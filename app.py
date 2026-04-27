@@ -111,12 +111,12 @@ def current_user(request: Request) -> dict:
 
 
 db.init()
-# Seed the known decks at boot for the default user, so a fresh DB has them
-# to study. New users get decks lazily via /study/{deck}/begin.
-_seed_user = os.environ.get("PREP_DEFAULT_USER", "owner@local")
-db.upsert_user(_seed_user, _seed_user.split("@", 1)[0], None)
-for known in generator.DECK_CONTEXT:
-    db.get_or_create_deck(_seed_user, known)
+# No boot-seed: deck rows materialize per-user the first time they navigate
+# to /deck/{name} (or hit any route that calls get_or_create_deck). The
+# index page enumerates DECK_CONTEXT directly so configured decks appear
+# even before they exist in DB. Avoids the previous design where seeding
+# under PREP_DEFAULT_USER (or its "owner@local" fallback) leaked dev
+# fixtures into the prod users/decks tables on every restart.
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 import dev_preview
@@ -126,12 +126,23 @@ dev_preview.register(app, templates)
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, user: dict = Depends(current_user)):
     uid = user["tailscale_login"]
+    # Merge DECK_CONTEXT (the configured catalog) with DB rows for this user.
+    # Configured decks the user hasn't materialized yet show as 0/0; they get
+    # a real row in `decks` the first time the user navigates to /deck/{name}.
+    db_decks = {d["name"]: d for d in db.list_decks(uid)}
+    decks: list[dict] = []
+    for name in generator.DECK_CONTEXT:
+        decks.append(db_decks.pop(name, {"name": name, "total": 0, "due": 0}))
+    # Append any decks the user has that aren't in DECK_CONTEXT (legacy or
+    # decks added then removed from the catalog) so they aren't orphaned.
+    decks.extend(db_decks.values())
+    decks.sort(key=lambda d: d["name"])
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "user": user,
-            "decks": db.list_decks(uid),
+            "decks": decks,
             "recent_sessions": db.list_recent_sessions(uid, limit=5),
         },
     )
