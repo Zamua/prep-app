@@ -162,32 +162,38 @@ def init() -> None:
             c.execute("ALTER TABLE questions ADD COLUMN language TEXT")
 
         # Multi-user migration: thread `user_id` through user-owned tables.
-        # Pre-multi-user DBs have all rows belonging to the inviting user
-        # ($PREP_DEFAULT_USER, fall back to "owner@local" if unset).
-        default_user = os.environ.get("PREP_DEFAULT_USER", "owner@local")
+        # Only fires when a pre-multi-user DB is detected (no user_id column
+        # on any of the user-owned tables). Modern DBs short-circuit and
+        # the inheriting-user upsert never runs — important so a deleted
+        # "owner@local" doesn't get auto-resurrected on every boot.
+        user_owned = ("decks", "questions", "study_sessions")
+        needs_legacy_migration = False
+        for tbl in user_owned:
+            cols = {r["name"] for r in c.execute(f"PRAGMA table_info({tbl})").fetchall()}
+            if "user_id" not in cols:
+                needs_legacy_migration = True
+                break
 
-        # 1. Ensure that user exists.
-        c.execute("""
-            INSERT OR IGNORE INTO users
-              (tailscale_login, display_name, created_at, last_seen_at)
-            VALUES (?, ?, ?, ?)
-        """, (default_user, default_user.split("@")[0], now(), now()))
+        if needs_legacy_migration:
+            # Pre-multi-user DBs assumed a single inviting user.
+            # PREP_DEFAULT_USER overrides the default; fall back to a literal
+            # "owner@local" only because there's no real identity to attribute
+            # the legacy data to.
+            default_user = os.environ.get("PREP_DEFAULT_USER", "owner@local")
+            c.execute("""
+                INSERT OR IGNORE INTO users
+                  (tailscale_login, display_name, created_at, last_seen_at)
+                VALUES (?, ?, ?, ?)
+            """, (default_user, default_user.split("@")[0], now(), now()))
 
-        # 2. Add user_id columns to existing tables. SQLite requires we ALTER
-        #    one column at a time, then backfill.
-        def _ensure_user_id(table: str, default: str) -> None:
-            existing = {r["name"] for r in c.execute(f"PRAGMA table_info({table})").fetchall()}
-            if "user_id" not in existing:
-                # Adding NOT NULL with a non-constant default isn't supported
-                # in SQLite ALTER, so we add nullable first, backfill, then
-                # leave it nullable but rely on app-level checks. This is
-                # acceptable for an SRS app — a stray NULL would just hide
-                # the row from per-user queries (defense in depth).
-                c.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
-                c.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (default,))
-
-        for tbl in ("decks", "questions", "study_sessions"):
-            _ensure_user_id(tbl, default_user)
+            # Add user_id columns and backfill. SQLite ALTER doesn't allow
+            # NOT NULL with non-constant default, so we add nullable, backfill
+            # in one statement, then rely on app-level enforcement.
+            for tbl in user_owned:
+                cols = {r["name"] for r in c.execute(f"PRAGMA table_info({tbl})").fetchall()}
+                if "user_id" not in cols:
+                    c.execute(f"ALTER TABLE {tbl} ADD COLUMN user_id TEXT")
+                    c.execute(f"UPDATE {tbl} SET user_id = ? WHERE user_id IS NULL", (default_user,))
 
         # 3. The decks table originally had `name TEXT UNIQUE NOT NULL`. Now we
         #    want `UNIQUE(user_id, name)` so different users can have decks
