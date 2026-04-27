@@ -7,29 +7,42 @@
   <span class="card-id">№ {{ q.id }}</span>
 </nav>
 
+{# Format `state.interval_minutes` as a friendly duration; mirrors the SRS
+   ladder so units match: 10 min, 1 day, 3 days, 1 week, 2 weeks, 1 month. #}
+{%- set m = state.interval_minutes -%}
+{%- if m < 60 -%}{% set human = m ~ ' min' %}
+{%- elif m < 24*60 -%}{% set human = (m // 60) ~ ' hr' %}
+{%- elif m == 24*60 -%}{% set human = '1 day' %}
+{%- elif m < 7*24*60 -%}{% set human = (m // (24*60)) ~ ' days' %}
+{%- elif m == 7*24*60 -%}{% set human = '1 week' %}
+{%- elif m < 30*24*60 -%}{% set human = (m // (7*24*60)) ~ ' weeks' %}
+{%- else -%}{% set human = (m // (30*24*60)) ~ ' month' ~ ('s' if m // (30*24*60) > 1 else '') %}
+{%- endif %}
+
 <section class="verdict-block">
   {% if verdict.result == 'right' %}
     <span class="verdict-mark verdict-mark-right" aria-hidden="true">✓</span>
     <h1 class="verdict-headline">Right.</h1>
-    <p class="verdict-sub">Pushed back to <strong>{{ state.interval_minutes }} min</strong> from now.</p>
+    <p class="verdict-sub">Next review in <strong>{{ human }}</strong>.</p>
   {% else %}
     <span class="verdict-mark verdict-mark-wrong" aria-hidden="true">✗</span>
     <h1 class="verdict-headline">Not yet.</h1>
-    <p class="verdict-sub">Resurfacing in <strong>{{ state.interval_minutes }} min</strong>.</p>
+    <p class="verdict-sub">Next review in <strong>{{ human }}</strong>.</p>
   {% endif %}
 </section>
 
 <section class="result-section">
   <p class="section-eyebrow"><span>The question</span><span class="rule"></span></p>
-  <div class="study-prompt">{{ q.prompt }}</div>
+  <div class="study-prompt prose">{{ q.prompt | markdown }}</div>
 </section>
 
 {# ---- Type-specific answer rendering ---- #}
 {% if q.type in ('mcq', 'multi') %}
   <section class="result-section">
     <p class="section-eyebrow">
-      <span>{% if q.type == 'mcq' %}Choices{% else %}Choices · pick all that apply{% endif %}</span>
+      <span>Choices</span>
       <span class="rule"></span>
+      {% if q.type == 'multi' %}<span class="eyebrow-aside">pick all that apply</span>{% endif %}
     </p>
     <ul class="answer-grid" role="list">
       {% for c in q.choices_list %}
@@ -72,7 +85,7 @@
   {% endif %}
   <section class="result-section">
     <p class="section-eyebrow"><span>Model answer</span><span class="rule"></span></p>
-    <blockquote class="prose-answer prose-answer-model">{{ q.answer }}</blockquote>
+    <blockquote class="prose-answer prose-answer-model prose">{{ q.answer | markdown }}</blockquote>
   </section>
 
 {% elif q.type == 'code' %}
@@ -103,7 +116,7 @@
 
 <section class="result-section">
   <p class="section-eyebrow"><span>Feedback</span><span class="rule"></span></p>
-  <p class="feedback-body">{{ verdict.feedback }}</p>
+  <div class="feedback-body prose">{{ verdict.feedback | markdown }}</div>
 </section>
 
 {% if q.rubric %}
@@ -116,7 +129,18 @@
 {% endif %}
 
 <div class="study-actions next-actions">
-  <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}">Next card →</a>
-  <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+  {% if session_id %}
+    {# Session-aware advance: POST so we can include the version stamp and
+       transition the session from showing-result → awaiting-answer (or
+       completed if no more due cards). #}
+    <form method="post" action="{{ request.scope.get('root_path','') }}/session/{{ session_id }}/advance" style="flex:1; min-width:10rem;">
+      <input type="hidden" name="version" value="{{ session_version }}">
+      <button class="btn btn-primary" type="submit" style="width:100%">Next card →</button>
+    </form>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Pause</a>
+  {% else %}
+    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}">Next card →</a>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+  {% endif %}
 </div>
 {% endblock %}

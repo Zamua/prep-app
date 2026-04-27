@@ -16,6 +16,14 @@ temporal-data/
 worker-go/bin/
 *.exe
 
+# UI sweep tooling — local-only, regenerable
+ui-tools/.venv/
+ui-screenshots/
+
+# CodeMirror bundle build node_modules — we ship the built cm-bundle.js
+# but not the node_modules used to build it.
+static/cm/node_modules/
+
 # Editor / OS noise
 .DS_Store
 .idea/

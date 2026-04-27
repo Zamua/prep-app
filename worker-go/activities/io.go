@@ -234,11 +234,27 @@ func insertCard(dbPath string, in shared.InsertInput) (shared.InsertResult, erro
 		choicesJSON = sql.NullString{String: string(data), Valid: true}
 	}
 
+	// Skeleton + language are only meaningful for code questions.
+	var skeletonCol, languageCol sql.NullString
+	if in.Card.Type == "code" {
+		if in.Card.Skeleton != "" {
+			skeletonCol = sql.NullString{String: in.Card.Skeleton, Valid: true}
+		}
+		// Default to "go" for code questions if the model didn't specify —
+		// most of our cards are Go and an unknown language just falls back
+		// to no highlighting on the client.
+		lang := in.Card.Language
+		if lang == "" {
+			lang = "go"
+		}
+		languageCol = sql.NullString{String: lang, Valid: true}
+	}
+
 	res, err := tx.Exec(`
-		INSERT INTO questions (deck_id, type, topic, prompt, choices, answer, rubric, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO questions (deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		deckID, in.Card.Type, nullable(in.Card.Topic), in.Card.Prompt,
-		choicesJSON, in.Card.Answer, nullable(in.Card.Rubric), nowISO())
+		choicesJSON, in.Card.Answer, nullable(in.Card.Rubric), nowISO(), skeletonCol, languageCol)
 	if err != nil {
 		return shared.InsertResult{}, fmt.Errorf("insert questions: %w", err)
 	}

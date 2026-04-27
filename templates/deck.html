@@ -18,18 +18,26 @@
   </p>
 </section>
 
-<section class="action-bar">
+<section class="primary-action">
   {% if due_count > 0 %}
-    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}">
-      <span>Begin study session</span>
-      <span class="btn-aside">{{ due_count }} due</span>
-    </a>
+    {# /begin auto-resumes any active session on this deck, otherwise creates
+       a fresh one. Add ?fresh=1 to force-start a new one. POST to keep the
+       URL path clean — but we also accept GET for direct linking. #}
+    <form method="post" action="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}/begin" style="margin:0">
+      <button class="btn btn-primary" type="submit" style="width:100%">
+        <span>Begin study session</span>
+        <span class="btn-aside">{{ due_count }} due</span>
+      </button>
+    </form>
   {% else %}
     <span class="btn btn-disabled" aria-disabled="true">
       <span>Nothing due right now</span>
     </span>
   {% endif %}
+</section>
 
+<section class="generate-section">
+  <p class="section-eyebrow"><span>Generate more</span><span class="rule"></span></p>
   <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/add" method="post" class="generate-form">
     <label class="number-input">
       <span class="number-label">add</span>
@@ -50,18 +58,14 @@
             <span class="qcard-num">№ {{ q.id }}</span>
             <span class="qcard-tags">
               <span class="tag tag-type tag-{{ q.type }}">{{ q.type }}</span>
-              {% if q.topic %}<span class="tag tag-topic">{{ q.topic }}</span>{% endif %}
+              {% if q.topic %}<span class="tag tag-topic" title="{{ q.topic }}">{{ q.topic }}</span>{% endif %}
+              {% if q.suspended %}<span class="tag tag-suspended">suspended</span>{% endif %}
             </span>
           </header>
           <p class="qcard-prompt">{{ q.prompt[:220] }}{% if q.prompt|length > 220 %}…{% endif %}</p>
           <footer class="qcard-foot">
             <span class="qcard-stats">
-              <span class="dot" aria-hidden="true">●</span>
-              {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct
-              {% if q.next_due %}
-                <span class="qcard-stats-divider">·</span>
-                next {{ q.next_due[:10] }}
-              {% endif %}
+              {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct{% if q.next_due %} <span class="qcard-stats-divider">·</span> next {{ q.next_due[:10] }}{% endif %}
             </span>
             <span class="qcard-actions">
               {% if q.suspended %}

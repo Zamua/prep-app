@@ -205,6 +205,85 @@ a { color: inherit; }
   height: 1px;
   background: var(--hairline);
 }
+.eyebrow-aside {
+  font-style: italic;
+  font-size: 0.75rem;
+  color: var(--ink-mute);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- Recent sessions block (above decks on index) --- */
+
+.recent-sessions {
+  margin-bottom: 2rem;
+}
+.recent-sessions .section-eyebrow {
+  margin-top: 0;
+  margin-bottom: 0.7rem;
+}
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.session-card {
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 200ms ease;
+}
+.session-card:hover { border-color: var(--rule); }
+.session-link {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.85rem 1.05rem;
+  text-decoration: none;
+  color: inherit;
+}
+.session-deck {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 36, "SOFT" 30;
+  font-size: 1.1rem;
+  font-weight: 480;
+  color: var(--ink);
+  text-transform: lowercase;
+  letter-spacing: -0.005em;
+}
+.session-meta {
+  grid-column: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.83rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.session-state { color: var(--quill); font-style: italic; }
+.session-divider { color: var(--rule); }
+.session-link .deck-arrow { grid-column: 2; grid-row: 1 / span 2; }
+
+/* --- Stale-session banner (mid-card) --- */
+
+.stale-banner {
+  background: color-mix(in srgb, var(--wrong) 8%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  margin: 0 0 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+/* `display: flex` above overrides the browser default for [hidden]. Restore it. */
+.stale-banner[hidden] { display: none; }
+.stale-banner p { margin: 0; font-style: italic; color: var(--wrong); }
 
 /* --- Index page: deck list --- */
 
@@ -355,50 +434,56 @@ a { color: inherit; }
 .figure-label { font-style: italic; font-size: 0.92rem; }
 .meta-divider { color: var(--rule); }
 
-/* --- Action bar (Begin study + Generate) --- */
+/* --- Primary action (Begin study) --- */
 
-.action-bar {
+.primary-action {
+  margin: 2rem 0 0;
+}
+.primary-action .btn {
+  width: 100%;
+  min-height: 3.2rem;
+  font-size: 1.05rem;
+}
+
+/* --- Generate-more section --- */
+
+.generate-section {
+  margin-top: 2.5rem;
+}
+.generate-section .section-eyebrow {
+  margin-top: 0;
+  margin-bottom: 0.9rem;
+}
+.generate-form {
   display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  margin: 2rem 0 1.5rem;
-  padding: 1.1rem;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.95rem 1.1rem;
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   background: var(--warm);
 }
 
-@media (min-width: 640px) {
-  .action-bar {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-  }
-}
-
-.generate-form {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-
 .number-input {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.45rem;
+  align-items: center;
+  gap: 0.55rem;
   font-style: italic;
   color: var(--ink-soft);
-  font-size: 0.95rem;
+  font-size: 1rem;
+  flex: 1 1 auto;
 }
 .number-input input {
   width: 3.4rem;
-  padding: 0.4rem 0.55rem;
+  min-height: 2.9rem;
+  padding: 0.5rem 0.6rem;
   font: inherit;
   font-style: normal;
   font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1.05rem;
   background: var(--paper);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--ink-mute);
   border-radius: 8px;
   color: var(--ink);
   text-align: center;
@@ -407,6 +492,7 @@ a { color: inherit; }
 .number-input input:focus-visible {
   outline: 2px solid var(--quill);
   outline-offset: 1px;
+  border-color: var(--quill);
 }
 
 /* --- Buttons --- */
@@ -530,7 +616,11 @@ a { color: inherit; }
 .qcard-tags {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 
 .tag {
@@ -545,10 +635,25 @@ a { color: inherit; }
   color: var(--ink-soft);
   background: var(--warm);
   font-variation-settings: "opsz" 14, "SOFT" 80;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tag-type {
   border-color: var(--ink-soft);
   background: transparent;
+  flex-shrink: 0;
+}
+.tag-topic {
+  /* Topics can be long ("system-design-async-promises") — let them shrink and ellipsis */
+  min-width: 0;
+}
+.tag-suspended {
+  color: var(--wrong);
+  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  flex-shrink: 0;
 }
 .tag-code  { color: var(--quill); border-color: color-mix(in srgb, var(--quill) 50%, transparent); }
 .tag-mcq   { color: var(--right); border-color: color-mix(in srgb, var(--right) 50%, transparent); }
@@ -569,20 +674,36 @@ a { color: inherit; }
   justify-content: space-between;
   gap: 0.8rem;
   border-top: 1px dashed var(--hairline);
-  padding-top: 0.6rem;
+  padding-top: 0.5rem;
   font-size: 0.85rem;
   color: var(--ink-mute);
   font-style: italic;
+  /* Negative bottom margin counters the increased link-btn padding so the
+     footer's outer height stays the same; gives the suspend/unsuspend a
+     bigger tap area without changing visual rhythm. */
+  margin-bottom: -0.55rem;
 }
 
-.qcard-stats { display: inline-flex; align-items: center; gap: 0.45rem; }
-.qcard-stats .dot { color: var(--right); font-size: 0.55rem; transform: translateY(-1px); }
-.qcard-stats-divider { color: var(--rule); }
+.qcard-stats {
+  /* Allow stats to wrap inline if very long; never grow past 70% so the
+     suspend button stays anchored on the right. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.qcard-stats-divider { color: var(--rule); margin: 0 0.15rem; }
+
+.qcard-actions {
+  flex-shrink: 0;
+}
 
 .link-btn {
+  /* Touch-target target: 44px on iOS. Visual size kept compact via padding,
+     because the negative-margin trick on .qcard-foot pulls the bottom back. */
   background: none;
   border: none;
-  padding: 0.4rem 0.5rem;
+  padding: 0.7rem 0.8rem;
+  margin: -0.7rem -0.8rem;
+  min-height: 44px;
   font: inherit;
   font-style: italic;
   color: var(--ink-mute);
@@ -594,6 +715,7 @@ a { color: inherit; }
   -webkit-tap-highlight-color: transparent;
 }
 .link-btn:hover { color: var(--wrong); text-decoration-color: var(--wrong); }
+.link-btn:active { color: var(--wrong); }
 
 /* --- Study card --- */
 
@@ -635,10 +757,56 @@ a { color: inherit; }
   font-size: clamp(1.18rem, 2.4vw, 1.32rem);
   line-height: 1.5;
   color: var(--ink);
-  white-space: pre-wrap;
   border-left: 3px solid var(--quill);
   padding: 0.2rem 0 0.2rem 1rem;
   margin: 0 0 1.5rem;
+}
+/* When the prompt is rendered as markdown (via the markdown filter) the
+   default <p> margins compound with the prompt's own margin. Reset them so
+   single-paragraph prompts read like a single block. */
+.study-prompt.prose > p { margin: 0 0 0.7em; }
+.study-prompt.prose > p:last-child { margin-bottom: 0; }
+
+/* General prose styling for rendered markdown (prompt, feedback, answer
+   blocks). Keeps the literary look while making **bold**, `code`, code
+   fences, and lists render distinctly. */
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--quill) 10%, var(--warm));
+  border: 1px solid color-mix(in srgb, var(--quill) 25%, var(--hairline));
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+}
+.prose pre {
+  background: var(--warm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.7em 0;
+}
+.prose pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.prose strong { font-variation-settings: "opsz" 14, "wght" 600; }
+.prose em { font-style: italic; }
+.prose ul, .prose ol { padding-left: 1.4rem; margin: 0.5em 0; }
+.prose li { margin: 0.25em 0; }
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 36, "SOFT" 40;
+  margin: 0.6em 0 0.3em;
+}
+.prose blockquote {
+  border-left: 2px solid var(--rule);
+  padding-left: 0.9rem;
+  color: var(--ink-soft);
+  margin: 0.5em 0;
 }
 
 .study-form { display: flex; flex-direction: column; gap: 1.1rem; }
@@ -674,21 +842,24 @@ a { color: inherit; }
 .choice input { position: absolute; opacity: 0; pointer-events: none; }
 
 .choice-marker {
-  width: 1.05rem; height: 1.05rem;
+  /* Bumped from 1.05rem to 1.4rem so the radio/check is visible at a glance,
+     not just a decoration on the row. Border weight also up so the
+     unselected state contrasts against cream. */
+  width: 1.4rem; height: 1.4rem;
   border-radius: 50%;
-  border: 1.5px solid var(--ink-soft);
+  border: 2px solid var(--ink-mute);
   display: inline-block;
   flex-shrink: 0;
-  margin-top: 0.32rem;
+  margin-top: 0.18rem;
   position: relative;
   transition: border-color 180ms ease, background 180ms ease;
 }
-.choices-multi .choice-marker { border-radius: 4px; }
+.choices-multi .choice-marker { border-radius: 5px; }
 
 .choice input:checked ~ .choice-marker {
   border-color: var(--quill);
   background: var(--quill);
-  box-shadow: inset 0 0 0 3px var(--paper);
+  box-shadow: inset 0 0 0 4px var(--paper);
 }
 .choices-multi .choice input:checked ~ .choice-marker {
   box-shadow: inset 0 0 0 0 var(--paper);
@@ -700,8 +871,9 @@ a { color: inherit; }
   display: grid;
   place-items: center;
   color: var(--paper);
-  font-size: 0.75rem;
+  font-size: 0.95rem;
   line-height: 1;
+  font-weight: 700;
 }
 .choice:has(input:checked) {
   border-color: var(--quill);
@@ -717,14 +889,104 @@ a { color: inherit; }
 .freetext {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 .freetext-label {
+  /* Eyebrow style — matches THE QUESTION / FEEDBACK / MODEL ANSWER labels.
+     The placeholder inside the textarea stays italic muted so the two don't
+     read as one continuous label. */
   font-style: italic;
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--ink-mute);
 }
+.freetext-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.freetext-actions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.lang-tag {
+  display: inline-block;
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  margin-left: 0.45rem;
+  padding: 0.1em 0.5em;
+  border: 1px solid color-mix(in srgb, var(--quill) 40%, var(--hairline));
+  border-radius: 999px;
+  color: var(--quill);
+  background: color-mix(in srgb, var(--quill) 8%, transparent);
+  font-family: var(--mono);
+  text-transform: lowercase;
+  vertical-align: 0.05em;
+}
+
+/* CodeMirror mount — styled so it lives inside the .study-card's cream
+   palette without fighting CM's default white background. */
+.cm-mount {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+.cm-mount .cm-editor {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 18rem;
+}
+.cm-mount .cm-editor.cm-focused {
+  outline: 2px solid var(--quill);
+  outline-offset: -2px;
+}
+.cm-mount .cm-gutters {
+  background: var(--warm);
+  border-right: 1px solid var(--hairline);
+  color: var(--ink-mute);
+}
+.cm-mount .cm-content { padding: 0.5rem 0; }
+.cm-mount .cm-line { padding: 0 0.6rem; }
+.cm-mount .cm-activeLine { background: color-mix(in srgb, var(--quill) 6%, transparent); }
+.cm-mount .cm-activeLineGutter { background: color-mix(in srgb, var(--quill) 12%, var(--warm)); }
+.cm-mount .cm-cursor { border-left-color: var(--ink); }
+.cm-mount .cm-selectionBackground,
+.cm-mount .cm-content ::selection { background: color-mix(in srgb, var(--quill) 25%, transparent); }
+/* Vim mode bar */
+.cm-mount .cm-vim-panel {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  padding: 0.3rem 0.6rem;
+}
+.freetext-reset {
+  background: none;
+  border: none;
+  padding: 0.4rem 0.5rem;
+  margin: -0.4rem -0.5rem;
+  font: inherit;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  cursor: pointer;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+.freetext-reset:hover { color: var(--quill); text-decoration-color: var(--quill); }
 textarea {
   width: 100%;
   min-height: 7rem;
@@ -752,11 +1014,23 @@ textarea:focus-visible {
 
 .study-actions {
   display: flex;
-  gap: 0.7rem;
+  /* Explicit row-gap so the wrapped state on mobile gets adequate vertical
+     separation. With both children forced to 100% width on mobile (see
+     media query below), the buttons become two stacked pills; without a
+     visible row-gap they read as a single fused element. 1.1rem reads as
+     intentional spacing on a 430px viewport. */
+  column-gap: 0.7rem;
+  row-gap: 1.1rem;
   flex-wrap: wrap;
   margin-top: 0.4rem;
 }
-.study-actions .btn { flex: 1; min-width: 10rem; }
+/* Direct children — handle both <a class="btn"> and <form><button class="btn">>
+   patterns. The generation/grading panels use forms for cancel/back actions,
+   the study/result pages use anchors and buttons. */
+.study-actions > .btn,
+.study-actions > form { flex: 1; min-width: 10rem; }
+.study-actions > form { display: flex; }
+.study-actions > form > .btn { flex: 1; min-width: 0; }
 
 .next-actions {
   margin-top: 2rem;
@@ -766,8 +1040,10 @@ textarea:focus-visible {
 
 .verdict-block {
   text-align: left;
-  padding: 1.5rem 0 0.5rem;
+  padding: 1.5rem 0 1.4rem;
   margin-bottom: 0.5rem;
+  /* Hairline separator formalizes the break that the eyebrows below imply. */
+  border-bottom: 1px solid var(--hairline);
 }
 
 .verdict-mark {
@@ -819,15 +1095,23 @@ textarea:focus-visible {
   background: var(--warm);
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
+  /* pre-wrap preserves newlines but only breaks at whitespace; long unbroken
+     tokens (`func New(n int) *BBQ {`) won't break without overflow-wrap.
+     overflow-wrap: anywhere lets the browser break inside long tokens so
+     code stays inside the cream block on narrow viewports. */
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: var(--mono);
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.85rem;
+  line-height: 1.55;
   color: var(--ink);
   overflow-x: auto;
 }
+@media (max-width: 480px) {
+  .reproduction { font-size: 0.8rem; padding: 0.85rem 0.95rem; }
+}
 .reproduction-model { background: color-mix(in srgb, var(--right) 6%, var(--warm)); }
-.reproduction-rubric { background: var(--bg); margin-top: 0.6rem; font-size: 0.85rem; }
+.reproduction-rubric { background: var(--bg); margin-top: 0.6rem; font-size: 0.8rem; }
 
 .rubric-details {
   margin-top: 0.6rem;
@@ -836,18 +1120,31 @@ textarea:focus-visible {
   cursor: pointer;
   font-style: italic;
   color: var(--ink-mute);
-  padding: 0.3rem 0;
+  padding: 0.7rem 0;
   user-select: none;
   list-style: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 .rubric-details summary::-webkit-details-marker { display: none; }
 .rubric-details summary::before {
-  content: "▸ ";
+  /* CSS-drawn chevron — rotates 90° when [open]. Looks intentional, not
+     like a literal punctuation char. */
+  content: "";
   display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-right: 1.5px solid var(--ink-mute);
+  border-bottom: 1.5px solid var(--ink-mute);
+  transform: rotate(-45deg);
+  margin-right: 0.55rem;
   transition: transform 200ms ease;
-  color: var(--rule);
+  vertical-align: 0.1em;
 }
-.rubric-details[open] summary::before { transform: rotate(90deg); }
+.rubric-details[open] summary::before {
+  transform: rotate(45deg);
+}
 
 .page-result-right .verdict-block { color: var(--right); }
 .page-result-wrong .verdict-block { color: var(--wrong); }
@@ -1035,6 +1332,18 @@ textarea:focus-visible {
 }
 .colophon-text em { color: var(--ink-soft); }
 
+/* Focused screens (study, result, grading, generation) hide the colophon
+   to keep attention on the card. The literary mood lives on index/deck. */
+.page-study .colophon,
+.page-study-empty .colophon,
+.page-result .colophon,
+.page-result-right .colophon,
+.page-result-wrong .colophon,
+.page-grading .colophon,
+.page-generation .colophon {
+  display: none;
+}
+
 /* --- Generation page --- */
 
 .generation-panel {
@@ -1110,6 +1419,40 @@ textarea:focus-visible {
   color: var(--ink-mute);
 }
 
+/* --- Grading polling spinner --- */
+
+.grading-panel {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem 1.5rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+  animation: rise 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.grading-spinner {
+  /* Inline next to "Reading your answer" so the dots feel like an ellipsis
+     animation, not orphaned punctuation. */
+  display: inline-flex;
+  gap: 0.2em;
+  margin-left: 0.25em;
+  vertical-align: 0.18em;
+}
+.grading-spinner .dot {
+  width: 0.32em; height: 0.32em;
+  border-radius: 50%;
+  background: var(--quill);
+  opacity: 0.5;
+  animation: blink 1.4s ease-in-out infinite;
+}
+.grading-spinner .d2 { animation-delay: 0.18s; }
+.grading-spinner .d3 { animation-delay: 0.36s; }
+
+@keyframes blink {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+  40%           { transform: scale(1.1);  opacity: 1; }
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 0.5; transform: scale(1); }
   50%      { opacity: 1; transform: scale(1.15); }
@@ -1141,5 +1484,6 @@ textarea:focus-visible {
   .study-card { padding: 1.2rem 1.1rem; }
   .study-prompt { font-size: 1.1rem; padding-left: 0.8rem; }
   .qcard { padding: 1rem 1.05rem; }
-  .study-actions .btn { min-width: 100%; }
+  .study-actions > .btn,
+  .study-actions > form { min-width: 100%; }
 }

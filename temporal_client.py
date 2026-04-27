@@ -21,6 +21,7 @@ TEMPORAL_HOST_PORT = os.environ.get("TEMPORAL_HOST_PORT", "127.0.0.1:7233")
 TEMPORAL_NAMESPACE = os.environ.get("TEMPORAL_NAMESPACE", "prep")
 TASK_QUEUE = "prep-generation"
 WORKFLOW_NAME = "GenerateCardsWorkflow"
+GRADE_WORKFLOW_NAME = "GradeAnswerWorkflow"
 
 _client: Client | None = None
 
@@ -88,3 +89,44 @@ async def cancel_generation(workflow_id: str) -> None:
     client = await _get_client()
     handle = client.get_workflow_handle(workflow_id)
     await handle.signal("cancelGeneration", "")
+
+
+# ---- Grading workflow helpers ----
+
+
+async def start_grading(question_id: int, deck_name: str, user_answer: str, idk: bool) -> StartResult:
+    """Start a GradeAnswerWorkflow run. workflow_id encodes deck_name and
+    question_id so the polling page (and the eventual result render) can
+    parse them back without a side table."""
+    client = await _get_client()
+    wid = f"grade-{deck_name}-q{question_id}-{uuid.uuid4().hex[:10]}"
+    handle = await client.start_workflow(
+        GRADE_WORKFLOW_NAME,
+        {"question_id": question_id, "user_answer": user_answer, "idk": idk},
+        id=wid,
+        task_queue=TASK_QUEUE,
+    )
+    return StartResult(workflow_id=handle.id, run_id=handle.first_execution_run_id or "")
+
+
+async def get_grade_progress(workflow_id: str) -> dict[str, Any] | None:
+    """Query the grade workflow's getGradeProgress handler. None if the
+    workflow has finished (no live handler) — caller should fall back to
+    fetching the result via `get_grade_result`."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    try:
+        return await handle.query("getGradeProgress")
+    except Exception:
+        return None
+
+
+async def get_grade_result(workflow_id: str) -> dict[str, Any] | None:
+    """Pull the final GradeAnswerResult from a completed workflow.
+    Returns None if the workflow hasn't completed (or failed)."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    try:
+        return await handle.result()
+    except Exception:
+        return None

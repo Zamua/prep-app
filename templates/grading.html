@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}grading · {{ deck_name }} · prep{% endblock %}
+{% block page_class %}grading{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+  <span class="card-id">workflow {{ wid[-10:] }}</span>
+</nav>
+
+<section class="grading-panel" id="grade-panel"
+         data-status-url="{{ request.scope.get('root_path','') }}/grading/{{ wid }}/status"
+         data-self-url="{{ request.scope.get('root_path','') }}/grading/{{ wid }}">
+  <p class="section-eyebrow">
+    <span>Grading</span>
+    <span class="rule"></span>
+  </p>
+  <h1 class="display gen-headline">
+    <em>Reading your answer.</em>
+  </h1>
+
+  <p class="gen-status">
+    <span class="status-dot" id="grade-dot"></span>
+    <span id="grade-status-text">{{ (progress and progress.status) or desc.status or 'starting' }}</span>
+    <span class="grading-spinner" aria-hidden="true"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span></span>
+  </p>
+
+  {% if failed %}
+  <p class="gen-hint">
+    <em>The workflow finished but the result couldn't be retrieved (probably failed).
+    Go back to the deck and try the card again.</em>
+  </p>
+  <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+  {% else %}
+  <p class="gen-hint">
+    <em>Usually 5–20 seconds. The workflow runs durably on Temporal — even if you close this tab
+    it keeps grading. Refresh later to see the result.</em>
+  </p>
+  {% endif %}
+</section>
+
+{% if not failed %}
+<script>
+(function () {
+  const panel = document.getElementById('grade-panel');
+  const statusUrl = panel.dataset.statusUrl;
+  const selfUrl = panel.dataset.selfUrl;
+  const $statusText = document.getElementById('grade-status-text');
+  const $dot = document.getElementById('grade-dot');
+
+  const TERMINAL = new Set(['done', 'failed', 'COMPLETED', 'FAILED', 'CANCELED', 'TERMINATED']);
+
+  async function poll () {
+    try {
+      const r = await fetch(statusUrl, { cache: 'no-store' });
+      const j = await r.json();
+      const p = j.progress;
+      const d = j.desc;
+      const status = (p && p.status) || (d && d.status) || 'unknown';
+      $statusText.textContent = status;
+      $dot.className = 'status-dot status-' + status.toLowerCase();
+      if (TERMINAL.has(status)) {
+        // Reload self — server-side render now returns result.html.
+        window.location.href = selfUrl;
+        return;
+      }
+    } catch (e) {
+      console.error('poll error', e);
+    }
+    setTimeout(poll, 1500);
+  }
+  poll();
+})();
+</script>
+{% endif %}
+{% endblock %}

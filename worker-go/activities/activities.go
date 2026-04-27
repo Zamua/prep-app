@@ -254,6 +254,23 @@ Output a single JSON object (no prose, no fences). Required fields:
 - "choices": array (REQUIRED for mcq/multi, OMIT otherwise)
 - "answer": string (for multi: a JSON-encoded array of the correct choices)
 - "rubric": 2-4 short bullet lines describing what a correct answer must demonstrate
+- "skeleton": OPTIONAL. For "code" questions only. Include MINIMAL starter code
+  ONLY when the canonical version of the problem provides scaffolding the user
+  fills in — e.g. LeetCode 1114/1115/1116/1117/1195/1226 (concurrency series),
+  problems where a class signature with empty methods is the natural fixture.
+  OMIT for problems where designing the structure (data class, type, function
+  signature) is itself part of the test. When present, keep it minimal: type
+  declaration + method stubs with EMPTY bodies, NOT a partial implementation.
+  CRITICAL: do NOT include placeholder/explanatory comments inside method
+  bodies — no slash-star ellipsis comments, no // TODO, no // your code here,
+  no // fill in. Leave bodies empty (curly braces with no content, or open
+  brace on one line and close brace on the next). The prompt itself explains
+  what to do; the skeleton should only carry structure, not narration.
+- "language": REQUIRED for "code" questions; one of "go" | "java" | "python" |
+  "javascript" | "typescript" | "rust" | "cpp". The language the user is meant
+  to write the answer in. Match the language to whatever the prompt asks for
+  (e.g. "Implement X **in Go**" → "go"). Drives the editor's syntax highlighting.
+  OMIT for non-code questions.
 
 Output ONLY the JSON object.`,
 		in.Index, in.Total, dedup.String())
@@ -396,6 +413,8 @@ func parseCardJSON(out []byte) (shared.Card, error) {
 	card.Prompt, _ = loose["prompt"].(string)
 	card.Rubric = coerceRubric(loose["rubric"])
 	card.Answer = coerceAnswer(loose["answer"])
+	card.Skeleton, _ = loose["skeleton"].(string)
+	card.Language, _ = loose["language"].(string)
 	if c, ok := loose["choices"].([]any); ok {
 		for _, x := range c {
 			if s, ok := x.(string); ok {

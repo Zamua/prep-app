@@ -12,6 +12,29 @@
   </p>
 </section>
 
+{% if recent_sessions %}
+<section class="recent-sessions">
+  <p class="section-eyebrow"><span>Pick up where you left off</span><span class="rule"></span></p>
+  <ul class="session-list" role="list">
+    {% for s in recent_sessions %}
+      <li class="session-card">
+        <a href="{{ request.scope.get('root_path','') }}/session/{{ s.id }}" class="session-link">
+          <span class="session-deck">{{ s.deck_name }}</span>
+          <span class="session-meta">
+            {% if s.state == 'grading' %}<span class="session-state">grading…</span>
+            {% elif s.state == 'showing-result' %}<span class="session-state">just answered</span>
+            {% elif s.current_type %}<span class="session-state">on {{ s.current_type }} card</span>
+            {% endif %}
+            {% if s.device_label %}<span class="session-divider" aria-hidden="true">·</span><em>{{ s.device_label }}</em>{% endif %}
+          </span>
+          <span class="deck-arrow" aria-hidden="true">→</span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 <ol class="deck-list" role="list">
   {% for d in decks %}
     {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][loop.index0] %}

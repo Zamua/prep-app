@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}out of sync · prep{% endblock %}
+{% block page_class %}stale{% endblock %}
+{% block main %}
+<article class="study-card">
+  <section class="empty-state">
+    <p class="empty-headline"><em>Session moved.</em></p>
+    <p class="empty-sub">
+      This session was advanced on another device since you opened this page.
+      To avoid overwriting that progress, I won't accept this submission.
+      Tap below to sync and continue from wherever the session is now.
+    </p>
+    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/session/{{ session_id }}">Sync &amp; continue</a>
+  </section>
+</article>
+{% endblock %}

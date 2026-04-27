@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}all clear · {{ deck_name }} · prep{% endblock %}
+{% block title %}done · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}study study-empty{% endblock %}
 {% block main %}
 <nav class="study-nav">
@@ -8,10 +8,11 @@
 
 <article class="study-card">
   <section class="empty-state">
-    <p class="empty-headline"><em>Nothing due.</em></p>
+    <p class="empty-headline"><em>Session complete.</em></p>
     <p class="empty-sub">
-      All cards in this deck are sleeping. Generate more from the deck page, or
-      check back later as cards mature into the next interval.
+      No more cards due in <strong>{{ deck_name }}</strong> right now. Cards
+      you got right are sleeping until their next interval; ones you got wrong
+      will resurface in 10 minutes.
     </p>
     <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
   </section>

@@ -4,8 +4,9 @@
 package shared
 
 const (
-	TaskQueue       = "prep-generation"
+	TaskQueue        = "prep-generation"
 	WorkflowGenerate = "GenerateCardsWorkflow"
+	WorkflowGrade    = "GradeAnswerWorkflow"
 )
 
 // GenerateCardsInput is the workflow's input — what the FastAPI app
@@ -68,6 +69,17 @@ type Card struct {
 	Choices []string `json:"choices,omitempty"`
 	Answer  string   `json:"answer"`
 	Rubric  string   `json:"rubric"`
+	// Skeleton is optional starter code that prefills the user's answer
+	// textarea. Only meaningful for `code` questions and only when the
+	// canonical version of the problem is "fill in the blanks" (LeetCode
+	// concurrency series, threading primitives where the class signature
+	// is given). Generators should leave it empty for problems where
+	// reproducing the structure is part of the test.
+	Skeleton string `json:"skeleton,omitempty"`
+	// Language is the CodeMirror lang id used to highlight the editor:
+	// "go" | "java" | "python" | "javascript" | "typescript" | "rust" | "cpp".
+	// Only meaningful for `code` questions; ignored otherwise.
+	Language string `json:"language,omitempty"`
 }
 
 // InsertInput is the input for InsertCard.
@@ -92,4 +104,66 @@ type CleanupInput struct {
 // NotifyInput is the input for NotifyTelegram.
 type NotifyInput struct {
 	Text string `json:"text"`
+}
+
+// ---- Grading workflow types ----
+
+// GradeAnswerInput is the input to GradeAnswerWorkflow.
+type GradeAnswerInput struct {
+	QuestionID int    `json:"question_id"`
+	UserAnswer string `json:"user_answer"`
+	IDK        bool   `json:"idk"`
+}
+
+// Verdict is what GradeFreeText returns and what the workflow ultimately
+// surfaces. Mirrors the shape grader.py:_grade_freetext returns.
+type Verdict struct {
+	Result              string `json:"result"` // "right" | "wrong"
+	Feedback            string `json:"feedback"`
+	ModelAnswerSummary  string `json:"model_answer_summary"`
+}
+
+// GradeFreeTextInput is the activity input. Question is fetched inside the
+// activity to keep the workflow's input small (Temporal payloads have a
+// practical size limit; passing the whole question payload is wasteful).
+type GradeFreeTextInput struct {
+	QuestionID int    `json:"question_id"`
+	UserAnswer string `json:"user_answer"`
+	IDK        bool   `json:"idk"`
+}
+
+// RecordReviewInput is the activity input for writing the review row +
+// advancing the SRS state.
+type RecordReviewInput struct {
+	QuestionID     int    `json:"question_id"`
+	Result         string `json:"result"`
+	UserAnswer     string `json:"user_answer"`
+	GraderNotes    string `json:"grader_notes"`
+	IdempotencyKey string `json:"idempotency_key"` // = workflow_id
+}
+
+// SRSState mirrors what db.py:record_review returns — used by the polling
+// page to render "next due in X min" + step.
+type SRSState struct {
+	Step            int    `json:"step"`
+	NextDue         string `json:"next_due"`
+	IntervalMinutes int    `json:"interval_minutes"`
+}
+
+// GradeAnswerResult is the workflow output, also exposed via the
+// getGradeProgress query for live status.
+type GradeAnswerResult struct {
+	QuestionID int      `json:"question_id"`
+	UserAnswer string   `json:"user_answer"`
+	IDK        bool     `json:"idk"`
+	Verdict    Verdict  `json:"verdict"`
+	State      SRSState `json:"state"`
+}
+
+// GradeProgress is the shape returned by the getGradeProgress query.
+type GradeProgress struct {
+	Status     string             `json:"status"` // "grading" | "recording" | "done" | "failed"
+	StartedAt  string             `json:"started_at"`
+	FinishedAt string             `json:"finished_at,omitempty"`
+	Result     *GradeAnswerResult `json:"result,omitempty"` // populated when status=done
 }

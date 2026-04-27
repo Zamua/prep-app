@@ -1,13 +1,17 @@
 {% extends "base.html" %}
-{% block title %}{{ deck_name }} · study · prep{% endblock %}
-{% block page_class %}study{% endblock %}
+{% block title %}{{ deck_name }} · session · prep{% endblock %}
+{% block page_class %}study session{% endblock %}
 {% block main %}
 <nav class="study-nav">
   <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
   <span class="card-id">№ {{ q.id }}</span>
 </nav>
 
-<article class="study-card">
+<article class="study-card"
+         id="session-card"
+         data-session-id="{{ session.id }}"
+         data-version="{{ session.version }}"
+         data-draft-url="{{ request.scope.get('root_path','') }}/session/{{ session.id }}/draft">
   <header class="study-head">
     <span class="tag tag-type tag-{{ q.type }}">{{ q.type }}</span>
     {% if q.topic %}<span class="tag tag-topic">{{ q.topic }}</span>{% endif %}
@@ -15,9 +19,15 @@
 
   <div class="study-prompt prose">{{ q.prompt | markdown }}</div>
 
-  <form method="post" action="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}" class="study-form">
+  <div class="stale-banner" id="stale-banner" hidden>
+    <p><em>This session was advanced on another device.</em></p>
+    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/session/{{ session.id }}">Sync &amp; continue</a>
+  </div>
+
+  <form method="post" action="{{ request.scope.get('root_path','') }}/session/{{ session.id }}/submit" class="study-form" id="session-form">
     <input type="hidden" name="question_id" value="{{ q.id }}">
     <input type="hidden" name="type" value="{{ q.type }}">
+    <input type="hidden" name="version" id="session-version" value="{{ session.version }}">
 
     {% if q.type == 'mcq' %}
       <fieldset class="choices">
@@ -54,22 +64,18 @@
             {% endif %}
           </span>
         </span>
-        {# Hidden textarea is the form control — CodeMirror writes into it on
-           submit. We keep the textarea (not just a hidden input) so that if
-           the JS fails to load (offline, CDN down), the user can still type
-           into it directly as a fallback. #}
         <textarea name="answer" id="code-answer" rows="14" spellcheck="false"
-                  placeholder="{% if q.skeleton %}// fill in the blanks below — or hit reset if you've cleared it{% else %}// write it out — pseudocode is fine if the idea is clear{% endif %}"
+                  placeholder="{% if q.skeleton %}// fill in the blanks below{% else %}// write it out — pseudocode is fine if the idea is clear{% endif %}"
                   class="code-area"
                   data-language="{{ q.language or 'go' }}"
-                  data-skeleton="{{ q.skeleton|e }}">{{ q.skeleton or '' }}</textarea>
+                  data-skeleton="{{ q.skeleton|e }}">{{ draft }}</textarea>
         <div id="cm-mount" class="cm-mount" aria-hidden="true"></div>
       </label>
     {% else %}
       <label class="freetext">
         <span class="freetext-label">Your answer</span>
-        <textarea name="answer" rows="6"
-                  placeholder="A sentence or two."></textarea>
+        <textarea name="answer" id="code-answer" rows="6"
+                  placeholder="A sentence or two.">{{ draft }}</textarea>
       </label>
     {% endif %}
 
@@ -83,19 +89,9 @@
 </article>
 
 {% if q.type == 'code' %}
+{# Reuse the same CodeMirror mount script as study.html. The session.html
+   variant additionally sets up draft autosave bound to /session/{sid}/draft. #}
 <script type="module">
-// CodeMirror 6 mount — replaces the textarea with a real editor for `code`
-// questions. Loaded from a locally-bundled ESM file (built from
-// static/cm/entry.js with `bun run build`) — bundling avoids the multi-
-// instance @codemirror/state loading bug that breaks instanceof checks
-// when transitive deps are resolved by a CDN.
-//
-// State that persists across cards (in localStorage):
-//   prep:vim — "1" if vim mode is enabled
-//
-// Languages mapped: go, java, python, javascript, typescript, rust, cpp.
-// Anything else falls back to no highlighting (still a usable editor).
-
 import {
   EditorView, basicSetup,
   EditorState, Compartment,
@@ -103,13 +99,9 @@ import {
 } from "{{ request.scope.get('root_path','') }}/static/cm-bundle.js";
 
 const langExts = {
-  go: go(),
-  java: java(),
-  python: python(),
-  javascript: javascript(),
-  typescript: javascript({typescript: true}),
-  rust: rust(),
-  cpp: cpp(),
+  go: go(), java: java(), python: python(),
+  javascript: javascript(), typescript: javascript({typescript: true}),
+  rust: rust(), cpp: cpp(),
 };
 
 const ta = document.getElementById('code-answer');
@@ -117,49 +109,82 @@ const mount = document.getElementById('cm-mount');
 const vimToggle = document.getElementById('vim-toggle');
 const vimState = document.getElementById('vim-state');
 const skelReset = document.getElementById('skel-reset');
-const form = ta && ta.form;
+const card = document.getElementById('session-card');
+const versionEl = document.getElementById('session-version');
+const banner = document.getElementById('stale-banner');
+const form = document.getElementById('session-form');
+const draftUrl = card.dataset.draftUrl;
 const lang = (ta && ta.dataset.language) || 'go';
 
-if (!ta || !mount) {
-  // No mount target — bail (graceful fallback to plain textarea).
-} else {
+if (ta && mount) {
   const langExt = langExts[lang] || [];
   const vimCompartment = new Compartment();
   const wantVim = localStorage.getItem('prep:vim') === '1';
-  const vimExt = wantVim ? vim() : [];
   vimState.textContent = wantVim ? 'on' : 'off';
+
+  // ------- Draft autosave (debounced) -------
+  let saveTimer = null;
+  let inFlight = false;
+  function getVersion() { return parseInt(versionEl.value, 10); }
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveDraft, 1000);
+  }
+  async function saveDraft() {
+    if (inFlight || banner.hidden === false) return;
+    inFlight = true;
+    try {
+      const r = await fetch(draftUrl, {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({version: getVersion(), draft: ta.value}),
+      });
+      if (r.status === 409) {
+        // Stale — show banner and stop autosaving until refresh.
+        banner.hidden = false;
+      } else if (r.ok) {
+        const j = await r.json();
+        versionEl.value = j.version;
+      }
+    } catch (e) {
+      // Network blip — silent. Will retry on next change.
+    } finally {
+      inFlight = false;
+    }
+  }
 
   const view = new EditorView({
     parent: mount,
     state: EditorState.create({
       doc: ta.value,
       extensions: [
-        vimCompartment.of(vimExt),
+        vimCompartment.of(wantVim ? vim() : []),
         basicSetup,
         langExt,
         EditorView.lineWrapping,
         EditorView.updateListener.of((u) => {
-          if (u.docChanged) ta.value = u.state.doc.toString();
+          if (u.docChanged) {
+            ta.value = u.state.doc.toString();
+            scheduleSave();
+          }
         }),
       ],
     }),
   });
 
-  // Hide the original textarea — CodeMirror is now the visible editor. The
-  // textarea stays in the DOM so the form submission still picks up its
-  // value (we sync into it on every change above).
   ta.style.position = 'absolute';
   ta.style.opacity = '0';
   ta.style.pointerEvents = 'none';
-  ta.style.height = '1px';
-  ta.style.width  = '1px';
-  ta.tabIndex = -1;
-  ta.setAttribute('aria-hidden', 'true');
+  ta.style.height = '1px'; ta.style.width = '1px';
+  ta.tabIndex = -1; ta.setAttribute('aria-hidden', 'true');
   mount.removeAttribute('aria-hidden');
 
   if (form) {
-    // Sync once more on submit — defensive against any race.
-    form.addEventListener('submit', () => { ta.value = view.state.doc.toString(); });
+    form.addEventListener('submit', (e) => {
+      // Flush draft sync (best-effort) before submission so the version on
+      // the server matches what we send.
+      ta.value = view.state.doc.toString();
+    });
   }
 
   vimToggle && vimToggle.addEventListener('click', () => {
@@ -188,72 +213,38 @@ if (!ta || !mount) {
     setTimeout(() => { copyBtn.textContent = original; }, 1200);
   });
 
-  // ------------------------------------------------------------------
-  // Mod-tap state machine on Escape (Karabiner-style "tap = Esc, hold +
-  // another key = Ctrl+key"). User has CapsLock → Esc remapped at the
-  // iPadOS system level, so we receive Escape events here, not CapsLock.
-  //
-  // Behavior:
-  //   • Escape keydown alone → swallowed; we wait
-  //   • Escape keyup before TAP_MS, no other key was pressed → fire Esc
-  //   • Any other key pressed while Escape is held → swallow that key,
-  //     dispatch a synthetic Ctrl+<key> to the editor, mark consumed
-  //   • Escape keyup after a combo → just clear state (don't fire Esc)
-  //   • Escape held past TAP_MS with no combo → do nothing on release
-  //
-  // Threshold and behavior mirror QMK's mod-tap default. Scoped to the
-  // editor's DOM so plain-page keypresses are unaffected.
-  // ------------------------------------------------------------------
+  // Mod-tap: tap Esc → escape; hold Esc + key → Ctrl+key. (Same state machine
+  // as study.html — duplicated here for now; could DRY later via a static .js.)
   const TAP_MS = 200;
-  let escDown = null;       // timestamp of Escape keydown, or null
-  let escConsumed = false;  // true once a combo has fired during hold
-  // Synthetic events we dispatch ourselves (Ctrl+<key> on combo, Escape on
-  // tap). Tracked so our own keydown listener doesn't re-intercept them and
-  // recurse — they're identified by reference via WeakSet.
+  let escDown = null, escConsumed = false;
   const synthetic = new WeakSet();
-
   function dispatchSynthetic(target, init) {
-    const kd = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
-    const ku = new KeyboardEvent('keyup',   { ...init, bubbles: true, cancelable: true });
+    const kd = new KeyboardEvent('keydown', {...init, bubbles: true, cancelable: true});
+    const ku = new KeyboardEvent('keyup',   {...init, bubbles: true, cancelable: true});
     synthetic.add(kd); synthetic.add(ku);
-    target.dispatchEvent(kd);
-    target.dispatchEvent(ku);
+    target.dispatchEvent(kd); target.dispatchEvent(ku);
   }
-
   view.dom.addEventListener('keydown', (e) => {
-    if (synthetic.has(e)) return;  // our own dispatched event — let it through
-    // Escape pressed alone — start the hold timer, swallow.
+    if (synthetic.has(e)) return;
     if (e.key === 'Escape' && !e.repeat && escDown === null) {
-      escDown = e.timeStamp;
-      escConsumed = false;
-      e.preventDefault();
-      e.stopPropagation();
-      return;
+      escDown = e.timeStamp; escConsumed = false;
+      e.preventDefault(); e.stopPropagation(); return;
     }
-    // Another key pressed while Escape is held — synthesize Ctrl+<key>.
     if (escDown !== null && e.key !== 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      escConsumed = true;
+      e.preventDefault(); e.stopPropagation(); escConsumed = true;
       dispatchSynthetic(view.contentDOM, {
-        key: e.key, code: e.code,
-        ctrlKey: true,
+        key: e.key, code: e.code, ctrlKey: true,
         shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey,
       });
     }
-  }, true);  // capture phase — beat CM's own keydown handler
-
+  }, true);
   view.dom.addEventListener('keyup', (e) => {
     if (synthetic.has(e)) return;
     if (e.key === 'Escape' && escDown !== null) {
       const heldFor = e.timeStamp - escDown;
       const wasTap = !escConsumed && heldFor < TAP_MS;
-      escDown = null;
-      escConsumed = false;
-      if (wasTap) {
-        // Re-fire Escape so vim sees it (exit insert mode, etc.).
-        dispatchSynthetic(view.contentDOM, { key: 'Escape', code: 'Escape' });
-      }
+      escDown = null; escConsumed = false;
+      if (wasTap) dispatchSynthetic(view.contentDOM, {key: 'Escape', code: 'Escape'});
     }
   }, true);
 }
