@@ -1894,6 +1894,13 @@ textarea:focus-visible {
   color: var(--ink-mute);
 }
 
+/* Single subscribe-toggle button: shows "Enable" or "Disable" label
+   based on data-state, set by JS from the local PushManager state. */
+#toggle-btn .toggle-label-on,
+#toggle-btn .toggle-label-off { display: none; }
+#toggle-btn[data-state="off"] .toggle-label-off { display: inline; }
+#toggle-btn[data-state="on"]  .toggle-label-on  { display: inline; }
+
 .notify-status {
   margin: 0.4rem 0 0.2rem;
   padding: 0.7rem 0.95rem;

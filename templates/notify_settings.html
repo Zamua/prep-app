@@ -88,14 +88,16 @@
     {% endif %}
   </p>
 
-  {# All four action buttons are rendered; JS picks which two to show based
-     on this device's subscription state (PushManager.getSubscription()).
-     Server-side "devices" is the user's total across devices and only
-     informs the status text. #}
+  {# Three action buttons. Toggle is a single button whose label and
+     primary/secondary styling flip based on the local subscription
+     state — JS sets data-state="on"/"off". Two static buttons would
+     waste vertical space and split the user's attention. #}
   <div class="study-actions" id="actions">
-    <button type="button" class="btn btn-primary"  id="save-btn"        hidden>Save settings</button>
-    <button type="button" class="btn btn-primary"  id="enable-btn"      hidden>Enable on this device</button>
-    <button type="button" class="btn btn-quiet"    id="disable-btn"     hidden>Disable on this device</button>
+    <button type="button" class="btn btn-primary" id="save-btn"   hidden>Save settings</button>
+    <button type="button" class="btn"             id="toggle-btn" hidden data-state="off">
+      <span class="toggle-label-off">Enable on this device</span>
+      <span class="toggle-label-on">Disable on this device</span>
+    </button>
     {# Stateful button: shows pending / success / error inline rather than
        updating the floating status pill. CSS picks which child <span>
        group is visible based on the is-* class on the button itself. #}
@@ -125,10 +127,9 @@
   const root = "{{ request.scope.get('root_path','') }}";
   const form = document.getElementById("notify-form");
   const status = document.getElementById("status");
-  const saveBtn    = document.getElementById("save-btn");
-  const enableBtn  = document.getElementById("enable-btn");
-  const disableBtn = document.getElementById("disable-btn");
-  const testBtn    = document.getElementById("test-btn");
+  const saveBtn   = document.getElementById("save-btn");
+  const toggleBtn = document.getElementById("toggle-btn");
+  const testBtn   = document.getElementById("test-btn");
   const tzInput    = document.getElementById("tz-input");
   const VAPID_KEY = "{{ vapid_key }}";
 
@@ -177,15 +178,18 @@
 
   function renderActions() {
     const subscribed = !!localSub;
-    saveBtn.hidden    = false;
-    enableBtn.hidden  = subscribed;
-    disableBtn.hidden = !subscribed;
-    testBtn.hidden    = !subscribed;
-    // Save's primary status alternates with Enable: when not subscribed,
-    // "Enable on this device" is the next step, so it gets primary;
-    // when subscribed, Save is the most-likely-next-action.
+    saveBtn.hidden   = false;
+    toggleBtn.hidden = false;
+    testBtn.hidden   = !subscribed;
+    // Toggle: data-state drives both label visibility (CSS) and click
+    // handler dispatch (JS). Primary class follows the user's most
+    // likely next action — Enable when not subscribed, Save when they
+    // already are.
+    toggleBtn.dataset.state = subscribed ? "on" : "off";
+    toggleBtn.classList.toggle("btn-primary", !subscribed);
+    toggleBtn.classList.toggle("btn-quiet",   subscribed);
     saveBtn.classList.toggle("btn-primary", subscribed);
-    saveBtn.classList.toggle("btn-quiet", !subscribed);
+    saveBtn.classList.toggle("btn-quiet",   !subscribed);
   }
 
   // ------- Pref save --------------------------------------------------------
@@ -220,7 +224,7 @@
     return Uint8Array.from(raw, (c) => c.charCodeAt(0));
   }
 
-  enableBtn.addEventListener("click", async () => {
+  async function doEnable() {
     if (!reg) {
       setStatus("This browser doesn't support web push.", "error");
       return;
@@ -251,9 +255,9 @@
     } else {
       setStatus("Server rejected the subscription.", "error");
     }
-  });
+  }
 
-  disableBtn.addEventListener("click", async () => {
+  async function doDisable() {
     if (!localSub) return;
     const endpoint = localSub.endpoint;
     setStatus("Disabling on this device…");
@@ -273,6 +277,11 @@
     localSub = null;
     setStatus("Disabled on this device.", "ok");
     renderActions();
+  }
+
+  toggleBtn.addEventListener("click", async () => {
+    if (toggleBtn.dataset.state === "on") await doDisable();
+    else await doEnable();
   });
 
   testBtn.addEventListener("click", async () => {
