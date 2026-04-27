@@ -91,6 +91,7 @@ func GenerateCards(ctx workflow.Context, in shared.GenerateCardsInput) (shared.G
 	var primeRes shared.PrimeResult
 	if err := workflow.ExecuteActivity(pctx, a.PrimeClaudeSession, shared.PrimeInput{
 		DeckName: in.DeckName,
+		UserID:   in.UserID,
 	}).Get(ctx, &primeRes); err != nil {
 		progress.Status = "failed"
 		return shared.GenerateCardsResult{}, fmt.Errorf("prime: %w", err)
@@ -141,6 +142,7 @@ func GenerateCards(ctx workflow.Context, in shared.GenerateCardsInput) (shared.G
 		err := workflow.ExecuteActivity(genCtx, a.GenerateNextCard, shared.GenerateInput{
 			SessionID:      sessionID,
 			DeckName:       in.DeckName,
+			UserID:         in.UserID,
 			Index:          i,
 			Total:          in.Count,
 			IdempotencyKey: key,
@@ -156,6 +158,7 @@ func GenerateCards(ctx workflow.Context, in shared.GenerateCardsInput) (shared.G
 		insCtx := workflow.WithActivityOptions(ctx, insertOpts)
 		if err := workflow.ExecuteActivity(insCtx, a.InsertCard, shared.InsertInput{
 			DeckName:       in.DeckName,
+			UserID:         in.UserID,
 			IdempotencyKey: key,
 			Card:           card,
 		}).Get(ctx, &ins); err != nil {

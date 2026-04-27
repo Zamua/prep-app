@@ -73,10 +73,50 @@ def _redirect(request: Request, path: str, status_code: int = 303) -> RedirectRe
         return RedirectResponse(f"{prefix}{path}", status_code=status_code)
     return RedirectResponse(f"{prefix}/{path}", status_code=status_code)
 
+
+# ---- Auth dependency -------------------------------------------------------
+#
+# Every authenticated route depends on `current_user`. We resolve identity in
+# this order:
+#   1. `Tailscale-User-Login` header (set by `tailscale serve` when properly
+#      configured to forward identity headers — not yet wired up; placeholder
+#      for the post-v0.3.0 plumbing).
+#   2. `PREP_DEFAULT_USER` env var — the inviting user. This covers the
+#      common case where the tailnet has only one identity (the owner) and
+#      removes the need for header plumbing for solo deployments.
+#   3. None → unauthenticated. (For now this raises 401; once we add the
+#      landing page in a later release this becomes a redirect.)
+#
+# `current_user` upserts the user row and returns the dict. This is cheap
+# (an upsert on every request) but keeps user.last_seen_at fresh.
+
+from fastapi import Depends
+
+
+def _resolve_login(request: Request) -> str | None:
+    hdr = request.headers.get("tailscale-user-login")
+    if hdr:
+        return hdr.strip()
+    fallback = os.environ.get("PREP_DEFAULT_USER")
+    return fallback or None
+
+
+def current_user(request: Request) -> dict:
+    login = _resolve_login(request)
+    if not login:
+        raise HTTPException(401, "no Tailscale identity (set Tailscale-User-Login header or PREP_DEFAULT_USER)")
+    display_name = request.headers.get("tailscale-user-name") or login.split("@", 1)[0]
+    profile_pic = request.headers.get("tailscale-user-profile-pic") or None
+    return db.upsert_user(login, display_name, profile_pic)
+
+
 db.init()
-# Seed the known decks at boot so they show up even before any questions exist.
+# Seed the known decks at boot for the default user, so a fresh DB has them
+# to study. New users get decks lazily via /study/{deck}/begin.
+_seed_user = os.environ.get("PREP_DEFAULT_USER", "owner@local")
+db.upsert_user(_seed_user, _seed_user.split("@", 1)[0], None)
 for known in generator.DECK_CONTEXT:
-    db.get_or_create_deck(known)
+    db.get_or_create_deck(_seed_user, known)
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 import dev_preview
@@ -84,25 +124,29 @@ dev_preview.register(app, templates)
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
+def index(request: Request, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "decks": db.list_decks(),
-            "recent_sessions": db.list_recent_sessions(limit=5),
+            "user": user,
+            "decks": db.list_decks(uid),
+            "recent_sessions": db.list_recent_sessions(uid, limit=5),
         },
     )
 
 
 @app.get("/deck/{name}", response_class=HTMLResponse)
-def deck_view(request: Request, name: str):
-    deck_id = db.get_or_create_deck(name)
-    questions = db.list_questions(deck_id)
+def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    deck_id = db.get_or_create_deck(uid, name)
+    questions = db.list_questions(uid, deck_id)
     return templates.TemplateResponse(
         "deck.html",
         {
             "request": request,
+            "user": user,
             "deck_name": name,
             "questions": questions,
             "due_count": sum(1 for q in questions
@@ -112,12 +156,15 @@ def deck_view(request: Request, name: str):
 
 
 @app.post("/deck/{name}/add")
-async def deck_add(request: Request, name: str, count: int = Form(5)):
+async def deck_add(request: Request, name: str, count: int = Form(5),
+                    user: dict = Depends(current_user)):
     if name not in generator.DECK_CONTEXT:
         raise HTTPException(400, f"Unknown deck '{name}'. Add it to generator.DECK_CONTEXT.")
     count = max(1, min(count, 15))
     try:
-        result = await temporal_client.start_generation(name, count)
+        result = await temporal_client.start_generation(
+            name, count, user_id=user["tailscale_login"],
+        )
     except Exception as e:
         raise HTTPException(500, f"failed to start workflow: {e}")
     return _redirect(request, f"/generation/{result.workflow_id}")
@@ -160,32 +207,36 @@ async def generation_cancel(request: Request, wid: str):
 
 
 @app.post("/study/{name}/begin")
-def session_begin(request: Request, name: str, fresh: int = 0):
+def session_begin(request: Request, name: str, fresh: int = 0,
+                   user: dict = Depends(current_user)):
     """Auto-resume an active session on this deck, or create a fresh one.
     Pass ?fresh=1 to abandon any existing active session and start over."""
-    deck_id = db.get_or_create_deck(name)
+    uid = user["tailscale_login"]
+    deck_id = db.get_or_create_deck(uid, name)
     if not fresh:
-        existing = db.find_active_session_for_deck(deck_id)
+        existing = db.find_active_session_for_deck(uid, deck_id)
         if existing:
             return _redirect(request, f"/session/{existing['id']}")
     # Mark prior abandoned (if fresh=1).
     if fresh:
-        existing = db.find_active_session_for_deck(deck_id)
+        existing = db.find_active_session_for_deck(uid, deck_id)
         if existing:
-            db.abandon_session(existing["id"])
+            db.abandon_session(uid, existing["id"])
     label = db.device_label_from_ua(request.headers.get("user-agent"))
-    sid = db.create_session(deck_id, label)
+    sid = db.create_session(uid, deck_id, label)
     return _redirect(request, f"/session/{sid}")
 
 
 @app.get("/session/{sid}", response_class=HTMLResponse)
-def session_view(request: Request, sid: str):
-    s = db.get_session(sid)
+def session_view(request: Request, sid: str, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    s = db.get_session(uid, sid)
     if not s:
         raise HTTPException(404, "session not found")
     with db.cursor() as c:
         deck_name = c.execute(
-            "SELECT name FROM decks WHERE id = ?", (s["deck_id"],)
+            "SELECT name FROM decks WHERE id = ? AND user_id = ?",
+            (s["deck_id"], uid),
         ).fetchone()["name"]
 
     # Branch by state.
@@ -203,7 +254,7 @@ def session_view(request: Request, sid: str):
         # row, plus the user_answer from the most recent reviews row for
         # this question (single source of truth, no extra column needed).
         qid = s["last_answered_qid"]
-        q = db.get_question(qid)
+        q = db.get_question(uid, qid)
         verdict = s["last_answered_verdict"]
         st = s["last_answered_state"]
         with db.cursor() as c:
@@ -248,20 +299,22 @@ def session_view(request: Request, sid: str):
         return _redirect(request, f"/grading/{s['current_grading_workflow_id']}")
 
     # awaiting-answer: render a session-aware study card.
-    q = db.get_question(s["current_question_id"]) if s["current_question_id"] else None
+    q = db.get_question(uid, s["current_question_id"]) if s["current_question_id"] else None
     if not q:
         # No more due cards — flip to completed.
         with db.cursor() as c:
             c.execute(
                 "UPDATE study_sessions SET status='completed', "
-                "       version = version + 1, last_active = ? WHERE id = ?",
-                (db.now(), sid),
+                "       version = version + 1, last_active = ? "
+                " WHERE id = ? AND user_id = ?",
+                (db.now(), sid, uid),
             )
         return _redirect(request, f"/session/{sid}")
     return templates.TemplateResponse(
         "session.html",
         {
             "request": request,
+            "user": user,
             "session": s,
             "deck_name": deck_name,
             "q": q,
@@ -271,12 +324,15 @@ def session_view(request: Request, sid: str):
 
 
 @app.post("/session/{sid}/draft")
-async def session_draft(request: Request, sid: str):
+async def session_draft(request: Request, sid: str, user: dict = Depends(current_user)):
     """Autosave endpoint. Body: {version: int, draft: str}. Returns
     {version: new} or 409 with {current_version: int}."""
     body = await request.json()
     try:
-        new_v = db.update_session_draft(sid, body.get("draft", ""), int(body["version"]))
+        new_v = db.update_session_draft(
+            user["tailscale_login"], sid,
+            body.get("draft", ""), int(body["version"]),
+        )
     except db.StaleVersionError as e:
         return JSONResponse(
             {"error": "stale", "current_version": e.current_version},
@@ -288,14 +344,15 @@ async def session_draft(request: Request, sid: str):
 
 
 @app.post("/session/{sid}/submit", response_class=HTMLResponse)
-async def session_submit(request: Request, sid: str):
+async def session_submit(request: Request, sid: str, user: dict = Depends(current_user)):
     form = await request.form()
     qtype = form["type"]
     qid = int(form["question_id"])
     expected_version = int(form["version"])
     idk = form.get("idk") == "1"
+    uid = user["tailscale_login"]
 
-    s = db.get_session(sid)
+    s = db.get_session(uid, sid)
     if not s:
         raise HTTPException(404, "session not found")
 
@@ -308,7 +365,7 @@ async def session_submit(request: Request, sid: str):
     else:
         user_answer = form.get("answer", "")
 
-    question = db.get_question(qid)
+    question = db.get_question(uid, qid)
     if not question:
         raise HTTPException(404, "question not found")
 
@@ -317,11 +374,14 @@ async def session_submit(request: Request, sid: str):
         # Look up deck name for the workflow id format.
         with db.cursor() as c:
             deck_name = c.execute(
-                "SELECT name FROM decks WHERE id = ?", (s["deck_id"],)
+                "SELECT name FROM decks WHERE id = ? AND user_id = ?",
+                (s["deck_id"], uid),
             ).fetchone()["name"]
         try:
-            res = await temporal_client.start_grading(qid, deck_name, user_answer, idk)
-            db.set_session_grading(sid, qid, res.workflow_id, expected_version)
+            res = await temporal_client.start_grading(
+                qid, deck_name, user_answer, idk, user_id=uid,
+            )
+            db.set_session_grading(uid, sid, qid, res.workflow_id, expected_version)
         except db.StaleVersionError as e:
             return _stale_response(request, sid, e.current_version)
         except Exception as e:
@@ -332,11 +392,11 @@ async def session_submit(request: Request, sid: str):
 
     # ---- Fast path: idk + mcq/multi grade synchronously.
     verdict = grader.grade(question, user_answer, idk=idk)
-    state = db.record_review(qid, verdict["result"], user_answer,
+    state = db.record_review(uid, qid, verdict["result"], user_answer,
                               notes=verdict.get("feedback", ""))
     try:
         db.record_session_answer_sync(
-            sid, qid, expected_version, user_answer, verdict, state,
+            uid, sid, qid, expected_version, user_answer, verdict, state,
         )
     except db.StaleVersionError as e:
         return _stale_response(request, sid, e.current_version)
@@ -344,25 +404,27 @@ async def session_submit(request: Request, sid: str):
 
 
 @app.post("/session/{sid}/advance")
-async def session_advance(request: Request, sid: str):
+async def session_advance(request: Request, sid: str, user: dict = Depends(current_user)):
     form = await request.form()
     expected_version = int(form["version"])
     try:
-        db.advance_session(sid, expected_version)
+        db.advance_session(user["tailscale_login"], sid, expected_version)
     except db.StaleVersionError as e:
         return _stale_response(request, sid, e.current_version)
     return _redirect(request, f"/session/{sid}")
 
 
 @app.post("/session/{sid}/abandon")
-def session_abandon(request: Request, sid: str):
-    db.abandon_session(sid)
-    s = db.get_session(sid)
+def session_abandon(request: Request, sid: str, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    db.abandon_session(uid, sid)
+    s = db.get_session(uid, sid)
     deck_name = ""
     if s:
         with db.cursor() as c:
             row = c.execute(
-                "SELECT name FROM decks WHERE id = ?", (s["deck_id"],)
+                "SELECT name FROM decks WHERE id = ? AND user_id = ?",
+                (s["deck_id"], uid),
             ).fetchone()
             if row:
                 deck_name = row["name"]
@@ -384,9 +446,10 @@ def _stale_response(request: Request, sid: str, current_version: int):
 
 
 @app.get("/study/{name}", response_class=HTMLResponse)
-def study(request: Request, name: str):
-    deck_id = db.get_or_create_deck(name)
-    due = db.due_questions(deck_id, limit=1)
+def study(request: Request, name: str, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    deck_id = db.get_or_create_deck(uid, name)
+    due = db.due_questions(uid, deck_id, limit=1)
     if not due:
         return templates.TemplateResponse(
             "study_empty.html",
@@ -399,11 +462,12 @@ def study(request: Request, name: str):
 
 
 @app.post("/study/{name}", response_class=HTMLResponse)
-async def study_submit(request: Request, name: str):
+async def study_submit(request: Request, name: str, user: dict = Depends(current_user)):
     form = await request.form()
     qid = int(form["question_id"])
     qtype = form["type"]
     idk = form.get("idk") == "1"
+    uid = user["tailscale_login"]
 
     if idk:
         user_answer = ""
@@ -414,7 +478,7 @@ async def study_submit(request: Request, name: str):
     else:
         user_answer = form.get("answer", "")
 
-    question = db.get_question(qid)
+    question = db.get_question(uid, qid)
     if not question:
         raise HTTPException(404, "question not found")
 
@@ -423,7 +487,9 @@ async def study_submit(request: Request, name: str):
     # grades + records via Temporal activities; we 303 to a polling page.
     if qtype in ("code", "short") and not idk:
         try:
-            res = await temporal_client.start_grading(qid, name, user_answer, idk)
+            res = await temporal_client.start_grading(
+                qid, name, user_answer, idk, user_id=uid,
+            )
         except Exception as e:
             raise HTTPException(500, f"failed to start grading workflow: {e}")
         return _redirect(request, f"/grading/{res.workflow_id}")
@@ -431,7 +497,7 @@ async def study_submit(request: Request, name: str):
     # ---- Fast path: idk + mcq/multi grade synchronously (deterministic, ms).
     verdict = grader.grade(question, user_answer, idk=idk)
     state = db.record_review(
-        qid, verdict["result"], user_answer,
+        uid, qid, verdict["result"], user_answer,
         notes=verdict.get("feedback", ""),
     )
 
@@ -493,11 +559,13 @@ def _parse_grading_wid(wid: str) -> tuple[str, int] | None:
 
 
 @app.get("/grading/{wid}", response_class=HTMLResponse)
-async def grading_view(request: Request, wid: str, sid: str = ""):
+async def grading_view(request: Request, wid: str, sid: str = "",
+                         user: dict = Depends(current_user)):
     parsed = _parse_grading_wid(wid)
     if not parsed:
         raise HTTPException(400, "malformed workflow id")
     deck_name, qid = parsed
+    uid = user["tailscale_login"]
 
     progress = await temporal_client.get_grade_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
@@ -515,7 +583,7 @@ async def grading_view(request: Request, wid: str, sid: str = ""):
                 {"request": request, "wid": wid, "deck_name": deck_name,
                  "progress": progress, "desc": desc, "failed": True},
             )
-        question = db.get_question(qid)
+        question = db.get_question(uid, qid)
         if not question:
             raise HTTPException(404, "question not found")
 
@@ -534,7 +602,7 @@ async def grading_view(request: Request, wid: str, sid: str = ""):
         # transition it to 'showing-result'. session_grading_completed is
         # idempotent — safe to call on every render.
         if sid:
-            db.session_grading_completed(sid, qid, verdict, state, wid)
+            db.session_grading_completed(uid, sid, qid, verdict, state, wid)
             # Once reconciled, the canonical view is /session/{sid} (state
             # showing-result). Redirect there so subsequent loads land on
             # the session URL, not the grading URL.
@@ -574,20 +642,30 @@ async def grading_status(wid: str):
 
 
 @app.post("/question/{qid}/suspend")
-def suspend(request: Request, qid: int):
-    db.set_suspended(qid, True)
-    q = db.get_question(qid)
-    deck_id = q["deck_id"]
+def suspend(request: Request, qid: int, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    q = db.get_question(uid, qid)
+    if not q:
+        raise HTTPException(404, "question not found")
+    db.set_suspended(uid, qid, True)
     with db.cursor() as c:
-        name = c.execute("SELECT name FROM decks WHERE id=?", (deck_id,)).fetchone()["name"]
+        name = c.execute(
+            "SELECT name FROM decks WHERE id=? AND user_id=?",
+            (q["deck_id"], uid),
+        ).fetchone()["name"]
     return _redirect(request, f"/deck/{name}")
 
 
 @app.post("/question/{qid}/unsuspend")
-def unsuspend(request: Request, qid: int):
-    db.set_suspended(qid, False)
-    q = db.get_question(qid)
-    deck_id = q["deck_id"]
+def unsuspend(request: Request, qid: int, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    q = db.get_question(uid, qid)
+    if not q:
+        raise HTTPException(404, "question not found")
+    db.set_suspended(uid, qid, False)
     with db.cursor() as c:
-        name = c.execute("SELECT name FROM decks WHERE id=?", (deck_id,)).fetchone()["name"]
+        name = c.execute(
+            "SELECT name FROM decks WHERE id=? AND user_id=?",
+            (q["deck_id"], uid),
+        ).fetchone()["name"]
     return _redirect(request, f"/deck/{name}")

@@ -1,10 +1,19 @@
 """SQLite layer for the interview-prep app.
 
 Schema:
-  decks       : one row per deck name
-  questions   : prompt + type + answer key + rubric, one per card
-  reviews     : every grading event, used to compute next-due
+  users       : one row per Tailscale identity (login email is the PK)
+  decks       : one row per (user, name) — names are NOT globally unique
+  questions   : prompt + type + answer key + rubric, scoped to a user
+  reviews     : every grading event, scoped via question → user
   cards       : one-to-one with questions, holds current SRS state
+  study_sessions / study_session_answers : cross-device study state, per-user
+
+Multi-user model:
+  • Every user-owned table has a `user_id` column = users.tailscale_login.
+  • Every read filters WHERE user_id = ?. Every write stamps user_id.
+  • Auth: Tailscale identity passthrough (Tailscale-User-Login header) when
+    available; falls back to PREP_DEFAULT_USER env var for development /
+    single-user setups. See app._auth_user.
 
 SRS = simplified SM-2:
   wrong              -> next interval = 10 minutes,  ease unchanged
@@ -19,6 +28,7 @@ SRS = simplified SM-2:
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -59,14 +69,25 @@ def init() -> None:
     with cursor() as c:
         c.executescript(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                tailscale_login  TEXT PRIMARY KEY,    -- email-shaped Tailscale login
+                display_name     TEXT,
+                profile_pic_url  TEXT,
+                created_at       TEXT NOT NULL,
+                last_seen_at     TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS decks (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                name        TEXT UNIQUE NOT NULL,
-                created_at  TEXT NOT NULL
+                user_id     TEXT NOT NULL REFERENCES users(tailscale_login) ON DELETE CASCADE,
+                name        TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                UNIQUE (user_id, name)
             );
 
             CREATE TABLE IF NOT EXISTS questions (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     TEXT NOT NULL REFERENCES users(tailscale_login) ON DELETE CASCADE,
                 deck_id     INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
                 type        TEXT NOT NULL,
                 topic       TEXT,
@@ -76,7 +97,8 @@ def init() -> None:
                 rubric      TEXT,
                 created_at  TEXT NOT NULL,
                 suspended   INTEGER NOT NULL DEFAULT 0,
-                skeleton    TEXT  -- optional starter code for `code` questions
+                skeleton    TEXT,  -- optional starter code for `code` questions
+                language    TEXT
             );
 
             CREATE TABLE IF NOT EXISTS cards (
@@ -101,6 +123,7 @@ def init() -> None:
 
             CREATE TABLE IF NOT EXISTS study_sessions (
                 id                          TEXT PRIMARY KEY,
+                user_id                     TEXT NOT NULL REFERENCES users(tailscale_login) ON DELETE CASCADE,
                 deck_id                     INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
                 created_at                  TEXT NOT NULL,
                 last_active                 TEXT NOT NULL,
@@ -129,31 +152,124 @@ def init() -> None:
             CREATE INDEX IF NOT EXISTS idx_sessions_deck ON study_sessions(deck_id, status);
             """
         )
-        # Migration: older DBs may have the questions table without
-        # `skeleton` / `language`. Add if missing — idempotent on each boot.
-        cols = [r["name"] for r in c.execute("PRAGMA table_info(questions)").fetchall()]
+        # ---- Schema migrations (idempotent; runs on every boot) -------------
+
+        # Older DBs may be missing skeleton / language columns on questions.
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(questions)").fetchall()}
         if "skeleton" not in cols:
             c.execute("ALTER TABLE questions ADD COLUMN skeleton TEXT")
         if "language" not in cols:
             c.execute("ALTER TABLE questions ADD COLUMN language TEXT")
+
+        # Multi-user migration: thread `user_id` through user-owned tables.
+        # Pre-multi-user DBs have all rows belonging to the inviting user
+        # ($PREP_DEFAULT_USER, fall back to "owner@local" if unset).
+        default_user = os.environ.get("PREP_DEFAULT_USER", "owner@local")
+
+        # 1. Ensure that user exists.
+        c.execute("""
+            INSERT OR IGNORE INTO users
+              (tailscale_login, display_name, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?)
+        """, (default_user, default_user.split("@")[0], now(), now()))
+
+        # 2. Add user_id columns to existing tables. SQLite requires we ALTER
+        #    one column at a time, then backfill.
+        def _ensure_user_id(table: str, default: str) -> None:
+            existing = {r["name"] for r in c.execute(f"PRAGMA table_info({table})").fetchall()}
+            if "user_id" not in existing:
+                # Adding NOT NULL with a non-constant default isn't supported
+                # in SQLite ALTER, so we add nullable first, backfill, then
+                # leave it nullable but rely on app-level checks. This is
+                # acceptable for an SRS app — a stray NULL would just hide
+                # the row from per-user queries (defense in depth).
+                c.execute(f"ALTER TABLE {table} ADD COLUMN user_id TEXT")
+                c.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (default,))
+
+        for tbl in ("decks", "questions", "study_sessions"):
+            _ensure_user_id(tbl, default_user)
+
+        # 3. The decks table originally had `name TEXT UNIQUE NOT NULL`. Now we
+        #    want `UNIQUE(user_id, name)` so different users can have decks
+        #    with the same name. Rebuild if the compound UNIQUE doesn't exist.
+        has_compound_unique = False
+        for idx in c.execute("PRAGMA index_list(decks)").fetchall():
+            if idx["unique"]:
+                cols = {r["name"] for r in c.execute(f"PRAGMA index_info({idx['name']})").fetchall()}
+                if cols == {"user_id", "name"}:
+                    has_compound_unique = True
+                    break
+        if not has_compound_unique:
+            c.executescript("""
+                CREATE TABLE decks_new (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id     TEXT NOT NULL,
+                    name        TEXT NOT NULL,
+                    created_at  TEXT NOT NULL,
+                    UNIQUE (user_id, name)
+                );
+                INSERT INTO decks_new (id, user_id, name, created_at)
+                  SELECT id, user_id, name, created_at FROM decks;
+                DROP TABLE decks;
+                ALTER TABLE decks_new RENAME TO decks;
+            """)
+
+        # 4. user_id-dependent indexes — created last, after every table has
+        #    the column. CREATE IF NOT EXISTS so re-running is a no-op.
+        c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON study_sessions(user_id, status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_questions_user_deck ON questions(user_id, deck_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_decks_user ON decks(user_id)")
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def get_or_create_deck(name: str) -> int:
+# =============================================================================
+# Users
+# =============================================================================
+
+def upsert_user(tailscale_login: str, display_name: str | None = None,
+                profile_pic_url: str | None = None) -> dict:
+    """Called on every authenticated request. Upserts the user row and bumps
+    last_seen_at. Returns the user dict."""
+    ts = now()
     with cursor() as c:
-        row = c.execute("SELECT id FROM decks WHERE name = ?", (name,)).fetchone()
+        c.execute(
+            """INSERT INTO users (tailscale_login, display_name, profile_pic_url, created_at, last_seen_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(tailscale_login) DO UPDATE SET
+                 display_name = COALESCE(?, users.display_name),
+                 profile_pic_url = COALESCE(?, users.profile_pic_url),
+                 last_seen_at = ?""",
+            (tailscale_login, display_name, profile_pic_url, ts, ts,
+             display_name, profile_pic_url, ts),
+        )
+        return dict(c.execute(
+            "SELECT * FROM users WHERE tailscale_login = ?", (tailscale_login,)
+        ).fetchone())
+
+
+# =============================================================================
+# Decks (per-user)
+# =============================================================================
+
+def get_or_create_deck(user_id: str, name: str) -> int:
+    with cursor() as c:
+        row = c.execute(
+            "SELECT id FROM decks WHERE user_id = ? AND name = ?",
+            (user_id, name),
+        ).fetchone()
         if row:
             return row["id"]
         cur = c.execute(
-            "INSERT INTO decks (name, created_at) VALUES (?, ?)", (name, now())
+            "INSERT INTO decks (user_id, name, created_at) VALUES (?, ?, ?)",
+            (user_id, name, now()),
         )
         return cur.lastrowid
 
 
-def list_decks() -> list[dict]:
+def list_decks(user_id: str) -> list[dict]:
     with cursor() as c:
         rows = c.execute(
             """
@@ -162,17 +278,19 @@ def list_decks() -> list[dict]:
                    SUM(CASE WHEN cards.next_due <= ? AND COALESCE(q.suspended,0)=0
                             THEN 1 ELSE 0 END) AS due
               FROM decks d
-              LEFT JOIN questions q ON q.deck_id = d.id
+              LEFT JOIN questions q ON q.deck_id = d.id AND q.user_id = d.user_id
               LEFT JOIN cards ON cards.question_id = q.id
+             WHERE d.user_id = ?
              GROUP BY d.id
              ORDER BY d.name
             """,
-            (now(),),
+            (now(), user_id),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
 def add_question(
+    user_id: str,
     deck_id: int,
     qtype: str,
     prompt: str,
@@ -197,10 +315,11 @@ def add_question(
         cur = c.execute(
             """
             INSERT INTO questions
-                (deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                user_id,
                 deck_id,
                 qtype,
                 topic,
@@ -221,7 +340,7 @@ def add_question(
         return qid
 
 
-def list_questions(deck_id: int) -> list[dict]:
+def list_questions(user_id: str, deck_id: int) -> list[dict]:
     with cursor() as c:
         rows = c.execute(
             """
@@ -232,32 +351,36 @@ def list_questions(deck_id: int) -> list[dict]:
                      WHERE r.question_id=q.id AND r.result='right') AS rights
               FROM questions q
               LEFT JOIN cards ON cards.question_id = q.id
-             WHERE q.deck_id = ?
+             WHERE q.deck_id = ? AND q.user_id = ?
              ORDER BY cards.next_due ASC, q.id ASC
             """,
-            (deck_id,),
+            (deck_id, user_id),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def question_prompts_for_deck(deck_id: int) -> list[str]:
-    """Used by the generator to avoid duplicates."""
+def question_prompts_for_deck(user_id: str, deck_id: int) -> list[str]:
+    """Used by the generator to avoid duplicates within a user's own deck."""
     with cursor() as c:
         rows = c.execute(
-            "SELECT prompt FROM questions WHERE deck_id = ?", (deck_id,)
+            "SELECT prompt FROM questions WHERE deck_id = ? AND user_id = ?",
+            (deck_id, user_id),
         ).fetchall()
         return [r["prompt"] for r in rows]
 
 
-def get_question(qid: int) -> dict | None:
+def get_question(user_id: str, qid: int) -> dict | None:
+    """Fetch a question, scoped to the user's own questions only. Returns
+    None if qid doesn't exist OR belongs to another user — same response
+    so we don't leak existence across users."""
     with cursor() as c:
         row = c.execute(
             """
             SELECT q.*, cards.step, cards.next_due
               FROM questions q LEFT JOIN cards ON cards.question_id = q.id
-             WHERE q.id = ?
+             WHERE q.id = ? AND q.user_id = ?
             """,
-            (qid,),
+            (qid, user_id),
         ).fetchone()
         if not row:
             return None
@@ -269,7 +392,7 @@ def get_question(qid: int) -> dict | None:
         return d
 
 
-def due_questions(deck_id: int, limit: int = 3) -> list[dict]:
+def due_questions(user_id: str, deck_id: int, limit: int = 3) -> list[dict]:
     """Cards due now, oldest-due first. Falls back to never-attempted-yet."""
     ts = now()
     with cursor() as c:
@@ -278,19 +401,22 @@ def due_questions(deck_id: int, limit: int = 3) -> list[dict]:
             SELECT q.id
               FROM questions q
               JOIN cards ON cards.question_id = q.id
-             WHERE q.deck_id = ?
+             WHERE q.deck_id = ? AND q.user_id = ?
                AND COALESCE(q.suspended, 0) = 0
                AND cards.next_due <= ?
              ORDER BY cards.next_due ASC
              LIMIT ?
             """,
-            (deck_id, ts, limit),
+            (deck_id, user_id, ts, limit),
         ).fetchall()
-        return [get_question(r["id"]) for r in rows]
+        return [get_question(user_id, r["id"]) for r in rows]
 
 
-def record_review(qid: int, result: str, user_answer: str, notes: str = "") -> dict:
+def record_review(user_id: str, qid: int, result: str, user_answer: str, notes: str = "") -> dict:
     """Record a review and advance/reset the SRS step.
+
+    Verifies the question belongs to the user before mutating SRS state —
+    defense in depth in case a route misses the check.
 
     Returns the new card state.
     """
@@ -298,6 +424,12 @@ def record_review(qid: int, result: str, user_answer: str, notes: str = "") -> d
         raise ValueError(f"unknown result: {result}")
     ts = datetime.now(timezone.utc)
     with cursor() as c:
+        # Verify ownership.
+        owner = c.execute(
+            "SELECT user_id FROM questions WHERE id = ?", (qid,)
+        ).fetchone()
+        if not owner or owner["user_id"] != user_id:
+            raise ValueError(f"question {qid} not owned by {user_id}")
         row = c.execute(
             "SELECT step FROM cards WHERE question_id = ?", (qid,)
         ).fetchone()
@@ -324,11 +456,11 @@ def record_review(qid: int, result: str, user_answer: str, notes: str = "") -> d
         return {"step": new_step, "next_due": next_due, "interval_minutes": interval}
 
 
-def set_suspended(qid: int, suspended: bool) -> None:
+def set_suspended(user_id: str, qid: int, suspended: bool) -> None:
     with cursor() as c:
         c.execute(
-            "UPDATE questions SET suspended = ? WHERE id = ?",
-            (1 if suspended else 0, qid),
+            "UPDATE questions SET suspended = ? WHERE id = ? AND user_id = ?",
+            (1 if suspended else 0, qid, user_id),
         )
 
 
@@ -380,31 +512,34 @@ def device_label_from_ua(ua: str | None) -> str:
     return "browser"
 
 
-def create_session(deck_id: int, device_label: str) -> str:
+def create_session(user_id: str, deck_id: int, device_label: str) -> str:
     """Create a fresh session for a deck. Returns the session id. Picks the
     first due card and seeds current_draft from its skeleton (if any)."""
     ts = now()
     sid = _new_session_id()
-    next_q = _pick_next_question_for_session(deck_id, sid)
+    next_q = _pick_next_question_for_session(user_id, deck_id, sid)
     initial_draft = (next_q.get("skeleton") or "") if next_q else ""
     with cursor() as c:
         c.execute(
             """
             INSERT INTO study_sessions
-                (id, deck_id, created_at, last_active, status, state,
+                (id, user_id, deck_id, created_at, last_active, status, state,
                  current_question_id, current_draft, version, device_label)
-            VALUES (?, ?, ?, ?, 'active', 'awaiting-answer', ?, ?, 1, ?)
+            VALUES (?, ?, ?, ?, ?, 'active', 'awaiting-answer', ?, ?, 1, ?)
             """,
-            (sid, deck_id, ts, ts, next_q["id"] if next_q else None,
+            (sid, user_id, deck_id, ts, ts, next_q["id"] if next_q else None,
              initial_draft, device_label),
         )
     return sid
 
 
-def get_session(sid: str) -> dict | None:
+def get_session(user_id: str, sid: str) -> dict | None:
+    """Fetch a session, scoped to the user. Returns None if the session
+    doesn't exist OR belongs to another user."""
     with cursor() as c:
         row = c.execute(
-            "SELECT * FROM study_sessions WHERE id = ?", (sid,)
+            "SELECT * FROM study_sessions WHERE id = ? AND user_id = ?",
+            (sid, user_id),
         ).fetchone()
         if not row:
             return None
@@ -418,7 +553,7 @@ def get_session(sid: str) -> dict | None:
         return d
 
 
-def _pick_next_question_for_session(deck_id: int, sid: str) -> dict | None:
+def _pick_next_question_for_session(user_id: str, deck_id: int, sid: str) -> dict | None:
     """Return the next question this session should show: a card that's due
     AND hasn't been answered in this session yet. Returns None if no such
     card (session is complete)."""
@@ -429,7 +564,7 @@ def _pick_next_question_for_session(deck_id: int, sid: str) -> dict | None:
             SELECT q.id
               FROM questions q
               JOIN cards ON cards.question_id = q.id
-             WHERE q.deck_id = ?
+             WHERE q.deck_id = ? AND q.user_id = ?
                AND COALESCE(q.suspended, 0) = 0
                AND cards.next_due <= ?
                AND q.id NOT IN (
@@ -438,35 +573,36 @@ def _pick_next_question_for_session(deck_id: int, sid: str) -> dict | None:
              ORDER BY cards.next_due ASC
              LIMIT 1
             """,
-            (deck_id, ts, sid),
+            (deck_id, user_id, ts, sid),
         ).fetchone()
-        return get_question(row["id"]) if row else None
+        return get_question(user_id, row["id"]) if row else None
 
 
-def find_active_session_for_deck(deck_id: int) -> dict | None:
+def find_active_session_for_deck(user_id: str, deck_id: int) -> dict | None:
     """Used by /study/{deck}/begin to auto-resume."""
     with cursor() as c:
         row = c.execute(
             "SELECT * FROM study_sessions "
-            " WHERE deck_id = ? AND status = 'active' "
+            " WHERE deck_id = ? AND user_id = ? AND status = 'active' "
             " ORDER BY last_active DESC LIMIT 1",
-            (deck_id,),
+            (deck_id, user_id),
         ).fetchone()
         return dict(row) if row else None
 
 
-def list_recent_sessions(limit: int = 5) -> list[dict]:
-    """Recent active sessions across all decks; for the index page block.
+def list_recent_sessions(user_id: str, limit: int = 5) -> list[dict]:
+    """Recent active sessions for this user across all their decks.
 
-    Side-effect: ages out sessions idle for >7d into status='abandoned'.
-    Cheap to do on each list call rather than wiring a separate reaper.
+    Side-effect: ages out THIS USER's sessions idle for >7d into
+    status='abandoned'. Cheap to do on each list call rather than wiring
+    a separate reaper.
     """
     abandon_before = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     with cursor() as c:
         c.execute(
             "UPDATE study_sessions SET status = 'abandoned' "
-            " WHERE status = 'active' AND last_active < ?",
-            (abandon_before,),
+            " WHERE user_id = ? AND status = 'active' AND last_active < ?",
+            (user_id, abandon_before),
         )
         rows = c.execute(
             """
@@ -475,37 +611,43 @@ def list_recent_sessions(limit: int = 5) -> list[dict]:
               FROM study_sessions s
               JOIN decks d ON d.id = s.deck_id
               LEFT JOIN questions q ON q.id = s.current_question_id
-             WHERE s.status = 'active'
+             WHERE s.user_id = ? AND s.status = 'active'
              ORDER BY s.last_active DESC
              LIMIT ?
             """,
-            (limit,),
+            (user_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def update_session_draft(sid: str, draft: str, expected_version: int) -> int:
+# All mutation functions below take user_id and add it to the WHERE clause —
+# defense in depth so a forgetful route can't accidentally let one user
+# mutate another's session.
+
+def update_session_draft(user_id: str, sid: str, draft: str, expected_version: int) -> int:
     """Save the in-progress draft. Version-checked. Returns the new version."""
     ts = now()
     with cursor() as c:
         row = c.execute(
-            "SELECT version FROM study_sessions WHERE id = ?", (sid,)
+            "SELECT version FROM study_sessions WHERE id = ? AND user_id = ?",
+            (sid, user_id),
         ).fetchone()
         if not row:
-            raise ValueError(f"session {sid} not found")
+            raise ValueError(f"session {sid} not found for user")
         if row["version"] != expected_version:
             raise StaleVersionError(row["version"])
         new_v = expected_version + 1
         c.execute(
             "UPDATE study_sessions "
             "   SET current_draft = ?, last_active = ?, version = ? "
-            " WHERE id = ?",
-            (draft, ts, new_v, sid),
+            " WHERE id = ? AND user_id = ?",
+            (draft, ts, new_v, sid, user_id),
         )
         return new_v
 
 
 def record_session_answer_sync(
+    user_id: str,
     sid: str,
     question_id: int,
     expected_version: int,
@@ -519,10 +661,11 @@ def record_session_answer_sync(
     ts = now()
     with cursor() as c:
         row = c.execute(
-            "SELECT version FROM study_sessions WHERE id = ?", (sid,)
+            "SELECT version FROM study_sessions WHERE id = ? AND user_id = ?",
+            (sid, user_id),
         ).fetchone()
         if not row:
-            raise ValueError(f"session {sid} not found")
+            raise ValueError(f"session {sid} not found for user")
         if row["version"] != expected_version:
             raise StaleVersionError(row["version"])
         new_v = expected_version + 1
@@ -542,23 +685,25 @@ def record_session_answer_sync(
                 last_answered_state = ?,
                 last_active = ?,
                 version = ?
-              WHERE id = ?""",
-            (question_id, json.dumps(verdict), json.dumps(state), ts, new_v, sid),
+              WHERE id = ? AND user_id = ?""",
+            (question_id, json.dumps(verdict), json.dumps(state),
+             ts, new_v, sid, user_id),
         )
         return new_v
 
 
-def set_session_grading(sid: str, question_id: int, workflow_id: str,
+def set_session_grading(user_id: str, sid: str, question_id: int, workflow_id: str,
                         expected_version: int) -> int:
     """Used when a code/short submission kicks off a grading workflow.
     Sets state='grading', stores the workflow id, version-checked."""
     ts = now()
     with cursor() as c:
         row = c.execute(
-            "SELECT version FROM study_sessions WHERE id = ?", (sid,)
+            "SELECT version FROM study_sessions WHERE id = ? AND user_id = ?",
+            (sid, user_id),
         ).fetchone()
         if not row:
-            raise ValueError(f"session {sid} not found")
+            raise ValueError(f"session {sid} not found for user")
         if row["version"] != expected_version:
             raise StaleVersionError(row["version"])
         new_v = expected_version + 1
@@ -568,21 +713,23 @@ def set_session_grading(sid: str, question_id: int, workflow_id: str,
                 current_grading_workflow_id = ?,
                 last_active = ?,
                 version = ?
-              WHERE id = ?""",
-            (workflow_id, ts, new_v, sid),
+              WHERE id = ? AND user_id = ?""",
+            (workflow_id, ts, new_v, sid, user_id),
         )
         return new_v
 
 
-def session_grading_completed(sid: str, question_id: int, verdict: dict,
+def session_grading_completed(user_id: str, sid: str, question_id: int, verdict: dict,
                                state: dict, workflow_id: str) -> None:
     """Called from a polling endpoint once the grading workflow finishes.
     Stamps the answer + transitions to showing-result. Not version-checked
-    because this is server-side reconciliation, not user input."""
+    because this is server-side reconciliation, not user input. Scoped to
+    user_id so cross-user reconciliation can't happen."""
     ts = now()
     with cursor() as c:
         row = c.execute(
-            "SELECT state, version FROM study_sessions WHERE id = ?", (sid,)
+            "SELECT state, version FROM study_sessions WHERE id = ? AND user_id = ?",
+            (sid, user_id),
         ).fetchone()
         if not row:
             return
@@ -605,23 +752,24 @@ def session_grading_completed(sid: str, question_id: int, verdict: dict,
                 last_answered_state = ?,
                 last_active = ?,
                 version = version + 1
-              WHERE id = ?""",
-            (question_id, json.dumps(verdict), json.dumps(state), ts, sid),
+              WHERE id = ? AND user_id = ?""",
+            (question_id, json.dumps(verdict), json.dumps(state), ts, sid, user_id),
         )
 
 
-def advance_session(sid: str, expected_version: int) -> int:
+def advance_session(user_id: str, sid: str, expected_version: int) -> int:
     """Move from showing-result to the next due card (or completed)."""
     ts = now()
     with cursor() as c:
         row = c.execute(
-            "SELECT version, deck_id FROM study_sessions WHERE id = ?", (sid,)
+            "SELECT version, deck_id FROM study_sessions WHERE id = ? AND user_id = ?",
+            (sid, user_id),
         ).fetchone()
         if not row:
-            raise ValueError(f"session {sid} not found")
+            raise ValueError(f"session {sid} not found for user")
         if row["version"] != expected_version:
             raise StaleVersionError(row["version"])
-        next_q = _pick_next_question_for_session(row["deck_id"], sid)
+        next_q = _pick_next_question_for_session(user_id, row["deck_id"], sid)
         new_v = expected_version + 1
         if next_q is None:
             c.execute(
@@ -634,8 +782,8 @@ def advance_session(sid: str, expected_version: int) -> int:
                     last_answered_verdict = NULL,
                     last_answered_state = NULL,
                     last_active = ?, version = ?
-                  WHERE id = ?""",
-                (ts, new_v, sid),
+                  WHERE id = ? AND user_id = ?""",
+                (ts, new_v, sid, user_id),
             )
         else:
             c.execute(
@@ -647,19 +795,19 @@ def advance_session(sid: str, expected_version: int) -> int:
                     last_answered_verdict = NULL,
                     last_answered_state = NULL,
                     last_active = ?, version = ?
-                  WHERE id = ?""",
-                (next_q["id"], next_q.get("skeleton") or "", ts, new_v, sid),
+                  WHERE id = ? AND user_id = ?""",
+                (next_q["id"], next_q.get("skeleton") or "", ts, new_v, sid, user_id),
             )
         return new_v
 
 
-def abandon_session(sid: str) -> None:
+def abandon_session(user_id: str, sid: str) -> None:
     with cursor() as c:
         c.execute(
             "UPDATE study_sessions "
             "   SET status = 'abandoned', last_active = ?, version = version + 1 "
-            " WHERE id = ?",
-            (now(), sid),
+            " WHERE id = ? AND user_id = ?",
+            (now(), sid, user_id),
         )
 
 

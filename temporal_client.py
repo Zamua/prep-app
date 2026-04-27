@@ -39,14 +39,15 @@ class StartResult:
     run_id: str
 
 
-async def start_generation(deck_name: str, count: int) -> StartResult:
+async def start_generation(deck_name: str, count: int, *, user_id: str) -> StartResult:
     """Start a GenerateCardsWorkflow run. Returns immediately — the workflow
-    runs asynchronously on the Go worker."""
+    runs asynchronously on the Go worker. user_id is passed through so the
+    worker writes to the correct user's deck."""
     client = await _get_client()
     wid = f"gen-{deck_name}-{uuid.uuid4().hex[:12]}"
     handle = await client.start_workflow(
         WORKFLOW_NAME,
-        {"deck_name": deck_name, "count": count},
+        {"deck_name": deck_name, "count": count, "user_id": user_id},
         id=wid,
         task_queue=TASK_QUEUE,
     )
@@ -94,15 +95,22 @@ async def cancel_generation(workflow_id: str) -> None:
 # ---- Grading workflow helpers ----
 
 
-async def start_grading(question_id: int, deck_name: str, user_answer: str, idk: bool) -> StartResult:
+async def start_grading(question_id: int, deck_name: str, user_answer: str, idk: bool, *,
+                          user_id: str) -> StartResult:
     """Start a GradeAnswerWorkflow run. workflow_id encodes deck_name and
     question_id so the polling page (and the eventual result render) can
-    parse them back without a side table."""
+    parse them back without a side table. user_id is passed through so the
+    grading activity scopes its DB reads to the correct user."""
     client = await _get_client()
     wid = f"grade-{deck_name}-q{question_id}-{uuid.uuid4().hex[:10]}"
     handle = await client.start_workflow(
         GRADE_WORKFLOW_NAME,
-        {"question_id": question_id, "user_answer": user_answer, "idk": idk},
+        {
+            "question_id": question_id,
+            "user_answer": user_answer,
+            "idk": idk,
+            "user_id": user_id,
+        },
         id=wid,
         task_queue=TASK_QUEUE,
     )

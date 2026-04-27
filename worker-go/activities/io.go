@@ -124,9 +124,11 @@ func openDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// allPromptsForDeck returns every prior prompt for a deck — used to seed
-// the priming context so the model doesn't repeat across batches.
-func allPromptsForDeck(dbPath, deckName string) ([]string, error) {
+// allPromptsForDeck returns every prior prompt for a (user, deck) — used
+// to seed the priming context so the model doesn't repeat across batches.
+// Scoped to user_id so different users can have decks with the same name
+// without their prompts polluting each other.
+func allPromptsForDeck(dbPath, userID, deckName string) ([]string, error) {
 	db, err := openDB(dbPath)
 	if err != nil {
 		return nil, err
@@ -136,7 +138,8 @@ func allPromptsForDeck(dbPath, deckName string) ([]string, error) {
 	rows, err := db.Query(`
 		SELECT q.prompt
 		  FROM questions q JOIN decks d ON d.id = q.deck_id
-		 WHERE d.name = ?`, deckName)
+		 WHERE d.name = ? AND d.user_id = ? AND q.user_id = ?`,
+		deckName, userID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,11 +216,14 @@ func insertCard(dbPath string, in shared.InsertInput) (shared.InsertResult, erro
 	}
 
 	// Look up deck id (creating if missing — mirrors the Python helper).
+	// Scoped to user_id so two users with a deck named "cherry" each get
+	// their own deck row.
 	var deckID int
-	err = tx.QueryRow(`SELECT id FROM decks WHERE name=?`, in.DeckName).Scan(&deckID)
+	err = tx.QueryRow(`SELECT id FROM decks WHERE name=? AND user_id=?`,
+		in.DeckName, in.UserID).Scan(&deckID)
 	if errors.Is(err, sql.ErrNoRows) {
-		res, err := tx.Exec(`INSERT INTO decks (name, created_at) VALUES (?, ?)`,
-			in.DeckName, nowISO())
+		res, err := tx.Exec(`INSERT INTO decks (user_id, name, created_at) VALUES (?, ?, ?)`,
+			in.UserID, in.DeckName, nowISO())
 		if err != nil {
 			return shared.InsertResult{}, err
 		}
@@ -251,9 +257,9 @@ func insertCard(dbPath string, in shared.InsertInput) (shared.InsertResult, erro
 	}
 
 	res, err := tx.Exec(`
-		INSERT INTO questions (deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		deckID, in.Card.Type, nullable(in.Card.Topic), in.Card.Prompt,
+		INSERT INTO questions (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		in.UserID, deckID, in.Card.Type, nullable(in.Card.Topic), in.Card.Prompt,
 		choicesJSON, in.Card.Answer, nullable(in.Card.Rubric), nowISO(), skeletonCol, languageCol)
 	if err != nil {
 		return shared.InsertResult{}, fmt.Errorf("insert questions: %w", err)

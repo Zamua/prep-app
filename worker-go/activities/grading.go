@@ -47,7 +47,7 @@ var srsLadderMinutes = []int{
 func (a *Activities) GradeFreeText(ctx context.Context, in shared.GradeFreeTextInput) (shared.Verdict, error) {
 	logger := activity.GetLogger(ctx)
 
-	q, err := loadQuestion(a.Cfg.DBPath, in.QuestionID)
+	q, err := loadQuestion(a.Cfg.DBPath, in.UserID, in.QuestionID)
 	if err != nil {
 		return shared.Verdict{}, temporal.NewNonRetryableApplicationError(
 			"load question failed", "BadQuestionID", err)
@@ -184,6 +184,18 @@ func (a *Activities) RecordReview(ctx context.Context, in shared.RecordReviewInp
 		return shared.SRSState{}, fmt.Errorf("idempotency check: %w", err)
 	}
 
+	// Verify ownership — defense in depth so a misrouted workflow can't
+	// mutate another user's SRS state.
+	var owner string
+	if err := tx.QueryRow(`SELECT user_id FROM questions WHERE id = ?`, in.QuestionID).Scan(&owner); err != nil {
+		return shared.SRSState{}, fmt.Errorf("read question owner: %w", err)
+	}
+	if owner != in.UserID {
+		return shared.SRSState{}, temporal.NewNonRetryableApplicationError(
+			"question does not belong to user", "BadOwner",
+			fmt.Errorf("question %d owned by %s, not %s", in.QuestionID, owner, in.UserID))
+	}
+
 	// Read current step.
 	var step int
 	if err := tx.QueryRow(`SELECT step FROM cards WHERE question_id = ?`, in.QuestionID).Scan(&step); err != nil {
@@ -243,7 +255,7 @@ type loadedQuestion struct {
 	Rubric string
 }
 
-func loadQuestion(dbPath string, qid int) (*loadedQuestion, error) {
+func loadQuestion(dbPath, userID string, qid int) (*loadedQuestion, error) {
 	db, err := openDB(dbPath)
 	if err != nil {
 		return nil, err
@@ -251,10 +263,10 @@ func loadQuestion(dbPath string, qid int) (*loadedQuestion, error) {
 	defer db.Close()
 	var q loadedQuestion
 	var rubric sql.NullString
-	err = db.QueryRow(`SELECT id, type, prompt, answer, rubric FROM questions WHERE id = ?`, qid).Scan(
-		&q.ID, &q.Type, &q.Prompt, &q.Answer, &rubric)
+	err = db.QueryRow(`SELECT id, type, prompt, answer, rubric FROM questions WHERE id = ? AND user_id = ?`,
+		qid, userID).Scan(&q.ID, &q.Type, &q.Prompt, &q.Answer, &rubric)
 	if err != nil {
-		return nil, fmt.Errorf("question %d: %w", qid, err)
+		return nil, fmt.Errorf("question %d for user %s: %w", qid, userID, err)
 	}
 	if rubric.Valid {
 		q.Rubric = rubric.String

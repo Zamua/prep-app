@@ -118,7 +118,7 @@ var deckRegistry = map[string]struct {
 	},
 }
 
-func (a *Activities) loadDeckContext(deckName string) (*DeckContext, error) {
+func (a *Activities) loadDeckContext(userID, deckName string) (*DeckContext, error) {
 	cfg, ok := deckRegistry[deckName]
 	if !ok {
 		return nil, fmt.Errorf("unknown deck %q", deckName)
@@ -133,7 +133,9 @@ func (a *Activities) loadDeckContext(deckName string) (*DeckContext, error) {
 		td, _ := readDirSummary(filepath.Join(a.Cfg.InterviewsDir, t), 30, 8000)
 		fmt.Fprintf(&topics, "\n## Shared topic: %s\n%s", t, td)
 	}
-	prior, err := allPromptsForDeck(a.Cfg.DBPath, deckName)
+	// Scoped to userID so other users' prior prompts don't bleed into the
+	// dedup context.
+	prior, err := allPromptsForDeck(a.Cfg.DBPath, userID, deckName)
 	if err != nil {
 		return nil, fmt.Errorf("read prior prompts: %w", err)
 	}
@@ -165,7 +167,7 @@ func (a *Activities) PrimeClaudeSession(ctx context.Context, in shared.PrimeInpu
 	logger := activity.GetLogger(ctx)
 	sessionID := newSessionUUID()
 
-	dctx, err := a.loadDeckContext(in.DeckName)
+	dctx, err := a.loadDeckContext(in.UserID, in.DeckName)
 	if err != nil {
 		return shared.PrimeResult{}, temporal.NewNonRetryableApplicationError(
 			"deck context load failed", "BadDeckContext", err)

@@ -18,6 +18,20 @@
         <span class="brand-mark">P</span>
         <span class="brand-word">Prep&nbsp;·&nbsp;<em>a commonplace book</em></span>
       </a>
+      {% if user %}
+        {# User indicator. Tap to expand a small panel showing the full
+           identity. Future: settings (vim default, keybindings, etc.). #}
+        <details class="user-indicator">
+          <summary class="user-chip" aria-label="account">
+            <span class="user-mark" aria-hidden="true">{{ (user.display_name or user.tailscale_login)[0]|upper }}</span>
+          </summary>
+          <div class="user-panel">
+            <p class="user-name">{{ user.display_name or user.tailscale_login.split('@')[0] }}</p>
+            <p class="user-login">{{ user.tailscale_login }}</p>
+            <p class="user-hint"><em>Settings coming soon.</em></p>
+          </div>
+        </details>
+      {% endif %}
       {% block header_extra %}{% endblock %}
     </header>
     <main class="folio">

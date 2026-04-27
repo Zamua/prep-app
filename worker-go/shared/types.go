@@ -14,6 +14,7 @@ const (
 type GenerateCardsInput struct {
 	DeckName string `json:"deck_name"`
 	Count    int    `json:"count"`
+	UserID   string `json:"user_id"` // tailscale_login of the user who owns this deck
 }
 
 // GenerateCardsResult is what the workflow returns when it completes.
@@ -41,6 +42,7 @@ type Progress struct {
 // ID before fully creating the session). Each retry mints a fresh ID.
 type PrimeInput struct {
 	DeckName string `json:"deck_name"`
+	UserID   string `json:"user_id"`
 }
 
 // PrimeResult is what PrimeClaudeSession returns. The workflow stores
@@ -54,6 +56,7 @@ type PrimeResult struct {
 type GenerateInput struct {
 	SessionID      string   `json:"session_id"`
 	DeckName       string   `json:"deck_name"`
+	UserID         string   `json:"user_id"`
 	Index          int      `json:"index"`
 	Total          int      `json:"total"`
 	IdempotencyKey string   `json:"idempotency_key"`
@@ -85,6 +88,7 @@ type Card struct {
 // InsertInput is the input for InsertCard.
 type InsertInput struct {
 	DeckName       string `json:"deck_name"`
+	UserID         string `json:"user_id"`
 	IdempotencyKey string `json:"idempotency_key"`
 	Card           Card   `json:"card"`
 }
@@ -113,6 +117,7 @@ type GradeAnswerInput struct {
 	QuestionID int    `json:"question_id"`
 	UserAnswer string `json:"user_answer"`
 	IDK        bool   `json:"idk"`
+	UserID     string `json:"user_id"`
 }
 
 // Verdict is what GradeFreeText returns and what the workflow ultimately
@@ -130,12 +135,14 @@ type GradeFreeTextInput struct {
 	QuestionID int    `json:"question_id"`
 	UserAnswer string `json:"user_answer"`
 	IDK        bool   `json:"idk"`
+	UserID     string `json:"user_id"`
 }
 
 // RecordReviewInput is the activity input for writing the review row +
 // advancing the SRS state.
 type RecordReviewInput struct {
 	QuestionID     int    `json:"question_id"`
+	UserID         string `json:"user_id"`
 	Result         string `json:"result"`
 	UserAnswer     string `json:"user_answer"`
 	GraderNotes    string `json:"grader_notes"`

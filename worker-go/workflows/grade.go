@@ -67,6 +67,7 @@ func GradeAnswer(ctx workflow.Context, in shared.GradeAnswerInput) (shared.Grade
 		QuestionID: in.QuestionID,
 		UserAnswer: in.UserAnswer,
 		IDK:        in.IDK,
+		UserID:     in.UserID,
 	}).Get(ctx, &verdict); err != nil {
 		progress.Status = "failed"
 		return shared.GradeAnswerResult{}, fmt.Errorf("grade: %w", err)
@@ -89,6 +90,7 @@ func GradeAnswer(ctx workflow.Context, in shared.GradeAnswerInput) (shared.Grade
 	var state shared.SRSState
 	if err := workflow.ExecuteActivity(rctx, a.RecordReview, shared.RecordReviewInput{
 		QuestionID:     in.QuestionID,
+		UserID:         in.UserID,
 		Result:         verdict.Result,
 		UserAnswer:     in.UserAnswer,
 		GraderNotes:    verdict.Feedback,
