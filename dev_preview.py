@@ -405,6 +405,23 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
         if ctx is None:
             raise HTTPException(404, f"unknown fixture '{fixture}' for template '{template}' "
                                        f"(have: {sorted(fixtures)})")
+        ctx = {**ctx}
+        # Result fixtures don't carry the handoff payload (it's computed in
+        # the live route from the same question + answer data). Recompute
+        # on the fly so the discuss popup is visible in dev preview too.
+        if template == "result" and "handoff_urls" not in ctx:
+            import chat_handoff
+            msg = chat_handoff.build_message(
+                deck_name=ctx.get("deck_name", ""), q=ctx.get("q", {}),
+                user_answer=ctx.get("user_answer", ""), verdict=ctx.get("verdict"),
+                idk=ctx.get("idk", False),
+                picked_set=ctx.get("picked_set", []),
+                correct_set=ctx.get("correct_set", []),
+            )
+            ctx["handoff_message"] = msg
+            ctx["handoff_urls"] = chat_handoff.provider_urls(msg)
+            ctx["handoff_providers"] = chat_handoff.CHAT_PROVIDERS
+            ctx["handoff_default_provider"] = chat_handoff.DEFAULT_PROVIDER
         # Inject `request` for url generation in templates.
         return templates.TemplateResponse(f"{template}.html", {"request": request, **ctx})
 

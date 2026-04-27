@@ -105,6 +105,26 @@ a { color: inherit; }
     calc(var(--safe-bottom) + 4rem);
 }
 
+/* --- SVG icons (Phosphor Light) --- */
+
+.icon {
+  /* Default sizing: 1em square so the icon scales with the surrounding
+     text. Inline-block + vertical-align tweaks because Phosphor's 256x256
+     viewBox sits a hair below the baseline at face value. */
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  fill: currentColor;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.icon-inline {
+  /* Slight horizontal nudge inside text-flow contexts (back links, button
+     captions) so the glyph doesn't crowd adjacent words. */
+  margin-right: 0.05em;
+}
+
 /* --- Masthead --- */
 
 .masthead {
@@ -935,16 +955,20 @@ a { color: inherit; }
 .choices-multi .choice input:checked ~ .choice-marker {
   box-shadow: inset 0 0 0 0 var(--paper);
 }
-.choices-multi .choice input:checked ~ .choice-marker::after {
-  content: "✓";
+.choice-marker-check {
+  /* Phosphor check icon inside the multi-select marker. Hidden by default,
+     revealed when the input is checked. Sized to fit the marker bezel. */
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  margin: auto;
+  width: 0.95rem;
+  height: 0.95rem;
   color: var(--paper);
-  font-size: 0.95rem;
-  line-height: 1;
-  font-weight: 700;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.choices-multi .choice input:checked ~ .choice-marker .choice-marker-check {
+  opacity: 1;
 }
 .choice:has(input:checked) {
   border-color: var(--quill);
@@ -1119,12 +1143,16 @@ textarea:focus-visible {
 
 .verdict-mark {
   display: inline-block;
-  font-family: var(--serif);
-  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
-  font-size: clamp(3.5rem, 14vw, 5.5rem);
-  line-height: 0.9;
+  /* font-size doubles as the icon size — see .icon { width: 1em } above.
+     Slightly smaller cap than the old serif glyph because Phosphor Light
+     reads heavier at the same nominal size. */
+  font-size: clamp(3rem, 12vw, 4.6rem);
+  line-height: 1;
   margin-bottom: 0.2rem;
   animation: stamp 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+.verdict-mark .icon {
+  vertical-align: middle;
 }
 .verdict-mark-right { color: var(--right); }
 .verdict-mark-wrong { color: var(--wrong); }
@@ -1220,6 +1248,128 @@ textarea:focus-visible {
 .page-result-right .verdict-block { color: var(--right); }
 .page-result-wrong .verdict-block { color: var(--wrong); }
 
+/* --- Discuss popover (handoff to external AI chat) --- */
+
+.discuss {
+  /* Sit just above the next/back actions, separated by air. The element
+     is a <details> so the open/closed state is browser-managed; no JS. */
+  position: relative;
+  margin: 1.6rem 0 0.6rem;
+}
+.discuss summary {
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.discuss summary::-webkit-details-marker { display: none; }
+
+.discuss-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1rem;
+  min-height: 2.6rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 14, "SOFT" 50;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  transition: border-color 200ms ease, color 200ms ease, background 200ms ease;
+}
+.discuss-trigger:hover {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+.discuss[open] .discuss-trigger {
+  background: var(--warm);
+  border-color: var(--quill);
+  color: var(--quill);
+}
+.discuss-caret {
+  font-size: 0.7rem;
+  transition: transform 200ms ease;
+  opacity: 0.7;
+}
+.discuss[open] .discuss-caret { transform: rotate(180deg); }
+
+.discuss-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  min-width: 14rem;
+  max-width: 90vw;
+  padding: 0.4rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  z-index: 25;
+  display: grid;
+  gap: 0.2rem;
+  animation: rise 220ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.discuss-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.7rem 0.95rem;
+  min-height: 2.6rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 0.98rem;
+  transition: background 180ms ease, color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.discuss-option:hover,
+.discuss-option:focus-visible {
+  background: var(--warm);
+  color: var(--quill);
+  outline: none;
+}
+.discuss-option-arrow {
+  color: var(--ink-mute);
+  font-size: 0.95rem;
+}
+.discuss-option:hover .discuss-option-arrow,
+.discuss-option:focus-visible .discuss-option-arrow {
+  color: var(--quill);
+}
+.discuss-copy {
+  /* It's a <button>, not an <a> — strip the default button chrome so it
+     reads as another menu row. Cursor + tap-highlight already inherit. */
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.discuss-copy.discuss-copy-success {
+  background: color-mix(in srgb, var(--right) 10%, transparent);
+  color: var(--right);
+}
+.discuss-copy.discuss-copy-success .discuss-option-arrow {
+  color: var(--right);
+}
+/* Two stacked icons in the copy button; toggle via the success class on
+   the parent so the SVG doesn't get clobbered by JS textContent swaps. */
+.copy-icon-default,
+.copy-icon-success {
+  display: inline-flex;
+  align-items: center;
+}
+.copy-icon-success { display: none; }
+.discuss-copy-success .copy-icon-default { display: none; }
+.discuss-copy-success .copy-icon-success { display: inline-flex; }
+
 /* --- mcq / multi answer grid --- */
 
 .answer-grid {
@@ -1248,13 +1398,18 @@ textarea:focus-visible {
   place-items: center;
   width: 1.6rem; height: 1.6rem;
   border-radius: 50%;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 1rem;
   flex-shrink: 0;
   margin-top: 0.1rem;
   border: 1.5px solid var(--rule);
   background: var(--bg);
   color: var(--ink-mute);
+}
+.answer-marker .icon {
+  /* Slightly inset from the bezel so the icon doesn't crowd the rim. */
+  width: 0.85em;
+  height: 0.85em;
+  vertical-align: middle;
 }
 
 .answer-text { color: var(--ink); }

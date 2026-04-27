@@ -3,7 +3,7 @@
 {% block page_class %}result result-{{ verdict.result }}{% endblock %}
 {% block main %}
 <nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
   <span class="card-id">№ {{ q.id }}</span>
 </nav>
 
@@ -21,11 +21,11 @@
 
 <section class="verdict-block">
   {% if verdict.result == 'right' %}
-    <span class="verdict-mark verdict-mark-right" aria-hidden="true">✓</span>
+    <span class="verdict-mark verdict-mark-right">{{ icon('check') }}</span>
     <h1 class="verdict-headline">Right.</h1>
     <p class="verdict-sub">Next review in <strong>{{ human }}</strong>.</p>
   {% else %}
-    <span class="verdict-mark verdict-mark-wrong" aria-hidden="true">✗</span>
+    <span class="verdict-mark verdict-mark-wrong">{{ icon('x') }}</span>
     <h1 class="verdict-headline">Not yet.</h1>
     <p class="verdict-sub">Next review in <strong>{{ human }}</strong>.</p>
   {% endif %}
@@ -53,8 +53,12 @@
                        else 'correct-missed' if is_correct
                        else 'idle' %}
         <li class="answer-row state-{{ state_cls }}">
-          <span class="answer-marker" aria-hidden="true">
-            {% if state_cls == 'correct-picked' %}✓{% elif state_cls == 'wrong-picked' %}✗{% elif state_cls == 'correct-missed' %}○{% else %}·{% endif %}
+          <span class="answer-marker">
+            {% if state_cls == 'correct-picked' %}{{ icon('check') }}
+            {%- elif state_cls == 'wrong-picked' %}{{ icon('x') }}
+            {%- elif state_cls == 'correct-missed' %}{{ icon('circle') }}
+            {%- else %}{{ icon('dot') }}
+            {%- endif %}
           </span>
           <span class="answer-text">{{ c }}</span>
           <span class="answer-tags">
@@ -128,6 +132,82 @@
 </section>
 {% endif %}
 
+{# Handoff to an external AI chat — opens a small popover with provider
+   options. The whole card context (prompt + answer + verdict + feedback)
+   gets URL-encoded into each provider's prefill param. On iOS / Android,
+   tapping the link triggers a universal-link handoff into the app if
+   installed, else opens the web. #}
+{% if handoff_urls %}
+<details class="discuss">
+  <summary class="discuss-trigger">
+    <span class="discuss-label">Discuss this card</span>
+    <span class="discuss-caret">{{ icon('caret-down') }}</span>
+  </summary>
+  <div class="discuss-menu" role="menu">
+    {% for key in ['claude', 'chatgpt'] %}
+      {% if key in handoff_urls %}
+      <a class="discuss-option" role="menuitem"
+         href="{{ handoff_urls[key] }}"
+         target="_blank" rel="noopener noreferrer">
+        <span class="discuss-option-name">{{ handoff_providers[key].label }}</span>
+        <span class="discuss-option-arrow">{{ icon('arrow-up-right') }}</span>
+      </a>
+      {% endif %}
+    {% endfor %}
+    {# Copy-to-clipboard fallback for when an app doesn't support universal-
+       link prefill (e.g. Claude iOS doesn't claim /new?q=…), or when the
+       user wants to paste into a different chat client entirely. The
+       handoff_message lives in a hidden <textarea> so we can fall back to
+       execCommand('copy') if navigator.clipboard isn't available. #}
+    <button type="button" class="discuss-option discuss-copy" role="menuitem"
+            data-copy-source="discuss-message">
+      <span class="discuss-option-name">Copy prompt</span>
+      <span class="discuss-option-arrow discuss-copy-status">
+        {# Two icons stacked; CSS shows one based on the .discuss-copy-success
+           class on the parent button. Avoids JS textContent swaps that would
+           clobber the inline SVG. #}
+        <span class="copy-icon-default">{{ icon('copy') }}</span>
+        <span class="copy-icon-success">{{ icon('check-circle') }}</span>
+      </span>
+    </button>
+    <textarea id="discuss-message" class="visually-hidden" readonly tabindex="-1"
+              aria-hidden="true">{{ handoff_message }}</textarea>
+  </div>
+</details>
+<script>
+  (function () {
+    var btn = document.querySelector('.discuss-copy');
+    if (!btn) return;
+    btn.addEventListener('click', async function () {
+      var source = document.getElementById(btn.dataset.copySource);
+      if (!source) return;
+      var text = source.value;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          // Older browsers / non-secure contexts: use the textarea selection.
+          source.removeAttribute('aria-hidden');
+          source.style.position = 'fixed';
+          source.style.opacity = '0';
+          source.focus();
+          source.select();
+          document.execCommand('copy');
+          source.blur();
+          source.setAttribute('aria-hidden', 'true');
+        }
+        btn.classList.add('discuss-copy-success');
+      } catch (err) {
+        btn.classList.add('discuss-copy-error');
+      }
+      setTimeout(function () {
+        btn.classList.remove('discuss-copy-success', 'discuss-copy-error');
+      }, 1400);
+    });
+  })();
+</script>
+{% endif %}
+
 <div class="study-actions next-actions">
   {% if session_id %}
     {# Session-aware advance: POST so we can include the version stamp and
@@ -135,11 +215,11 @@
        completed if no more due cards). #}
     <form method="post" action="{{ request.scope.get('root_path','') }}/session/{{ session_id }}/advance" style="flex:1; min-width:10rem;">
       <input type="hidden" name="version" value="{{ session_version }}">
-      <button class="btn btn-primary" type="submit" style="width:100%">Next card →</button>
+      <button class="btn btn-primary" type="submit" style="width:100%">Next card {{ icon('arrow-right', class_='icon icon-inline') }}</button>
     </form>
     <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Pause</a>
   {% else %}
-    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}">Next card →</a>
+    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}">Next card {{ icon('arrow-right', class_='icon icon-inline') }}</a>
     <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
   {% endif %}
 </div>

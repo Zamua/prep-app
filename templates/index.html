@@ -27,7 +27,7 @@
             {% endif %}
             {% if s.device_label %}<span class="session-divider" aria-hidden="true">·</span><em>{{ s.device_label }}</em>{% endif %}
           </span>
-          <span class="deck-arrow" aria-hidden="true">→</span>
+          <span class="deck-arrow">{{ icon('arrow-right') }}</span>
         </a>
       </li>
     {% endfor %}
@@ -55,7 +55,7 @@
             </span>
           </span>
         </span>
-        <span class="deck-arrow" aria-hidden="true">→</span>
+        <span class="deck-arrow">{{ icon('arrow-right') }}</span>
       </a>
     </li>
   {% endfor %}

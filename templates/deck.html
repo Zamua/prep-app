@@ -3,7 +3,7 @@
 {% block page_class %}deck{% endblock %}
 {% block main %}
 <section class="deck-header">
-  <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">← all decks</a></p>
+  <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
   <h1 class="display deck-title">{{ deck_name }}</h1>
   <p class="deck-meta">
     <span class="meta-figure {% if due_count > 0 %}is-active{% endif %}">

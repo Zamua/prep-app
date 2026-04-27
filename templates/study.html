@@ -3,7 +3,7 @@
 {% block page_class %}study{% endblock %}
 {% block main %}
 <nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
   <span class="card-id">№ {{ q.id }}</span>
 </nav>
 
@@ -36,7 +36,9 @@
         {% for c in q.choices_list %}
           <label class="choice">
             <input type="checkbox" name="choice" value="{{ c }}">
-            <span class="choice-marker" aria-hidden="true"></span>
+            <span class="choice-marker" aria-hidden="true">
+              {{ icon('check', class_='icon choice-marker-check') }}
+            </span>
             <span class="choice-text">{{ c }}</span>
           </label>
         {% endfor %}

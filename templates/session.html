@@ -3,7 +3,7 @@
 {% block page_class %}study session{% endblock %}
 {% block main %}
 <nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
   <span class="card-id">№ {{ q.id }}</span>
 </nav>
 

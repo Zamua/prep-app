@@ -25,9 +25,11 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 import mistune
 
+import chat_handoff
 import db
 import generator
 import grader
+import icons
 import temporal_client
 
 BASE_DIR = Path(__file__).parent
@@ -44,6 +46,24 @@ _md = mistune.create_markdown(
 )
 
 
+def _handoff_ctx(*, deck_name: str, q: dict, user_answer: str, verdict: dict | None,
+                 idk: bool, picked_set: list[str], correct_set: list[str]) -> dict:
+    """Build the AI-chat-handoff payload that result.html embeds as data
+    attributes. Same shape across all three result-rendering paths
+    (study_submit, session_view, grading_view terminal)."""
+    msg = chat_handoff.build_message(
+        deck_name=deck_name, q=q, user_answer=user_answer,
+        verdict=verdict, idk=idk,
+        picked_set=picked_set, correct_set=correct_set,
+    )
+    return {
+        "handoff_message": msg,
+        "handoff_urls": chat_handoff.provider_urls(msg),
+        "handoff_default_provider": chat_handoff.DEFAULT_PROVIDER,
+        "handoff_providers": chat_handoff.CHAT_PROVIDERS,
+    }
+
+
 def _markdown(text: str | None) -> Markup:
     """Jinja filter: render markdown to safe HTML. Returns empty string for
     None so templates can `{{ q.prompt|markdown }}` without guards."""
@@ -53,6 +73,7 @@ def _markdown(text: str | None) -> Markup:
 
 
 templates.env.filters["markdown"] = _markdown
+templates.env.globals["icon"] = icons.icon
 
 # When fronted by Caddy at a path prefix, set ROOT_PATH so generated URLs include it.
 import os
@@ -333,6 +354,9 @@ def session_view(request: Request, sid: str, user: dict = Depends(current_user))
                 "correct_set": correct_set,
                 "session_id": sid,
                 "session_version": s["version"],
+                **_handoff_ctx(deck_name=deck_name, q=q, user_answer=user_answer,
+                               verdict=verdict, idk=idk,
+                               picked_set=picked_set, correct_set=correct_set),
             },
         )
 
@@ -571,6 +595,9 @@ async def study_submit(request: Request, name: str, user: dict = Depends(current
             # For mcq/multi: parsed sets; template uses them to colour each choice.
             "picked_set": picked_set,
             "correct_set": correct_set,
+            **_handoff_ctx(deck_name=name, q=question, user_answer=user_answer,
+                           verdict=verdict, idk=idk,
+                           picked_set=picked_set, correct_set=correct_set),
         },
     )
 
@@ -673,6 +700,10 @@ async def grading_view(request: Request, wid: str, sid: str = "",
                 "state": state,
                 "picked_set": picked_set,
                 "correct_set": correct_set,
+                **_handoff_ctx(deck_name=deck_name, q=question,
+                               user_answer=result["user_answer"],
+                               verdict=verdict, idk=result["idk"],
+                               picked_set=picked_set, correct_set=correct_set),
             },
         )
 
