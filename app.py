@@ -170,11 +170,39 @@ async def deck_add(request: Request, name: str, count: int = Form(5),
     return _redirect(request, f"/generation/{result.workflow_id}")
 
 
+def _parse_generation_wid(wid: str) -> str | None:
+    """Workflow IDs are formatted `gen-<deck>-<rand>`. Returns deck_name
+    or None if malformed. Deck names can contain hyphens, so we walk from
+    the right (rand is always the last segment)."""
+    if not wid.startswith("gen-"):
+        return None
+    parts = wid[len("gen-"):].split("-")
+    if len(parts) < 2:
+        return None
+    return "-".join(parts[:-1])
+
+
+def _require_owns_generation(user: dict, wid: str) -> str:
+    """Verifies the current user owns the deck this workflow is generating
+    cards for. Returns deck_name on success, raises HTTPException otherwise.
+    Used as the auth gate for /generation/{wid}* routes — without this, any
+    authed user could poll/cancel any other user's generation by guessing
+    the workflow id."""
+    deck_name = _parse_generation_wid(wid)
+    if not deck_name:
+        raise HTTPException(400, "malformed workflow id")
+    deck_id = db.find_deck(user["tailscale_login"], deck_name)
+    if deck_id is None:
+        raise HTTPException(404, "workflow not found")
+    return deck_name
+
+
 @app.get("/generation/{wid}", response_class=HTMLResponse)
-async def generation_view(request: Request, wid: str):
+async def generation_view(request: Request, wid: str,
+                          user: dict = Depends(current_user)):
+    deck_name = _require_owns_generation(user, wid)
     progress = await temporal_client.get_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
-    deck_name = wid.split("-", 2)[1] if wid.startswith("gen-") else ""
     return templates.TemplateResponse(
         "generation.html",
         {
@@ -188,14 +216,17 @@ async def generation_view(request: Request, wid: str):
 
 
 @app.get("/generation/{wid}/status")
-async def generation_status(wid: str):
+async def generation_status(wid: str, user: dict = Depends(current_user)):
+    _require_owns_generation(user, wid)
     progress = await temporal_client.get_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
     return JSONResponse({"progress": progress, "desc": desc})
 
 
 @app.post("/generation/{wid}/cancel")
-async def generation_cancel(request: Request, wid: str):
+async def generation_cancel(request: Request, wid: str,
+                            user: dict = Depends(current_user)):
+    _require_owns_generation(user, wid)
     try:
         await temporal_client.cancel_generation(wid)
     except Exception as e:
@@ -567,6 +598,14 @@ async def grading_view(request: Request, wid: str, sid: str = "",
     deck_name, qid = parsed
     uid = user["tailscale_login"]
 
+    # Ownership gate — must verify before exposing ANY workflow state, not
+    # just at terminal time. Otherwise user A can poll user B's in-progress
+    # grading by guessing the wid (deck/qid are in the wid; the verdict
+    # itself is gated below at terminal). This upfront check makes the
+    # polling phase consistent with terminal: 404 on mismatch.
+    if db.get_question(uid, qid) is None:
+        raise HTTPException(404, "question not found")
+
     progress = await temporal_client.get_grade_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
     status = (progress or {}).get("status") or (desc or {}).get("status") or "unknown"
@@ -635,7 +674,13 @@ async def grading_view(request: Request, wid: str, sid: str = "",
 
 
 @app.get("/grading/{wid}/status")
-async def grading_status(wid: str):
+async def grading_status(wid: str, user: dict = Depends(current_user)):
+    parsed = _parse_grading_wid(wid)
+    if not parsed:
+        raise HTTPException(400, "malformed workflow id")
+    _, qid = parsed
+    if db.get_question(user["tailscale_login"], qid) is None:
+        raise HTTPException(404, "question not found")
     progress = await temporal_client.get_grade_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
     return JSONResponse({"progress": progress, "desc": desc})

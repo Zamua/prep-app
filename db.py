@@ -269,6 +269,18 @@ def get_or_create_deck(user_id: str, name: str) -> int:
         return cur.lastrowid
 
 
+def find_deck(user_id: str, name: str) -> int | None:
+    """Read-only deck lookup — does not auto-create. Used for ownership
+    checks on workflow status routes where we must NOT side-effect on a
+    misrouted poll."""
+    with cursor() as c:
+        row = c.execute(
+            "SELECT id FROM decks WHERE user_id = ? AND name = ?",
+            (user_id, name),
+        ).fetchone()
+        return row["id"] if row else None
+
+
 def list_decks(user_id: str) -> list[dict]:
     with cursor() as c:
         rows = c.execute(
