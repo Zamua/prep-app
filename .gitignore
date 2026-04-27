@@ -29,3 +29,13 @@ static/cm/node_modules/
 .idea/
 .vscode/
 *.swp
+
+# Web push state — local-only to each deployment
+vapid-keys.json
+push-subscriptions.json
+vapid-private.pem
+
+# Web push state (local-only per deployment)
+push-subscriptions.json
+push-subscriptions.json.archived-*
+

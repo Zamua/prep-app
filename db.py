@@ -253,6 +253,22 @@ def init() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_questions_user_deck ON questions(user_id, deck_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_decks_user ON decks(user_id)")
 
+        # 5. Notifications: per-user prefs (JSON blob) + push subscription table.
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "notification_prefs" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN notification_prefs TEXT")  # JSON
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                endpoint     TEXT PRIMARY KEY,
+                user_id      TEXT NOT NULL REFERENCES users(tailscale_login) ON DELETE CASCADE,
+                p256dh       TEXT NOT NULL,
+                auth         TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+        """)
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -281,6 +297,126 @@ def upsert_user(tailscale_login: str, display_name: str | None = None,
         return dict(c.execute(
             "SELECT * FROM users WHERE tailscale_login = ?", (tailscale_login,)
         ).fetchone())
+
+
+# ---- Notification prefs (JSON blob on users) ------------------------------
+
+import json as _json
+
+# Default prefs for a fresh user — explicit opt-in, so mode starts off.
+DEFAULT_NOTIFICATION_PREFS = {
+    "mode": "off",                      # off | digest | when-ready
+    "digest_hour": 9,                   # 0..23 local-tz hour for digest mode
+    "tz": "America/New_York",           # IANA timezone name
+    "threshold": 3,                     # min due cards for when-ready mode
+    "quiet_start_hour": 22,             # 22..8 quiet window default
+    "quiet_end_hour": 8,
+    # State (not user-edited; updated by the scheduler):
+    "last_digest_date": None,           # ISO date "YYYY-MM-DD" in user tz
+    "last_when_ready_at": None,         # ISO datetime UTC, debounce window
+}
+
+
+def get_notification_prefs(user_id: str) -> dict:
+    """Return current prefs merged over defaults so callers always see every
+    key. Defaults apply for users who've never opened settings."""
+    with cursor() as c:
+        row = c.execute(
+            "SELECT notification_prefs FROM users WHERE tailscale_login = ?",
+            (user_id,),
+        ).fetchone()
+    raw = row["notification_prefs"] if row and row["notification_prefs"] else None
+    saved = _json.loads(raw) if raw else {}
+    return {**DEFAULT_NOTIFICATION_PREFS, **saved}
+
+
+def set_notification_prefs(user_id: str, prefs: dict) -> None:
+    """Persist prefs. Caller is responsible for validation (we trust the
+    settings route to clamp ranges and validate the mode enum)."""
+    with cursor() as c:
+        c.execute(
+            "UPDATE users SET notification_prefs = ? WHERE tailscale_login = ?",
+            (_json.dumps(prefs), user_id),
+        )
+
+
+# ---- Push subscriptions (DB-backed, one row per device) -------------------
+
+def upsert_push_subscription(user_id: str, endpoint: str, p256dh: str, auth: str) -> None:
+    ts = now()
+    with cursor() as c:
+        c.execute(
+            """INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth, created_at, last_seen_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(endpoint) DO UPDATE SET
+                 user_id = excluded.user_id,
+                 p256dh = excluded.p256dh,
+                 auth = excluded.auth,
+                 last_seen_at = excluded.last_seen_at""",
+            (endpoint, user_id, p256dh, auth, ts, ts),
+        )
+
+
+def list_push_subscriptions(user_id: str) -> list[dict]:
+    with cursor() as c:
+        rows = c.execute(
+            "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_push_subscription(endpoint: str) -> None:
+    """Used to prune subscriptions the push service has rejected (404/410).
+    Endpoint is the natural unique key; same endpoint can only be one user's."""
+    with cursor() as c:
+        c.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+
+
+def list_users_with_push_subs() -> list[str]:
+    """Return tailscale_login values for every user with at least one
+    push subscription. Used by the scheduler so we don't iterate users who
+    can't be reached anyway."""
+    with cursor() as c:
+        rows = c.execute(
+            "SELECT DISTINCT user_id FROM push_subscriptions"
+        ).fetchall()
+    return [r["user_id"] for r in rows]
+
+
+def count_due_for_user(user_id: str) -> int:
+    """Total cards due-now across all of this user's decks. The scheduler
+    uses this to decide whether to send a digest / threshold ping."""
+    with cursor() as c:
+        row = c.execute(
+            """SELECT COUNT(*) AS n
+                 FROM cards
+                 JOIN questions ON questions.id = cards.question_id
+                WHERE questions.user_id = ?
+                  AND COALESCE(questions.suspended, 0) = 0
+                  AND cards.next_due <= ?""",
+            (user_id, now()),
+        ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def deck_due_breakdown(user_id: str) -> list[tuple[str, int]]:
+    """[(deck_name, due_count), ...] for digest body composition."""
+    with cursor() as c:
+        rows = c.execute(
+            """SELECT d.name, COUNT(c.question_id) AS n
+                 FROM decks d
+                 LEFT JOIN questions q ON q.deck_id = d.id AND q.user_id = d.user_id
+                 LEFT JOIN cards c ON c.question_id = q.id
+                                  AND c.next_due <= ?
+                                  AND COALESCE(q.suspended, 0) = 0
+                WHERE d.user_id = ?
+                GROUP BY d.id
+               HAVING n > 0
+                ORDER BY n DESC""",
+            (now(), user_id),
+        ).fetchall()
+    return [(r["name"], int(r["n"])) for r in rows]
 
 
 # =============================================================================

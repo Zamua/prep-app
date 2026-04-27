@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}notifications · prep{% endblock %}
+{% block page_class %}notify{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">Notifications</p>
+  <h1 class="display">When prep&nbsp;<em>nudges</em>.</h1>
+  <p class="lede">
+    Push notifications arrive even when prep isn't open — on iOS this
+    only works if you've installed the app to your home screen. Choose
+    how often you'd like to be nudged; you can change this any time.
+  </p>
+</section>
+
+<section class="notify-explainer">
+  <details class="rubric-details">
+    <summary>How notifications work</summary>
+    <ul>
+      <li><strong>Daily digest</strong> — one notification per day at the hour you choose, summarizing what's due across all decks. Best if you want a single morning prompt.</li>
+      <li><strong>When ready</strong> — fires the first moment your due-pile crosses a threshold (default 3 cards), and won't re-fire for 4&nbsp;hours after, regardless of new arrivals. Best if your study windows are flexible.</li>
+      <li><strong>Off</strong> — no pushes. The app still works, you just open it on your own schedule.</li>
+    </ul>
+    <p class="muted">All modes respect a quiet-hours window so you don't get pinged overnight. Time-zone is auto-detected from this device.</p>
+  </details>
+</section>
+
+<form id="notify-form" class="notify-form" autocomplete="off">
+  <fieldset class="notify-mode">
+    <legend class="visually-hidden">Mode</legend>
+    {% for value, label, help in [
+      ('off',        'Off',           'No notifications.'),
+      ('digest',     'Daily digest',  'One ping per day at a chosen hour.'),
+      ('when-ready', 'When ready',    'Ping when N or more cards become due.'),
+    ] %}
+    <label class="notify-mode-option {% if prefs.mode == value %}is-selected{% endif %}">
+      <input type="radio" name="mode" value="{{ value }}" {% if prefs.mode == value %}checked{% endif %}>
+      <span class="notify-mode-marker" aria-hidden="true"></span>
+      <span class="notify-mode-text">
+        <span class="notify-mode-label">{{ label }}</span>
+        <span class="notify-mode-help">{{ help }}</span>
+      </span>
+    </label>
+    {% endfor %}
+  </fieldset>
+
+  <div class="notify-extras" id="extras-digest" {% if prefs.mode != 'digest' %}hidden{% endif %}>
+    <label class="number-input">
+      <span>send at</span>
+      <input type="number" name="digest_hour" min="0" max="23" value="{{ prefs.digest_hour }}" inputmode="numeric">
+      <span>:00</span>
+    </label>
+  </div>
+
+  <div class="notify-extras" id="extras-when-ready" {% if prefs.mode != 'when-ready' %}hidden{% endif %}>
+    <label class="number-input">
+      <span>nudge when</span>
+      <input type="number" name="threshold" min="1" max="99" value="{{ prefs.threshold }}" inputmode="numeric">
+      <span>or more cards are due</span>
+    </label>
+  </div>
+
+  <div class="notify-extras">
+    <p class="section-eyebrow"><span>Quiet hours</span><span class="rule"></span></p>
+    <div class="quiet-row">
+      <label class="number-input">
+        <span>from</span>
+        <input type="number" name="quiet_start_hour" min="0" max="23" value="{{ prefs.quiet_start_hour }}" inputmode="numeric">
+      </label>
+      <label class="number-input">
+        <span>to</span>
+        <input type="number" name="quiet_end_hour" min="0" max="23" value="{{ prefs.quiet_end_hour }}" inputmode="numeric">
+      </label>
+    </div>
+    <input type="hidden" name="tz" id="tz-input" value="{{ prefs.tz }}">
+  </div>
+
+  <p class="notify-status" id="status" data-devices="{{ devices }}">
+    {% if devices == 0 %}
+      No devices subscribed yet — enable below to get pushes on this device.
+    {% else %}
+      Subscribed on {{ devices }} device{{ '' if devices == 1 else 's' }}.
+    {% endif %}
+  </p>
+
+  <div class="study-actions">
+    <button type="button" class="btn btn-primary" id="save-btn">Save settings</button>
+    <button type="button" class="btn btn-quiet" id="enable-btn">Enable on this device</button>
+    <button type="button" class="btn btn-quiet" id="test-btn" {% if devices == 0 %}disabled{% endif %}>Send test push</button>
+  </div>
+</form>
+
+<script>
+(async function () {
+  const root = "{{ request.scope.get('root_path','') }}";
+  const form = document.getElementById("notify-form");
+  const status = document.getElementById("status");
+  const saveBtn = document.getElementById("save-btn");
+  const enableBtn = document.getElementById("enable-btn");
+  const testBtn = document.getElementById("test-btn");
+  const tzInput = document.getElementById("tz-input");
+  const VAPID_KEY = "{{ vapid_key }}";
+
+  // Auto-detect tz from the browser. User can't hand-edit this from the
+  // form (the input is hidden) — keeps the surface small.
+  try {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (detected) tzInput.value = detected;
+  } catch (e) { /* keep server-stored value */ }
+
+  function setStatus(msg, kind) {
+    status.textContent = msg;
+    status.dataset.kind = kind || "";
+  }
+
+  // Toggle conditional sections on radio change.
+  form.querySelectorAll('input[name="mode"]').forEach((r) => {
+    r.addEventListener("change", () => {
+      document.getElementById("extras-digest").hidden = r.value !== "digest" || !r.checked;
+      document.getElementById("extras-when-ready").hidden = r.value !== "when-ready" || !r.checked;
+      form.querySelectorAll(".notify-mode-option").forEach((opt) => {
+        opt.classList.toggle("is-selected", opt.querySelector("input").checked);
+      });
+    });
+  });
+
+  function readPrefs() {
+    const fd = new FormData(form);
+    return {
+      mode: fd.get("mode") || "off",
+      digest_hour: Number(fd.get("digest_hour") || 9),
+      threshold: Number(fd.get("threshold") || 3),
+      quiet_start_hour: Number(fd.get("quiet_start_hour") || 22),
+      quiet_end_hour: Number(fd.get("quiet_end_hour") || 8),
+      tz: fd.get("tz") || "America/New_York",
+    };
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    setStatus("Saving…");
+    const r = await fetch(root + "/notify/prefs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(readPrefs()),
+    });
+    if (r.ok) setStatus("Saved.", "ok");
+    else setStatus("Save failed (" + r.status + ").", "error");
+  });
+
+  function urlB64ToUint8Array(b64) {
+    const padding = "=".repeat((4 - (b64.length % 4)) % 4);
+    const base64 = (b64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+
+  enableBtn.addEventListener("click", async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setStatus("This browser doesn't support web push.", "error");
+      return;
+    }
+    setStatus("Asking for permission…");
+    const reg = await navigator.serviceWorker.register(root + "/sw.js", { scope: root + "/" });
+    await navigator.serviceWorker.ready;
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      setStatus("Permission denied. You can re-enable in iOS Settings → Notifications → prep.", "error");
+      return;
+    }
+    let sub;
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(VAPID_KEY),
+      });
+    } catch (e) {
+      setStatus("Subscribe failed: " + e.message, "error");
+      return;
+    }
+    const r = await fetch(root + "/notify/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(sub),
+    });
+    if (r.ok) {
+      setStatus("Subscribed on this device. Save your settings to start receiving pushes.", "ok");
+      testBtn.disabled = false;
+    } else {
+      setStatus("Server rejected the subscription.", "error");
+    }
+  });
+
+  testBtn.addEventListener("click", async () => {
+    setStatus("Sending a test push…");
+    const r = await fetch(root + "/notify/test", { method: "POST" });
+    const j = await r.json();
+    if (j.sent > 0) setStatus("Test sent to " + j.sent + " device(s). Check your home screen.", "ok");
+    else setStatus("No devices reached (sent=" + j.sent + ", pruned=" + j.pruned + ", failed=" + j.failed + ").", "error");
+  });
+})();
+</script>
+
+{% endblock %}

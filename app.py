@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
@@ -30,6 +30,7 @@ import db
 import generator
 import grader
 import icons
+import notify
 import temporal_client
 
 BASE_DIR = Path(__file__).parent
@@ -756,3 +757,134 @@ def unsuspend(request: Request, qid: int, user: dict = Depends(current_user)):
             (q["deck_id"], uid),
         ).fetchone()["name"]
     return _redirect(request, f"/deck/{name}")
+
+
+# ---- PWA install (manifest + service worker) ------------------------------
+#
+# These two routes are intentionally NOT gated by current_user: the manifest
+# and service worker have to be reachable before the PWA is "installed", and
+# the install-from-Safari flow doesn't reliably carry Tailscale-User-Login
+# on its first hit. Auth kicks in for any actual app view the moment the
+# PWA navigates into one.
+
+@app.get("/manifest.json")
+def manifest(request: Request) -> JSONResponse:
+    """Web App Manifest, dynamic so the scope/start_url match whatever
+    ROOT_PATH this instance is served at (so prep vs prep-staging both
+    install correctly without a hand-edited manifest each time)."""
+    root = ROOT_PATH or ""
+    env_label = "staging" if "staging" in root else ""
+    short = "prep" + (f" ({env_label})" if env_label else "")
+    return JSONResponse({
+        "name": f"prep · a commonplace book{' (staging)' if env_label else ''}",
+        "short_name": short,
+        "description": "Spaced-repetition flashcards for interview prep.",
+        "display": "standalone",
+        "scope": (root + "/") or "/",
+        "start_url": (root + "/") or "/",
+        "background_color": "#f4ecdc",
+        "theme_color": "#f5efe6",
+        "icons": [
+            {"src": f"{root}/static/pwa/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": f"{root}/static/pwa/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        ],
+    })
+
+
+@app.get("/sw.js")
+def service_worker():
+    """Serve the SW from the app's root scope (rather than /static/sw.js
+    whose default scope is /static/). The browser uses the SW's URL path
+    as its scope, so this URL is what determines what the SW controls."""
+    return FileResponse(BASE_DIR / "static" / "sw.js", media_type="application/javascript")
+
+
+# ---- Notifications (settings + subscribe) ---------------------------------
+
+_VALID_MODES = {"off", "digest", "when-ready"}
+
+
+def _validate_prefs(p: dict) -> dict:
+    """Validate + clamp incoming preference values. Anything missing or
+    out-of-range falls back to the existing default; we don't reject
+    partial updates because the form may only submit a subset."""
+    base = dict(db.DEFAULT_NOTIFICATION_PREFS)
+    mode = str(p.get("mode", base["mode"]))
+    if mode not in _VALID_MODES:
+        mode = base["mode"]
+    base["mode"] = mode
+    base["digest_hour"] = max(0, min(23, int(p.get("digest_hour", base["digest_hour"]))))
+    base["threshold"] = max(1, min(99, int(p.get("threshold", base["threshold"]))))
+    base["quiet_start_hour"] = max(0, min(23, int(p.get("quiet_start_hour", base["quiet_start_hour"]))))
+    base["quiet_end_hour"] = max(0, min(23, int(p.get("quiet_end_hour", base["quiet_end_hour"]))))
+    tz = str(p.get("tz", base["tz"]) or base["tz"])[:64]
+    base["tz"] = tz
+    return base
+
+
+@app.get("/notify", response_class=HTMLResponse)
+def notify_settings(request: Request, user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    prefs = db.get_notification_prefs(uid)
+    devices = len(db.list_push_subscriptions(uid))
+    return templates.TemplateResponse("notify_settings.html", {
+        "request": request,
+        "user": user,
+        "prefs": prefs,
+        "devices": devices,
+        "vapid_key": notify.public_key_b64(),
+    })
+
+
+@app.post("/notify/prefs")
+async def notify_prefs_save(request: Request, user: dict = Depends(current_user)):
+    raw = await request.json()
+    # Merge submitted values over the user's existing prefs so state-only
+    # fields (last_digest_date, last_when_ready_at) survive an update.
+    existing = db.get_notification_prefs(user["tailscale_login"])
+    validated = _validate_prefs({**existing, **raw})
+    # Preserve scheduler-managed state untouched.
+    for k in ("last_digest_date", "last_when_ready_at"):
+        validated[k] = existing.get(k)
+    db.set_notification_prefs(user["tailscale_login"], validated)
+    return JSONResponse({"ok": True, "prefs": validated})
+
+
+@app.get("/notify/vapid-public-key")
+def vapid_public_key():
+    return JSONResponse({"key": notify.public_key_b64()})
+
+
+@app.post("/notify/subscribe")
+async def notify_subscribe(request: Request, user: dict = Depends(current_user)):
+    sub = await request.json()
+    if not isinstance(sub, dict) or "endpoint" not in sub:
+        raise HTTPException(400, "bad subscription payload")
+    notify.subscribe(user["tailscale_login"], sub)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/notify/test")
+async def notify_send_test(user: dict = Depends(current_user)):
+    """Send a one-off "test push" to the current user's devices so they
+    can verify subscription is alive end-to-end. Useful after first
+    install or after toggling off→on."""
+    res = notify.send_to_user(
+        user["tailscale_login"],
+        "Prep — test push",
+        "If you can read this, notifications are working on this device.",
+        url="/notify",
+    )
+    return JSONResponse(res)
+
+
+# Move the staging-experiment subscription file out of the way and start
+# the scheduler. Existing subscribers from the test will need to re-enable
+# from the settings page (one-time friction; cleaner than carrying state
+# in two stores).
+@app.on_event("startup")
+async def _notify_boot():
+    legacy = BASE_DIR / "push-subscriptions.json"
+    if legacy.exists():
+        legacy.rename(legacy.with_suffix(".json.archived-pre-v0.5"))
+    notify.start_scheduler()
