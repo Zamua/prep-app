@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ status_code }} · prep{% endblock %}
+{% block page_class %}error error-{{ status_code }}{% endblock %}
+{% block main %}
+
+<section class="error-block">
+  <p class="eyebrow">{{ status_code }}</p>
+  <h1 class="display">{{ headline }}</h1>
+  {% if blurb %}<p class="lede">{{ blurb }}</p>{% endif %}
+
+  {% if path %}
+    <p class="error-path">
+      <span class="error-path-label">URL:</span>
+      <code>{{ path }}</code>
+    </p>
+  {% endif %}
+
+  <div class="study-actions next-actions">
+    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/">{{ icon('arrow-left', class_='icon icon-inline') }} Back to decks</a>
+  </div>
+</section>
+
+{% endblock %}

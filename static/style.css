@@ -1792,6 +1792,44 @@ textarea:focus-visible {
   * { animation: none !important; transition: none !important; }
 }
 
+/* --- Error page (404, 401, 500, …) --- */
+
+.error-block {
+  margin-top: 1.5rem;
+  text-align: left;
+}
+.error-block .eyebrow {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  font-style: normal;
+  margin-bottom: 0.4rem;
+}
+.error-block .display em {
+  font-style: italic;
+  color: var(--quill);
+}
+.error-path {
+  margin: 1.4rem 0 0;
+  font-size: 0.92rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.error-path-label { letter-spacing: 0.02em; margin-right: 0.4rem; }
+.error-path code {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.88em;
+  background: var(--warm);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  color: var(--ink-soft);
+  word-break: break-all;
+}
+.page-error .colophon { display: none; }
+
 /* --- Notification settings --- */
 
 .notify-explainer {
