@@ -4,6 +4,66 @@ Interview-prep flashcard tool with Claude-generated questions and SM-2-style spa
 repetition. Manual-only for now (user invokes "Add more" or "Study" via the browser);
 no scheduler is wired up yet.
 
+## Deploy convention — staging-first, tag-based
+
+**This is the definitive flow. Every change goes through staging.**
+
+Two parallel checkouts of the same repo:
+
+```
+~/Dropbox/workspace/macmini/prep-app/          ← prod, detached HEAD at a tag (v0.X.Y)
+~/Dropbox/workspace/macmini/prep-app-staging/  ← staging, on branch `main` (rolling)
+```
+
+| concern              | prod                              | staging                                   |
+|----------------------|-----------------------------------|-------------------------------------------|
+| URL                  | https://example-host.ts.net/prep/         | https://example-host.ts.net/prep-staging/    |
+| FastAPI port         | 8081                              | 8082                                      |
+| pm2 services         | `prep-app`, `prep-worker`         | `prep-app-staging`, `prep-worker-staging` |
+| data.sqlite          | live user data                    | seeded copy; refresh as needed            |
+| Temporal namespace   | `prep`                            | `prep-staging`                            |
+| Temporal devserver   | shared (port 7233 + Web UI 8233) — Web UI shows both namespaces |
+
+**The flow:**
+
+1. Develop in `prep-app-staging/` on `main`. Commit + push as you go.
+   • Refresh on phone, verify on `/prep-staging/`.
+   • Staging always reflects `origin/main` HEAD.
+2. When staging is good, **promote by tagging from main:**
+   ```
+   cd ~/Dropbox/workspace/macmini/prep-app-staging
+   git tag -a v0.X.Y -m "release notes"
+   git push origin v0.X.Y
+   ```
+3. **Deploy that tag to prod:**
+   ```
+   cd ~/Dropbox/workspace/macmini/prep-app
+   ./deploy.sh v0.X.Y
+   ```
+   `deploy.sh` does: `git fetch --tags && git checkout <tag>`, reinstalls Python deps,
+   rebuilds the Go worker + cm-bundle, restarts pm2 services. Prints `git describe`
+   at the end for confirmation.
+
+**Hotfixes** (when prod has a bug and main has unreleased work you don't want shipping):
+1. From the current prod tag: `git checkout -b hotfix-foo v0.X.Y`
+2. Fix, push the branch, optionally test in staging by `git checkout` of that branch
+3. Tag `v0.X.(Y+1)`, push, deploy
+4. Merge hotfix back into `main` so it doesn't get lost on the next promotion
+
+**Rollback:** `cd ~/Dropbox/workspace/macmini/prep-app && ./deploy.sh v0.<previous>`. One command.
+
+**Versioning:** semver — bump minor for features (v0.2.0), patch for fixes (v0.2.1),
+major when breaking. Pre-1.0 we're permissive about minor-vs-patch boundaries.
+
+**Initial release: v0.1.0** — sessions + CodeMirror + Telegram channel + UI sweep + skeletons (the cumulative state on 2026-04-27 when staging was bootstrapped).
+
+**Staging data refresh** (when you want a fresh copy of prod data):
+```
+cp ~/Dropbox/workspace/macmini/prep-app/data.sqlite \
+   ~/Dropbox/workspace/macmini/prep-app-staging/data.sqlite
+pm2 restart prep-app-staging
+```
+
 ## Architecture
 
 ```
