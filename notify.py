@@ -246,9 +246,12 @@ async def _tick() -> None:
             elif mode == "when-ready":
                 # Quiet hours apply here — when-ready can fire any time and the
                 # user might not want a 3am ping for a card that just rolled due.
-                if _in_quiet_hours(local.hour,
-                                   int(prefs.get("quiet_start_hour", 22)),
-                                   int(prefs.get("quiet_end_hour", 8))):
+                # Honor the opt-in: skip the check entirely if disabled.
+                if prefs.get("quiet_hours_enabled") and _in_quiet_hours(
+                    local.hour,
+                    int(prefs.get("quiet_start_hour", 22)),
+                    int(prefs.get("quiet_end_hour", 8)),
+                ):
                     continue
                 if _should_send_when_ready(prefs, due_total, now_utc):
                     send_to_user(uid, "Prep — cards ready",

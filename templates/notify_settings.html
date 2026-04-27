@@ -49,10 +49,13 @@
   </fieldset>
 
   <div class="notify-extras" id="extras-digest" {% if prefs.mode != 'digest' %}hidden{% endif %}>
-    <label class="number-input">
-      <span>send at</span>
-      <input type="number" name="digest_hour" min="0" max="23" value="{{ prefs.digest_hour }}" inputmode="numeric">
-      <span>:00</span>
+    <label class="time-input">
+      <span class="time-label">send at</span>
+      {# step="3600" pins to whole hours; the browser still renders an
+         AM/PM picker on iOS/Android in 12-hour locales. We round-trip
+         "HH:00" strings, parsing back to the int hour on save. #}
+      <input type="time" name="digest_time" step="3600"
+             value="{{ '%02d:00' % prefs.digest_hour }}">
     </label>
   </div>
 
@@ -66,17 +69,28 @@
 
   <div class="notify-extras" id="extras-quiet" {% if prefs.mode != 'when-ready' %}hidden{% endif %}>
     <p class="section-eyebrow"><span>Quiet hours</span><span class="rule"></span></p>
-    <div class="quiet-row">
-      <label class="number-input">
-        <span>from</span>
-        <input type="number" name="quiet_start_hour" min="0" max="23" value="{{ prefs.quiet_start_hour }}" inputmode="numeric">
+    <label class="toggle-check">
+      <input type="checkbox" name="quiet_hours_enabled" id="quiet-toggle"
+             {% if prefs.quiet_hours_enabled %}checked{% endif %}>
+      <span>Set quiet hours</span>
+    </label>
+    <div class="quiet-row" id="quiet-row" {% if not prefs.quiet_hours_enabled %}hidden{% endif %}>
+      <label class="time-input">
+        <span class="time-label">from</span>
+        <input type="time" name="quiet_start_time" step="3600"
+               value="{{ '%02d:00' % prefs.quiet_start_hour }}">
       </label>
-      <label class="number-input">
-        <span>to</span>
-        <input type="number" name="quiet_end_hour" min="0" max="23" value="{{ prefs.quiet_end_hour }}" inputmode="numeric">
+      <label class="time-input">
+        <span class="time-label">to</span>
+        <input type="time" name="quiet_end_time" step="3600"
+               value="{{ '%02d:00' % prefs.quiet_end_hour }}">
       </label>
     </div>
-    <p class="quiet-help">No "when ready" pings will fire during these hours. Daily digest ignores this — it always fires at the hour you picked.</p>
+    <p class="quiet-help">
+      No "when ready" pings will fire during these hours. Daily digest ignores quiet hours — it always fires at the time you picked.
+      <br>
+      <span class="quiet-tz">Times shown in <em id="tz-display">{{ prefs.tz }}</em> (auto-detected).</span>
+    </p>
   </div>
   <input type="hidden" name="tz" id="tz-input" value="{{ prefs.tz }}">
 
@@ -133,11 +147,23 @@
   const tzInput    = document.getElementById("tz-input");
   const VAPID_KEY = "{{ vapid_key }}";
 
-  // tz detection — hidden input only, no UI to override.
+  // tz detection — hidden input drives the saved value, visible label
+  // shows it to the user so they understand what zone the times use.
   try {
     const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (detected) tzInput.value = detected;
+    if (detected) {
+      tzInput.value = detected;
+      const tzDisplay = document.getElementById("tz-display");
+      if (tzDisplay) tzDisplay.textContent = detected;
+    }
   } catch (e) { /* keep server-stored value */ }
+
+  // Quiet hours opt-in: hide the time pickers when the toggle is off.
+  const quietToggle = document.getElementById("quiet-toggle");
+  const quietRow    = document.getElementById("quiet-row");
+  quietToggle.addEventListener("change", () => {
+    quietRow.hidden = !quietToggle.checked;
+  });
 
   function setStatus(msg, kind) {
     status.textContent = msg;
@@ -193,14 +219,23 @@
   }
 
   // ------- Pref save --------------------------------------------------------
+  function hourFromTime(s, fallback) {
+    // <input type="time"> returns "HH:MM"; parse the hour or fall back.
+    if (typeof s === "string" && /^\d{2}:\d{2}$/.test(s)) {
+      return Number(s.slice(0, 2));
+    }
+    return fallback;
+  }
+
   function readPrefs() {
     const fd = new FormData(form);
     return {
       mode: fd.get("mode") || "off",
-      digest_hour: Number(fd.get("digest_hour") || 9),
+      digest_hour: hourFromTime(fd.get("digest_time"), 9),
       threshold: Number(fd.get("threshold") || 3),
-      quiet_start_hour: Number(fd.get("quiet_start_hour") || 22),
-      quiet_end_hour: Number(fd.get("quiet_end_hour") || 8),
+      quiet_hours_enabled: fd.get("quiet_hours_enabled") === "on",
+      quiet_start_hour: hourFromTime(fd.get("quiet_start_time"), 22),
+      quiet_end_hour: hourFromTime(fd.get("quiet_end_time"), 8),
       tz: fd.get("tz") || "America/New_York",
     };
   }

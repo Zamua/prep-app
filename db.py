@@ -309,7 +309,8 @@ DEFAULT_NOTIFICATION_PREFS = {
     "digest_hour": 9,                   # 0..23 local-tz hour for digest mode
     "tz": "America/New_York",           # IANA timezone name
     "threshold": 3,                     # min due cards for when-ready mode
-    "quiet_start_hour": 22,             # 22..8 quiet window default
+    "quiet_hours_enabled": False,       # opt-in; when false, no quiet window
+    "quiet_start_hour": 22,             # 0..23, only honored when enabled
     "quiet_end_hour": 8,
     # State (not user-edited; updated by the scheduler):
     "last_digest_date": None,           # ISO date "YYYY-MM-DD" in user tz

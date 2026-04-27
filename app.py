@@ -815,6 +815,7 @@ def _validate_prefs(p: dict) -> dict:
     base["mode"] = mode
     base["digest_hour"] = max(0, min(23, int(p.get("digest_hour", base["digest_hour"]))))
     base["threshold"] = max(1, min(99, int(p.get("threshold", base["threshold"]))))
+    base["quiet_hours_enabled"] = bool(p.get("quiet_hours_enabled", base["quiet_hours_enabled"]))
     base["quiet_start_hour"] = max(0, min(23, int(p.get("quiet_start_hour", base["quiet_start_hour"]))))
     base["quiet_end_hour"] = max(0, min(23, int(p.get("quiet_end_hour", base["quiet_end_hour"]))))
     tz = str(p.get("tz", base["tz"]) or base["tz"])[:64]

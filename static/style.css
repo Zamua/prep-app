@@ -1887,6 +1887,73 @@ textarea:focus-visible {
 .notify-extras .number-input { margin: 0.2rem 0; }
 .notify-extras .section-eyebrow { margin: 0 0 0.6rem; }
 .quiet-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+/* `display: flex` above overrides the user-agent `[hidden]` rule. Restore
+   it so the toggle-check / hidden attribute actually hides the row. */
+.quiet-row[hidden] { display: none; }
+
+/* Time picker — `<input type="time">` styled to fit alongside number inputs.
+   Browsers render their own AM/PM widget on iOS/Android; we just give the
+   wrapper consistent typography and the input the same border treatment. */
+.time-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 1rem;
+}
+.time-input .time-label { font-style: italic; }
+.time-input input[type="time"] {
+  font: inherit;
+  font-style: normal;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1.05rem;
+  padding: 0.45rem 0.65rem;
+  min-height: 2.7rem;
+  background: var(--paper);
+  border: 1px solid var(--ink-mute);
+  border-radius: 8px;
+  color: var(--ink);
+}
+.time-input input[type="time"]:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+
+/* Inline checkbox toggle ("Set quiet hours"). Used for any opt-in we
+   want a low-noise checkbox affordance for. */
+.toggle-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 0.96rem;
+  margin: 0.4rem 0 0.8rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.toggle-check input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--quill);
+  cursor: pointer;
+}
+
+.quiet-tz {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.82rem;
+}
+.quiet-tz em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.9em;
+  color: var(--ink-soft);
+}
 .quiet-help {
   margin: 0.5rem 0 0;
   font-style: italic;
