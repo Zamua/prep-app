@@ -228,27 +228,34 @@ async def _tick() -> None:
                 tz = ZoneInfo("America/New_York")
             local = now_utc.astimezone(tz)
 
-            if _in_quiet_hours(local.hour,
-                               int(prefs.get("quiet_start_hour", 22)),
-                               int(prefs.get("quiet_end_hour", 8))):
-                continue
-
             due_total = db.count_due_for_user(uid)
             if due_total == 0:
                 continue
 
-            if _should_send_digest(prefs, local):
-                breakdown = db.deck_due_breakdown(uid)
-                send_to_user(uid, "Prep — daily digest",
-                             _digest_body(breakdown, due_total), url="/")
-                prefs["last_digest_date"] = local.date().isoformat()
-                db.set_notification_prefs(uid, prefs)
-            elif _should_send_when_ready(prefs, due_total, now_utc):
-                send_to_user(uid, "Prep — cards ready",
-                             f"{due_total} card{'s' if due_total != 1 else ''} due to study.",
-                             url="/")
-                prefs["last_when_ready_at"] = now_utc.isoformat()
-                db.set_notification_prefs(uid, prefs)
+            mode = prefs.get("mode")
+            if mode == "digest":
+                # Digest fires at the user's deliberately-chosen hour — quiet
+                # hours don't apply (the chosen hour IS the schedule). Idempotent
+                # via last_digest_date so a 5-minute tick window won't double-fire.
+                if _should_send_digest(prefs, local):
+                    breakdown = db.deck_due_breakdown(uid)
+                    send_to_user(uid, "Prep — daily digest",
+                                 _digest_body(breakdown, due_total), url="/")
+                    prefs["last_digest_date"] = local.date().isoformat()
+                    db.set_notification_prefs(uid, prefs)
+            elif mode == "when-ready":
+                # Quiet hours apply here — when-ready can fire any time and the
+                # user might not want a 3am ping for a card that just rolled due.
+                if _in_quiet_hours(local.hour,
+                                   int(prefs.get("quiet_start_hour", 22)),
+                                   int(prefs.get("quiet_end_hour", 8))):
+                    continue
+                if _should_send_when_ready(prefs, due_total, now_utc):
+                    send_to_user(uid, "Prep — cards ready",
+                                 f"{due_total} card{'s' if due_total != 1 else ''} due to study.",
+                                 url="/")
+                    prefs["last_when_ready_at"] = now_utc.isoformat()
+                    db.set_notification_prefs(uid, prefs)
         except Exception as e:
             _log.exception("scheduler tick failed for user %s: %s", uid, e)
 

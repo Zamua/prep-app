@@ -64,7 +64,7 @@
     </label>
   </div>
 
-  <div class="notify-extras">
+  <div class="notify-extras" id="extras-quiet" {% if prefs.mode != 'when-ready' %}hidden{% endif %}>
     <p class="section-eyebrow"><span>Quiet hours</span><span class="rule"></span></p>
     <div class="quiet-row">
       <label class="number-input">
@@ -76,8 +76,9 @@
         <input type="number" name="quiet_end_hour" min="0" max="23" value="{{ prefs.quiet_end_hour }}" inputmode="numeric">
       </label>
     </div>
-    <input type="hidden" name="tz" id="tz-input" value="{{ prefs.tz }}">
+    <p class="quiet-help">No "when ready" pings will fire during these hours. Daily digest ignores this — it always fires at the hour you picked.</p>
   </div>
+  <input type="hidden" name="tz" id="tz-input" value="{{ prefs.tz }}">
 
   <p class="notify-status" id="status" data-devices="{{ devices }}">
     {% if devices == 0 %}
@@ -117,15 +118,20 @@
     status.dataset.kind = kind || "";
   }
 
-  // Toggle conditional sections on radio change.
-  form.querySelectorAll('input[name="mode"]').forEach((r) => {
-    r.addEventListener("change", () => {
-      document.getElementById("extras-digest").hidden = r.value !== "digest" || !r.checked;
-      document.getElementById("extras-when-ready").hidden = r.value !== "when-ready" || !r.checked;
-      form.querySelectorAll(".notify-mode-option").forEach((opt) => {
-        opt.classList.toggle("is-selected", opt.querySelector("input").checked);
-      });
+  // Toggle conditional sections on radio change. Quiet hours only matter
+  // for "when ready" — digest mode fires at a deliberately-chosen hour
+  // regardless, and "off" obviously has nothing to silence.
+  function syncExtras() {
+    const mode = (form.querySelector('input[name="mode"]:checked') || {}).value;
+    document.getElementById("extras-digest").hidden     = mode !== "digest";
+    document.getElementById("extras-when-ready").hidden = mode !== "when-ready";
+    document.getElementById("extras-quiet").hidden      = mode !== "when-ready";
+    form.querySelectorAll(".notify-mode-option").forEach((opt) => {
+      opt.classList.toggle("is-selected", opt.querySelector("input").checked);
     });
+  }
+  form.querySelectorAll('input[name="mode"]').forEach((r) => {
+    r.addEventListener("change", syncExtras);
   });
 
   function readPrefs() {

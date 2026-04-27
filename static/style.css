@@ -1814,6 +1814,12 @@ textarea:focus-visible {
 .notify-extras .number-input { margin: 0.2rem 0; }
 .notify-extras .section-eyebrow { margin: 0 0 0.6rem; }
 .quiet-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.quiet-help {
+  margin: 0.5rem 0 0;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+}
 
 .notify-status {
   margin: 0.4rem 0 0.2rem;
