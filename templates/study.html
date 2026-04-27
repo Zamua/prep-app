@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ deck_name }} · study · prep{% endblock %}
+{% block page_class %}study{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+  <span class="card-id">№ {{ q.id }}</span>
+</nav>
+
+<article class="study-card">
+  <header class="study-head">
+    <span class="tag tag-type tag-{{ q.type }}">{{ q.type }}</span>
+    {% if q.topic %}<span class="tag tag-topic">{{ q.topic }}</span>{% endif %}
+  </header>
+
+  <div class="study-prompt">{{ q.prompt }}</div>
+
+  <form method="post" action="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}" class="study-form">
+    <input type="hidden" name="question_id" value="{{ q.id }}">
+    <input type="hidden" name="type" value="{{ q.type }}">
+
+    {% if q.type == 'mcq' %}
+      <fieldset class="choices">
+        <legend class="visually-hidden">Choose one</legend>
+        {% for c in q.choices_list %}
+          <label class="choice">
+            <input type="radio" name="choice" value="{{ c }}" required>
+            <span class="choice-marker" aria-hidden="true"></span>
+            <span class="choice-text">{{ c }}</span>
+          </label>
+        {% endfor %}
+      </fieldset>
+    {% elif q.type == 'multi' %}
+      <fieldset class="choices choices-multi">
+        <legend class="visually-hidden">Pick all that apply</legend>
+        {% for c in q.choices_list %}
+          <label class="choice">
+            <input type="checkbox" name="choice" value="{{ c }}">
+            <span class="choice-marker" aria-hidden="true"></span>
+            <span class="choice-text">{{ c }}</span>
+          </label>
+        {% endfor %}
+      </fieldset>
+    {% elif q.type == 'code' %}
+      <label class="freetext">
+        <span class="freetext-label">Your code</span>
+        <textarea name="answer" rows="12" spellcheck="false"
+                  placeholder="// write it out — pseudocode is fine if the idea is clear"
+                  class="code-area"></textarea>
+      </label>
+    {% else %}
+      <label class="freetext">
+        <span class="freetext-label">Your answer</span>
+        <textarea name="answer" rows="6"
+                  placeholder="A sentence or two."></textarea>
+      </label>
+    {% endif %}
+
+    <div class="study-actions">
+      <button class="btn btn-primary" type="submit">Submit</button>
+      <button class="btn btn-quiet" type="submit" name="idk" value="1" formnovalidate>
+        I don't know
+      </button>
+    </div>
+  </form>
+</article>
+{% endblock %}

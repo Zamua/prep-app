@@ -1,0 +1,463 @@
+// Package activities holds the side-effecting work the workflow orchestrates.
+//
+// All activities here are designed to be idempotent against repeat invocations
+// triggered by Temporal's at-least-once delivery — we use either:
+//   - a deterministic key (workflowID + index) checked in SQLite before the
+//     side effect runs, or
+//   - operations that are inherently idempotent (rm -f, "session jsonl
+//     exists?" check before priming).
+package activities
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+
+	"prep-worker/shared"
+)
+
+// emptyMCPConfig + strict-mcp-config tells claude to load NO MCP servers
+// for this invocation. We use this on every worker shell-out so we don't
+// race the channel-mode Claude's Telegram MCP for the bot's getUpdates slot.
+//
+// IMPORTANT: do NOT use --bare here. --bare disables OAuth/keychain reads
+// too and breaks subscription auth ("Not logged in · Please run /login").
+// strict-mcp-config keeps auth intact and only suppresses MCPs.
+const emptyMCPConfig = `{"mcpServers":{}}`
+
+// newSessionUUID returns a fresh random UUIDv4-shaped string. We mint one
+// per PrimeClaudeSession attempt so retries after a failed prime never hit
+// "Session ID X is already in use" (Claude registers the ID before fully
+// creating the session, so collisions persist across retries).
+func newSessionUUID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant RFC 4122
+	h := hex.EncodeToString(b)
+	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
+}
+
+// Config holds host paths read from env at worker boot.
+type Config struct {
+	DBPath         string
+	InterviewsDir  string
+	ClaudeBin      string
+	TelegramEnv    string
+	TelegramChatID string
+}
+
+func (c *Config) Validate() error {
+	if c.DBPath == "" {
+		return errors.New("PREP_DB_PATH unset")
+	}
+	if c.InterviewsDir == "" {
+		return errors.New("PREP_INTERVIEWS_DIR unset")
+	}
+	if c.ClaudeBin == "" {
+		return errors.New("CLAUDE_BIN unset")
+	}
+	return nil
+}
+
+// Activities groups all activity methods so we can register them under one
+// receiver and share Config.
+type Activities struct {
+	Cfg *Config
+}
+
+// ---- Deck context loading ----------------------------------------------
+
+// DeckContext is bundled into the priming prompt — deck source files +
+// shared topic dirs + every existing prompt for the deck (for cross-batch dedup).
+type DeckContext struct {
+	deckName       string
+	focus          string
+	sourceText     string
+	topicTexts     string
+	existingPrompts []string
+}
+
+// deckRegistry mirrors generator.DECK_CONTEXT in the Python app — we keep it
+// in sync by hand for now; long-term this could move to a shared JSON file.
+var deckRegistry = map[string]struct {
+	Source string
+	Topics []string
+	Focus  string
+}{
+	"cherry": {
+		Source: "cherry",
+		Topics: []string{"behavioral"},
+		Focus: "Cherry has a multi-round loop: hiring-manager (behavioral, " +
+			"decision-making, ownership), backend coding in Coderpad, system " +
+			"design, application/API design, and a final career-narrative round. " +
+			"Generate a balanced mix biased toward whichever round is closest in " +
+			"time per the schedule.md if visible. Stack is Kotlin primary, MySQL/" +
+			"MongoDB/Redis/Elasticsearch, AWS/GCP.",
+	},
+	"temporal": {
+		Source: "temporal-prep",
+		Topics: []string{"concurrency"},
+		Focus: "Temporal Senior SWE OSS interview is two back-to-back rounds: " +
+			"(1) Coding/Concurrency — Go/Java/Python multithreading primitives, " +
+			"synchronization, deadlock avoidance, channel patterns; " +
+			"(2) Design/Distributed Systems — durable execution, message queues, " +
+			"WAL, sharding, consistency, replication. Generate a balanced mix.",
+	},
+}
+
+func (a *Activities) loadDeckContext(deckName string) (*DeckContext, error) {
+	cfg, ok := deckRegistry[deckName]
+	if !ok {
+		return nil, fmt.Errorf("unknown deck %q", deckName)
+	}
+	srcDir := filepath.Join(a.Cfg.InterviewsDir, cfg.Source)
+	source, err := readDirSummary(srcDir, 30, 8000)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", srcDir, err)
+	}
+	var topics strings.Builder
+	for _, t := range cfg.Topics {
+		td, _ := readDirSummary(filepath.Join(a.Cfg.InterviewsDir, t), 30, 8000)
+		fmt.Fprintf(&topics, "\n## Shared topic: %s\n%s", t, td)
+	}
+	prior, err := allPromptsForDeck(a.Cfg.DBPath, deckName)
+	if err != nil {
+		return nil, fmt.Errorf("read prior prompts: %w", err)
+	}
+	return &DeckContext{
+		deckName:        deckName,
+		focus:           cfg.Focus,
+		sourceText:      source,
+		topicTexts:      topics.String(),
+		existingPrompts: prior,
+	}, nil
+}
+
+// ---- Activity: PrimeClaudeSession --------------------------------------
+
+// PrimeClaudeSession mints a fresh session ID, then seeds a claude session
+// with all the deck context up front so subsequent GenerateNextCard calls
+// only have to add a one-line "now generate card #i" prompt. Anthropic's
+// prompt cache then makes the per-card calls cheap.
+//
+// Returns the session ID it created. The workflow stores this and passes
+// it to all GenerateNextCard / Cleanup activities.
+//
+// Retry semantics: each call mints a fresh UUID, so retries after a partial
+// failure never collide on "Session ID X is already in use." Temporal's
+// at-least-once delivery means a successful call's ID gets recorded in
+// workflow history; subsequent re-deliveries of the same activity result
+// reuse that ID via history replay.
+func (a *Activities) PrimeClaudeSession(ctx context.Context, in shared.PrimeInput) (shared.PrimeResult, error) {
+	logger := activity.GetLogger(ctx)
+	sessionID := newSessionUUID()
+
+	dctx, err := a.loadDeckContext(in.DeckName)
+	if err != nil {
+		return shared.PrimeResult{}, temporal.NewNonRetryableApplicationError(
+			"deck context load failed", "BadDeckContext", err)
+	}
+
+	primePrompt := fmt.Sprintf(`You are about to generate flashcard questions for an interview-prep app, one card at a time, over multiple turns. This first message gives you ALL the context. Acknowledge in one short sentence — do not generate any cards yet.
+
+**Deck:** %s
+
+**Focus / context:**
+%s
+
+**Existing question prompts in this deck (do NOT duplicate or paraphrase any of these in subsequent cards):**
+%s
+
+**Source material (the user's own prep notes for this deck):**
+%s
+
+%s
+
+---
+
+Acknowledge: "Ready to generate cards for %s." Nothing else.`,
+		dctx.deckName,
+		dctx.focus,
+		joinPrompts(dctx.existingPrompts),
+		dctx.sourceText,
+		dctx.topicTexts,
+		dctx.deckName,
+	)
+
+	// --strict-mcp-config + empty mcp config: load NO MCP servers for this
+	// invocation. Without this, each spawn would load the user's plugin
+	// config and try to start its own Telegram MCP child, racing for the
+	// bot's single getUpdates poll slot and killing the channel-mode Claude's
+	// MCP. Hit on 2026-04-26 — six bun spawns in 46s during a 5-card batch
+	// took down the user's Telegram MCP for the whole session.
+	//
+	// Do NOT use --bare for this — --bare also disables OAuth/keychain reads
+	// and breaks subscription auth ("Not logged in · Please run /login").
+	cmd := exec.CommandContext(ctx,
+		a.Cfg.ClaudeBin,
+		"--strict-mcp-config", "--mcp-config", emptyMCPConfig,
+		"--session-id", sessionID,
+		"-p", primePrompt,
+	)
+	cmd.Env = os.Environ()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return shared.PrimeResult{}, fmt.Errorf("claude prime failed: %w (output: %s)", err, truncate(string(out), 800))
+	}
+	logger.Info("primed", "session_id", sessionID, "ack", truncate(string(out), 200))
+	return shared.PrimeResult{SessionID: sessionID}, nil
+}
+
+// ---- Activity: GenerateNextCard ----------------------------------------
+
+// GenerateNextCard resumes the primed session and asks for one card.
+// Idempotent: looks up `idempotency_key` in the questions table first;
+// if found, returns the existing card without calling claude.
+func (a *Activities) GenerateNextCard(ctx context.Context, in shared.GenerateInput) (shared.Card, error) {
+	logger := activity.GetLogger(ctx)
+
+	// Idempotency check.
+	if existing, found, err := getCardByIdempotencyKey(a.Cfg.DBPath, in.IdempotencyKey); err != nil {
+		return shared.Card{}, fmt.Errorf("idempotency lookup: %w", err)
+	} else if found {
+		logger.Info("card already generated for this key, returning cached",
+			"idempotency_key", in.IdempotencyKey)
+		return existing, nil
+	}
+
+	dedup := strings.Builder{}
+	for _, p := range in.PriorPrompts {
+		fmt.Fprintf(&dedup, "- %s\n", truncate(p, 180))
+	}
+
+	prompt := fmt.Sprintf(`Generate ONE flashcard question. This is card %d of %d.
+
+Avoid duplicating these prompts you just generated:
+%s
+Output a single JSON object (no prose, no fences). Required fields:
+- "type": one of "code" | "mcq" | "multi" | "short"
+- "topic": short string tag
+- "prompt": markdown ok
+- "choices": array (REQUIRED for mcq/multi, OMIT otherwise)
+- "answer": string (for multi: a JSON-encoded array of the correct choices)
+- "rubric": 2-4 short bullet lines describing what a correct answer must demonstrate
+
+Output ONLY the JSON object.`,
+		in.Index, in.Total, dedup.String())
+
+	// Heartbeat loop while claude runs — keeps Temporal from declaring the
+	// activity stuck if claude takes 30+s.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		t := time.NewTicker(10 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				activity.RecordHeartbeat(ctx, fmt.Sprintf("waiting on claude (card %d/%d)", in.Index, in.Total))
+			}
+		}
+	}()
+
+	// `claude --resume <id>` resumes by session ID. NOT `--session-id X --resume`
+	// — that combo errors with "--session-id can only be used with --continue or
+	// --resume if --fork-session is also specified" (we DON'T want fork because
+	// fork creates a new session ID).
+	//
+	// --strict-mcp-config + empty mcp config disables all MCPs (see the long
+	// comment in PrimeClaudeSession). DO NOT use --bare here — it also breaks
+	// OAuth.
+	cmd := exec.CommandContext(ctx,
+		a.Cfg.ClaudeBin,
+		"--strict-mcp-config", "--mcp-config", emptyMCPConfig,
+		"--resume", in.SessionID,
+		"-p", prompt,
+	)
+	cmd.Env = os.Environ()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return shared.Card{}, fmt.Errorf("claude resume failed: %w (output: %s)", err, truncate(string(out), 800))
+	}
+
+	card, err := parseCardJSON(out)
+	if err != nil {
+		// Bad JSON from the model is a terminal failure for this card —
+		// don't retry, the workflow can decide to skip and continue.
+		return shared.Card{}, temporal.NewNonRetryableApplicationError(
+			"card JSON parse failed", "BadCardJSON",
+			fmt.Errorf("%w: %s", err, truncate(string(out), 800)))
+	}
+	return card, nil
+}
+
+// ---- Activity: InsertCard ----------------------------------------------
+
+// InsertCard writes a card to the prep-app's SQLite. Idempotent via the
+// `idempotency_key` UNIQUE constraint added to the questions table.
+func (a *Activities) InsertCard(ctx context.Context, in shared.InsertInput) (shared.InsertResult, error) {
+	return insertCard(a.Cfg.DBPath, in)
+}
+
+// ---- Activity: NotifyTelegram ------------------------------------------
+
+// NotifyTelegram pings the user via the bot HTTP API. Not naturally
+// idempotent — each call sends a message — but for "done!" pings we accept
+// the rare duplicate as cheap.
+func (a *Activities) NotifyTelegram(ctx context.Context, in shared.NotifyInput) error {
+	if a.Cfg.TelegramEnv == "" || a.Cfg.TelegramChatID == "" {
+		return nil // telegram disabled
+	}
+	token, err := readTelegramToken(a.Cfg.TelegramEnv)
+	if err != nil {
+		return fmt.Errorf("read telegram env: %w", err)
+	}
+	api := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+	form := url.Values{}
+	form.Set("chat_id", a.Cfg.TelegramChatID)
+	form.Set("text", in.Text)
+	cmd := exec.CommandContext(ctx, "curl",
+		"-fsS", "-m", "10", api, "--data-urlencode", "chat_id="+a.Cfg.TelegramChatID,
+		"--data-urlencode", "text="+in.Text)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("telegram notify failed: %w (%s)", err, truncate(string(out), 400))
+	}
+	return nil
+}
+
+// ---- Activity: Cleanup -------------------------------------------------
+
+// Cleanup deletes the claude session jsonl after the workflow is done.
+// Inherently idempotent — `rm -f` on a missing file is a no-op.
+func (a *Activities) Cleanup(ctx context.Context, in shared.CleanupInput) error {
+	paths := claudeSessionPaths(in.SessionID)
+	for _, p := range paths {
+		_ = os.Remove(p) // best-effort
+	}
+	return nil
+}
+
+// ---- Helpers (small enough to stay here) -------------------------------
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+func parseCardJSON(out []byte) (shared.Card, error) {
+	raw := strings.TrimSpace(string(out))
+	// Strip optional markdown fences.
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+	// Trim anything before { and after }.
+	if i := strings.Index(raw, "{"); i > 0 {
+		raw = raw[i:]
+	}
+	if i := strings.LastIndex(raw, "}"); i >= 0 && i < len(raw)-1 {
+		raw = raw[:i+1]
+	}
+
+	var card shared.Card
+	// First try the canonical decode.
+	if err := json.Unmarshal([]byte(raw), &card); err == nil {
+		if card.Type == "" || card.Prompt == "" || card.Answer == "" {
+			return shared.Card{}, errors.New("missing required fields (type/prompt/answer)")
+		}
+		return card, nil
+	}
+	// Some models wrap the answer field as a list — fall through with a
+	// permissive decode and re-coerce.
+	var loose map[string]any
+	if err := json.Unmarshal([]byte(raw), &loose); err != nil {
+		return shared.Card{}, fmt.Errorf("not JSON: %w", err)
+	}
+	card.Type, _ = loose["type"].(string)
+	card.Topic, _ = loose["topic"].(string)
+	card.Prompt, _ = loose["prompt"].(string)
+	card.Rubric = coerceRubric(loose["rubric"])
+	card.Answer = coerceAnswer(loose["answer"])
+	if c, ok := loose["choices"].([]any); ok {
+		for _, x := range c {
+			if s, ok := x.(string); ok {
+				card.Choices = append(card.Choices, s)
+			}
+		}
+	}
+	if card.Type == "" || card.Prompt == "" || card.Answer == "" {
+		return shared.Card{}, errors.New("missing required fields after coercion")
+	}
+	return card, nil
+}
+
+func coerceRubric(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case []any:
+		var b strings.Builder
+		for _, item := range x {
+			if s, ok := item.(string); ok {
+				fmt.Fprintf(&b, "- %s\n", s)
+			}
+		}
+		return strings.TrimRight(b.String(), "\n")
+	}
+	return ""
+}
+
+func coerceAnswer(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case []any:
+		// `multi` answer as a list — JSON-encode for storage.
+		if data, err := json.Marshal(x); err == nil {
+			return string(data)
+		}
+	}
+	return ""
+}
+
+func joinPrompts(prompts []string) string {
+	if len(prompts) == 0 {
+		return "(none yet)"
+	}
+	var b strings.Builder
+	for _, p := range prompts {
+		fmt.Fprintf(&b, "- %s\n", truncate(p, 200))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func readTelegramToken(envFile string) (string, error) {
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "TELEGRAM_BOT_TOKEN=") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "TELEGRAM_BOT_TOKEN=")), nil
+		}
+	}
+	return "", errors.New("TELEGRAM_BOT_TOKEN missing")
+}

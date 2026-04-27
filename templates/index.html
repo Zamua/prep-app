@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}decks · prep{% endblock %}
+{% block page_class %}index{% endblock %}
+{% block main %}
+<section class="prelude">
+  <p class="eyebrow">The decks</p>
+  <h1 class="display">A standing library<br><em>of questions</em>.</h1>
+  <p class="lede">
+    Pick a deck to study what's due, or generate a fresh batch. Cards
+    re-surface on a forgetting curve — the more you remember, the longer
+    they sleep.
+  </p>
+</section>
+
+<ol class="deck-list" role="list">
+  {% for d in decks %}
+    {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][loop.index0] %}
+    <li class="deck-card" style="--i: {{ loop.index }}">
+      <a href="{{ request.scope.get('root_path','') }}/deck/{{ d.name }}" class="deck-link">
+        <span class="deck-numeral" aria-hidden="true">{{ roman }}</span>
+        <span class="deck-body">
+          <span class="deck-name">{{ d.name }}</span>
+          <span class="deck-stats">
+            <span class="stat-due {% if (d.due or 0) > 0 %}is-active{% endif %}">
+              <span class="stat-value">{{ d.due or 0 }}</span>
+              <span class="stat-label">due now</span>
+            </span>
+            <span class="stat-divider" aria-hidden="true">·</span>
+            <span class="stat-total">
+              <span class="stat-value">{{ d.total or 0 }}</span>
+              <span class="stat-label">in deck</span>
+            </span>
+          </span>
+        </span>
+        <span class="deck-arrow" aria-hidden="true">→</span>
+      </a>
+    </li>
+  {% endfor %}
+  {% if not decks %}
+    <li class="deck-card empty"><p>No decks yet.</p></li>
+  {% endif %}
+</ol>
+{% endblock %}

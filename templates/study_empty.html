@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}all clear · {{ deck_name }} · prep{% endblock %}
+{% block page_class %}study study-empty{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+</nav>
+
+<section class="empty-state">
+  <p class="empty-headline"><em>Nothing due.</em></p>
+  <p class="empty-sub">
+    All cards in this deck are sleeping. Generate more from the deck page, or
+    check back later as cards mature into the next interval.
+  </p>
+  <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+</section>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}generating · {{ deck_name }} · prep{% endblock %}
+{% block page_class %}generation{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+  <span class="card-id">workflow {{ wid[-12:] }}</span>
+</nav>
+
+<section class="generation-panel" id="gen-panel"
+         data-status-url="{{ request.scope.get('root_path','') }}/generation/{{ wid }}/status"
+         data-deck-url="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">
+  <p class="eyebrow">Generating</p>
+  <h1 class="display gen-headline" id="gen-headline">
+    <span id="gen-completed">{{ (progress and progress.completed) or 0 }}</span>
+    <span class="of">of</span>
+    <span id="gen-total">{{ (progress and progress.total) or '?' }}</span>
+    <em>cards</em>
+  </h1>
+  <p class="gen-status">
+    <span class="status-dot" id="gen-dot"></span>
+    <span id="gen-status-text">{{ (progress and progress.status) or desc.status or 'starting' }}</span>
+    <span class="status-topic" id="gen-topic">{% if progress and progress.current_topic %}· {{ progress.current_topic }}{% endif %}</span>
+  </p>
+
+  <div class="gen-bar"><div class="gen-bar-fill" id="gen-bar-fill"></div></div>
+
+  <div class="actions">
+    <form action="{{ request.scope.get('root_path','') }}/generation/{{ wid }}/cancel" method="post" id="gen-cancel-form">
+      <button class="btn btn-quiet" type="submit">Cancel after current card</button>
+    </form>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Open deck (skip wait)</a>
+  </div>
+
+  <p class="gen-hint">
+    <em>This page polls the workflow every 2 seconds. Generation runs durably on
+    Temporal — even if you close this tab, it keeps going. Refresh the deck page later to see new cards.</em>
+  </p>
+</section>
+
+<script>
+(function () {
+  const panel = document.getElementById('gen-panel');
+  const statusUrl = panel.dataset.statusUrl;
+  const deckUrl = panel.dataset.deckUrl;
+  const $completed = document.getElementById('gen-completed');
+  const $total = document.getElementById('gen-total');
+  const $statusText = document.getElementById('gen-status-text');
+  const $topic = document.getElementById('gen-topic');
+  const $dot = document.getElementById('gen-dot');
+  const $bar = document.getElementById('gen-bar-fill');
+
+  const TERMINAL = new Set(['done', 'cancelled', 'failed', 'COMPLETED', 'CANCELED', 'FAILED', 'TERMINATED']);
+
+  async function poll () {
+    try {
+      const r = await fetch(statusUrl, { cache: 'no-store' });
+      const j = await r.json();
+      const p = j.progress;
+      const d = j.desc;
+      const status = (p && p.status) || (d && d.status) || 'unknown';
+      const completed = (p && p.completed) || 0;
+      const total = (p && p.total) || (parseInt($total.textContent) || 0);
+      $completed.textContent = completed;
+      if (total) $total.textContent = total;
+      $statusText.textContent = status;
+      $topic.textContent = (p && p.current_topic) ? '· ' + p.current_topic : '';
+      $dot.className = 'status-dot status-' + status.toLowerCase();
+      const pct = total ? Math.round((completed / total) * 100) : 0;
+      $bar.style.width = pct + '%';
+
+      if (TERMINAL.has(status)) {
+        // Pause briefly then send the user to the deck.
+        setTimeout(() => { window.location.href = deckUrl; }, 1500);
+        return;
+      }
+    } catch (e) {
+      console.error('poll error', e);
+    }
+    setTimeout(poll, 2000);
+  }
+  poll();
+})();
+</script>
+{% endblock %}

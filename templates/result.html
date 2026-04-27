@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ verdict.result }} · {{ deck_name }} · prep{% endblock %}
+{% block page_class %}result result-{{ verdict.result }}{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">← {{ deck_name }}</a>
+  <span class="card-id">№ {{ q.id }}</span>
+</nav>
+
+<section class="verdict-block">
+  {% if verdict.result == 'right' %}
+    <span class="verdict-mark verdict-mark-right" aria-hidden="true">✓</span>
+    <h1 class="verdict-headline">Right.</h1>
+    <p class="verdict-sub">Pushed back to <strong>{{ state.interval_minutes }} min</strong> from now.</p>
+  {% else %}
+    <span class="verdict-mark verdict-mark-wrong" aria-hidden="true">✗</span>
+    <h1 class="verdict-headline">Not yet.</h1>
+    <p class="verdict-sub">Resurfacing in <strong>{{ state.interval_minutes }} min</strong>.</p>
+  {% endif %}
+</section>
+
+<section class="result-section">
+  <p class="section-eyebrow"><span>The question</span><span class="rule"></span></p>
+  <div class="study-prompt">{{ q.prompt }}</div>
+</section>
+
+{# ---- Type-specific answer rendering ---- #}
+{% if q.type in ('mcq', 'multi') %}
+  <section class="result-section">
+    <p class="section-eyebrow">
+      <span>{% if q.type == 'mcq' %}Choices{% else %}Choices · pick all that apply{% endif %}</span>
+      <span class="rule"></span>
+    </p>
+    <ul class="answer-grid" role="list">
+      {% for c in q.choices_list %}
+        {% set was_picked = c in picked_set %}
+        {% set is_correct = c in correct_set %}
+        {% set state_cls = 'correct-picked' if (was_picked and is_correct)
+                       else 'wrong-picked'   if was_picked
+                       else 'correct-missed' if is_correct
+                       else 'idle' %}
+        <li class="answer-row state-{{ state_cls }}">
+          <span class="answer-marker" aria-hidden="true">
+            {% if state_cls == 'correct-picked' %}✓{% elif state_cls == 'wrong-picked' %}✗{% elif state_cls == 'correct-missed' %}○{% else %}·{% endif %}
+          </span>
+          <span class="answer-text">{{ c }}</span>
+          <span class="answer-tags">
+            {% if was_picked %}<span class="tag tag-pick">your pick</span>{% endif %}
+            {% if is_correct %}<span class="tag tag-correct">correct</span>{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+    {% if q.type == 'multi' %}
+      <p class="answer-tally">
+        {% set hits = picked_set | select('in', correct_set) | list | length %}
+        {% set extras = picked_set | reject('in', correct_set) | list | length %}
+        {% set missed = correct_set | reject('in', picked_set) | list | length %}
+        <em>{{ hits }} correct picked</em>
+        {% if extras %} · <em>{{ extras }} wrong included</em>{% endif %}
+        {% if missed %} · <em>{{ missed }} correct missed</em>{% endif %}
+      </p>
+    {% endif %}
+  </section>
+
+{% elif q.type == 'short' %}
+  {% if not idk %}
+  <section class="result-section">
+    <p class="section-eyebrow"><span>What you wrote</span><span class="rule"></span></p>
+    <blockquote class="prose-answer">{{ user_answer }}</blockquote>
+  </section>
+  {% endif %}
+  <section class="result-section">
+    <p class="section-eyebrow"><span>Model answer</span><span class="rule"></span></p>
+    <blockquote class="prose-answer prose-answer-model">{{ q.answer }}</blockquote>
+  </section>
+
+{% elif q.type == 'code' %}
+  {% if not idk %}
+  <section class="result-section">
+    <p class="section-eyebrow"><span>What you wrote</span><span class="rule"></span></p>
+    <pre class="reproduction">{{ user_answer }}</pre>
+  </section>
+  {% endif %}
+  <section class="result-section">
+    <p class="section-eyebrow"><span>Model answer</span><span class="rule"></span></p>
+    <pre class="reproduction reproduction-model">{{ q.answer }}</pre>
+  </section>
+
+{% else %}
+  {# Fallback for unknown types — shouldn't happen but don't lose the data #}
+  {% if not idk %}
+  <section class="result-section">
+    <p class="section-eyebrow"><span>What you wrote</span><span class="rule"></span></p>
+    <pre class="reproduction">{{ user_answer }}</pre>
+  </section>
+  {% endif %}
+  <section class="result-section">
+    <p class="section-eyebrow"><span>Model answer</span><span class="rule"></span></p>
+    <pre class="reproduction reproduction-model">{{ q.answer }}</pre>
+  </section>
+{% endif %}
+
+<section class="result-section">
+  <p class="section-eyebrow"><span>Feedback</span><span class="rule"></span></p>
+  <p class="feedback-body">{{ verdict.feedback }}</p>
+</section>
+
+{% if q.rubric %}
+<section class="result-section">
+  <details class="rubric-details">
+    <summary>Show the grading rubric</summary>
+    <pre class="reproduction reproduction-rubric">{{ q.rubric }}</pre>
+  </details>
+</section>
+{% endif %}
+
+<div class="study-actions next-actions">
+  <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}">Next card →</a>
+  <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+</div>
+{% endblock %}

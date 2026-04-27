@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ deck_name }} · prep{% endblock %}
+{% block page_class %}deck{% endblock %}
+{% block main %}
+<section class="deck-header">
+  <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">← all decks</a></p>
+  <h1 class="display deck-title">{{ deck_name }}</h1>
+  <p class="deck-meta">
+    <span class="meta-figure {% if due_count > 0 %}is-active{% endif %}">
+      <span class="figure">{{ due_count }}</span>
+      <span class="figure-label">due now</span>
+    </span>
+    <span class="meta-divider" aria-hidden="true">·</span>
+    <span class="meta-figure">
+      <span class="figure">{{ questions|length }}</span>
+      <span class="figure-label">total cards</span>
+    </span>
+  </p>
+</section>
+
+<section class="action-bar">
+  {% if due_count > 0 %}
+    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}">
+      <span>Begin study session</span>
+      <span class="btn-aside">{{ due_count }} due</span>
+    </a>
+  {% else %}
+    <span class="btn btn-disabled" aria-disabled="true">
+      <span>Nothing due right now</span>
+    </span>
+  {% endif %}
+
+  <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/add" method="post" class="generate-form">
+    <label class="number-input">
+      <span class="number-label">add</span>
+      <input type="number" name="count" value="5" min="1" max="15" inputmode="numeric">
+      <span class="number-suffix">cards</span>
+    </label>
+    <button type="submit" class="btn btn-ghost">Generate</button>
+  </form>
+</section>
+
+{% if questions %}
+  <section class="card-index">
+    <p class="section-eyebrow"><span>The collection</span><span class="rule"></span></p>
+    <ol class="qcards" role="list" start="1">
+      {% for q in questions %}
+        <li class="qcard{% if q.suspended %} is-suspended{% endif %}" style="--i: {{ loop.index }}">
+          <header class="qcard-head">
+            <span class="qcard-num">№ {{ q.id }}</span>
+            <span class="qcard-tags">
+              <span class="tag tag-type tag-{{ q.type }}">{{ q.type }}</span>
+              {% if q.topic %}<span class="tag tag-topic">{{ q.topic }}</span>{% endif %}
+            </span>
+          </header>
+          <p class="qcard-prompt">{{ q.prompt[:220] }}{% if q.prompt|length > 220 %}…{% endif %}</p>
+          <footer class="qcard-foot">
+            <span class="qcard-stats">
+              <span class="dot" aria-hidden="true">●</span>
+              {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct
+              {% if q.next_due %}
+                <span class="qcard-stats-divider">·</span>
+                next {{ q.next_due[:10] }}
+              {% endif %}
+            </span>
+            <span class="qcard-actions">
+              {% if q.suspended %}
+                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post">
+                  <button class="link-btn">unsuspend</button>
+                </form>
+              {% else %}
+                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post">
+                  <button class="link-btn">suspend</button>
+                </form>
+              {% endif %}
+            </span>
+          </footer>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+{% else %}
+  <section class="empty-state">
+    <p class="empty-headline"><em>No cards yet.</em></p>
+    <p class="empty-sub">Press <strong>Generate</strong> above to draw the first batch.</p>
+  </section>
+{% endif %}
+{% endblock %}

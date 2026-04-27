@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# SQLite — user data lives in the DB; restore by re-generating
+data.sqlite
+data.sqlite-shm
+data.sqlite-wal
+
+# Temporal devserver state — local dev only
+temporal-data/
+
+# Go build artifacts
+worker-go/bin/
+*.exe
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
