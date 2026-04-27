@@ -206,19 +206,46 @@ def init() -> None:
                     has_compound_unique = True
                     break
         if not has_compound_unique:
-            c.executescript("""
-                CREATE TABLE decks_new (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id     TEXT NOT NULL,
-                    name        TEXT NOT NULL,
-                    created_at  TEXT NOT NULL,
-                    UNIQUE (user_id, name)
-                );
-                INSERT INTO decks_new (id, user_id, name, created_at)
-                  SELECT id, user_id, name, created_at FROM decks;
-                DROP TABLE decks;
-                ALTER TABLE decks_new RENAME TO decks;
-            """)
+            # CRITICAL: disable FK enforcement for the rebuild. `DROP TABLE
+            # decks` would otherwise CASCADE through every questions row
+            # (FK: questions.deck_id → decks.id ON DELETE CASCADE), which
+            # in turn cascades through cards and reviews. v0.3.0 shipped
+            # without this guard and silently wiped a real user's deck on
+            # the first prod migration — never again. SQLite's blessed
+            # pattern for table rebuilds:
+            # https://sqlite.org/lang_altertable.html#otheralter
+            #
+            # The PRAGMA must be set OUTSIDE any open transaction to take
+            # effect. Commit any pending work on this connection first.
+            c.commit()
+            c.execute("PRAGMA foreign_keys = OFF")
+            try:
+                c.executescript("""
+                    BEGIN;
+                    CREATE TABLE decks_new (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id     TEXT NOT NULL,
+                        name        TEXT NOT NULL,
+                        created_at  TEXT NOT NULL,
+                        UNIQUE (user_id, name)
+                    );
+                    INSERT INTO decks_new (id, user_id, name, created_at)
+                      SELECT id, user_id, name, created_at FROM decks;
+                    DROP TABLE decks;
+                    ALTER TABLE decks_new RENAME TO decks;
+                    COMMIT;
+                """)
+                # Verify no foreign-key invariants were violated. We preserve
+                # `id` in the rebuild so questions.deck_id still resolves,
+                # but defense-in-depth costs nothing.
+                orphans = c.execute("PRAGMA foreign_key_check").fetchall()
+                if orphans:
+                    raise RuntimeError(
+                        f"foreign_key_check failed after decks rebuild: "
+                        f"{[dict(r) for r in orphans]}"
+                    )
+            finally:
+                c.execute("PRAGMA foreign_keys = ON")
 
         # 4. user_id-dependent indexes — created last, after every table has
         #    the column. CREATE IF NOT EXISTS so re-running is a no-op.
