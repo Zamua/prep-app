@@ -89,8 +89,17 @@
   </p>
 
   <div class="study-actions">
-    <button type="button" class="btn btn-primary" id="save-btn">Save settings</button>
-    <button type="button" class="btn btn-quiet" id="enable-btn">Enable on this device</button>
+    {# When not yet subscribed on this device, "Enable" is the primary
+       call-to-action; "Save settings" is secondary. Once subscribed,
+       Save becomes primary so the user can adjust prefs without thinking
+       about subscription state again. #}
+    {% if devices == 0 %}
+      <button type="button" class="btn btn-primary" id="enable-btn">Enable on this device</button>
+      <button type="button" class="btn btn-quiet" id="save-btn">Save settings</button>
+    {% else %}
+      <button type="button" class="btn btn-primary" id="save-btn">Save settings</button>
+      <button type="button" class="btn btn-quiet" id="enable-btn">Resubscribe this device</button>
+    {% endif %}
     <button type="button" class="btn btn-quiet" id="test-btn" {% if devices == 0 %}disabled{% endif %}>Send test push</button>
   </div>
 </form>

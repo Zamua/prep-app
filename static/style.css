@@ -662,7 +662,8 @@ a { color: inherit; }
   border-color: var(--ink);
 }
 
-.btn-disabled {
+.btn-disabled,
+.btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
   pointer-events: none;
@@ -670,6 +671,10 @@ a { color: inherit; }
   border-color: var(--rule);
   color: var(--ink-mute);
   font-style: italic;
+  /* Override the dark-on-cream styling of btn-primary if a primary button
+     is disabled — needs explicit reset since :disabled has lower specificity. */
+  box-shadow: none;
+  transform: none;
 }
 
 .btn-aside {
