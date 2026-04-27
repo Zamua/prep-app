@@ -88,19 +88,35 @@
     {% endif %}
   </p>
 
-  <div class="study-actions">
-    {# When not yet subscribed on this device, "Enable" is the primary
-       call-to-action; "Save settings" is secondary. Once subscribed,
-       Save becomes primary so the user can adjust prefs without thinking
-       about subscription state again. #}
-    {% if devices == 0 %}
-      <button type="button" class="btn btn-primary" id="enable-btn">Enable on this device</button>
-      <button type="button" class="btn btn-quiet" id="save-btn">Save settings</button>
-    {% else %}
-      <button type="button" class="btn btn-primary" id="save-btn">Save settings</button>
-      <button type="button" class="btn btn-quiet" id="enable-btn">Resubscribe this device</button>
-    {% endif %}
-    <button type="button" class="btn btn-quiet" id="test-btn" {% if devices == 0 %}disabled{% endif %}>Send test push</button>
+  {# All four action buttons are rendered; JS picks which two to show based
+     on this device's subscription state (PushManager.getSubscription()).
+     Server-side "devices" is the user's total across devices and only
+     informs the status text. #}
+  <div class="study-actions" id="actions">
+    <button type="button" class="btn btn-primary"  id="save-btn"        hidden>Save settings</button>
+    <button type="button" class="btn btn-primary"  id="enable-btn"      hidden>Enable on this device</button>
+    <button type="button" class="btn btn-quiet"    id="disable-btn"     hidden>Disable on this device</button>
+    {# Stateful button: shows pending / success / error inline rather than
+       updating the floating status pill. CSS picks which child <span>
+       group is visible based on the is-* class on the button itself. #}
+    <button type="button" class="btn btn-quiet btn-async" id="test-btn" hidden>
+      <span class="btn-async-state btn-async-default">
+        {{ icon('paper-plane-tilt', class_='icon icon-inline') }}
+        <span>Send test push</span>
+      </span>
+      <span class="btn-async-state btn-async-pending">
+        {{ icon('circle-notch', class_='icon icon-inline btn-async-spin') }}
+        <span>Sending…</span>
+      </span>
+      <span class="btn-async-state btn-async-success">
+        {{ icon('check-circle', class_='icon icon-inline') }}
+        <span>Sent — check your home screen</span>
+      </span>
+      <span class="btn-async-state btn-async-error">
+        {{ icon('warning-circle', class_='icon icon-inline') }}
+        <span>Couldn't send — try again</span>
+      </span>
+    </button>
   </div>
 </form>
 
@@ -109,14 +125,14 @@
   const root = "{{ request.scope.get('root_path','') }}";
   const form = document.getElementById("notify-form");
   const status = document.getElementById("status");
-  const saveBtn = document.getElementById("save-btn");
-  const enableBtn = document.getElementById("enable-btn");
-  const testBtn = document.getElementById("test-btn");
-  const tzInput = document.getElementById("tz-input");
+  const saveBtn    = document.getElementById("save-btn");
+  const enableBtn  = document.getElementById("enable-btn");
+  const disableBtn = document.getElementById("disable-btn");
+  const testBtn    = document.getElementById("test-btn");
+  const tzInput    = document.getElementById("tz-input");
   const VAPID_KEY = "{{ vapid_key }}";
 
-  // Auto-detect tz from the browser. User can't hand-edit this from the
-  // form (the input is hidden) — keeps the surface small.
+  // tz detection — hidden input only, no UI to override.
   try {
     const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (detected) tzInput.value = detected;
@@ -127,9 +143,7 @@
     status.dataset.kind = kind || "";
   }
 
-  // Toggle conditional sections on radio change. Quiet hours only matter
-  // for "when ready" — digest mode fires at a deliberately-chosen hour
-  // regardless, and "off" obviously has nothing to silence.
+  // Quiet hours only apply to when-ready; the other modes hide it.
   function syncExtras() {
     const mode = (form.querySelector('input[name="mode"]:checked') || {}).value;
     document.getElementById("extras-digest").hidden     = mode !== "digest";
@@ -143,6 +157,38 @@
     r.addEventListener("change", syncExtras);
   });
 
+  // ------- Subscription state on THIS device --------------------------------
+  // Server-rendered `devices` is total across devices, so we can't trust it
+  // to render local state. Ask the browser directly.
+  let reg = null;
+  let localSub = null;
+
+  async function loadLocalSub() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    try {
+      reg = await navigator.serviceWorker.register(root + "/sw.js", { scope: root + "/" });
+      await navigator.serviceWorker.ready;
+      localSub = await reg.pushManager.getSubscription();
+    } catch (e) {
+      // SW didn't register — leave reg/localSub null.
+      console.warn("SW register failed:", e);
+    }
+  }
+
+  function renderActions() {
+    const subscribed = !!localSub;
+    saveBtn.hidden    = false;
+    enableBtn.hidden  = subscribed;
+    disableBtn.hidden = !subscribed;
+    testBtn.hidden    = !subscribed;
+    // Save's primary status alternates with Enable: when not subscribed,
+    // "Enable on this device" is the next step, so it gets primary;
+    // when subscribed, Save is the most-likely-next-action.
+    saveBtn.classList.toggle("btn-primary", subscribed);
+    saveBtn.classList.toggle("btn-quiet", !subscribed);
+  }
+
+  // ------- Pref save --------------------------------------------------------
   function readPrefs() {
     const fd = new FormData(form);
     return {
@@ -166,6 +212,7 @@
     else setStatus("Save failed (" + r.status + ").", "error");
   });
 
+  // ------- Enable / Disable / Test ------------------------------------------
   function urlB64ToUint8Array(b64) {
     const padding = "=".repeat((4 - (b64.length % 4)) % 4);
     const base64 = (b64 + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -174,21 +221,18 @@
   }
 
   enableBtn.addEventListener("click", async () => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (!reg) {
       setStatus("This browser doesn't support web push.", "error");
       return;
     }
     setStatus("Asking for permission…");
-    const reg = await navigator.serviceWorker.register(root + "/sw.js", { scope: root + "/" });
-    await navigator.serviceWorker.ready;
     const perm = await Notification.requestPermission();
     if (perm !== "granted") {
       setStatus("Permission denied. You can re-enable in iOS Settings → Notifications → prep.", "error");
       return;
     }
-    let sub;
     try {
-      sub = await reg.pushManager.subscribe({
+      localSub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlB64ToUint8Array(VAPID_KEY),
       });
@@ -199,23 +243,63 @@
     const r = await fetch(root + "/notify/subscribe", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(sub),
+      body: JSON.stringify(localSub),
     });
     if (r.ok) {
-      setStatus("Subscribed on this device. Save your settings to start receiving pushes.", "ok");
-      testBtn.disabled = false;
+      setStatus("Subscribed on this device.", "ok");
+      renderActions();
     } else {
       setStatus("Server rejected the subscription.", "error");
     }
   });
 
-  testBtn.addEventListener("click", async () => {
-    setStatus("Sending a test push…");
-    const r = await fetch(root + "/notify/test", { method: "POST" });
-    const j = await r.json();
-    if (j.sent > 0) setStatus("Test sent to " + j.sent + " device(s). Check your home screen.", "ok");
-    else setStatus("No devices reached (sent=" + j.sent + ", pruned=" + j.pruned + ", failed=" + j.failed + ").", "error");
+  disableBtn.addEventListener("click", async () => {
+    if (!localSub) return;
+    const endpoint = localSub.endpoint;
+    setStatus("Disabling on this device…");
+    try {
+      await localSub.unsubscribe();
+    } catch (e) {
+      // Even if pushManager.unsubscribe throws (rare), still tell the
+      // server to forget us so the scheduler doesn't keep targeting a
+      // dead endpoint.
+      console.warn("local unsubscribe failed:", e);
+    }
+    await fetch(root + "/notify/unsubscribe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ endpoint: endpoint }),
+    });
+    localSub = null;
+    setStatus("Disabled on this device.", "ok");
+    renderActions();
   });
+
+  testBtn.addEventListener("click", async () => {
+    // The button owns its own feedback — pending / success / error states
+    // swap inline via the `is-*` class on the button. The CSS keeps the
+    // pending state visually inert via pointer-events:none so we don't
+    // need the HTML disabled attribute (which conflicts with the
+    // colored success/error backgrounds via .btn:disabled).
+    testBtn.classList.remove("is-success", "is-error");
+    testBtn.classList.add("is-pending");
+    let result = null;
+    try {
+      const r = await fetch(root + "/notify/test", { method: "POST" });
+      result = await r.json();
+    } catch (e) {
+      result = { sent: 0 };
+    }
+    testBtn.classList.remove("is-pending");
+    testBtn.classList.add(result && result.sent > 0 ? "is-success" : "is-error");
+    setTimeout(() => {
+      testBtn.classList.remove("is-success", "is-error");
+    }, 2400);
+  });
+
+  // ------- Boot --------------------------------------------------------------
+  await loadLocalSub();
+  renderActions();
 })();
 </script>
 

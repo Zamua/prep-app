@@ -864,6 +864,21 @@ async def notify_subscribe(request: Request, user: dict = Depends(current_user))
     return JSONResponse({"ok": True})
 
 
+@app.post("/notify/unsubscribe")
+async def notify_unsubscribe(request: Request, user: dict = Depends(current_user)):
+    """Remove a single device's push subscription. Endpoint is the natural
+    key — same endpoint can only belong to one user, so the auth check
+    here is for sanity (the endpoint is opaque and unguessable, so even
+    without ownership filtering, an attacker would need the endpoint URL
+    to remove someone else's subscription)."""
+    body = await request.json()
+    endpoint = body.get("endpoint") if isinstance(body, dict) else None
+    if not endpoint:
+        raise HTTPException(400, "missing endpoint")
+    db.delete_push_subscription(endpoint)
+    return JSONResponse({"ok": True})
+
+
 @app.post("/notify/test")
 async def notify_send_test(user: dict = Depends(current_user)):
     """Send a one-off "test push" to the current user's devices so they
