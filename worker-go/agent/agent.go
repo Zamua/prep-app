@@ -192,10 +192,11 @@ func (a *HTTPAgent) Run(ctx context.Context, in RunInput) (RunOutput, error) {
 // ---- Construction from env ------------------------------------------
 
 // FromEnv returns a Client based on env vars. PREP_AGENT_URL takes
-// precedence over PREP_AGENT_BIN (for the docker / agent-server case);
-// PREP_AGENT_URL set + reachable wins. Returns (nil, nil) if neither is
-// configured — the caller can run with no AI and the worker will refuse
-// the AI-needing activities.
+// precedence over PREP_AGENT_BIN (for the docker / agent-server case).
+// Returns nil if neither is configured OR if PREP_AGENT_BIN points at
+// a path that doesn't exist — keeps the Go worker's notion of "agent
+// available" consistent with the Python probe in agent.py, so the UI
+// (gated on the Python probe) never sends work the worker can't run.
 func FromEnv() Client {
 	if u := strings.TrimSpace(os.Getenv("PREP_AGENT_URL")); u != "" {
 		return &HTTPAgent{BaseURL: u}
@@ -205,6 +206,9 @@ func FromEnv() Client {
 		bin = strings.TrimSpace(os.Getenv("CLAUDE_BIN")) // back-compat alias
 	}
 	if bin == "" {
+		return nil
+	}
+	if info, err := os.Stat(bin); err != nil || info.IsDir() {
 		return nil
 	}
 	return &ShellAgent{
