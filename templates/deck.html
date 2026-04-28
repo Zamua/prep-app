@@ -122,7 +122,10 @@
             </span>
             <span class="qcard-actions">
               <details class="qcard-improve">
-                <summary class="link-btn">improve</summary>
+                <summary class="qcard-action" aria-label="Improve this card">
+                  {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+                  <span class="qcard-action-label">improve</span>
+                </summary>
                 <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/improve" method="post" class="qcard-improve-form">
                   <textarea name="prompt" rows="2" maxlength="2000"
                             placeholder="e.g. add a code skeleton · fix the typo in `releaze` · simplify the prompt"
@@ -133,12 +136,18 @@
                 </form>
               </details>
               {% if q.suspended %}
-                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post">
-                  <button class="link-btn">unsuspend</button>
+                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post" class="qcard-action-form">
+                  <button class="qcard-action" type="submit" aria-label="Unsuspend this card">
+                    {{ icon('play', class_='icon icon-inline') }}
+                    <span class="qcard-action-label">unsuspend</span>
+                  </button>
                 </form>
               {% else %}
-                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post">
-                  <button class="link-btn">suspend</button>
+                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post" class="qcard-action-form">
+                  <button class="qcard-action" type="submit" aria-label="Suspend this card">
+                    {{ icon('pause', class_='icon icon-inline') }}
+                    <span class="qcard-action-label">suspend</span>
+                  </button>
                 </form>
               {% endif %}
             </span>
