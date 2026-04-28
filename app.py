@@ -35,7 +35,20 @@ import notify
 import temporal_client
 
 BASE_DIR = Path(__file__).parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _user_context(request: Request) -> dict:
+    """Jinja context_processor: surface `user` to every template that gets a
+    Request whose state was populated by current_user(). Lets routes /
+    error handlers omit the explicit `"user": user` entry without losing the
+    masthead chip + base.html `data-editor-mode` attribute."""
+    return {"user": getattr(request.state, "user", None)}
+
+
+templates = Jinja2Templates(
+    directory=str(BASE_DIR / "templates"),
+    context_processors=[_user_context],
+)
 
 # Markdown rendering for prompts (and other free-form fields). Mistune escapes
 # raw HTML by default — input is already trusted (we generated it ourselves)
@@ -214,7 +227,13 @@ def current_user(request: Request) -> dict:
         raise HTTPException(401, "no Tailscale identity (set Tailscale-User-Login header or PREP_DEFAULT_USER)")
     display_name = request.headers.get("tailscale-user-name") or login.split("@", 1)[0]
     profile_pic = request.headers.get("tailscale-user-profile-pic") or None
-    return db.upsert_user(login, display_name, profile_pic)
+    user = db.upsert_user(login, display_name, profile_pic)
+    # Stash on request.state so the Jinja context_processor (`_user_context`)
+    # can surface it to every template without each route having to remember
+    # to pass `"user": user` in the context dict. Keeps masthead chip +
+    # data-editor-mode consistent across all authenticated pages.
+    request.state.user = user
+    return user
 
 
 db.init()
@@ -689,7 +708,7 @@ def study(request: Request, name: str, user: dict = Depends(current_user)):
         )
     return templates.TemplateResponse(
         "study.html",
-        {"request": request, "deck_name": name, "q": due[0]},
+        {"request": request, "user": user, "deck_name": name, "q": due[0]},
     )
 
 

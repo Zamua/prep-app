@@ -52,25 +52,59 @@
         {% endfor %}
       </fieldset>
     {% elif q.type == 'code' %}
-      <label class="freetext">
-        <span class="freetext-label-row">
-          <span class="freetext-label">Your code <span class="lang-tag">{{ q.language or 'go' }}</span></span>
-          <span class="freetext-actions">
-            <button type="button" class="freetext-reset" id="vim-toggle">vim: <span id="vim-state">off</span></button>
-            <button type="button" class="freetext-reset" id="copy-code">copy</button>
+      {# `<div class="freetext">` rather than `<label class="freetext">` —
+         when buttons are nested inside a `<label>`, the browser synthesizes
+         a click on the first labelable descendant whenever you tap anywhere
+         in the label. Same fix as study.html. #}
+      <div class="freetext">
+        <div class="freetext-label-row">
+          <label for="code-answer" class="freetext-label">Your code <span class="lang-tag">{{ q.language or 'go' }}</span></label>
+          <div class="freetext-actions">
+            {# Per-card input-mode picker. Default reflects the user's
+               profile setting (rendered into <body data-editor-mode> by
+               base.html); changing it reconfigures the editor for THIS
+               card only. /settings/editor is where the profile default
+               is set. #}
+            <label class="code-action code-action-mode" title="Editor input mode (this card only)">
+              {{ icon('terminal-window', class_='icon icon-inline') }}
+              <select id="input-mode-select" aria-label="Editor input mode">
+                <option value="vanilla">vanilla</option>
+                <option value="vim">vim</option>
+                <option value="emacs">emacs</option>
+              </select>
+            </label>
+            <button type="button" class="code-action btn-async" id="copy-code"
+                    title="Copy your code to clipboard">
+              <span class="btn-async-state btn-async-default">
+                {{ icon('copy', class_='icon icon-inline') }}
+                <span class="code-action-label">copy</span>
+              </span>
+              <span class="btn-async-state btn-async-success">
+                {{ icon('check-circle', class_='icon icon-inline') }}
+                <span class="code-action-label">copied</span>
+              </span>
+              <span class="btn-async-state btn-async-error">
+                {{ icon('warning-circle', class_='icon icon-inline') }}
+                <span class="code-action-label">failed</span>
+              </span>
+            </button>
             {% if q.skeleton %}
-              <button type="button" class="freetext-reset" id="skel-reset"
-                      data-skeleton="{{ q.skeleton|e }}">reset</button>
+              <button type="button" class="code-action" id="skel-reset"
+                      data-skeleton="{{ q.skeleton|e }}"
+                      title="Restore the skeleton starter code">
+                {{ icon('arrow-counter-clockwise', class_='icon icon-inline') }}
+                <span class="code-action-label">reset</span>
+              </button>
             {% endif %}
-          </span>
-        </span>
+          </div>
+        </div>
         <textarea name="answer" id="code-answer" rows="14" spellcheck="false"
                   placeholder="{% if q.skeleton %}// fill in the blanks below{% else %}// write it out — pseudocode is fine if the idea is clear{% endif %}"
                   class="code-area"
                   data-language="{{ q.language or 'go' }}"
                   data-skeleton="{{ q.skeleton|e }}">{{ draft }}</textarea>
         <div id="cm-mount" class="cm-mount" aria-hidden="true"></div>
-      </label>
+      </div>
     {% else %}
       <label class="freetext">
         <span class="freetext-label">Your answer</span>
@@ -95,7 +129,7 @@
 import {
   EditorView, basicSetup,
   EditorState, Compartment,
-  go, java, python, javascript, rust, cpp, vim,
+  go, java, python, javascript, rust, cpp, vim, emacs,
 } from "{{ request.scope.get('root_path','') }}/static/cm-bundle.js";
 
 const langExts = {
@@ -106,8 +140,6 @@ const langExts = {
 
 const ta = document.getElementById('code-answer');
 const mount = document.getElementById('cm-mount');
-const vimToggle = document.getElementById('vim-toggle');
-const vimState = document.getElementById('vim-state');
 const skelReset = document.getElementById('skel-reset');
 const card = document.getElementById('session-card');
 const versionEl = document.getElementById('session-version');
@@ -115,12 +147,19 @@ const banner = document.getElementById('stale-banner');
 const form = document.getElementById('session-form');
 const draftUrl = card.dataset.draftUrl;
 const lang = (ta && ta.dataset.language) || 'go';
+// Server renders the user's preferred input mode as `data-editor-mode`
+// on <body> (see base.html). Defaults to vanilla if missing/unknown.
+const inputMode = document.body.dataset.editorMode || 'vanilla';
+
+function inputModeExtensions(mode) {
+  if (mode === 'vim')   return [vim()];
+  if (mode === 'emacs') return [emacs()];
+  return [];
+}
 
 if (ta && mount) {
   const langExt = langExts[lang] || [];
-  const vimCompartment = new Compartment();
-  const wantVim = localStorage.getItem('prep:vim') === '1';
-  vimState.textContent = wantVim ? 'on' : 'off';
+  const modeCompartment = new Compartment();
 
   // ------- Draft autosave (debounced) -------
   let saveTimer = null;
@@ -158,7 +197,7 @@ if (ta && mount) {
     state: EditorState.create({
       doc: ta.value,
       extensions: [
-        vimCompartment.of(wantVim ? vim() : []),
+        modeCompartment.of(inputModeExtensions(inputMode)),
         basicSetup,
         langExt,
         EditorView.lineWrapping,
@@ -171,6 +210,19 @@ if (ta && mount) {
       ],
     }),
   });
+
+  // Per-card mode picker. Changes are NOT persisted to profile —
+  // /settings/editor is where the default is set.
+  const modeSelect = document.getElementById('input-mode-select');
+  if (modeSelect) {
+    modeSelect.value = inputMode;
+    modeSelect.addEventListener('change', () => {
+      view.dispatch({
+        effects: modeCompartment.reconfigure(inputModeExtensions(modeSelect.value)),
+      });
+      view.focus();
+    });
+  }
 
   ta.style.position = 'absolute';
   ta.style.opacity = '0';
@@ -187,30 +239,23 @@ if (ta && mount) {
     });
   }
 
-  vimToggle && vimToggle.addEventListener('click', () => {
-    const nowOn = !(localStorage.getItem('prep:vim') === '1');
-    localStorage.setItem('prep:vim', nowOn ? '1' : '0');
-    vimState.textContent = nowOn ? 'on' : 'off';
-    view.dispatch({effects: vimCompartment.reconfigure(nowOn ? vim() : [])});
-    view.focus();
-  });
-
   skelReset && skelReset.addEventListener('click', () => {
     const fresh = skelReset.dataset.skeleton || '';
     view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: fresh}});
     view.focus();
   });
 
+  // Copy uses the .btn-async pattern — class swap, no textContent fiddle.
   const copyBtn = document.getElementById('copy-code');
   copyBtn && copyBtn.addEventListener('click', async () => {
-    const original = copyBtn.textContent;
+    copyBtn.classList.remove('is-success', 'is-error');
     try {
       await navigator.clipboard.writeText(view.state.doc.toString());
-      copyBtn.textContent = 'copied!';
+      copyBtn.classList.add('is-success');
     } catch (e) {
-      copyBtn.textContent = 'failed';
+      copyBtn.classList.add('is-error');
     }
-    setTimeout(() => { copyBtn.textContent = original; }, 1200);
+    setTimeout(() => copyBtn.classList.remove('is-success', 'is-error'), 1400);
   });
 
   // Mod-tap: tap Esc → escape; hold Esc + key → Ctrl+key. (Same state machine
