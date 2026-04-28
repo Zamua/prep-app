@@ -1,0 +1,122 @@
+# Dockerfile.prep — the FastAPI app, the Go temporal worker, the
+# embedded temporal devserver, and the cm-bundle, all packaged into
+# one image. goreman runs the three processes inside the container
+# (same shape as the v0.9 launchd-managed deploy, just inside docker).
+#
+# Why one image instead of separate prep / temporal / worker
+# containers: this is a single-user self-hosted tool. Independent
+# scaling / restarts add networking + lifecycle complexity that buys
+# nothing here. goreman handles process supervision well enough.
+# (The agent runs in its OWN container — see Dockerfile.agent —
+# because that one IS independent: different lifecycle, different
+# update cadence, different volume.)
+#
+# Multi-stage layout:
+#   builder-go    → worker binary + goreman
+#   builder-bun   → cm-bundle.js
+#   builder-py    → .venv with all deps installed via uv
+#   runtime       → composes the above into a slim python:3.11 image
+#                   with the temporal CLI binary baked in.
+#
+# Built for the host arch by default (linux/arm64 on the macmini);
+# multi-arch publishing is a future PR (github actions on tag push).
+
+ARG TARGETARCH=arm64
+
+# ---- builder-go -----------------------------------------------------
+FROM golang:1.26-alpine AS builder-go
+
+WORKDIR /src
+COPY worker-go/go.mod worker-go/go.sum ./
+RUN go mod download
+COPY worker-go/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/worker .
+RUN CGO_ENABLED=0 GOOS=linux go install github.com/mattn/goreman@latest \
+    && cp /go/bin/goreman /out/goreman
+
+# ---- builder-bun ----------------------------------------------------
+# Pin to bun 1.1.0 (matches .tool-versions on the dev side) so the
+# lockfile format the host's `bun install` produced is the format the
+# build container reads. Newer bun images error on "Unknown lockfile
+# version" because the lockfile schema bumped.
+FROM oven/bun:1.1.0 AS builder-bun
+
+WORKDIR /src/static/cm
+COPY static/cm/package.json static/cm/bun.lock ./
+# `bun install` (not --frozen-lockfile) — bun's lockfile carries
+# platform-specific resolution that doesn't round-trip from
+# darwin-arm64 (dev) to linux-arm64 (container). The build is still
+# deterministic per package.json + the cm/ source we COPY in next.
+RUN bun install
+COPY static/cm/ ./
+RUN bun run build
+# Output is at /src/static/cm-bundle.js (../cm-bundle.js per the build script).
+
+# ---- builder-py -----------------------------------------------------
+FROM python:3.11-slim AS builder-py
+
+# uv is the package installer + venv manager. faster than pip, lockfile-aware.
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock* ./
+# `uv sync` creates .venv with the locked deps. --frozen ensures we don't
+# silently update the lockfile during the image build.
+RUN uv sync --frozen --no-dev
+
+# ---- runtime --------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+ARG TARGETARCH
+
+# tini for clean PID-1 signal handling (so docker stop propagates to
+# goreman → child processes). curl for healthcheck. ca-certificates for
+# https outbound to the agent + temporal services. tar/gzip to unpack
+# the temporal release tarball below.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl tini tar gzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Temporal CLI — pinned to match .tool-versions on the dev side. The
+# CLI bundles a SQLite-backed devserver (`temporal server start-dev`)
+# which is what staging + prod use today.
+ARG TEMPORAL_VERSION=1.6.2
+RUN curl -fsSL "https://github.com/temporalio/cli/releases/download/v${TEMPORAL_VERSION}/temporal_cli_${TEMPORAL_VERSION}_linux_${TARGETARCH}.tar.gz" \
+    | tar -xz -C /usr/local/bin temporal \
+    && temporal --version
+
+WORKDIR /app
+
+# Application source. Order matters for layer caching: rarely-changed
+# files first, frequently-changed files last.
+COPY pyproject.toml uv.lock* ./
+COPY --from=builder-py /app/.venv ./.venv
+
+# Binaries from the go + bun stages.
+COPY --from=builder-go /out/worker ./worker-go/bin/worker
+COPY --from=builder-go /out/goreman /usr/local/bin/goreman
+COPY --from=builder-bun /src/static/cm-bundle.js ./static/cm-bundle.js
+
+# App source. The Procfile.docker (below) is what goreman runs.
+COPY *.py ./
+COPY templates/ ./templates/
+COPY static/ ./static/
+COPY docker/Procfile.docker ./Procfile.docker
+
+# Persistent state goes here. compose mounts a named volume so the
+# data.sqlite + vapid keys + temporal-data subdirs all survive
+# container recreates.
+RUN mkdir -p /data/prep /data/temporal && chmod 700 /data
+
+ENV PORT=8082 \
+    HOST=0.0.0.0 \
+    PREP_DB_PATH=/data/prep/data.sqlite \
+    PREP_VAPID_KEYS_PATH=/data/prep/vapid-keys.json \
+    PREP_VAPID_PEM_PATH=/data/prep/vapid-private.pem \
+    TEMPORAL_HOST_PORT=127.0.0.1:7233 \
+    TEMPORAL_NAMESPACE=prep
+
+EXPOSE 8082
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["goreman", "-f", "Procfile.docker", "-set-ports=false", "-exit-on-error", "start"]

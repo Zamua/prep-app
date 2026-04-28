@@ -39,3 +39,7 @@ vapid-private.pem
 push-subscriptions.json
 push-subscriptions.json.archived-*
 
+
+# docker-compose env file (per-deployment config; .env.example is the
+# committed template).
+.env

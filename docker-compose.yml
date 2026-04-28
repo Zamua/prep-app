@@ -1,0 +1,65 @@
+# Docker compose for prep. Two services: the app stack (uvicorn +
+# temporal devserver + worker, all in one container via goreman) and
+# the agent (claude wrapper, separate lifecycle + auth volume).
+#
+# The compose file deliberately drops the v0.9 separation between
+# "staging" and "prod" — for any given checkout you get ONE stack.
+# Run side-by-side environments by either: (a) two checkouts with
+# different .env files + different `-p <project>` namespaces, or
+# (b) on different hosts. The "two checkouts of the same repo" pattern
+# the author uses on the macmini falls under (a).
+#
+# .env file lives at the repo root and isn't committed (see
+# .gitignore). Copy from .env.example to start:
+#   cp .env.example .env && $EDITOR .env
+
+services:
+  prep:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prep
+    image: prep:dev
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PREP_HOST_PORT:-8082}:8082"
+    volumes:
+      - prep-data:/data
+    depends_on:
+      agent:
+        condition: service_started
+        required: false
+    environment:
+      # Worker reaches the agent via the compose service name.
+      PREP_AGENT_URL: http://agent:9999
+      # Internal temporal devserver runs in this same container —
+      # 127.0.0.1 inside the container is correct.
+      TEMPORAL_HOST_PORT: 127.0.0.1:7233
+
+  agent:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agent
+    image: prep-agent:dev
+    restart: unless-stopped
+    # No host port mapping by default — only the prep service needs to
+    # reach this. To debug from the host (curl /healthz etc) uncomment
+    # the ports stanza or `docker compose up -d agent` then `docker
+    # compose port agent 9999`.
+    # ports:
+    #   - "9999:9999"
+    volumes:
+      - prep-agent-data:/data
+
+volumes:
+  # /data inside the prep container — sqlite db + vapid keys + temporal
+  # devserver state. Named explicitly (not <project>_prep-data) so a
+  # `docker compose down --volumes` doesn't surprise-delete data, and
+  # so the volume survives across project name changes.
+  prep-data:
+    name: prep-data
+  # /data inside the agent container — the claude OAuth token only.
+  # Named to match the volume the standalone PR2 agent container used,
+  # so the user's already-pasted token survives the compose cutover.
+  prep-agent-data:
+    name: prep-agent-data
