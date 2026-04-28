@@ -140,7 +140,7 @@
 
           <footer class="qcard-foot">
             <span class="qcard-stats">
-              {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct{% if q.next_due %} <span class="qcard-stats-divider">·</span> next {{ q.next_due[:10] }}{% endif %}
+              {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct{% if q.next_due %} <span class="qcard-stats-divider">·</span> next {{ q.next_due[5:10] }}{% endif %}
             </span>
             <span class="qcard-actions">
               {# Manual edit — always available. Pencil icon = "edit by hand". #}

@@ -922,6 +922,21 @@ a { color: inherit; }
   margin: 0;
 }
 
+/* Phone widths: drop the action-button labels so the qcard-stats row
+   gets its width back. aria-labels still announce the action to screen
+   readers. The .icon stays the same size. Buttons become squarer pills
+   with consistent ~36px touch targets. */
+@media (max-width: 540px) {
+  .qcard-actions { gap: 0.35rem; }
+  .qcard-action {
+    padding: 0.5rem 0.65rem;
+    min-width: 2.2rem;
+    justify-content: center;
+  }
+  .qcard-action-label { display: none; }
+  .qcard-action .icon { width: 1.05em; height: 1.05em; }
+}
+
 .link-btn {
   /* Touch-target target: 44px on iOS. Visual size kept compact via padding,
      because the negative-margin trick on .qcard-foot pulls the bottom back. */
