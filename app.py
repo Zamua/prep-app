@@ -1046,10 +1046,9 @@ def question_new(request: Request, name: str, user: dict = Depends(current_user)
 async def question_new_submit(request: Request, name: str,
                               user: dict = Depends(current_user)):
     uid = user["tailscale_login"]
-    deck = db.find_deck(uid, name)
-    if not deck:
+    deck_id = db.find_deck(uid, name)
+    if deck_id is None:
         raise HTTPException(404, "deck not found")
-    deck_id = deck["id"]
 
     form = await request.form()
     qtype = (form.get("type") or "").strip()
@@ -1342,10 +1341,10 @@ def _require_owns_plan(user: dict, wid: str) -> tuple[str, int]:
     if not name:
         raise HTTPException(400, "malformed workflow id")
     uid = user["tailscale_login"]
-    deck = db.find_deck(uid, name)
-    if not deck:
+    deck_id = db.find_deck(uid, name)  # returns int|None, not a row
+    if deck_id is None:
         raise HTTPException(404, "plan not found")
-    return name, deck["id"]
+    return name, deck_id
 
 
 @app.get("/plan/{wid}", response_class=HTMLResponse)
