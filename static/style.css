@@ -1979,6 +1979,16 @@ textarea:focus-visible {
 .transform-status[data-status="done"]      { color: var(--right); }
 .transform-status[data-status="failed"]    { color: var(--wrong); }
 .transform-status[data-status="rejected"]  { color: var(--ink-mute); }
+.transform-refresh {
+  margin-left: 0.6rem;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+.transform-refresh:hover { color: var(--quill); text-decoration-color: var(--quill); }
 .transform-plan {
   margin: 1rem 0;
   padding: 1rem 1.1rem;

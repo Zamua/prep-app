@@ -54,7 +54,10 @@ func Transform(ctx workflow.Context, in shared.TransformInput) (shared.Transform
 
 	// ---- Compute the plan ----
 	computeOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		// Generous: claude reads the entire deck and rewrites multiple cards.
+		// Activity heartbeats every 10s so a truly hung run still gets killed
+		// by the heartbeat timeout — this is just the upper bound.
+		StartToCloseTimeout: 15 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    2 * time.Second,

@@ -31,6 +31,9 @@
 <div class="transform-panel">
   <p class="transform-status" id="t-status" data-status="{{ progress.status or '' }}">
     {{ progress.status or 'starting…' }}
+    {% if progress.status in ('computing', 'awaiting_apply', 'applying', '') %}
+      <a href="#" id="t-refresh" class="transform-refresh">refresh now</a>
+    {% endif %}
   </p>
 
   {% if progress.plan %}
@@ -128,43 +131,71 @@
 
 <script>
 (function () {
-  // While the workflow is still working, poll for updates and reload on
-  // a state transition. Browser-side approach keeps this simple — no
-  // websockets needed, and the workflow tick is slow (claude shell-out)
-  // so a 2s poll is fine.
+  // Poll for status changes, reload on transition. Robust against iOS PWA
+  // background suspension: setInterval pauses when the tab is hidden, so
+  // we ALSO trigger an immediate fetch on visibilitychange→visible (which
+  // catches the case where the workflow finished while the tab was
+  // suspended — without this, the user has to manually refresh, hit on
+  // 2026-04-27 with a 5-minute deck-transform).
   const root = "{{ request.scope.get('root_path','') }}";
   const wid = "{{ wid }}";
   const initialStatus = "{{ progress.status or '' }}";
   const TERMINAL = ['done', 'rejected', 'failed', 'COMPLETED', 'FAILED', 'TERMINATED', 'CANCELED'];
-  const STAGE = ['computing', 'awaiting_apply', 'applying'];
-  if (TERMINAL.includes(initialStatus) || !STAGE.includes(initialStatus)) {
-    if (initialStatus === '' || initialStatus === 'starting…') {
-      // first hit — workflow just kicked off, nothing yet — keep polling
-    } else {
-      return;  // already terminal, no need to poll
-    }
-  }
+  if (TERMINAL.includes(initialStatus)) return;  // nothing more to wait for
+
   let lastStatus = initialStatus;
+  let pollHandle = null;
+
   const tick = async () => {
     try {
-      const r = await fetch(root + "/transform/" + wid + "/status");
+      // Cache-buster — defensive against any HTTP cache between us and uvicorn
+      // returning a stale response (we've seen this on iOS Safari).
+      const r = await fetch(root + "/transform/" + wid + "/status?_=" + Date.now(),
+                            { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
       const s = (j.progress && j.progress.status) || (j.desc && j.desc.status) || '';
-      if (s !== lastStatus) {
-        // Reload to render the new state — keeps the rendering server-side
-        // for consistency with the rest of the app.
+      if (s && s !== lastStatus) {
         location.reload();
         return;
       }
-      lastStatus = s;
+      lastStatus = s || lastStatus;
     } catch (e) { /* swallow; we'll try next tick */ }
   };
-  const handle = setInterval(tick, 2000);
-  // Stop polling once the page is hidden (user switched apps); resume on visible.
+
+  const startPolling = () => {
+    if (pollHandle) return;
+    pollHandle = setInterval(tick, 2000);
+  };
+  const stopPolling = () => {
+    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  };
+
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) clearInterval(handle);
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      // Page just became visible — fire one immediate poll so we catch
+      // any state change that happened while the tab was suspended,
+      // then re-arm the interval.
+      tick();
+      startPolling();
+    }
   });
+
+  // Manual "refresh" link for users who don't want to wait for a tick.
+  const refreshLink = document.getElementById('t-refresh');
+  if (refreshLink) {
+    refreshLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      location.reload();
+    });
+  }
+
+  startPolling();
+  // Also do one immediate poll right away — catches the case where the
+  // workflow finishes between SSR and the first interval tick.
+  tick();
 })();
 </script>
 
