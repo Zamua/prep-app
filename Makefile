@@ -1,16 +1,17 @@
 # prep — contributor entrypoints.
 #
 # Quick start (macOS):
-#   brew bundle && make setup && make dev
+#   brew bundle && mise install && make setup && make dev
 #
-# Linux: see CONTRIBUTING.md (curl-install uv, apt-install go, etc.) then
-# `make setup && make dev`.
+# Linux: see CONTRIBUTING.md (one-line mise install + temporal CLI from
+# GitHub releases) then `mise install && make setup && make dev`.
 
-UV     ?= uv
-VENV   := .venv
-GO     ?= go
-WORKER := worker-go/bin/worker
-GOREMAN ?= goreman
+# `mise exec` runs commands with .tool-versions tools on PATH without
+# requiring shell activation. Set MISE_BIN to override (e.g., for users
+# not on macOS Homebrew).
+MISE     ?= mise
+RUN      := $(MISE) exec --
+WORKER   := worker-go/bin/worker
 
 # Dev-bypass user: `make dev` boots with this set so a contributor sees a
 # working app immediately on http://127.0.0.1:8081/ without needing
@@ -18,37 +19,44 @@ GOREMAN ?= goreman
 # Tailscale (see CLAUDE.md).
 export PREP_DEFAULT_USER ?= dev@example.com
 
-.PHONY: help setup deps build dev run-app run-worker run-temporal test clean wipe-temporal-state
+.PHONY: help setup tools deps build install-goreman dev run-app run-worker run-temporal test clean wipe-temporal-state
 
 help:
-	@echo "make setup    — uv sync (Python + venv + deps) + build Go worker"
+	@echo "make setup    — mise install + uv sync + build worker + install goreman"
 	@echo "make dev      — start temporal + app + worker via goreman (Procfile)"
 	@echo "make build    — Go worker build only"
 	@echo "make test     — placeholder; no test suite yet"
 	@echo "make clean    — kill stray dev processes; preserve data"
 	@echo "make wipe-temporal-state — reset temporal devserver state (data.sqlite untouched)"
 
-setup: deps build
+setup: tools deps build install-goreman
 
-deps:
-	@command -v $(UV) >/dev/null 2>&1 || { \
-	  echo "uv not found — \`brew install uv\` (or see https://github.com/astral-sh/uv)"; exit 1; }
-	$(UV) sync --quiet
+tools:
+	@command -v $(MISE) >/dev/null 2>&1 || { \
+	  echo "mise not found — \`brew install mise\` (or curl https://mise.run | sh)"; exit 1; }
+	$(MISE) install --quiet
+
+deps: tools
+	$(RUN) uv sync --quiet
 
 build: $(WORKER)
 
-$(WORKER): $(shell find worker-go -name '*.go' 2>/dev/null) worker-go/go.mod
-	cd worker-go && $(GO) build -o bin/worker .
+$(WORKER): $(shell find worker-go -name '*.go' 2>/dev/null) worker-go/go.mod tools
+	cd worker-go && $(RUN) go build -o bin/worker .
 
-dev:
-	@command -v $(GOREMAN) >/dev/null 2>&1 || { \
-	  echo "goreman not found — \`brew install goreman\` (or any Procfile runner: overmind, forego, hivemind)"; exit 1; }
+install-goreman: tools
+	@$(RUN) sh -c 'command -v goreman >/dev/null 2>&1' || { \
+	  echo "Installing goreman via mise's go..."; \
+	  $(RUN) go install github.com/mattn/goreman@latest; \
+	}
+
+dev: tools install-goreman
 	@mkdir -p temporal-data
-	$(GOREMAN) start
+	$(RUN) goreman start
 
 # Helpers if you want to run one process at a time (e.g. for debugging):
-run-app:
-	$(VENV)/bin/uvicorn app:app --host 127.0.0.1 --port 8081 --reload
+run-app: tools
+	$(RUN) .venv/bin/uvicorn app:app --host 127.0.0.1 --port 8081 --reload
 
 run-worker: build
 	$(WORKER)

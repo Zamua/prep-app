@@ -1,0 +1,13 @@
+# Language runtimes managed by mise (https://mise.jdx.dev/).
+#
+# Run `mise install` to materialize these on your dev box. The Brewfile
+# adds the binaries that mise can't easily install (temporal CLI,
+# goreman); mise itself comes from `brew install mise`.
+#
+# These get reflected via shims when you `eval "$(mise activate <shell>)"`,
+# or you can prefix commands with `mise exec --` to run inside mise's
+# environment without shell activation. The Makefile uses the latter.
+
+python 3.11
+go 1.22
+bun 1.1.0

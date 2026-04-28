@@ -8,8 +8,8 @@ repo and have a working local instance running.
 ```bash
 git clone <repo-url> prep-app
 cd prep-app
-brew bundle              # uv, go, temporal, goreman
-make setup               # uv sync (Python + venv + deps) + go build
+brew bundle              # mise, temporal
+make setup               # mise install + uv sync + go build + goreman install
 make dev                 # starts temporal + uvicorn + worker via Procfile
 ```
 
@@ -22,15 +22,40 @@ don't need Tailscale to develop).
 ## Quick start (Linux)
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh     # uv (handles Python install + deps)
-sudo apt install golang-go                          # or your distro's equivalent
+curl https://mise.run | sh                          # mise (manages python+go+bun)
 # temporal: download the latest binary from https://github.com/temporalio/cli/releases
-go install github.com/mattn/goreman@latest          # adds ~/go/bin/goreman
 git clone <repo-url> prep-app
 cd prep-app
 make setup
 make dev
 ```
+
+## How toolchain management works
+
+The repo pins language versions in `.tool-versions`:
+
+```
+python 3.11
+go 1.22
+bun 1.1.0
+```
+
+[mise](https://mise.jdx.dev/) reads that file and provisions the right
+versions per project — no system Python conflicts, no `goenv`/`pyenv`
+juggling, no version drift between contributors. mise uses uv internally
+for Python, so installs are fast.
+
+`make setup` does the install end-to-end:
+1. `mise install` — provision pinned versions of python, go, bun
+2. `mise exec -- uv sync` — create the Python venv + install deps
+3. `mise exec -- go build` — build the worker
+4. `go install goreman` — Procfile runner used by `make dev`
+
+The Makefile uses `mise exec --` to run commands within mise's tool
+environment, so you don't need to `eval "$(mise activate <shell>)"` in
+your rc file. If you do want shell activation (auto-PATH for the
+pinned tools any time you `cd` into the repo), follow
+<https://mise.jdx.dev/getting-started.html>.
 
 ## What's running
 
