@@ -45,11 +45,12 @@ mkdir -p "$CURRENT_DIR"
 
 echo "==> promoting $DEPLOY_ENV → $REF"
 
-# Atomic symlink swap: write into a tmp name then rename. Avoids a
-# window where the symlink doesn't exist.
-TMP="$(mktemp -du "$CURRENT_DIR/.$DEPLOY_ENV.swap.XXXXXX")"
-ln -s "$ARTIFACT" "$TMP"
-mv -f "$TMP" "$LINK"
+# Atomic symlink replace. `ln -sfn` is the canonical incantation:
+#   -s symbolic, -f force (remove existing target), -n don't dereference
+# the destination if it's a symlink-to-directory. Without -n, mv/ln
+# follow the existing symlink into the artifact dir and write the new
+# link INSIDE it instead of replacing it. (Hit on the first promote.)
+ln -sfn "$ARTIFACT" "$LINK"
 
 echo "    $LINK -> $(readlink "$LINK")"
 
