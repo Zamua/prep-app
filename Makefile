@@ -20,21 +20,20 @@ WORKER   := worker-go/bin/worker
 export PREP_DEFAULT_USER ?= dev@example.com
 
 .PHONY: help setup tools deps build install-goreman dev run-app run-worker run-temporal test clean wipe-temporal-state \
-        artifact promote install-staging install-prod
+        docker-up docker-down docker-build docker-logs
 
 help:
-	@echo "make setup    — mise install + uv sync + build worker + install goreman"
-	@echo "make dev      — start temporal + app + worker via goreman (Procfile)"
-	@echo "make build    — Go worker build only"
-	@echo "make test     — placeholder; no test suite yet"
-	@echo "make clean    — kill stray dev processes; preserve data"
-	@echo "make wipe-temporal-state — reset temporal devserver state (data.sqlite untouched)"
+	@echo "Local dev (no docker):"
+	@echo "  make setup    — mise install + uv sync + build worker + install goreman"
+	@echo "  make dev      — start temporal + app + worker via goreman (Procfile)"
+	@echo "  make build    — Go worker build only"
+	@echo "  make clean    — kill stray dev processes; preserve data"
 	@echo ""
-	@echo "Deploy pipeline (artifact-based, see DEPLOY.md):"
-	@echo "  make artifact REF=<sha-or-tag>    — build a deployable artifact"
-	@echo "  make promote ENV=<env> REF=<id>   — point staging|prod at an artifact"
-	@echo "  make install-staging              — one-time launchd setup for staging"
-	@echo "  make install-prod                 — one-time launchd setup for prod"
+	@echo "Docker compose (canonical deploy shape):"
+	@echo "  make docker-build   — build prep + agent images"
+	@echo "  make docker-up      — bring the stack up in detached mode"
+	@echo "  make docker-down    — stop the stack (data volumes preserved)"
+	@echo "  make docker-logs    — tail compose logs"
 
 setup: tools deps build install-goreman
 
@@ -84,24 +83,22 @@ clean:
 wipe-temporal-state:
 	rm -rf temporal-data/
 
-# ----- artifact-based deploy pipeline -----
-# See DEPLOY.md for the full story. Short version:
-#   work in this repo on main → tag when satisfied → build artifact from
-#   that tag → promote staging or prod to it. Artifacts are immutable
-#   directories under ~/Library/prep/artifacts/ with their own .venv +
-#   built worker + bundled cm. Data lives in ~/Library/prep/data/<env>/
-#   so it survives any promote.
+# ----- docker compose deploy -----
+# Canonical deploy shape as of v0.13.0. Two services: prep (app +
+# temporal devserver + go worker) and agent (claude wrapper). Volumes
+# preserved across `docker compose down` — only `down -v` wipes data.
+# See README.md for the .env setup + the one-time `claude setup-token`
+# auth flow.
 
-artifact:
-	@[ -n "$(REF)" ] || { echo "usage: make artifact REF=<sha-or-tag>"; exit 1; }
-	REF=$(REF) FORCE=$(FORCE) scripts/build.sh
+docker-build:
+	docker compose build
 
-promote:
-	@[ -n "$(ENV)" ] && [ -n "$(REF)" ] || { echo "usage: make promote ENV=<staging|prod> REF=<artifact-id>"; exit 1; }
-	scripts/promote.sh $(ENV) $(REF)
+docker-up:
+	@[ -f .env ] || { echo "missing .env — copy .env.example and edit"; exit 1; }
+	docker compose up -d
 
-install-staging:
-	scripts/install-launchd.sh staging
+docker-down:
+	docker compose down
 
-install-prod:
-	scripts/install-launchd.sh prod
+docker-logs:
+	docker compose logs -f --tail=200
