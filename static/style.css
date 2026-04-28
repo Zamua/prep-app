@@ -2230,47 +2230,57 @@ body:has(dialog[open]) {
    the job; .qcard already has `position: relative` from being a list
    item with absolute children possibilities. */
 .qcard { position: relative; }
-.qcard-improve {
-  display: inline-block;
-  position: static;  /* don't anchor abs children to the summary cell */
+/* Improve-card dialog body. Inherits .card-preview chrome (rounded,
+   centered modal w/ backdrop) via composition. The form fills the
+   modal; close-X is positioned absolutely by the .card-preview-close
+   rules. */
+.improve-dialog {
+  /* Slightly narrower than the card-preview — improve only needs a
+     prompt textarea, no full card content. */
+  max-width: min(34rem, calc(100vw - 1.6rem));
+  width: min(34rem, 100%);
 }
-.qcard-improve > summary { list-style: none; }
-.qcard-improve > summary::-webkit-details-marker { display: none; }
-.qcard-improve-form {
-  position: absolute;
-  left: 0.85rem;
-  right: 0.85rem;
-  top: 100%;
-  margin-top: 0.5rem;
-  z-index: 5;
-  padding: 0.8rem 0.95rem;
-  border: 1px solid var(--quill);
-  border-radius: var(--radius);
-  background: var(--paper);
-  box-shadow: var(--shadow-md);
+.improve-dialog-body {
+  padding: 0.4rem 1.4rem 1.4rem;
   display: grid;
-  gap: 0.55rem;
+  gap: 0.95rem;
+  /* Take all remaining space below the sticky close-form (same flex
+     trick as .card-preview-body — see [open] gate above). */
+  flex: 1 1 auto;
+  min-height: 0;
 }
-.qcard-improve[open] {
-  /* Reserve a buffer below the card so the popped-out form doesn't
-     visually crash into the next qcard. */
-  margin-bottom: 0;
-}
-.qcard-improve[open] ~ * { /* placeholder for spacing if needed */ }
-/* Push the next qcard down while the improve form is open, leaving
-   room for the absolute-positioned panel. ~13rem covers the textarea
-   + padding + button. */
-.qcard:has(.qcard-improve[open]) {
-  margin-bottom: 13rem;
-}
-.qcard-improve-form textarea {
-  font-family: var(--serif);
+.improve-card-context {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  background: var(--code-bg, var(--warm));
+  border-radius: var(--radius);
+  font-style: italic; color: var(--ink-soft);
   font-size: 0.92rem;
-  min-height: 3rem;
+  line-height: 1.4;
+  /* Wrap long prompts; cap height so a giant prompt doesn't shove the
+     textarea off-screen. */
+  max-height: 6rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
 }
-.qcard-improve-actions {
-  display: flex;
-  justify-content: flex-end;
+.improve-card-num {
+  font-family: var(--serif); font-style: italic; color: var(--ink-mute);
+  margin-right: 0.4rem;
+}
+.improve-dialog-body textarea {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  min-height: 5rem;
+  width: 100%;
+}
+.improve-dialog-actions {
+  display: flex; gap: 0.6rem; justify-content: flex-end;
+}
+@media (max-width: 480px) {
+  .improve-dialog-actions { flex-direction: column-reverse; }
+  .improve-dialog-actions .btn { width: 100%; }
 }
 .btn-tiny {
   padding: 0.4rem 0.9rem;

@@ -153,22 +153,18 @@
                 <span class="qcard-action-label">edit</span>
               </a>
               {% if agent_available %}
-                {# AI improve — sparkle icon to mark it as the AI surface,
-                   distinct from the manual edit pencil above. #}
-                <details class="qcard-improve">
-                  <summary class="qcard-action" aria-label="Improve this card with AI">
-                    {{ icon('sparkle', class_='icon icon-inline') }}
-                    <span class="qcard-action-label">improve</span>
-                  </summary>
-                  <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/improve" method="post" class="qcard-improve-form">
-                    <textarea name="prompt" rows="2" maxlength="2000"
-                              placeholder="e.g. add a code skeleton · fix the typo in `releaze` · simplify the prompt"
-                              required></textarea>
-                    <div class="qcard-improve-actions">
-                      <button class="btn btn-quiet btn-tiny" type="submit">improve</button>
-                    </div>
-                  </form>
-                </details>
+                {# AI improve — opens a modal so the layout doesn't
+                   shift on tap. The dialog itself is rendered once at
+                   the page level (below); this button just opens it
+                   with this card's qid + prompt as context. #}
+                <button type="button"
+                        class="qcard-action qcard-action--improve"
+                        data-qid="{{ q.id }}"
+                        data-prompt="{{ q.prompt[:200] }}"
+                        aria-label="Improve this card with AI">
+                  {{ icon('sparkle', class_='icon icon-inline') }}
+                  <span class="qcard-action-label">improve</span>
+                </button>
               {% endif %}
               {# Both forms always rendered; CSS shows one based on the
                  qcard's .is-suspended class. JS below toggles the class
@@ -208,6 +204,39 @@
     Delete this deck
   </button>
 </section>
+
+{# Improve-card dialog. Single instance shared across all qcards — the
+   per-card "improve" button writes its qid into the form action and
+   the card's prompt into the context display, then opens this dialog.
+   Submit POSTs to /question/<qid>/improve which kicks off a Transform
+   workflow and 303s to the polling page (full nav is fine; we want
+   the user to land on /transform/<wid>). #}
+{% if agent_available %}
+<dialog id="improve-dialog" class="card-preview improve-dialog" aria-label="Improve card with AI">
+  <form method="dialog" class="card-preview-close-form">
+    <button type="submit" class="card-preview-close" aria-label="Close">
+      {{ icon('x', class_='icon') }}
+    </button>
+  </form>
+  <form id="improve-form" method="post" action="" class="improve-dialog-body">
+    <p class="section-eyebrow">
+      <span>{{ icon('sparkle', class_='icon icon-inline') }} Improve card</span>
+      <span class="rule"></span>
+    </p>
+    <p class="improve-card-context" id="improve-card-context"></p>
+    <label class="freetext">
+      <span class="freetext-label">What should claude change?</span>
+      <textarea name="prompt" id="improve-prompt" rows="4" maxlength="2000"
+                placeholder="e.g. add a code skeleton · fix the typo in `releaze` · simplify the prompt"
+                required></textarea>
+    </label>
+    <div class="improve-dialog-actions">
+      <button type="submit" class="btn btn-primary">Apply with AI</button>
+      <button type="button" class="btn btn-quiet" id="improve-cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
 
 {# Card-preview dialog. Native <dialog> handles Esc + tab focus trapping;
    we wire backdrop-click to close as well. Content is filled per-click
@@ -287,6 +316,47 @@
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg) dlg.close();
   });
+})();
+
+// AI improve dialog. One dialog shared across all qcards — wire the
+// per-card improve button to populate the form action + context, then
+// showModal(). Submit is a real POST so the user lands on the polling
+// page (/transform/<wid>) like every other AI flow.
+(function () {
+  const dlg = document.getElementById('improve-dialog');
+  const form = document.getElementById('improve-form');
+  const ctx = document.getElementById('improve-card-context');
+  const prompt = document.getElementById('improve-prompt');
+  const cancel = document.getElementById('improve-cancel');
+  if (!dlg || !form) return;
+  const root = "{{ request.scope.get('root_path','') }}";
+
+  document.querySelectorAll('.qcard-action--improve').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const qid = btn.dataset.qid;
+      const cardPrompt = btn.dataset.prompt || '';
+      form.action = `${root}/question/${qid}/improve`;
+      if (ctx) {
+        ctx.innerHTML = `<span class="improve-card-num">№ ${qid}</span> ${escapeHtml(cardPrompt)}${cardPrompt.length >= 200 ? '…' : ''}`;
+      }
+      if (prompt) {
+        prompt.value = '';
+      }
+      dlg.showModal();
+      // Focus the prompt after showModal so iOS keyboards pop up promptly.
+      requestAnimationFrame(() => prompt && prompt.focus());
+    });
+  });
+
+  if (cancel) cancel.addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
 })();
 
 // Inline suspend / unsuspend — fetch POST + class toggle, no full-page
