@@ -1097,9 +1097,82 @@ a { color: inherit; }
 }
 .freetext-actions {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.4rem;
   flex-shrink: 0;
+}
+
+/* --- Code-editor action buttons (vim toggle, copy, reset skeleton) --- */
+/* Pill-shaped buttons that read clearly as interactive — replaces the
+   underlined text-link style which was hard to see and easy to mis-tap.
+   Sized larger than .freetext-reset so they're a real touch target. */
+.code-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  min-height: 2.3rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 14, "SOFT" 50;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+.code-action:hover,
+.code-action:focus-visible {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+  outline: none;
+}
+.code-action .icon {
+  width: 0.95em;
+  height: 0.95em;
+}
+.code-action-label {
+  font-style: italic;
+}
+.code-action-state {
+  /* Pill-within-a-pill that surfaces ON/OFF state for the vim toggle. */
+  display: inline-block;
+  padding: 0.05em 0.45em;
+  border-radius: 999px;
+  background: var(--warm);
+  border: 1px solid var(--hairline);
+  color: var(--ink-mute);
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* Active state for the vim toggle. aria-pressed is the source of truth. */
+.code-action[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--quill) 10%, var(--paper));
+  border-color: var(--quill);
+  color: var(--quill);
+}
+.code-action[aria-pressed="true"] .code-action-state {
+  background: var(--quill);
+  border-color: var(--quill);
+  color: var(--paper);
+}
+/* Async-button success / error tints for the copy button. Reuses
+   .btn-async-state machinery from the discuss popover. */
+.code-action.is-success {
+  background: color-mix(in srgb, var(--right) 12%, var(--paper));
+  border-color: color-mix(in srgb, var(--right) 50%, var(--rule));
+  color: var(--right);
+}
+.code-action.is-error {
+  background: color-mix(in srgb, var(--wrong) 10%, var(--paper));
+  border-color: color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  color: var(--wrong);
 }
 .lang-tag {
   display: inline-block;

@@ -44,18 +44,48 @@
         {% endfor %}
       </fieldset>
     {% elif q.type == 'code' %}
-      <label class="freetext">
-        <span class="freetext-label-row">
-          <span class="freetext-label">Your code <span class="lang-tag">{{ q.language or 'go' }}</span></span>
-          <span class="freetext-actions">
-            <button type="button" class="freetext-reset" id="vim-toggle">vim: <span id="vim-state">off</span></button>
-            <button type="button" class="freetext-reset" id="copy-code">copy</button>
+      {# `<div class="freetext">` rather than `<label class="freetext">` —
+         when buttons are nested inside a `<label>`, the browser synthesizes
+         a click on the first labelable descendant whenever you tap anywhere
+         in the label. With our action buttons living inside, every tap on
+         the cm-mount editor would toggle vim mode. Use a real `<label
+         for=...>` for the textarea caption only, and keep the action
+         buttons as siblings. #}
+      <div class="freetext">
+        <div class="freetext-label-row">
+          <label for="code-answer" class="freetext-label">Your code <span class="lang-tag">{{ q.language or 'go' }}</span></label>
+          <div class="freetext-actions">
+            <button type="button" class="code-action code-action-vim" id="vim-toggle"
+                    aria-pressed="false" title="Toggle vim keybindings">
+              {{ icon('terminal-window', class_='icon icon-inline') }}
+              <span class="code-action-label">vim</span>
+              <span class="code-action-state" id="vim-state">off</span>
+            </button>
+            <button type="button" class="code-action btn-async" id="copy-code"
+                    title="Copy your code to clipboard">
+              <span class="btn-async-state btn-async-default">
+                {{ icon('copy', class_='icon icon-inline') }}
+                <span class="code-action-label">copy</span>
+              </span>
+              <span class="btn-async-state btn-async-success">
+                {{ icon('check-circle', class_='icon icon-inline') }}
+                <span class="code-action-label">copied</span>
+              </span>
+              <span class="btn-async-state btn-async-error">
+                {{ icon('warning-circle', class_='icon icon-inline') }}
+                <span class="code-action-label">failed</span>
+              </span>
+            </button>
             {% if q.skeleton %}
-              <button type="button" class="freetext-reset" id="skel-reset"
-                      data-skeleton="{{ q.skeleton|e }}">reset</button>
+              <button type="button" class="code-action" id="skel-reset"
+                      data-skeleton="{{ q.skeleton|e }}"
+                      title="Restore the skeleton starter code">
+                {{ icon('arrow-counter-clockwise', class_='icon icon-inline') }}
+                <span class="code-action-label">reset</span>
+              </button>
             {% endif %}
-          </span>
-        </span>
+          </div>
+        </div>
         {# Hidden textarea is the form control — CodeMirror writes into it on
            submit. We keep the textarea (not just a hidden input) so that if
            the JS fails to load (offline, CDN down), the user can still type
@@ -66,7 +96,7 @@
                   data-language="{{ q.language or 'go' }}"
                   data-skeleton="{{ q.skeleton|e }}">{{ q.skeleton or '' }}</textarea>
         <div id="cm-mount" class="cm-mount" aria-hidden="true"></div>
-      </label>
+      </div>
     {% else %}
       <label class="freetext">
         <span class="freetext-label">Your answer</span>
@@ -164,10 +194,17 @@ if (!ta || !mount) {
     form.addEventListener('submit', () => { ta.value = view.state.doc.toString(); });
   }
 
+  // Reflect initial vim state on the toggle so screen readers / pressed
+  // styling are correct on first paint.
+  if (vimToggle) {
+    const initial = localStorage.getItem('prep:vim') === '1';
+    vimToggle.setAttribute('aria-pressed', initial ? 'true' : 'false');
+  }
   vimToggle && vimToggle.addEventListener('click', () => {
     const nowOn = !(localStorage.getItem('prep:vim') === '1');
     localStorage.setItem('prep:vim', nowOn ? '1' : '0');
     vimState.textContent = nowOn ? 'on' : 'off';
+    vimToggle.setAttribute('aria-pressed', nowOn ? 'true' : 'false');
     view.dispatch({effects: vimCompartment.reconfigure(nowOn ? vim() : [])});
     view.focus();
   });
@@ -178,16 +215,17 @@ if (!ta || !mount) {
     view.focus();
   });
 
+  // Copy uses the .btn-async pattern — class swap, no textContent fiddle.
   const copyBtn = document.getElementById('copy-code');
   copyBtn && copyBtn.addEventListener('click', async () => {
-    const original = copyBtn.textContent;
+    copyBtn.classList.remove('is-success', 'is-error');
     try {
       await navigator.clipboard.writeText(view.state.doc.toString());
-      copyBtn.textContent = 'copied!';
+      copyBtn.classList.add('is-success');
     } catch (e) {
-      copyBtn.textContent = 'failed';
+      copyBtn.classList.add('is-error');
     }
-    setTimeout(() => { copyBtn.textContent = original; }, 1200);
+    setTimeout(() => copyBtn.classList.remove('is-success', 'is-error'), 1400);
   });
 
   // ------------------------------------------------------------------
