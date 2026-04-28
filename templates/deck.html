@@ -36,9 +36,11 @@
   {% endif %}
 </section>
 
-{# Add-cards panel: manual + AI side-by-side, equal weight. Manual is
-   always present; AI is shown when an agent is configured. No mode
-   toggle — both surfaces are available, you pick. #}
+{# Add-cards panel. Manual is always available — one button, no
+   ceremony. When an agent is configured, an "— or —" divider precedes
+   the AI prompt section: a labeled, self-contained form whose Apply
+   button kicks off a Transform workflow. No mode toggle; you pick the
+   surface. #}
 <section class="add-section">
   <p class="section-eyebrow"><span>Add to this deck</span><span class="rule"></span></p>
   <div class="add-cta-row">
@@ -46,20 +48,18 @@
       {{ icon('plus', class_='icon icon-inline') }}
       <span>Add a card by hand</span>
     </a>
-    {% if agent_available %}
-      <a class="btn btn-primary add-cta" href="#ai-prompt">
-        {{ icon('sparkle', class_='icon icon-inline') }}
-        <span>Generate with AI</span>
-      </a>
-    {% endif %}
   </div>
 
   {% if agent_available %}
-    <form id="ai-prompt"
-          action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+    <p class="add-or" aria-hidden="true"><span>or</span></p>
+
+    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
           method="post" class="transform-form add-ai-form">
       <label class="freetext">
-        <span class="freetext-label">Tell claude what to add or change</span>
+        <span class="freetext-label">
+          {{ icon('sparkle', class_='icon icon-inline') }}
+          Ask claude to add cards or edit existing ones
+        </span>
         <textarea name="prompt" rows="3" maxlength="4000"
                   placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing"
                   required></textarea>
