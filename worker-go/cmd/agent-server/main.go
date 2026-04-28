@@ -259,29 +259,18 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errResp{Error: "token is required"})
 		return
 	}
-	// We deliberately don't try to validate the token against anthropic
-	// at connect time — `claude auth status --json` reports loggedIn=true
-	// for any token-shaped string the env var holds (it's structural,
-	// not live), and a real validation call would burn the user's quota
-	// just to ack a connection. We save optimistically; the first /run
-	// surfaces a bad/expired token via claude's own error path and the
-	// UI can prompt for a reconnect.
-	//
-	// We do reject the most common paste mistake — the OAuth URL — so
-	// that fat-fingering doesn't silently store garbage. Beyond that we
-	// trust the user's paste; token prefixes vary across account types
-	// (sk-ant-oat… for the documented setup-token output, but other
-	// shapes have been seen in the wild) and we'd rather accept something
-	// that fails on /run than reject something that would have worked.
-	if strings.HasPrefix(tok, "http://") || strings.HasPrefix(tok, "https://") {
+	// `claude setup-token` produces an OAuth token of the form
+	// `sk-ant-oat01-…`. Reject obvious paste-mistakes (the URL, an API
+	// key, etc.). We deliberately don't try to validate the token
+	// against anthropic at connect time — `claude auth status --json`
+	// reports loggedIn=true for any sk-ant-prefixed string the env var
+	// holds (it's structural, not live), and a real validation call
+	// would burn the user's quota for a connection check. We save
+	// optimistically; the first /run surfaces a bad/expired token via
+	// claude's own error path and the UI can prompt for a reconnect.
+	if !strings.HasPrefix(tok, "sk-ant-oat") {
 		writeJSON(w, http.StatusBadRequest, errResp{
-			Error: "that looks like a URL, not a token. paste the token (a long string, not the verification URL) printed by `claude setup-token` after you finished the OAuth flow.",
-		})
-		return
-	}
-	if len(tok) < 20 {
-		writeJSON(w, http.StatusBadRequest, errResp{
-			Error: "that's too short to be a valid token. did the paste get truncated?",
+			Error: "token doesn't look like a `claude setup-token` output (expected sk-ant-oat…). if you pasted the URL or an API key by mistake, generate a new one with `claude setup-token` and try again.",
 		})
 		return
 	}
