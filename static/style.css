@@ -1970,14 +1970,24 @@ textarea:focus-visible {
   margin: 0 0 0.6rem;
   color: var(--ink-mute);
 }
+/* Delete trigger: dangerous-looking at rest, even more dangerous on
+   hover. Subtle wrong-tinted background + a real wrong-colored border
+   so a careless tap doesn't blend in with the page chrome. The trash
+   icon also picks up the wrong color via currentColor. */
 .danger-link {
-  color: var(--ink-mute);
-  border-color: var(--rule);
+  color: var(--wrong);
+  background: color-mix(in srgb, var(--wrong) 6%, var(--paper));
+  border-color: color-mix(in srgb, var(--wrong) 45%, var(--rule));
 }
 .danger-link:hover,
 .danger-link:focus-visible {
-  color: var(--wrong);
+  color: var(--paper);
+  background: var(--wrong);
   border-color: var(--wrong);
+}
+.danger-link:active {
+  background: color-mix(in srgb, var(--wrong) 85%, var(--ink));
+  border-color: color-mix(in srgb, var(--wrong) 85%, var(--ink));
 }
 
 /* Delete-confirm dialog. Uses the same .card-preview chrome (centered
