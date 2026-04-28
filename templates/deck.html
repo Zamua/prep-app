@@ -36,17 +36,29 @@
   {% endif %}
 </section>
 
+{% if agent_available %}
+  <section class="transform-section">
+    <p class="section-eyebrow"><span>Transform this deck</span><span class="rule"></span></p>
+    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform" method="post" class="transform-form">
+      <textarea name="prompt" rows="3" maxlength="4000"
+                placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add code skeletons where missing"
+                required></textarea>
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </form>
+    <p class="transform-hint">
+      Free-form — type whatever change you want. Claude reads the deck,
+      proposes a patch, and you confirm before anything writes.
+    </p>
+  </section>
+{% endif %}
+
 <section class="transform-section">
-  <p class="section-eyebrow"><span>Transform this deck</span><span class="rule"></span></p>
-  <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform" method="post" class="transform-form">
-    <textarea name="prompt" rows="3" maxlength="4000"
-              placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add code skeletons where missing"
-              required></textarea>
-    <button type="submit" class="btn btn-primary">Apply</button>
-  </form>
+  <p class="section-eyebrow"><span>Add a card</span><span class="rule"></span></p>
   <p class="transform-hint">
-    Free-form — type whatever change you want. Claude reads the deck,
-    proposes a patch, and you confirm before anything writes.
+    Write a question by hand{% if agent_available %} — useful when you have a specific card in mind that the bulk transform shouldn't generate{% else %} — manual entry is the only path until you wire up an AI agent{% endif %}.
+  </p>
+  <p>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new">Add question manually</a>
   </p>
 </section>
 
@@ -121,20 +133,22 @@
               {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct{% if q.next_due %} <span class="qcard-stats-divider">·</span> next {{ q.next_due[:10] }}{% endif %}
             </span>
             <span class="qcard-actions">
-              <details class="qcard-improve">
-                <summary class="qcard-action" aria-label="Improve this card">
-                  {{ icon('pencil-simple-line', class_='icon icon-inline') }}
-                  <span class="qcard-action-label">improve</span>
-                </summary>
-                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/improve" method="post" class="qcard-improve-form">
-                  <textarea name="prompt" rows="2" maxlength="2000"
-                            placeholder="e.g. add a code skeleton · fix the typo in `releaze` · simplify the prompt"
-                            required></textarea>
-                  <div class="qcard-improve-actions">
-                    <button class="btn btn-quiet btn-tiny" type="submit">improve</button>
-                  </div>
-                </form>
-              </details>
+              {% if agent_available %}
+                <details class="qcard-improve">
+                  <summary class="qcard-action" aria-label="Improve this card">
+                    {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+                    <span class="qcard-action-label">improve</span>
+                  </summary>
+                  <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/improve" method="post" class="qcard-improve-form">
+                    <textarea name="prompt" rows="2" maxlength="2000"
+                              placeholder="e.g. add a code skeleton · fix the typo in `releaze` · simplify the prompt"
+                              required></textarea>
+                    <div class="qcard-improve-actions">
+                      <button class="btn btn-quiet btn-tiny" type="submit">improve</button>
+                    </div>
+                  </form>
+                </details>
+              {% endif %}
               {% if q.suspended %}
                 <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post" class="qcard-action-form">
                   <button class="qcard-action" type="submit" aria-label="Unsuspend this card">
@@ -159,7 +173,7 @@
 {% else %}
   <section class="empty-state">
     <p class="empty-headline"><em>No cards yet.</em></p>
-    <p class="empty-sub">Use the box above to describe the first batch you'd like.</p>
+    <p class="empty-sub">{% if agent_available %}Use the box above to describe the first batch you'd like, or add a card by hand.{% else %}Add a question by hand to get started.{% endif %}</p>
   </section>
 {% endif %}
 

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}self-grade · {{ deck_name }} · prep{% endblock %}
+{% block page_class %}result self-grade{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+  <span class="card-id">№ {{ q.id }}</span>
+</nav>
+
+<article class="study-card self-grade-card">
+  <p class="section-eyebrow"><span>Self-grade</span><span class="rule"></span></p>
+  <p class="self-grade-blurb">
+    No AI grader is configured, so you're the judge here. Compare what
+    you wrote against the canonical answer and pick honestly — the SRS
+    ladder works either way.
+  </p>
+
+  <p class="section-eyebrow"><span>The question</span><span class="rule"></span></p>
+  <div class="study-prompt prose">{{ q.prompt | markdown }}</div>
+
+  <p class="section-eyebrow"><span>Your answer</span><span class="rule"></span></p>
+  {% if q.type == 'code' %}
+    <pre class="reproduction">{{ user_answer or '(blank)' }}</pre>
+  {% else %}
+    <div class="prose-answer prose">{{ (user_answer or '_(blank)_') | markdown }}</div>
+  {% endif %}
+
+  <p class="section-eyebrow"><span>Canonical answer</span><span class="rule"></span></p>
+  {% if q.type == 'code' %}
+    <pre class="reproduction reproduction-model">{{ q.answer }}</pre>
+  {% else %}
+    <div class="prose-answer prose-answer-model prose">{{ q.answer | markdown }}</div>
+  {% endif %}
+  {% if q.rubric %}
+    <p class="section-eyebrow"><span>Rubric</span><span class="rule"></span></p>
+    <pre class="reproduction reproduction-rubric">{{ q.rubric }}</pre>
+  {% endif %}
+
+  <form method="post"
+        action="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}/self-grade/{{ q.id }}"
+        class="self-grade-form">
+    <input type="hidden" name="user_answer" value="{{ user_answer|e }}">
+    {% if session_id %}
+      <input type="hidden" name="session_id" value="{{ session_id }}">
+      <input type="hidden" name="session_version" value="{{ session_version }}">
+    {% endif %}
+    <div class="self-grade-actions">
+      <button class="btn btn-primary" type="submit" name="verdict" value="right">I got it right</button>
+      <button class="btn btn-quiet" type="submit" name="verdict" value="wrong">I got it wrong</button>
+    </div>
+    <p class="self-grade-hint">
+      Right advances the card on the SRS ladder; wrong resets it to the
+      first interval. No partial credit — keep the bar honest.
+    </p>
+  </form>
+</article>
+{% endblock %}

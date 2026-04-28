@@ -18,14 +18,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	"prep-worker/agent"
 	"prep-worker/shared"
 )
 
@@ -67,16 +66,17 @@ func (a *Activities) ComputeTransform(ctx context.Context, in shared.ComputeTran
 		}
 	}()
 
-	cmd := exec.CommandContext(ctx, a.Cfg.AgentBin, a.Cfg.agentArgs(prompt)...)
-	cmd.Env = os.Environ()
-	out, err := cmd.CombinedOutput()
+	if a.Cfg.Agent == nil {
+		return shared.TransformPlan{}, noAgentErr("ComputeTransform")
+	}
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
 	if err != nil {
-		return shared.TransformPlan{}, fmt.Errorf("claude transform failed: %w (output: %s)", err, truncate(string(out), 800))
+		return shared.TransformPlan{}, fmt.Errorf("agent transform failed: %w", err)
 	}
 
-	plan, err := parseTransformPlan(out)
+	plan, err := parseTransformPlan([]byte(out.Stdout))
 	if err != nil {
-		return shared.TransformPlan{}, fmt.Errorf("parse plan: %w (raw: %s)", err, truncate(string(out), 600))
+		return shared.TransformPlan{}, fmt.Errorf("parse plan: %w (raw: %s)", err, truncate(out.Stdout, 600))
 	}
 	plan.Scope = in.Scope
 	return plan, nil

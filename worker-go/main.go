@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"prep-worker/activities"
+	"prep-worker/agent"
 	"prep-worker/shared"
 	"prep-worker/workflows"
 )
@@ -29,23 +30,35 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("prep-worker booting")
 
-	// Agent CLI: PREP_AGENT_BIN is the canonical name; CLAUDE_BIN is the
-	// backward-compat alias for users carrying older configs forward.
-	// Default to ~/.local/bin/claude — the path the Claude Code installer
-	// uses on macOS/Linux. Mirrors the Python side's default in agent.py.
-	agentBin := os.Getenv("PREP_AGENT_BIN")
-	if agentBin == "" {
-		agentBin = os.Getenv("CLAUDE_BIN")
-	}
-	if agentBin == "" {
+	// Agent: HTTPAgent if PREP_AGENT_URL is set (containerized worker
+	// talking to a host-side agent-server), else ShellAgent if a CLI
+	// binary is configured (PREP_AGENT_BIN, CLAUDE_BIN, or the default
+	// ~/.local/bin/claude path), else nil — the worker still boots and
+	// non-AI activities still run, but AI activities will fail-fast
+	// with a NoAgent error so the app can render a clear UI message.
+	agentClient := agent.FromEnv()
+	if agentClient == nil {
+		// Last-resort default: probe the conventional claude-code path.
+		// FromEnv only honors explicit env vars — this lets a contributor
+		// who installed claude-code without setting PREP_AGENT_BIN still
+		// get AI features automatically.
 		if home, err := os.UserHomeDir(); err == nil {
-			agentBin = home + "/.local/bin/claude"
+			defaultBin := home + "/.local/bin/claude"
+			if _, statErr := os.Stat(defaultBin); statErr == nil {
+				agentClient = &agent.ShellAgent{Bin: defaultBin}
+				log.Printf("agent: using default ShellAgent at %s", defaultBin)
+			}
 		}
 	}
+	if agentClient == nil {
+		log.Println("agent: NONE configured — AI features disabled. Set PREP_AGENT_URL or PREP_AGENT_BIN to enable.")
+	} else {
+		log.Printf("agent: %T ready", agentClient)
+	}
+
 	cfg := &activities.Config{
-		DBPath:    os.Getenv("PREP_DB_PATH"),
-		AgentBin:  agentBin,
-		AgentArgs: os.Getenv("PREP_AGENT_ARGS"),
+		DBPath: os.Getenv("PREP_DB_PATH"),
+		Agent:  agentClient,
 	}
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("config invalid: %v", err)

@@ -16,24 +16,19 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	"prep-worker/agent"
 	"prep-worker/shared"
 )
 
-// emptyMCPConfig + strict-mcp-config tells claude to load NO MCP servers
-// for this invocation. We use this on every worker shell-out so we don't
-// race the channel-mode Claude's Telegram MCP for the bot's getUpdates slot.
-//
-// IMPORTANT: do NOT use --bare here. --bare disables OAuth/keychain reads
-// too and breaks subscription auth ("Not logged in · Please run /login").
-// strict-mcp-config keeps auth intact and only suppresses MCPs.
-const emptyMCPConfig = `{"mcpServers":{}}`
+// (The empty-MCP-config trick that keeps claude from loading the user's
+// MCP plugins on every shell-out lives in package agent now — it's part
+// of the default ShellAgent argv template, not an activity concern.)
 
 // newSessionUUID returns a fresh random UUIDv4-shaped string. We mint one
 // per PrimeClaudeSession attempt so retries after a failed prime never hit
@@ -48,17 +43,18 @@ func newSessionUUID() string {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
 
-// Config holds host paths read from env at worker boot.
+// Config holds host paths + the agent client read from env at worker
+// boot. The Agent field is the single seam through which all AI calls
+// flow (see prep-worker/agent). Activities don't touch exec.Command
+// or http.Client directly — they go through Agent.Run.
 //
-// AgentBin / AgentArgs configure the local agent CLI shell-out. Defaults
-// match claude-code; users with a different harness (opencode, aider, …)
-// can override via PREP_AGENT_BIN / PREP_AGENT_ARGS in main.go.
-//
-// CLAUDE_BIN is honored as a backward-compat alias for PREP_AGENT_BIN.
+// Agent may be nil if no agent is configured at boot (PREP_AGENT_URL
+// and PREP_AGENT_BIN both unset). Activities that need the agent
+// return a non-retryable "no agent configured" error in that case so
+// the workflow surfaces it to the user instead of looping retries.
 type Config struct {
-	DBPath    string
-	AgentBin  string
-	AgentArgs string
+	DBPath string
+	Agent  agent.Client
 }
 
 func (c *Config) Validate() error {
@@ -69,32 +65,19 @@ func (c *Config) Validate() error {
 		// data.sqlite that the FastAPI process writes to.
 		c.DBPath = "./data.sqlite"
 	}
-	if c.AgentBin == "" {
-		return errors.New("PREP_AGENT_BIN (or CLAUDE_BIN) unset — set to the local agent CLI binary")
-	}
+	// Agent is allowed to be nil — manual-only mode is a supported
+	// runtime config. Per-activity callers gate on c.Agent before
+	// dispatching AI work.
 	return nil
 }
 
-// agentArgs renders the configured arg template, substituting placeholders
-// and appending the prompt as the last arg. Defaults match claude-code's
-// argument shape.
-const defaultAgentArgs = "--strict-mcp-config,--mcp-config,{mcp_config},-p"
-
-func (c *Config) agentArgs(prompt string) []string {
-	csv := c.AgentArgs
-	if csv == "" {
-		csv = defaultAgentArgs
-	}
-	out := []string{}
-	for _, a := range strings.Split(csv, ",") {
-		a = strings.TrimSpace(a)
-		if a == "" {
-			continue
-		}
-		a = strings.ReplaceAll(a, "{mcp_config}", emptyMCPConfig)
-		out = append(out, a)
-	}
-	return append(out, prompt)
+// noAgentErr is returned to the workflow when an AI-needing activity is
+// invoked but no agent is configured. Non-retryable so the user sees a
+// real error instead of "still trying."
+func noAgentErr(activity string) error {
+	return temporal.NewNonRetryableApplicationError(
+		fmt.Sprintf("%s needs an AI agent but none is configured (PREP_AGENT_URL / PREP_AGENT_BIN unset)", activity),
+		"NoAgent", nil)
 }
 
 // Activities groups all activity methods so we can register them under one
@@ -180,21 +163,19 @@ Acknowledge: "Ready to generate cards for %s." Nothing else.`,
 		dctx.deckName,
 	)
 
-	// --session-id is the one extra arg PrimeClaudeSession passes that the
-	// agent helper doesn't (it's about session persistence for prompt-cache
-	// reuse, specific to claude). We splice it in at the front of the
-	// configured agent args. For non-claude agents that don't support
-	// --session-id, the user's PREP_AGENT_ARGS would need to include
-	// equivalent flags or this codepath needs adjustment — claude is the
-	// documented v1 agent.
-	args := append([]string{"--session-id", sessionID}, a.Cfg.agentArgs(primePrompt)...)
-	cmd := exec.CommandContext(ctx, a.Cfg.AgentBin, args...)
-	cmd.Env = os.Environ()
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return shared.PrimeResult{}, fmt.Errorf("claude prime failed: %w (output: %s)", err, truncate(string(out), 800))
+	if a.Cfg.Agent == nil {
+		return shared.PrimeResult{}, noAgentErr("PrimeClaudeSession")
 	}
-	logger.Info("primed", "session_id", sessionID, "ack", truncate(string(out), 200))
+	// SessionID primes a NEW session with the given id so subsequent
+	// GenerateNextCard ResumeID calls reuse it for prompt-cache wins.
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{
+		Prompt:    primePrompt,
+		SessionID: sessionID,
+	})
+	if err != nil {
+		return shared.PrimeResult{}, fmt.Errorf("agent prime failed: %w", err)
+	}
+	logger.Info("primed", "session_id", sessionID, "ack", truncate(out.Stdout, 200))
 	return shared.PrimeResult{SessionID: sessionID}, nil
 }
 
@@ -269,28 +250,26 @@ Output ONLY the JSON object.`,
 		}
 	}()
 
-	// `claude --resume <id>` resumes by session ID. NOT `--session-id X --resume`
-	// — that combo errors with "--session-id can only be used with --continue or
-	// --resume if --fork-session is also specified" (we DON'T want fork because
-	// fork creates a new session ID).
-	//
-	// Same agent helper, with --resume <id> spliced in to reuse the primed
-	// session for prompt-cache wins.
-	args := append([]string{"--resume", in.SessionID}, a.Cfg.agentArgs(prompt)...)
-	cmd := exec.CommandContext(ctx, a.Cfg.AgentBin, args...)
-	cmd.Env = os.Environ()
-	out, err := cmd.CombinedOutput()
+	if a.Cfg.Agent == nil {
+		return shared.Card{}, noAgentErr("GenerateNextCard")
+	}
+	// ResumeID picks up the session that PrimeClaudeSession set up so
+	// the per-card prompts ride on top of the already-cached deck context.
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{
+		Prompt:   prompt,
+		ResumeID: in.SessionID,
+	})
 	if err != nil {
-		return shared.Card{}, fmt.Errorf("claude resume failed: %w (output: %s)", err, truncate(string(out), 800))
+		return shared.Card{}, fmt.Errorf("agent resume failed: %w", err)
 	}
 
-	card, err := parseCardJSON(out)
+	card, err := parseCardJSON([]byte(out.Stdout))
 	if err != nil {
 		// Bad JSON from the model is a terminal failure for this card —
 		// don't retry, the workflow can decide to skip and continue.
 		return shared.Card{}, temporal.NewNonRetryableApplicationError(
 			"card JSON parse failed", "BadCardJSON",
-			fmt.Errorf("%w: %s", err, truncate(string(out), 800)))
+			fmt.Errorf("%w: %s", err, truncate(out.Stdout, 800)))
 	}
 	return card, nil
 }

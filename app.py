@@ -36,6 +36,11 @@ import temporal_client
 
 BASE_DIR = Path(__file__).parent
 
+# Probed once at module import (cheap — file stat / one HTTP call max).
+# Surfaced via _agent_context so templates can gate AI-driven UI.
+import agent as _agent_mod
+_AGENT_AVAILABLE = _agent_mod.probe()
+
 
 def _user_context(request: Request) -> dict:
     """Jinja context_processor: surface `user` to every template that gets a
@@ -45,9 +50,19 @@ def _user_context(request: Request) -> dict:
     return {"user": getattr(request.state, "user", None)}
 
 
+def _agent_context(request: Request) -> dict:
+    """Jinja context_processor: every template gets `agent_available`.
+    True when an AI agent (PREP_AGENT_URL or PREP_AGENT_BIN) is reachable
+    at boot. Templates use it to hide AI-driven controls (Generate cards,
+    Transform, Improve) and surface manual paths instead — so the app
+    stays useful as a manual-flashcard SRS for users without claude
+    installed."""
+    return {"agent_available": _AGENT_AVAILABLE}
+
+
 templates = Jinja2Templates(
     directory=str(BASE_DIR / "templates"),
-    context_processors=[_user_context],
+    context_processors=[_user_context, _agent_context],
 )
 
 # Markdown rendering for prompts (and other free-form fields). Mistune escapes
@@ -243,16 +258,29 @@ db.init()
 # that auto-created an "owner@local" placeholder user, leaving dev
 # fixtures in prod tables on every restart.
 
+import logging
+_log = logging.getLogger("prep")
+
 # Surface PREP_DEFAULT_USER state at boot so an operator who's
 # accidentally left it set in prod sees it loudly. Useful as well
 # for `make dev` so the contributor knows auth is being bypassed.
 _default_user_at_boot = os.environ.get("PREP_DEFAULT_USER")
 if _default_user_at_boot:
-    import logging
-    logging.getLogger("prep").info(
+    _log.info(
         "PREP_DEFAULT_USER=%s — every header-less request will be authenticated as this user. "
         "Fine for local dev; remove in prod unless you really want a single-user shared identity.",
         _default_user_at_boot,
+    )
+
+# Surface agent availability at boot so the operator can tell whether AI
+# features will work without checking the UI. _AGENT_AVAILABLE was probed
+# at module import; we just log it here.
+if _AGENT_AVAILABLE:
+    _log.info("agent: AI features ENABLED (PREP_AGENT_URL or PREP_AGENT_BIN reachable).")
+else:
+    _log.info(
+        "agent: AI features DISABLED — no PREP_AGENT_URL set, and PREP_AGENT_BIN "
+        "(default ~/.local/bin/claude) doesn't exist. Manual flashcard mode only."
     )
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
@@ -620,14 +648,29 @@ async def session_submit(request: Request, sid: str, user: dict = Depends(curren
     if not question:
         raise HTTPException(404, "question not found")
 
-    # ---- Slow path: code/short go through the Temporal workflow.
+    # ---- Slow path: code/short go through the Temporal workflow when
+    # an agent is available. No-agent mode renders a self-grade form
+    # (sync, no workflow) so the session keeps advancing manually.
     if qtype in ("code", "short") and not idk:
-        # Look up deck name for the workflow id format.
         with db.cursor() as c:
             deck_name = c.execute(
                 "SELECT name FROM decks WHERE id = ? AND user_id = ?",
                 (s["deck_id"], uid),
             ).fetchone()["name"]
+
+        if not _AGENT_AVAILABLE:
+            return templates.TemplateResponse(
+                "self_grade.html",
+                {
+                    "request": request,
+                    "deck_name": deck_name,
+                    "q": question,
+                    "user_answer": user_answer,
+                    "session_id": sid,
+                    "session_version": expected_version,
+                },
+            )
+
         try:
             res = await temporal_client.start_grading(
                 qid, deck_name, user_answer, idk, user_id=uid,
@@ -736,7 +779,24 @@ async def study_submit(request: Request, name: str, user: dict = Depends(current
     # ---- Slow path: code/short go through the GradeAnswerWorkflow so the
     # browser doesn't hang for 10-30s on the claude -p shell-out. The worker
     # grades + records via Temporal activities; we 303 to a polling page.
+    #
+    # No-agent mode: skip the workflow and render a self-grade form. The
+    # user compares their answer to the canonical and picks right/wrong;
+    # a small sync POST records the review. Same outcome as AI grading,
+    # different judge.
     if qtype in ("code", "short") and not idk:
+        if not _AGENT_AVAILABLE:
+            return templates.TemplateResponse(
+                "self_grade.html",
+                {
+                    "request": request,
+                    "deck_name": name,
+                    "q": question,
+                    "user_answer": user_answer,
+                    "session_id": None,
+                    "session_version": None,
+                },
+            )
         try:
             res = await temporal_client.start_grading(
                 qid, name, user_answer, idk, user_id=uid,
@@ -911,6 +971,124 @@ async def grading_status(wid: str, user: dict = Depends(current_user)):
     progress = await temporal_client.get_grade_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
     return JSONResponse({"progress": progress, "desc": desc})
+
+
+@app.post("/study/{name}/self-grade/{qid}")
+async def study_self_grade(request: Request, name: str, qid: int,
+                           user: dict = Depends(current_user)):
+    """No-agent grading. The user submitted a code/short answer, the
+    workflow path was skipped (no agent to grade with), and they picked
+    right/wrong themselves on the self_grade.html page. We record a
+    normal review and either advance the session or bounce back to the
+    deck index."""
+    uid = user["tailscale_login"]
+    q = db.get_question(uid, qid)
+    if not q:
+        raise HTTPException(404, "question not found")
+
+    form = await request.form()
+    verdict_str = form.get("verdict", "")
+    if verdict_str not in ("right", "wrong"):
+        raise HTTPException(422, "verdict must be 'right' or 'wrong'")
+    user_answer = form.get("user_answer", "")
+    sid = form.get("session_id") or None
+    sver = form.get("session_version") or None
+
+    verdict = {"result": verdict_str, "feedback": "(self-graded)"}
+    state = db.record_review(uid, qid, verdict_str, user_answer,
+                             notes="(self-graded)")
+
+    if sid and sver:
+        try:
+            db.record_session_answer_sync(
+                uid, sid, qid, int(sver), user_answer, verdict, state,
+            )
+        except db.StaleVersionError as e:
+            return _stale_response(request, sid, e.current_version)
+        return _redirect(request, f"/session/{sid}")
+    return _redirect(request, f"/deck/{name}")
+
+
+@app.get("/deck/{name}/question/new", response_class=HTMLResponse)
+def question_new(request: Request, name: str, user: dict = Depends(current_user)):
+    """Manual question entry form. Becomes the primary card-creation
+    path when no AI agent is configured; an additional path otherwise."""
+    uid = user["tailscale_login"]
+    if not db.find_deck(uid, name):
+        raise HTTPException(404, "deck not found")
+    return templates.TemplateResponse(
+        "question_new.html",
+        {"request": request, "deck_name": name, "form": {}, "error": None},
+    )
+
+
+@app.post("/deck/{name}/question/new", response_class=HTMLResponse)
+async def question_new_submit(request: Request, name: str,
+                              user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    deck = db.find_deck(uid, name)
+    if not deck:
+        raise HTTPException(404, "deck not found")
+    deck_id = deck["id"]
+
+    form = await request.form()
+    qtype = (form.get("type") or "").strip()
+    prompt = (form.get("prompt") or "").strip()
+    answer_raw = (form.get("answer") or "").strip()
+    topic = (form.get("topic") or "").strip() or None
+    skeleton = (form.get("skeleton") or "").strip() or None
+    language = (form.get("language") or "").strip() or None
+    rubric = (form.get("rubric") or "").strip() or None
+    # Choices are entered one per line.
+    choices_raw = (form.get("choices") or "").strip()
+    choices = [ln.strip() for ln in choices_raw.splitlines() if ln.strip()] or None
+
+    err = None
+    if qtype not in db.QUESTION_TYPES:
+        err = f"Type must be one of: {', '.join(sorted(db.QUESTION_TYPES))}."
+    elif not prompt:
+        err = "Prompt is required."
+    elif not answer_raw:
+        err = "Answer is required."
+    elif qtype in ("mcq", "multi") and not choices:
+        err = f"{qtype.upper()} questions need at least one choice (one per line)."
+    elif qtype == "code" and not language:
+        err = "Code questions need a language."
+
+    if err:
+        return templates.TemplateResponse(
+            "question_new.html",
+            {
+                "request": request,
+                "deck_name": name,
+                "form": {
+                    "type": qtype, "prompt": prompt, "answer": answer_raw,
+                    "topic": topic or "", "skeleton": skeleton or "",
+                    "language": language or "", "rubric": rubric or "",
+                    "choices": choices_raw,
+                },
+                "error": err,
+            },
+            status_code=400,
+        )
+
+    answer: object = answer_raw
+    if qtype == "multi":
+        # Stored as JSON array. Accept either a JSON literal or a
+        # newline-separated list (same as choices) — be forgiving.
+        try:
+            parsed = json.loads(answer_raw)
+            if isinstance(parsed, list):
+                answer = parsed
+        except json.JSONDecodeError:
+            answer = [ln.strip() for ln in answer_raw.splitlines() if ln.strip()]
+
+    db.add_question(
+        uid, deck_id, qtype, prompt, answer,
+        topic=topic, choices=choices, rubric=rubric,
+        skeleton=skeleton, language=language,
+    )
+    return _redirect(request, f"/deck/{name}")
 
 
 @app.post("/question/{qid}/suspend")

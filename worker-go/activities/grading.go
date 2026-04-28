@@ -16,14 +16,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	"prep-worker/agent"
 	"prep-worker/shared"
 )
 
@@ -108,22 +107,23 @@ Output ONLY the JSON object.`,
 		}
 	}()
 
-	cmd := exec.CommandContext(ctx, a.Cfg.AgentBin, a.Cfg.agentArgs(prompt)...)
-	cmd.Env = os.Environ()
-	out, err := cmd.CombinedOutput()
+	if a.Cfg.Agent == nil {
+		return shared.Verdict{}, noAgentErr("GradeFreeText")
+	}
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
 	if err != nil {
-		return shared.Verdict{}, fmt.Errorf("claude grade failed: %w (output: %s)", err, truncate(string(out), 800))
+		return shared.Verdict{}, fmt.Errorf("agent grade failed: %w", err)
 	}
 
-	v, parseErr := parseVerdictJSON(out, q.Answer)
+	v, parseErr := parseVerdictJSON([]byte(out.Stdout), q.Answer)
 	if parseErr != nil {
 		// Mark as wrong with the parse error in feedback — non-retryable so
 		// the workflow doesn't burn retries on a model that consistently
 		// returns malformed JSON.
-		logger.Warn("verdict parse failed", "err", parseErr.Error(), "raw", truncate(string(out), 300))
+		logger.Warn("verdict parse failed", "err", parseErr.Error(), "raw", truncate(out.Stdout, 300))
 		return shared.Verdict{
 			Result:             "wrong",
-			Feedback:           fmt.Sprintf("(grader returned non-JSON: %s)", truncate(string(out), 200)),
+			Feedback:           fmt.Sprintf("(grader returned non-JSON: %s)", truncate(out.Stdout, 200)),
 			ModelAnswerSummary: truncate(q.Answer, 400),
 		}, nil
 	}
