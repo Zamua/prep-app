@@ -2092,14 +2092,17 @@ textarea:focus-visible {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   color: var(--ink);
-  /* Use flex so the close-form stays at the top and the body grows /
-     scrolls in the remaining space — instead of the body overflowing
-     the dialog's bounds and the page scrolling underneath. */
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
   /* Don't let dialog scroll bleed into the page (iOS scroll-chaining). */
   overscroll-behavior: contain;
+}
+/* Flex layout ONLY when the dialog is open. Without the [open] gate,
+   `display: flex` here overrides the UA's `dialog:not([open]) {
+   display: none }` rule and the (empty) dialog renders inline at the
+   bottom of the deck page. (Hit on 2026-04-28.) */
+.card-preview[open] {
+  display: flex;
+  flex-direction: column;
 }
 .card-preview::backdrop {
   background: rgba(20, 17, 13, 0.55);
