@@ -11,3 +11,6 @@
 python 3.11
 go 1.22
 bun 1.1.0
+# mise's `temporal` shortcut maps to the temporal SERVER package; we want the
+# CLI (which embeds a server for `start-dev`). Spell out the aqua plugin.
+aqua:temporalio/cli 1.6.2

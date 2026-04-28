@@ -8,7 +8,7 @@ repo and have a working local instance running.
 ```bash
 git clone <repo-url> prep-app
 cd prep-app
-brew bundle              # mise, temporal
+brew bundle              # mise (only)
 make setup               # mise install + uv sync + go build + goreman install
 make dev                 # starts temporal + uvicorn + worker via Procfile
 ```
@@ -22,8 +22,7 @@ don't need Tailscale to develop).
 ## Quick start (Linux)
 
 ```bash
-curl https://mise.run | sh                          # mise (manages python+go+bun)
-# temporal: download the latest binary from https://github.com/temporalio/cli/releases
+curl https://mise.run | sh                          # mise (manages python+go+bun+temporal)
 git clone <repo-url> prep-app
 cd prep-app
 make setup
@@ -32,12 +31,13 @@ make dev
 
 ## How toolchain management works
 
-The repo pins language versions in `.tool-versions`:
+The repo pins tool versions in `.tool-versions`:
 
 ```
 python 3.11
 go 1.22
 bun 1.1.0
+aqua:temporalio/cli 1.6.2
 ```
 
 [mise](https://mise.jdx.dev/) reads that file and provisions the right
