@@ -68,31 +68,53 @@ def _read_dir_summary(dir_path: Path, max_files: int = 30, max_bytes_per_file: i
     return "".join(out)
 
 
-def _build_prompt(deck_name: str, count: int, existing_prompts: list[str]) -> str:
-    cfg = DECK_CONTEXT.get(deck_name)
-    if not cfg:
-        raise ValueError(f"Unknown deck '{deck_name}'. Add it to DECK_CONTEXT.")
-    source_text = _read_dir_summary(INTERVIEWS_DIR / cfg["source"])
-    topic_texts = "\n\n".join(
-        f"## Shared topic: {t}\n{_read_dir_summary(INTERVIEWS_DIR / t)}"
-        for t in cfg["topics"]
-    )
+def _build_prompt(deck_name: str, count: int, existing_prompts: list[str],
+                   user_id: str | None = None) -> str:
+    """Construct the generation prompt. Prefers the user-supplied
+    `decks.context_prompt` (set via the UI); falls back to the legacy
+    DECK_CONTEXT entry for the bootstrap decks (cherry, temporal) if the
+    column is empty. Eventually DECK_CONTEXT can be deleted once those
+    two decks have been re-described via the UI."""
+    db_prompt = db.get_deck_context_prompt(user_id, deck_name) if user_id else None
+    legacy = DECK_CONTEXT.get(deck_name)
+
+    if db_prompt and db_prompt.strip():
+        focus_block = db_prompt.strip()
+        # No on-disk source dirs in the new flow — the user's prompt is
+        # expected to carry whatever context is needed (or invite claude
+        # to web-search for it).
+        source_block = ""
+    elif legacy:
+        focus_block = legacy["focus"]
+        source_text = _read_dir_summary(INTERVIEWS_DIR / legacy["source"])
+        topic_texts = "\n\n".join(
+            f"## Shared topic: {t}\n{_read_dir_summary(INTERVIEWS_DIR / t)}"
+            for t in legacy["topics"]
+        )
+        source_block = (
+            f"\n**Source material (the user's own prep notes for this deck):**\n"
+            f"{source_text}\n\n{topic_texts}"
+        )
+    else:
+        raise ValueError(
+            f"Deck '{deck_name}' has no context_prompt and no legacy DECK_CONTEXT entry. "
+            "Set one via the UI or seed the DB."
+        )
+
     existing_block = "\n".join(f"- {p[:200]}" for p in existing_prompts) or "(none yet)"
 
     return f"""You are generating flashcard questions for an interview-prep app. The user is preparing for a senior software engineering interview.
 
 **Deck:** {deck_name}
 
-**Focus / context for this deck:**
-{cfg['focus']}
+**Focus / context for this deck (provided by the user):**
+{focus_block}
+
+If the description above contains URLs or references recent material, you may use your web-fetch / web-search tools to ground the questions in current information.
 
 **Existing question prompts in this deck — do NOT duplicate or paraphrase any of these:**
 {existing_block}
-
-**Source material (the user's own prep notes for this deck):**
-{source_text}
-
-{topic_texts}
+{source_block}
 
 ---
 

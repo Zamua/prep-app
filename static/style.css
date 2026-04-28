@@ -1792,6 +1792,74 @@ textarea:focus-visible {
   * { animation: none !important; transition: none !important; }
 }
 
+/* --- New-deck tile + form --- */
+
+.deck-card-new {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+}
+.deck-card-new:hover {
+  background: var(--paper);
+  border-color: var(--quill);
+  border-style: solid;
+}
+.deck-numeral-plus {
+  font-style: normal !important;
+  color: var(--ink-mute);
+  font-weight: 300;
+}
+.deck-card-new:hover .deck-numeral-plus { color: var(--quill); }
+
+.deck-new-form {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+.form-field {
+  display: grid;
+  gap: 0.4rem;
+}
+.form-label {
+  font-style: italic;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.form-hint {
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.form-field input[type="text"] {
+  font: inherit;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1.1rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: var(--ink);
+}
+.form-field input[type="text"]:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+.form-field textarea {
+  min-height: 12rem;
+}
+.form-error {
+  margin: 1rem 0 0;
+  padding: 0.7rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  background: color-mix(in srgb, var(--wrong) 8%, var(--paper));
+  border-radius: var(--radius);
+  color: var(--wrong);
+  font-style: italic;
+}
+
 /* --- Error page (404, 401, 500, …) --- */
 
 .error-block {

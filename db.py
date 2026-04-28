@@ -269,6 +269,14 @@ def init() -> None:
             CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
         """)
 
+        # 6. UI-created decks need a free-form context prompt — what claude
+        #    sees when generating cards. Fills the role that DECK_CONTEXT[*]
+        #    used to play in source code. Existing rows have NULL until
+        #    re-described.
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
+        if "context_prompt" not in cols:
+            c.execute("ALTER TABLE decks ADD COLUMN context_prompt TEXT")
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -449,6 +457,40 @@ def find_deck(user_id: str, name: str) -> int | None:
             (user_id, name),
         ).fetchone()
         return row["id"] if row else None
+
+
+def create_deck(user_id: str, name: str, context_prompt: str | None = None) -> int:
+    """Insert a new deck row. Caller is responsible for validating the name
+    (alphanumeric + hyphens, length cap, etc.). Raises sqlite3.IntegrityError
+    if the (user_id, name) pair already exists."""
+    with cursor() as c:
+        cur = c.execute(
+            "INSERT INTO decks (user_id, name, created_at, context_prompt) VALUES (?, ?, ?, ?)",
+            (user_id, name, now(), context_prompt),
+        )
+        return cur.lastrowid
+
+
+def get_deck_context_prompt(user_id: str, name: str) -> str | None:
+    """Returns the user-supplied context prompt for a deck, or None if the
+    deck doesn't exist or has no prompt set yet (legacy decks, or a row
+    pre-dating UI creation)."""
+    with cursor() as c:
+        row = c.execute(
+            "SELECT context_prompt FROM decks WHERE user_id = ? AND name = ?",
+            (user_id, name),
+        ).fetchone()
+    if not row:
+        return None
+    return row["context_prompt"]
+
+
+def update_deck_context_prompt(user_id: str, name: str, context_prompt: str) -> None:
+    with cursor() as c:
+        c.execute(
+            "UPDATE decks SET context_prompt = ? WHERE user_id = ? AND name = ?",
+            (context_prompt, user_id, name),
+        )
 
 
 def list_decks(user_id: str) -> list[dict]:

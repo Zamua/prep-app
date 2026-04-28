@@ -124,6 +124,30 @@ func openDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// getDeckContextPrompt returns the user-supplied free-form deck description
+// stored in `decks.context_prompt`. Returns empty string + nil error if the
+// deck row exists but the column is NULL (legacy decks that pre-date UI
+// creation). Returns sql.ErrNoRows if no row matches.
+func getDeckContextPrompt(dbPath, userID, deckName string) (string, error) {
+	db, err := openDB(dbPath)
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+	var prompt sql.NullString
+	err = db.QueryRow(
+		"SELECT context_prompt FROM decks WHERE user_id = ? AND name = ?",
+		userID, deckName,
+	).Scan(&prompt)
+	if err != nil {
+		return "", err
+	}
+	if prompt.Valid {
+		return prompt.String, nil
+	}
+	return "", nil
+}
+
 // allPromptsForDeck returns every prior prompt for a (user, deck) — used
 // to seed the priming context so the model doesn't repeat across batches.
 // Scoped to user_id so different users can have decks with the same name

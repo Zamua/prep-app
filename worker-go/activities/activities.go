@@ -119,9 +119,33 @@ var deckRegistry = map[string]struct {
 }
 
 func (a *Activities) loadDeckContext(userID, deckName string) (*DeckContext, error) {
+	// Prior prompts (cross-batch dedup signal) are independent of which
+	// context source we use — pull them up front.
+	prior, err := allPromptsForDeck(a.Cfg.DBPath, userID, deckName)
+	if err != nil {
+		return nil, fmt.Errorf("read prior prompts: %w", err)
+	}
+
+	// Prefer the user-supplied context_prompt from the DB (set via the
+	// new-deck UI). When set, it carries everything the model needs:
+	// notes, links, focus paragraph. No source dir / topic dirs in this
+	// path — UI-created decks don't have a filesystem-backed prep dir.
+	dbPrompt, err := getDeckContextPrompt(a.Cfg.DBPath, userID, deckName)
+	if err == nil && strings.TrimSpace(dbPrompt) != "" {
+		return &DeckContext{
+			deckName:        deckName,
+			focus:           strings.TrimSpace(dbPrompt),
+			sourceText:      "",
+			topicTexts:      "",
+			existingPrompts: prior,
+		}, nil
+	}
+
+	// Legacy fallback for the pre-UI decks (cherry, temporal). Reads the
+	// hardcoded focus + the filesystem prep dir + shared topic dirs.
 	cfg, ok := deckRegistry[deckName]
 	if !ok {
-		return nil, fmt.Errorf("unknown deck %q", deckName)
+		return nil, fmt.Errorf("deck %q has no context_prompt and no legacy registry entry", deckName)
 	}
 	srcDir := filepath.Join(a.Cfg.InterviewsDir, cfg.Source)
 	source, err := readDirSummary(srcDir, 30, 8000)
@@ -132,12 +156,6 @@ func (a *Activities) loadDeckContext(userID, deckName string) (*DeckContext, err
 	for _, t := range cfg.Topics {
 		td, _ := readDirSummary(filepath.Join(a.Cfg.InterviewsDir, t), 30, 8000)
 		fmt.Fprintf(&topics, "\n## Shared topic: %s\n%s", t, td)
-	}
-	// Scoped to userID so other users' prior prompts don't bleed into the
-	// dedup context.
-	prior, err := allPromptsForDeck(a.Cfg.DBPath, userID, deckName)
-	if err != nil {
-		return nil, fmt.Errorf("read prior prompts: %w", err)
 	}
 	return &DeckContext{
 		deckName:        deckName,
@@ -173,19 +191,26 @@ func (a *Activities) PrimeClaudeSession(ctx context.Context, in shared.PrimeInpu
 			"deck context load failed", "BadDeckContext", err)
 	}
 
+	// Skip the "Source material" / topic blocks for UI-created decks where
+	// the user's free-form context_prompt is the entire focus — printing
+	// empty headers reads as broken context to the model.
+	sourceBlock := ""
+	if strings.TrimSpace(dctx.sourceText) != "" || strings.TrimSpace(dctx.topicTexts) != "" {
+		sourceBlock = fmt.Sprintf("\n**Source material (the user's own prep notes for this deck):**\n%s\n\n%s",
+			dctx.sourceText, dctx.topicTexts)
+	}
+
 	primePrompt := fmt.Sprintf(`You are about to generate flashcard questions for an interview-prep app, one card at a time, over multiple turns. This first message gives you ALL the context. Acknowledge in one short sentence — do not generate any cards yet.
 
 **Deck:** %s
 
-**Focus / context:**
+**Focus / context (provided by the user):**
 %s
+
+If the description above contains URLs or references recent material, you may use your web-fetch / web-search tools to ground the questions in current information.
 
 **Existing question prompts in this deck (do NOT duplicate or paraphrase any of these in subsequent cards):**
 %s
-
-**Source material (the user's own prep notes for this deck):**
-%s
-
 %s
 
 ---
@@ -194,8 +219,7 @@ Acknowledge: "Ready to generate cards for %s." Nothing else.`,
 		dctx.deckName,
 		dctx.focus,
 		joinPrompts(dctx.existingPrompts),
-		dctx.sourceText,
-		dctx.topicTexts,
+		sourceBlock,
 		dctx.deckName,
 	)
 

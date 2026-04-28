@@ -254,6 +254,81 @@ def index(request: Request, user: dict = Depends(current_user)):
     )
 
 
+# ---- Deck creation (UI-driven) -------------------------------------------
+
+import re
+
+# Deck names go in the URL, so they're constrained to URL-safe chars.
+# Lowercase + digits + hyphens; must start alphanumeric; 2-30 chars.
+_DECK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,29}$")
+_RESERVED_DECK_NAMES = {"new", "create", "edit", "delete", "static",
+                        "dev", "preview", "notify", "session", "study",
+                        "deck", "decks", "manifest"}
+_MAX_CONTEXT_PROMPT_CHARS = 8000
+
+
+def _validate_deck_name(name: str) -> str:
+    n = (name or "").strip().lower()
+    if not _DECK_NAME_RE.match(n):
+        raise HTTPException(400, "Deck name must be 2-30 chars, lowercase, alphanumerics or hyphens, starting with a letter or digit.")
+    if n in _RESERVED_DECK_NAMES:
+        raise HTTPException(400, f"\"{n}\" is reserved — pick another name.")
+    return n
+
+
+@app.get("/decks/new", response_class=HTMLResponse)
+def deck_new_form(request: Request, user: dict = Depends(current_user)):
+    return templates.TemplateResponse(
+        "deck_new.html",
+        {
+            "request": request,
+            "user": user,
+            "name_value": "",
+            "context_value": "",
+            "error": None,
+        },
+    )
+
+
+@app.post("/decks/new", response_class=HTMLResponse)
+def deck_new_create(request: Request,
+                    name: str = Form(...),
+                    context_prompt: str = Form(""),
+                    user: dict = Depends(current_user)):
+    uid = user["tailscale_login"]
+    try:
+        clean = _validate_deck_name(name)
+    except HTTPException as e:
+        # Re-render the form with the error inline so the user keeps their
+        # context_prompt. Form errors don't deserve a full error page.
+        return templates.TemplateResponse(
+            "deck_new.html",
+            {"request": request, "user": user,
+             "name_value": name, "context_value": context_prompt,
+             "error": e.detail},
+            status_code=400,
+        )
+    if db.find_deck(uid, clean) is not None:
+        return templates.TemplateResponse(
+            "deck_new.html",
+            {"request": request, "user": user,
+             "name_value": name, "context_value": context_prompt,
+             "error": f"You already have a deck named \"{clean}\"."},
+            status_code=400,
+        )
+    cp = (context_prompt or "").strip()
+    if len(cp) > _MAX_CONTEXT_PROMPT_CHARS:
+        return templates.TemplateResponse(
+            "deck_new.html",
+            {"request": request, "user": user,
+             "name_value": name, "context_value": context_prompt,
+             "error": f"Description is too long ({len(cp)} chars; max {_MAX_CONTEXT_PROMPT_CHARS})."},
+            status_code=400,
+        )
+    db.create_deck(uid, clean, context_prompt=cp or None)
+    return _redirect(request, f"/deck/{clean}")
+
+
 @app.get("/deck/{name}", response_class=HTMLResponse)
 def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
     uid = user["tailscale_login"]
@@ -275,8 +350,12 @@ def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
 @app.post("/deck/{name}/add")
 async def deck_add(request: Request, name: str, count: int = Form(5),
                     user: dict = Depends(current_user)):
-    if name not in generator.DECK_CONTEXT:
-        raise HTTPException(400, f"Unknown deck '{name}'. Add it to generator.DECK_CONTEXT.")
+    # The deck must exist in DB. UI-created decks have a context_prompt;
+    # legacy bootstrap decks (cherry, temporal) fall back to DECK_CONTEXT
+    # in the worker's loadDeckContext.
+    uid = user["tailscale_login"]
+    if db.find_deck(uid, name) is None and name not in generator.DECK_CONTEXT:
+        raise HTTPException(404, f"Unknown deck \"{name}\".")
     count = max(1, min(count, 15))
     try:
         result = await temporal_client.start_generation(

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}new deck · prep{% endblock %}
+{% block page_class %}deck-new{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">A new deck</p>
+  <h1 class="display">Tell prep&nbsp;<em>about it</em>.</h1>
+  <p class="lede">
+    Pick a short name, then describe the deck — what you're prepping for,
+    what kinds of questions to ask, links to docs that should ground the
+    questions. The more concrete you are, the better the cards.
+  </p>
+</section>
+
+{% if error %}
+<p class="form-error">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="{{ request.scope.get('root_path','') }}/decks/new" class="deck-new-form" autocomplete="off">
+  <label class="form-field">
+    <span class="form-label">Deck name</span>
+    <input type="text" name="name" value="{{ name_value }}" required
+           pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
+           placeholder="e.g. acme, distributed-systems"
+           autocapitalize="none" autocorrect="off">
+    <span class="form-hint">2–30 chars, lowercase letters/digits/hyphens, used in the URL.</span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">Description</span>
+    <textarea name="context_prompt" rows="10" maxlength="8000"
+              placeholder="What is this deck for? What kinds of questions do you want? Paste links to specs, blog posts, the company's tech stack page, etc. Claude can web-search anything you reference."
+              >{{ context_value }}</textarea>
+    <span class="form-hint">
+      Free-form. Claude reads this when generating cards. URLs are fine —
+      they'll be web-fetched if useful.
+    </span>
+  </label>
+
+  <div class="study-actions">
+    <button type="submit" class="btn btn-primary">Create deck</button>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

@@ -62,5 +62,15 @@
   {% if not decks %}
     <li class="deck-card empty"><p>No decks yet.</p></li>
   {% endif %}
+  <li class="deck-card deck-card-new">
+    <a href="{{ request.scope.get('root_path','') }}/decks/new" class="deck-link">
+      <span class="deck-numeral deck-numeral-plus" aria-hidden="true">+</span>
+      <span class="deck-body">
+        <span class="deck-name">new deck</span>
+        <span class="deck-stats"><span class="stat-label">describe a thing to prep for</span></span>
+      </span>
+      <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+    </a>
+  </li>
 </ol>
 {% endblock %}
