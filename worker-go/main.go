@@ -31,9 +31,16 @@ func main() {
 
 	// Agent CLI: PREP_AGENT_BIN is the canonical name; CLAUDE_BIN is the
 	// backward-compat alias for users carrying older configs forward.
+	// Default to ~/.local/bin/claude — the path the Claude Code installer
+	// uses on macOS/Linux. Mirrors the Python side's default in agent.py.
 	agentBin := os.Getenv("PREP_AGENT_BIN")
 	if agentBin == "" {
 		agentBin = os.Getenv("CLAUDE_BIN")
+	}
+	if agentBin == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			agentBin = home + "/.local/bin/claude"
+		}
 	}
 	cfg := &activities.Config{
 		DBPath:    os.Getenv("PREP_DB_PATH"),

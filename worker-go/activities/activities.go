@@ -63,7 +63,11 @@ type Config struct {
 
 func (c *Config) Validate() error {
 	if c.DBPath == "" {
-		return errors.New("PREP_DB_PATH unset")
+		// Mirror the Python side's default: data.sqlite next to the
+		// running binary's working dir. For `make dev` this is the repo
+		// root; for prod it's the prep-app/ checkout dir. Both contain a
+		// data.sqlite that the FastAPI process writes to.
+		c.DBPath = "./data.sqlite"
 	}
 	if c.AgentBin == "" {
 		return errors.New("PREP_AGENT_BIN (or CLAUDE_BIN) unset — set to the local agent CLI binary")

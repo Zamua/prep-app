@@ -1,0 +1,12 @@
+# Procfile for staging deployment — replaces the pm2-managed
+# prep-app-staging + prep-worker-staging services. Reuses the shared
+# prep-temporal pm2 service for now (not in this Procfile).
+#
+# Run with: goreman -f Procfile.staging start
+#
+# The author drives this via tmux for now (`tmux new -ds prep-staging` +
+# attach inside that session). Auto-restart on reboot is not yet wired —
+# noted in the OSS-readiness Phase 1 punch list.
+
+app: ROOT_PATH=/prep-staging TEMPORAL_NAMESPACE=prep-staging PREP_DEFAULT_USER=guest@example.com .venv/bin/uvicorn app:app --host 127.0.0.1 --port 8082 --no-access-log
+worker: TEMPORAL_NAMESPACE=prep-staging ./worker-go/bin/worker
