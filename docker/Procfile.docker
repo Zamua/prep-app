@@ -6,6 +6,6 @@
 # All values come from env (see Dockerfile.prep ENV defaults +
 # docker-compose.yml env_file directive).
 
-temporal: temporal server start-dev --ip 127.0.0.1 --port 7233 --ui-port 8233 --db-filename /data/temporal/temporal.db --namespace $TEMPORAL_NAMESPACE --log-level warn
+temporal: sh -c 'mkdir -p /data/temporal /data/prep && exec temporal server start-dev --ip 127.0.0.1 --port 7233 --ui-port 8233 --db-filename /data/temporal/temporal.db --namespace $TEMPORAL_NAMESPACE --log-level warn'
 app: .venv/bin/uvicorn app:app --host $HOST --port $PORT --no-access-log
 worker: ./worker-go/bin/worker
