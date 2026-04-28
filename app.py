@@ -962,6 +962,40 @@ def service_worker():
     return FileResponse(BASE_DIR / "static" / "sw.js", media_type="application/javascript")
 
 
+# ---- Editor settings ------------------------------------------------------
+
+@app.get("/settings/editor", response_class=HTMLResponse)
+def editor_settings(request: Request, user: dict = Depends(current_user)):
+    return templates.TemplateResponse(
+        "settings_editor.html",
+        {
+            "request": request,
+            "user": user,
+            "current_mode": db.get_editor_input_mode(user["tailscale_login"]),
+            "modes": db.EDITOR_INPUT_MODES,
+            "saved": False,
+        },
+    )
+
+
+@app.post("/settings/editor", response_class=HTMLResponse)
+def editor_settings_save(request: Request, mode: str = Form(...),
+                         user: dict = Depends(current_user)):
+    if mode not in db.EDITOR_INPUT_MODES:
+        raise HTTPException(400, f"Unknown input mode \"{mode}\".")
+    db.set_editor_input_mode(user["tailscale_login"], mode)
+    return templates.TemplateResponse(
+        "settings_editor.html",
+        {
+            "request": request,
+            "user": {**user, "editor_input_mode": mode},  # reflect saved value in next render
+            "current_mode": mode,
+            "modes": db.EDITOR_INPUT_MODES,
+            "saved": True,
+        },
+    )
+
+
 # ---- Notifications (settings + subscribe) ---------------------------------
 
 _VALID_MODES = {"off", "digest", "when-ready"}

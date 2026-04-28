@@ -1162,6 +1162,33 @@ a { color: inherit; }
   border-color: var(--quill);
   color: var(--paper);
 }
+/* Mode picker — pill-styled <select> with the editor's current input
+   mode. Inherits the .code-action pill chrome; the native select
+   widget renders the OS picker on tap (12-key wheel on iOS). */
+.code-action-mode {
+  cursor: pointer;
+  padding-right: 0.55rem;  /* tighter to fit chevron */
+}
+.code-action-mode select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-style: italic;
+  font-size: 0.88rem;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 1rem 0 0;
+  /* Custom chevron via background-image — keeps the pill clean. */
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(-45deg, transparent 50%, currentColor 50%);
+  background-position: calc(100% - 0.5rem) 0.55em,
+                       calc(100% - 0.25rem) 0.55em;
+  background-size: 0.25rem 0.25rem;
+  background-repeat: no-repeat;
+}
+.code-action-mode select:focus { outline: none; }
 /* Async-button success / error tints for the copy button. Reuses
    .btn-async-state machinery from the discuss popover. */
 .code-action.is-success {

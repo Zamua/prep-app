@@ -16,3 +16,4 @@ export { javascript } from "@codemirror/lang-javascript";
 export { rust } from "@codemirror/lang-rust";
 export { cpp } from "@codemirror/lang-cpp";
 export { vim } from "@replit/codemirror-vim";
+export { emacs } from "@replit/codemirror-emacs";

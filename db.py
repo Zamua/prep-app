@@ -277,6 +277,13 @@ def init() -> None:
         if "context_prompt" not in cols:
             c.execute("ALTER TABLE decks ADD COLUMN context_prompt TEXT")
 
+        # 7. Editor input mode (vanilla | vim | emacs). Per-user profile
+        #    setting that determines which CodeMirror keybinding extension
+        #    loads when the user studies a code question.
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "editor_input_mode" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN editor_input_mode TEXT")
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -305,6 +312,38 @@ def upsert_user(tailscale_login: str, display_name: str | None = None,
         return dict(c.execute(
             "SELECT * FROM users WHERE tailscale_login = ?", (tailscale_login,)
         ).fetchone())
+
+
+# ---- Editor input mode (single-key user setting) --------------------------
+
+EDITOR_INPUT_MODES = ("vanilla", "vim", "emacs")
+DEFAULT_EDITOR_INPUT_MODE = "vanilla"
+
+
+def get_editor_input_mode(user_id: str) -> str:
+    """Returns the user's preferred CodeMirror input mode. Falls back to
+    DEFAULT_EDITOR_INPUT_MODE if the column is NULL or unrecognised."""
+    with cursor() as c:
+        row = c.execute(
+            "SELECT editor_input_mode FROM users WHERE tailscale_login = ?",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return DEFAULT_EDITOR_INPUT_MODE
+    val = row["editor_input_mode"]
+    if val in EDITOR_INPUT_MODES:
+        return val
+    return DEFAULT_EDITOR_INPUT_MODE
+
+
+def set_editor_input_mode(user_id: str, mode: str) -> None:
+    if mode not in EDITOR_INPUT_MODES:
+        raise ValueError(f"unknown editor input mode {mode!r}")
+    with cursor() as c:
+        c.execute(
+            "UPDATE users SET editor_input_mode = ? WHERE tailscale_login = ?",
+            (mode, user_id),
+        )
 
 
 # ---- Notification prefs (JSON blob on users) ------------------------------

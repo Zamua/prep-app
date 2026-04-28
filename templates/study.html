@@ -55,12 +55,19 @@
         <div class="freetext-label-row">
           <label for="code-answer" class="freetext-label">Your code <span class="lang-tag">{{ q.language or 'go' }}</span></label>
           <div class="freetext-actions">
-            <button type="button" class="code-action code-action-vim" id="vim-toggle"
-                    aria-pressed="false" title="Toggle vim keybindings">
+            {# Per-card input-mode picker. Default reflects the user's
+               profile setting (rendered into <body data-editor-mode>);
+               changing it reconfigures the editor for THIS card only —
+               doesn't write back to the profile. /settings/editor is
+               where the profile default is set. #}
+            <label class="code-action code-action-mode" title="Editor input mode (this card only)">
               {{ icon('terminal-window', class_='icon icon-inline') }}
-              <span class="code-action-label">vim</span>
-              <span class="code-action-state" id="vim-state">off</span>
-            </button>
+              <select id="input-mode-select" aria-label="Editor input mode">
+                <option value="vanilla">vanilla</option>
+                <option value="vim">vim</option>
+                <option value="emacs">emacs</option>
+              </select>
+            </label>
             <button type="button" class="code-action btn-async" id="copy-code"
                     title="Copy your code to clipboard">
               <span class="btn-async-state btn-async-default">
@@ -122,8 +129,9 @@
 // instance @codemirror/state loading bug that breaks instanceof checks
 // when transitive deps are resolved by a CDN.
 //
-// State that persists across cards (in localStorage):
-//   prep:vim — "1" if vim mode is enabled
+// Input mode (vanilla / vim / emacs) is set per user in Editor settings
+// (/settings/editor) and rendered into a body data attribute by the
+// server, so it's consistent across devices.
 //
 // Languages mapped: go, java, python, javascript, typescript, rust, cpp.
 // Anything else falls back to no highlighting (still a usable editor).
@@ -131,7 +139,7 @@
 import {
   EditorView, basicSetup,
   EditorState, Compartment,
-  go, java, python, javascript, rust, cpp, vim,
+  go, java, python, javascript, rust, cpp, vim, emacs,
 } from "{{ request.scope.get('root_path','') }}/static/cm-bundle.js";
 
 const langExts = {
@@ -146,27 +154,33 @@ const langExts = {
 
 const ta = document.getElementById('code-answer');
 const mount = document.getElementById('cm-mount');
-const vimToggle = document.getElementById('vim-toggle');
-const vimState = document.getElementById('vim-state');
 const skelReset = document.getElementById('skel-reset');
 const form = ta && ta.form;
 const lang = (ta && ta.dataset.language) || 'go';
+// Server renders the user's preferred input mode as `data-editor-mode`
+// on <body> (see base.html). Defaults to vanilla if missing/unknown.
+const inputMode = document.body.dataset.editorMode || 'vanilla';
+
+function inputModeExtensions(mode) {
+  if (mode === 'vim')   return [vim()];
+  if (mode === 'emacs') return [emacs()];
+  return [];
+}
 
 if (!ta || !mount) {
   // No mount target — bail (graceful fallback to plain textarea).
 } else {
   const langExt = langExts[lang] || [];
-  const vimCompartment = new Compartment();
-  const wantVim = localStorage.getItem('prep:vim') === '1';
-  const vimExt = wantVim ? vim() : [];
-  vimState.textContent = wantVim ? 'on' : 'off';
+  // Compartment lets us swap the input-mode extension at runtime when the
+  // user changes the per-card select.
+  const modeCompartment = new Compartment();
 
   const view = new EditorView({
     parent: mount,
     state: EditorState.create({
       doc: ta.value,
       extensions: [
-        vimCompartment.of(vimExt),
+        modeCompartment.of(inputModeExtensions(inputMode)),
         basicSetup,
         langExt,
         EditorView.lineWrapping,
@@ -176,6 +190,19 @@ if (!ta || !mount) {
       ],
     }),
   });
+
+  // Wire the per-card mode picker. Changes are NOT persisted to profile —
+  // /settings/editor is where the default is set.
+  const modeSelect = document.getElementById('input-mode-select');
+  if (modeSelect) {
+    modeSelect.value = inputMode;
+    modeSelect.addEventListener('change', () => {
+      view.dispatch({
+        effects: modeCompartment.reconfigure(inputModeExtensions(modeSelect.value)),
+      });
+      view.focus();
+    });
+  }
 
   // Hide the original textarea — CodeMirror is now the visible editor. The
   // textarea stays in the DOM so the form submission still picks up its
@@ -194,20 +221,6 @@ if (!ta || !mount) {
     form.addEventListener('submit', () => { ta.value = view.state.doc.toString(); });
   }
 
-  // Reflect initial vim state on the toggle so screen readers / pressed
-  // styling are correct on first paint.
-  if (vimToggle) {
-    const initial = localStorage.getItem('prep:vim') === '1';
-    vimToggle.setAttribute('aria-pressed', initial ? 'true' : 'false');
-  }
-  vimToggle && vimToggle.addEventListener('click', () => {
-    const nowOn = !(localStorage.getItem('prep:vim') === '1');
-    localStorage.setItem('prep:vim', nowOn ? '1' : '0');
-    vimState.textContent = nowOn ? 'on' : 'off';
-    vimToggle.setAttribute('aria-pressed', nowOn ? 'true' : 'false');
-    view.dispatch({effects: vimCompartment.reconfigure(nowOn ? vim() : [])});
-    view.focus();
-  });
 
   skelReset && skelReset.addEventListener('click', () => {
     const fresh = skelReset.dataset.skeleton || '';

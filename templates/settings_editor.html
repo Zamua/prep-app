@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}editor settings · prep{% endblock %}
+{% block page_class %}settings settings-editor{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">Editor preferences</p>
+  <h1 class="display">Pick your <em>keys</em>.</h1>
+  <p class="lede">
+    Which input mode CodeMirror should load by default when you study a
+    code question. The per-card picker on the study page lets you
+    override this for a single card without changing your default.
+  </p>
+</section>
+
+<form method="post" action="{{ request.scope.get('root_path','') }}/settings/editor" class="notify-form" autocomplete="off">
+  <fieldset class="notify-mode">
+    <legend class="visually-hidden">Input mode</legend>
+    {% for value, label, help in [
+      ('vanilla', 'Vanilla',  'Default CodeMirror keybindings.'),
+      ('vim',     'Vim',      'Modal editing with Vim keybindings.'),
+      ('emacs',   'Emacs',    'Emacs-style keybindings.'),
+    ] %}
+    <label class="notify-mode-option {% if current_mode == value %}is-selected{% endif %}">
+      <input type="radio" name="mode" value="{{ value }}" {% if current_mode == value %}checked{% endif %}>
+      <span class="notify-mode-marker" aria-hidden="true"></span>
+      <span class="notify-mode-text">
+        <span class="notify-mode-label">{{ label }}</span>
+        <span class="notify-mode-help">{{ help }}</span>
+      </span>
+    </label>
+    {% endfor %}
+  </fieldset>
+
+  {% if saved %}
+    <p class="notify-status" data-kind="ok">Saved. Open a code card to see it take effect.</p>
+  {% endif %}
+
+  <div class="study-actions">
+    <button type="submit" class="btn btn-primary">Save</button>
+  </div>
+</form>
+
+<script>
+// Visual is-selected sync (matches the notify-settings page).
+document.querySelectorAll('.notify-mode-option input').forEach((r) => {
+  r.addEventListener('change', () => {
+    document.querySelectorAll('.notify-mode-option').forEach((opt) => {
+      opt.classList.toggle('is-selected', opt.querySelector('input').checked);
+    });
+  });
+});
+</script>
+
+{% endblock %}

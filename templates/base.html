@@ -23,7 +23,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="prep{% if env_label %} ({{ env_label }}){% endif %}">
 </head>
-<body class="page-{% block page_class %}default{% endblock %}">
+<body class="page-{% block page_class %}default{% endblock %}"
+      {% if user and user.editor_input_mode %}data-editor-mode="{{ user.editor_input_mode }}"{% endif %}>
   <div class="paper">
     <header class="masthead">
       <a href="{{ request.scope.get('root_path','') }}/" class="masthead-brand">
@@ -41,6 +42,7 @@
             <p class="user-name">{{ user.display_name or user.tailscale_login.split('@')[0] }}</p>
             <p class="user-login">{{ user.tailscale_login }}</p>
             <ul class="user-links">
+              <li><a href="{{ root }}/settings/editor">Editor {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               <li><a href="{{ root }}/notify">Notifications {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
             </ul>
           </div>
