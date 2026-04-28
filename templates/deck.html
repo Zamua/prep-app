@@ -143,10 +143,18 @@
               {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct{% if q.next_due %} <span class="qcard-stats-divider">·</span> next {{ q.next_due[:10] }}{% endif %}
             </span>
             <span class="qcard-actions">
+              {# Manual edit — always available. Pencil icon = "edit by hand". #}
+              <a class="qcard-action" href="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/edit"
+                 aria-label="Edit this card by hand">
+                {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+                <span class="qcard-action-label">edit</span>
+              </a>
               {% if agent_available %}
+                {# AI improve — sparkle icon to mark it as the AI surface,
+                   distinct from the manual edit pencil above. #}
                 <details class="qcard-improve">
-                  <summary class="qcard-action" aria-label="Improve this card">
-                    {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+                  <summary class="qcard-action" aria-label="Improve this card with AI">
+                    {{ icon('sparkle', class_='icon icon-inline') }}
                     <span class="qcard-action-label">improve</span>
                   </summary>
                   <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/improve" method="post" class="qcard-improve-form">

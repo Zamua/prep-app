@@ -621,6 +621,58 @@ def add_question(
         return qid
 
 
+def update_question(
+    user_id: str,
+    qid: int,
+    *,
+    qtype: str,
+    prompt: str,
+    answer,
+    topic: str | None = None,
+    choices: list[str] | None = None,
+    rubric=None,
+    skeleton: str | None = None,
+    language: str | None = None,
+) -> None:
+    """In-place edit of an existing question. Same field shape as
+    add_question. Does NOT touch the cards/reviews tables — SRS state
+    is preserved across edits. Raises ValueError if no row matches
+    (user_id, qid)."""
+    if qtype not in QUESTION_TYPES:
+        raise ValueError(f"unknown type: {qtype}")
+    if isinstance(rubric, list):
+        rubric = "\n".join(f"- {b}" for b in rubric)
+    if isinstance(answer, list):
+        answer = json.dumps(answer)
+    with cursor() as c:
+        cur = c.execute(
+            """UPDATE questions
+                  SET type = ?,
+                      topic = ?,
+                      prompt = ?,
+                      choices = ?,
+                      answer = ?,
+                      rubric = ?,
+                      skeleton = ?,
+                      language = ?
+                WHERE id = ? AND user_id = ?""",
+            (
+                qtype,
+                topic,
+                prompt,
+                json.dumps(choices) if choices else None,
+                answer,
+                rubric,
+                skeleton if (skeleton and qtype == "code") else None,
+                language if qtype == "code" else None,
+                qid,
+                user_id,
+            ),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(f"question {qid} not found for user")
+
+
 def list_questions(user_id: str, deck_id: int) -> list[dict]:
     with cursor() as c:
         rows = c.execute(
