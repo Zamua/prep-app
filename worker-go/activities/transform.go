@@ -104,9 +104,10 @@ func (a *Activities) buildTransformPrompt(in shared.ComputeTransformInput) (stri
 	if err != nil {
 		return "", err
 	}
-	if len(cards) == 0 {
-		return "", fmt.Errorf("deck %d empty or not found for user %s", in.TargetID, in.UserID)
-	}
+	// Empty deck is fine: the user can transform an empty deck into a
+	// populated one (the action is just "claude, generate everything from
+	// scratch per my prompt"). Pass an empty list and let claude return
+	// pure additions. The route already verified the deck row exists.
 	return deckScopePrompt(cards, in.Prompt), nil
 }
 
@@ -148,6 +149,11 @@ Preserve fields the user's request didn't ask to change. Output ONLY the JSON ob
 }
 
 func deckScopePrompt(cards []cardForTransform, userPrompt string) string {
+	// json.MarshalIndent(nil) = "null"; we want "[]" so an empty deck
+	// reads as a clean empty list to claude.
+	if cards == nil {
+		cards = []cardForTransform{}
+	}
 	cardsJSON, _ := json.MarshalIndent(cards, "", "  ")
 	return fmt.Sprintf(`You are applying a deck-wide transformation to an interview-prep flashcard deck, per the user's request.
 

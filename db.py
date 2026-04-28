@@ -532,6 +532,19 @@ def update_deck_context_prompt(user_id: str, name: str, context_prompt: str) -> 
         )
 
 
+def delete_deck(user_id: str, name: str) -> int:
+    """Delete a deck by name and return the count of rows removed (0 or 1).
+    FK CASCADE removes the deck's questions; question CASCADEs remove
+    cards / reviews / study_session_answers. study_sessions on the deck
+    also cascade. So a single DELETE wipes the entire subtree."""
+    with cursor() as c:
+        cur = c.execute(
+            "DELETE FROM decks WHERE user_id = ? AND name = ?",
+            (user_id, name),
+        )
+        return cur.rowcount
+
+
 def list_decks(user_id: str) -> list[dict]:
     with cursor() as c:
         rows = c.execute(

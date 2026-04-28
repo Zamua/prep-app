@@ -986,6 +986,21 @@ async def improve_card(request: Request, qid: int, prompt: str = Form(...),
     return _redirect(request, f"/transform/{result.workflow_id}")
 
 
+@app.post("/deck/{name}/delete")
+def deck_delete(request: Request, name: str, confirm: str = Form(...),
+                 user: dict = Depends(current_user)):
+    """Delete a deck and everything in it (questions/cards/reviews/sessions
+    all cascade). Requires the user to type the deck name into a `confirm`
+    field on the dialog form — guards against accidental clicks."""
+    uid = user["tailscale_login"]
+    if confirm.strip() != name:
+        raise HTTPException(400, "deck name didn't match — delete not performed")
+    if db.find_deck(uid, name) is None:
+        raise HTTPException(404, "deck not found")
+    db.delete_deck(uid, name)
+    return _redirect(request, "/")
+
+
 @app.post("/deck/{name}/transform")
 async def deck_transform(request: Request, name: str, prompt: str = Form(...),
                           user: dict = Depends(current_user)):

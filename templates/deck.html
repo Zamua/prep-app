@@ -163,6 +163,16 @@
   </section>
 {% endif %}
 
+{# Danger zone — kept understated. The button just opens the confirm
+   dialog; real deletion requires typing the deck name. #}
+<section class="danger-zone">
+  <p class="section-eyebrow"><span>Danger zone</span><span class="rule"></span></p>
+  <button type="button" class="btn btn-quiet danger-link" id="open-delete-dialog">
+    {{ icon('trash', class_='icon icon-inline') }}
+    Delete this deck
+  </button>
+</section>
+
 {# Card-preview dialog. Native <dialog> handles Esc + tab focus trapping;
    we wire backdrop-click to close as well. Content is filled per-click
    from the matching qcard's <template>. #}
@@ -173,6 +183,34 @@
     </button>
   </form>
   <div id="card-preview-body" class="card-preview-body"></div>
+</dialog>
+
+{# Delete-deck confirmation dialog. Type-the-name-to-confirm pattern —
+   prevents accidental clicks in a way "Are you sure?" doesn't. #}
+<dialog id="delete-deck-dialog" class="delete-dialog" aria-label="Delete deck confirmation">
+  <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/delete" class="delete-form">
+    <h2 class="delete-headline">Delete <em>{{ deck_name }}</em>?</h2>
+    <p class="delete-warn">
+      This permanently removes <strong>{{ questions|length }}</strong>
+      card{{ '' if questions|length == 1 else 's' }} plus all reviews
+      and SRS state for this deck. Other decks are unaffected.
+    </p>
+    <p class="delete-warn">
+      This <strong>cannot be undone</strong>. Type
+      <code>{{ deck_name }}</code> below to confirm.
+    </p>
+    <label class="form-field">
+      <span class="visually-hidden">Type the deck name to confirm</span>
+      <input type="text" name="confirm" id="delete-confirm-input" autocomplete="off"
+             autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    </label>
+    <div class="delete-actions">
+      <button type="submit" class="btn delete-button" id="delete-submit" disabled>
+        Delete deck
+      </button>
+      <button type="button" class="btn btn-quiet" id="cancel-delete">Cancel</button>
+    </div>
+  </form>
 </dialog>
 
 <script>
@@ -213,6 +251,41 @@
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg) dlg.close();
   });
+})();
+
+// Delete-deck dialog
+(function () {
+  const openBtn = document.getElementById('open-delete-dialog');
+  const dlg = document.getElementById('delete-deck-dialog');
+  const cancelBtn = document.getElementById('cancel-delete');
+  const submitBtn = document.getElementById('delete-submit');
+  const input = document.getElementById('delete-confirm-input');
+  const expected = "{{ deck_name }}";
+  if (!openBtn || !dlg) return;
+
+  openBtn.addEventListener('click', () => {
+    if (input) input.value = '';
+    if (submitBtn) submitBtn.disabled = true;
+    dlg.showModal();
+    if (input) input.focus();
+  });
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      dlg.close();
+    });
+  }
+  // Backdrop click closes (same pattern as preview dialog).
+  dlg.addEventListener('click', (e) => {
+    if (e.target === dlg) dlg.close();
+  });
+  // Enable Delete only when the typed value matches the deck name exactly.
+  if (input && submitBtn) {
+    input.addEventListener('input', () => {
+      submitBtn.disabled = input.value !== expected;
+    });
+  }
 })();
 </script>
 {% endblock %}

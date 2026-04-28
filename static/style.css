@@ -1935,6 +1935,105 @@ textarea:focus-visible {
   * { animation: none !important; transition: none !important; }
 }
 
+/* --- Danger zone (deck deletion) --- */
+
+.danger-zone {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--hairline);
+}
+.danger-zone .section-eyebrow {
+  margin: 0 0 0.6rem;
+  color: var(--ink-mute);
+}
+.danger-link {
+  color: var(--ink-mute);
+  border-color: var(--rule);
+}
+.danger-link:hover,
+.danger-link:focus-visible {
+  color: var(--wrong);
+  border-color: var(--wrong);
+}
+
+/* Delete-confirm dialog. Uses the same .card-preview chrome (centered
+   modal w/ backdrop) but tinted toward the wrong-state palette to make
+   it read as destructive. */
+.delete-dialog {
+  max-width: min(34rem, calc(100vw - 1.6rem));
+  width: min(34rem, 100%);
+  padding: 0;
+  margin: auto;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--wrong) 30%, var(--rule));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  color: var(--ink);
+  overflow: hidden;
+}
+.delete-dialog::backdrop {
+  background: rgba(20, 17, 13, 0.55);
+  backdrop-filter: blur(2px);
+}
+.delete-form {
+  padding: 1.6rem 1.5rem 1.4rem;
+  display: grid;
+  gap: 0.95rem;
+}
+.delete-headline {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 144, "SOFT" 60;
+  font-weight: 380;
+  font-size: 1.7rem;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--ink);
+}
+.delete-headline em {
+  font-style: italic;
+  color: var(--wrong);
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+}
+.delete-warn {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+.delete-warn code {
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--wrong) 8%, var(--warm));
+  border: 1px solid color-mix(in srgb, var(--wrong) 30%, var(--hairline));
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+  font-size: 0.92em;
+  color: var(--wrong);
+}
+.delete-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+.delete-actions > .btn { flex: 1; min-width: 8rem; }
+.delete-button {
+  background: var(--wrong);
+  border-color: var(--wrong);
+  color: var(--paper);
+}
+.delete-button:hover {
+  background: color-mix(in srgb, var(--wrong) 80%, var(--ink));
+  border-color: color-mix(in srgb, var(--wrong) 80%, var(--ink));
+  color: var(--paper);
+}
+.delete-button:disabled {
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--ink-mute);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* --- Card preview dialog --- */
 
 .card-index-hint {
