@@ -3,13 +3,11 @@
 # Quick start (macOS):
 #   brew bundle && make setup && make dev
 #
-# Linux: install python3, python3-venv, go, temporal, bun, goreman by hand
-# (see CONTRIBUTING.md), then `make setup && make dev`.
+# Linux: see CONTRIBUTING.md (curl-install uv, apt-install go, etc.) then
+# `make setup && make dev`.
 
-PYTHON ?= python3
+UV     ?= uv
 VENV   := .venv
-PIP    := $(VENV)/bin/pip
-PY     := $(VENV)/bin/python
 GO     ?= go
 WORKER := worker-go/bin/worker
 GOREMAN ?= goreman
@@ -17,29 +15,25 @@ GOREMAN ?= goreman
 # Dev-bypass user: `make dev` boots with this set so a contributor sees a
 # working app immediately on http://127.0.0.1:8081/ without needing
 # Tailscale Serve installed. For a real auth flow, unset and set up
-# Tailscale (see ARCHITECTURE.md).
+# Tailscale (see CLAUDE.md).
 export PREP_DEFAULT_USER ?= dev@example.com
 
-.PHONY: help setup venv deps build dev run-app run-worker run-temporal test clean wipe-temporal-state
+.PHONY: help setup deps build dev run-app run-worker run-temporal test clean wipe-temporal-state
 
 help:
-	@echo "make setup    — create venv, install Python deps, build Go worker"
+	@echo "make setup    — uv sync (Python + venv + deps) + build Go worker"
 	@echo "make dev      — start temporal + app + worker via goreman (Procfile)"
 	@echo "make build    — Go worker build only"
 	@echo "make test     — placeholder; no test suite yet"
 	@echo "make clean    — kill stray dev processes; preserve data"
 	@echo "make wipe-temporal-state — reset temporal devserver state (data.sqlite untouched)"
 
-setup: venv deps build
+setup: deps build
 
-venv: $(VENV)/bin/activate
-
-$(VENV)/bin/activate:
-	$(PYTHON) -m venv $(VENV)
-	$(PIP) install -q --upgrade pip
-
-deps: venv
-	$(PIP) install -q -r requirements.txt
+deps:
+	@command -v $(UV) >/dev/null 2>&1 || { \
+	  echo "uv not found — \`brew install uv\` (or see https://github.com/astral-sh/uv)"; exit 1; }
+	$(UV) sync --quiet
 
 build: $(WORKER)
 

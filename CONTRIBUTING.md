@@ -8,8 +8,8 @@ repo and have a working local instance running.
 ```bash
 git clone <repo-url> prep-app
 cd prep-app
-brew bundle              # python, go, temporal, bun, goreman
-make setup               # venv + pip install + go build
+brew bundle              # uv, go, temporal, goreman
+make setup               # uv sync (Python + venv + deps) + go build
 make dev                 # starts temporal + uvicorn + worker via Procfile
 ```
 
@@ -22,8 +22,8 @@ don't need Tailscale to develop).
 ## Quick start (Linux)
 
 ```bash
-sudo apt install python3 python3-venv golang-go    # or your distro's equivalent
-curl -fsSL https://bun.sh/install | bash            # bun (only needed if you rebuild cm-bundle)
+curl -LsSf https://astral.sh/uv/install.sh | sh     # uv (handles Python install + deps)
+sudo apt install golang-go                          # or your distro's equivalent
 # temporal: download the latest binary from https://github.com/temporalio/cli/releases
 go install github.com/mattn/goreman@latest          # adds ~/go/bin/goreman
 git clone <repo-url> prep-app
