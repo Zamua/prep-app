@@ -1,8 +1,7 @@
-# Language runtimes managed by mise (https://mise.jdx.dev/).
-#
-# Run `mise install` to materialize these on your dev box. The Brewfile
-# adds the binaries that mise can't easily install (temporal CLI,
-# goreman); mise itself comes from `brew install mise`.
+# Language runtimes + dev-time tools, all managed by mise
+# (https://mise.jdx.dev/). Run `mise install` to materialize them.
+# mise itself comes from `brew install mise` (or the curl installer
+# linked in CONTRIBUTING.md for non-Homebrew users).
 #
 # These get reflected via shims when you `eval "$(mise activate <shell>)"`,
 # or you can prefix commands with `mise exec --` to run inside mise's
@@ -14,3 +13,7 @@ bun 1.1.0
 # mise's `temporal` shortcut maps to the temporal SERVER package; we want the
 # CLI (which embeds a server for `start-dev`). Spell out the aqua plugin.
 aqua:temporalio/cli 1.6.2
+# Procfile runner used by `make dev`. Pinned via aqua so a contributor's
+# `mise install` is the single command that gets the entire toolchain —
+# no extra `go install ... @latest` step.
+aqua:mattn/goreman 0.3.17

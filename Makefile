@@ -19,12 +19,12 @@ WORKER   := worker-go/bin/worker
 # Tailscale (see CLAUDE.md).
 export PREP_DEFAULT_USER ?= dev@example.com
 
-.PHONY: help setup tools deps build install-goreman dev run-app run-worker run-temporal test clean wipe-temporal-state \
+.PHONY: help setup tools deps build dev run-app run-worker run-temporal test clean wipe-temporal-state \
         docker-up docker-down docker-build docker-logs
 
 help:
 	@echo "Local dev (no docker):"
-	@echo "  make setup    — mise install + uv sync + build worker + install goreman"
+	@echo "  make setup    — mise install (toolchain incl. goreman) + uv sync + build worker"
 	@echo "  make dev      — start temporal + app + worker via goreman (Procfile)"
 	@echo "  make build    — Go worker build only"
 	@echo "  make clean    — kill stray dev processes; preserve data"
@@ -35,7 +35,7 @@ help:
 	@echo "  make docker-down    — stop the stack (data volumes preserved)"
 	@echo "  make docker-logs    — tail compose logs"
 
-setup: tools deps build install-goreman
+setup: tools deps build
 
 tools:
 	@command -v $(MISE) >/dev/null 2>&1 || { \
@@ -50,13 +50,7 @@ build: $(WORKER)
 $(WORKER): $(shell find worker-go -name '*.go' 2>/dev/null) worker-go/go.mod tools
 	cd worker-go && $(RUN) go build -o bin/worker .
 
-install-goreman: tools
-	@$(RUN) sh -c 'command -v goreman >/dev/null 2>&1' || { \
-	  echo "Installing goreman via mise's go..."; \
-	  $(RUN) go install github.com/mattn/goreman@latest; \
-	}
-
-dev: tools install-goreman
+dev: tools
 	@mkdir -p temporal-data
 	$(RUN) goreman start
 
