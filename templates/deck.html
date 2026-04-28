@@ -89,7 +89,10 @@
             <span class="qcard-tags">
               <span class="tag tag-type tag-{{ q.type }}">{{ q.type }}</span>
               {% if q.topic %}<span class="tag tag-topic" title="{{ q.topic }}">{{ q.topic }}</span>{% endif %}
-              {% if q.suspended %}<span class="tag tag-suspended">suspended</span>{% endif %}
+              {# Always rendered, CSS hides on non-suspended cards.
+                 Lets the JS suspend/unsuspend toggle update the chip
+                 inline by just flipping the qcard's .is-suspended. #}
+              <span class="tag tag-suspended">suspended</span>
             </span>
           </header>
           <p class="qcard-prompt">{{ q.prompt[:220] }}{% if q.prompt|length > 220 %}…{% endif %}</p>
@@ -167,21 +170,22 @@
                   </form>
                 </details>
               {% endif %}
-              {% if q.suspended %}
-                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post" class="qcard-action-form">
-                  <button class="qcard-action" type="submit" aria-label="Unsuspend this card">
-                    {{ icon('play', class_='icon icon-inline') }}
-                    <span class="qcard-action-label">unsuspend</span>
-                  </button>
-                </form>
-              {% else %}
-                <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post" class="qcard-action-form">
-                  <button class="qcard-action" type="submit" aria-label="Suspend this card">
-                    {{ icon('pause', class_='icon icon-inline') }}
-                    <span class="qcard-action-label">suspend</span>
-                  </button>
-                </form>
-              {% endif %}
+              {# Both forms always rendered; CSS shows one based on the
+                 qcard's .is-suspended class. JS below toggles the class
+                 after a successful fetch POST so the user gets an
+                 inline state change without a full-page reload. #}
+              <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post" class="qcard-action-form qcard-action-form--suspend">
+                <button class="qcard-action" type="submit" aria-label="Suspend this card">
+                  {{ icon('pause', class_='icon icon-inline') }}
+                  <span class="qcard-action-label">suspend</span>
+                </button>
+              </form>
+              <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post" class="qcard-action-form qcard-action-form--unsuspend">
+                <button class="qcard-action" type="submit" aria-label="Unsuspend this card">
+                  {{ icon('play', class_='icon icon-inline') }}
+                  <span class="qcard-action-label">unsuspend</span>
+                </button>
+              </form>
             </span>
           </footer>
         </li>
@@ -282,6 +286,47 @@
   // a click on the dialog's padding area registers as target=dlg.
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg) dlg.close();
+  });
+})();
+
+// Inline suspend / unsuspend — fetch POST + class toggle, no full-page
+// reload (which would lose scroll position on long deck pages).
+(function () {
+  document.addEventListener('submit', async (e) => {
+    const form = e.target;
+    if (!(form.classList.contains('qcard-action-form--suspend') ||
+          form.classList.contains('qcard-action-form--unsuspend'))) return;
+    const qcard = form.closest('.qcard');
+    if (!qcard) return;
+    e.preventDefault();
+
+    const willSuspend = form.classList.contains('qcard-action-form--suspend');
+    // Optimistic toggle so the UI feels instant. If the POST fails we
+    // revert and fall back to a real submit.
+    qcard.classList.toggle('is-suspended', willSuspend);
+
+    try {
+      const r = await fetch(form.action, {
+        method: 'POST',
+        headers: { 'accept': 'text/html' },
+        // Tell the server (or any caching middleware) we're an in-page
+        // request, not a navigation. Mostly informational.
+        redirect: 'manual',
+      });
+      // Any 2xx or 3xx (the redirect we never follow) means the write
+      // landed.
+      if (!r.ok && r.type !== 'opaqueredirect' && r.status !== 0) {
+        throw new Error('non-success: ' + r.status);
+      }
+      // Visually punch the button so it doesn't feel ignored — also
+      // unfocus to drop the iOS active state.
+      form.querySelector('button')?.blur();
+    } catch (err) {
+      // Revert optimistic toggle, fall back to real submit so the user
+      // gets the canonical full-page error path.
+      qcard.classList.toggle('is-suspended', !willSuspend);
+      form.submit();
+    }
   });
 })();
 

@@ -922,6 +922,15 @@ a { color: inherit; }
   margin: 0;
 }
 
+/* Both suspend AND unsuspend forms are always rendered; this rule
+   shows the one matching the qcard's current state. JS swaps
+   .is-suspended after a successful fetch so the toggle is inline,
+   no full-page reload. */
+.qcard:not(.is-suspended) .qcard-action-form--unsuspend { display: none; }
+.qcard.is-suspended .qcard-action-form--suspend { display: none; }
+/* Same pattern for the "suspended" chip in the qcard header. */
+.qcard:not(.is-suspended) .tag-suspended { display: none; }
+
 /* Phone widths: drop the action-button labels so the qcard-stats row
    gets its width back. aria-labels still announce the action to screen
    readers. The .icon stays the same size. Buttons become squarer pills
