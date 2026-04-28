@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}{% if scope == 'card' %}improving card{% else %}transforming deck{% endif %} · prep{% endblock %}
+{% block page_class %}transform transform-{{ scope }}{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  {% if deck_name %}
+    <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+  {% else %}
+    <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
+  {% endif %}
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">{% if scope == 'card' %}Card · improve{% else %}Deck · transform{% endif %}</p>
+  <h1 class="display" id="display-headline">
+    {% if progress.status == 'computing' or progress.status == 'awaiting_apply' or progress.status == 'applying' %}
+      <em>Thinking</em><span class="ellipsis"></span>
+    {% elif progress.status == 'done' %}
+      Done.
+    {% elif progress.status == 'rejected' %}
+      Cancelled.
+    {% elif progress.status == 'failed' %}
+      Failed.
+    {% else %}
+      <em>Working</em><span class="ellipsis"></span>
+    {% endif %}
+  </h1>
+</section>
+
+<div class="transform-panel">
+  <p class="transform-status" id="t-status" data-status="{{ progress.status or '' }}">
+    {{ progress.status or 'starting…' }}
+  </p>
+
+  {% if progress.plan %}
+    {# Go's json marshaller emits null for unset slices, so default to []
+       in jinja before any |length / iteration. #}
+    {% set plan = progress.plan %}
+    {% set mods = plan.modifications or [] %}
+    {% set adds = plan.additions or [] %}
+    {% set dels = plan.deletions or [] %}
+    <details class="transform-plan" open>
+      <summary>The plan</summary>
+      {% if plan.notes %}
+        <p class="transform-notes"><em>{{ plan.notes }}</em></p>
+      {% endif %}
+      <ul class="transform-counts">
+        <li><strong>{{ mods|length }}</strong> modification{{ '' if mods|length == 1 else 's' }}</li>
+        <li><strong>{{ adds|length }}</strong> addition{{ '' if adds|length == 1 else 's' }}</li>
+        <li><strong>{{ dels|length }}</strong> deletion{{ '' if dels|length == 1 else 's' }}</li>
+      </ul>
+
+      {% if mods %}
+        <p class="section-eyebrow"><span>Sample modifications</span><span class="rule"></span></p>
+        <ul class="transform-list">
+          {% for m in mods[:3] %}
+            <li class="transform-list-item">
+              <span class="transform-list-id">№ {{ m.question_id }}</span>
+              <span class="transform-list-prompt">{{ m.prompt[:160] }}{% if m.prompt|length > 160 %}…{% endif %}</span>
+            </li>
+          {% endfor %}
+          {% if mods|length > 3 %}<li class="transform-list-more">+ {{ mods|length - 3 }} more</li>{% endif %}
+        </ul>
+      {% endif %}
+
+      {% if adds %}
+        <p class="section-eyebrow"><span>Sample additions</span><span class="rule"></span></p>
+        <ul class="transform-list">
+          {% for a in adds[:3] %}
+            <li class="transform-list-item">
+              <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
+              <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
+            </li>
+          {% endfor %}
+          {% if adds|length > 3 %}<li class="transform-list-more">+ {{ adds|length - 3 }} more</li>{% endif %}
+        </ul>
+      {% endif %}
+
+      {% if dels %}
+        <p class="section-eyebrow"><span>Deletions</span><span class="rule"></span></p>
+        <ul class="transform-list">
+          {% for qid in dels[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+          {% if dels|length > 6 %}<li class="transform-list-more">+ {{ dels|length - 6 }} more</li>{% endif %}
+        </ul>
+      {% endif %}
+    </details>
+  {% endif %}
+
+  {% if progress.result %}
+    {% set rmods = progress.result.modified_ids or [] %}
+    {% set radds = progress.result.added_ids or [] %}
+    {% set rdels = progress.result.deleted_ids or [] %}
+    <p class="transform-applied">
+      Applied — modified {{ rmods|length }},
+      added {{ radds|length }},
+      deleted {{ rdels|length }}.
+    </p>
+  {% endif %}
+
+  {# Action row depends on the workflow's status. #}
+  <div class="study-actions transform-actions">
+    {% if scope == 'deck' and progress.status == 'awaiting_apply' %}
+      <form method="post" action="{{ request.scope.get('root_path','') }}/transform/{{ wid }}/apply" style="flex:1;min-width:10rem">
+        <button class="btn btn-primary" type="submit" style="width:100%">Apply changes</button>
+      </form>
+      <form method="post" action="{{ request.scope.get('root_path','') }}/transform/{{ wid }}/reject" style="flex:1;min-width:10rem">
+        <button class="btn btn-quiet" type="submit" style="width:100%">Reject</button>
+      </form>
+    {% elif progress.status == 'done' %}
+      {% if deck_name %}
+        <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+      {% else %}
+        <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/">Back home</a>
+      {% endif %}
+    {% elif progress.status in ('failed', 'rejected') %}
+      {% if deck_name %}
+        <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+      {% else %}
+        <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/">Back home</a>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% if progress.error %}
+    <p class="form-error" style="margin-top:1rem">{{ progress.error }}</p>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  // While the workflow is still working, poll for updates and reload on
+  // a state transition. Browser-side approach keeps this simple — no
+  // websockets needed, and the workflow tick is slow (claude shell-out)
+  // so a 2s poll is fine.
+  const root = "{{ request.scope.get('root_path','') }}";
+  const wid = "{{ wid }}";
+  const initialStatus = "{{ progress.status or '' }}";
+  const TERMINAL = ['done', 'rejected', 'failed', 'COMPLETED', 'FAILED', 'TERMINATED', 'CANCELED'];
+  const STAGE = ['computing', 'awaiting_apply', 'applying'];
+  if (TERMINAL.includes(initialStatus) || !STAGE.includes(initialStatus)) {
+    if (initialStatus === '' || initialStatus === 'starting…') {
+      // first hit — workflow just kicked off, nothing yet — keep polling
+    } else {
+      return;  // already terminal, no need to poll
+    }
+  }
+  let lastStatus = initialStatus;
+  const tick = async () => {
+    try {
+      const r = await fetch(root + "/transform/" + wid + "/status");
+      if (!r.ok) return;
+      const j = await r.json();
+      const s = (j.progress && j.progress.status) || (j.desc && j.desc.status) || '';
+      if (s !== lastStatus) {
+        // Reload to render the new state — keeps the rendering server-side
+        // for consistency with the rest of the app.
+        location.reload();
+        return;
+      }
+      lastStatus = s;
+    } catch (e) { /* swallow; we'll try next tick */ }
+  };
+  const handle = setInterval(tick, 2000);
+  // Stop polling once the page is hidden (user switched apps); resume on visible.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) clearInterval(handle);
+  });
+})();
+</script>
+
+{% endblock %}

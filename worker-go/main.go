@@ -62,6 +62,9 @@ func main() {
 	w.RegisterWorkflowWithOptions(workflows.GradeAnswer, workflow.RegisterOptions{
 		Name: shared.WorkflowGrade,
 	})
+	w.RegisterWorkflowWithOptions(workflows.Transform, workflow.RegisterOptions{
+		Name: shared.WorkflowTransform,
+	})
 
 	a := &activities.Activities{Cfg: cfg}
 	w.RegisterActivity(a)

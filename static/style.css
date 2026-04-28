@@ -1892,6 +1892,176 @@ textarea:focus-visible {
   * { animation: none !important; transition: none !important; }
 }
 
+/* --- Transform (card-level improve + deck-level prompt) --- */
+
+.transform-section {
+  margin-top: 2.5rem;
+}
+.transform-section .section-eyebrow { margin-top: 0; margin-bottom: 0.9rem; }
+.transform-form {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.95rem 1.1rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--warm);
+}
+.transform-form textarea {
+  font-family: var(--serif);
+  font-size: 1rem;
+  min-height: 4.5rem;
+  resize: vertical;
+}
+.transform-form .btn { justify-self: end; min-width: 8rem; }
+.transform-hint {
+  margin-top: 0.6rem;
+  font-style: italic;
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+}
+
+/* Per-card improve form (collapsed under "improve" summary) */
+.qcard-improve {
+  display: inline-block;
+}
+.qcard-improve > summary.link-btn {
+  /* Inherits .link-btn but adds list-style none so the disclosure
+     triangle doesn't render. */
+  list-style: none;
+}
+.qcard-improve > summary::-webkit-details-marker { display: none; }
+.qcard-improve-form {
+  position: relative;
+  margin: 0.7rem 0 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: var(--warm);
+  display: grid;
+  gap: 0.5rem;
+  /* Snap below the qcard footer when expanded — it's wider than the
+     summary cell. We pull it left with negative margins so it aligns
+     with the qcard body, not the inline summary. */
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 16rem;
+}
+.qcard-improve-form textarea {
+  font-family: var(--serif);
+  font-size: 0.92rem;
+  min-height: 3rem;
+}
+.qcard-improve-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.btn-tiny {
+  padding: 0.4rem 0.9rem;
+  min-height: 2.2rem;
+  font-size: 0.88rem;
+}
+
+/* Transform polling/preview page */
+.transform-panel {
+  margin-top: 1.2rem;
+  padding: 1.4rem 1.4rem 1.2rem;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.transform-status {
+  margin: 0 0 1rem;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 1rem;
+}
+.transform-status[data-status="done"]      { color: var(--right); }
+.transform-status[data-status="failed"]    { color: var(--wrong); }
+.transform-status[data-status="rejected"]  { color: var(--ink-mute); }
+.transform-plan {
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.transform-plan summary {
+  cursor: pointer;
+  font-style: italic;
+  color: var(--ink-soft);
+  list-style: none;
+  font-size: 0.92rem;
+}
+.transform-plan summary::-webkit-details-marker { display: none; }
+.transform-notes {
+  margin: 0.7rem 0;
+  color: var(--ink-soft);
+  font-size: 1rem;
+}
+.transform-counts {
+  list-style: none;
+  margin: 0.7rem 0 0.4rem;
+  padding: 0;
+  display: flex;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+  color: var(--ink-mute);
+  font-size: 0.95rem;
+}
+.transform-counts strong {
+  color: var(--ink);
+  font-style: normal;
+  font-feature-settings: "lnum" on;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1.05rem;
+}
+.transform-list {
+  list-style: none;
+  margin: 0.5rem 0 0.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.transform-list-item {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+.transform-list-id {
+  font-style: italic;
+  font-feature-settings: "onum" on;
+  color: var(--ink-mute);
+  flex-shrink: 0;
+}
+.transform-list-prompt {
+  font-size: 0.92rem;
+}
+.transform-list-more {
+  color: var(--ink-mute);
+  font-style: italic;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+.transform-applied {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.9rem;
+  background: color-mix(in srgb, var(--right) 8%, var(--paper));
+  border-left: 3px solid var(--right);
+  border-radius: var(--radius);
+  font-style: italic;
+  color: var(--right);
+}
+.transform-actions { margin-top: 1.2rem; }
+.ellipsis::after {
+  content: "…";
+  display: inline-block;
+  animation: ellipsis-blink 1.4s infinite;
+}
+@keyframes ellipsis-blink { 50% { opacity: 0.3; } }
+
 /* --- New-deck tile + form --- */
 
 .deck-card-new {

@@ -922,6 +922,168 @@ def unsuspend(request: Request, qid: int, user: dict = Depends(current_user)):
     return _redirect(request, f"/deck/{name}")
 
 
+# ---- Transform (card-level improve + deck-level prompt) -------------------
+#
+# Replaces the count-based "+ N cards" generate flow with a free-text prompt
+# claude interprets. Two scopes:
+#   • POST /question/{qid}/improve — auto-applies the rewrite
+#   • POST /deck/{name}/transform  — returns a Plan, redirects to preview;
+#                                    user signals apply or reject
+
+def _parse_transform_wid(wid: str) -> tuple[str, int] | None:
+    """transform workflow IDs are `transform-<scope>-<target_id>-<rand>`.
+    Returns (scope, target_id) or None if malformed. scope ∈ {card, deck}."""
+    if not wid.startswith("transform-"):
+        return None
+    parts = wid[len("transform-"):].split("-")
+    if len(parts) < 3:
+        return None
+    scope = parts[0]
+    if scope not in ("card", "deck"):
+        return None
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        return None
+    return scope, target_id
+
+
+def _require_owns_transform(user: dict, wid: str) -> tuple[str, int]:
+    parsed = _parse_transform_wid(wid)
+    if not parsed:
+        raise HTTPException(400, "malformed workflow id")
+    scope, target_id = parsed
+    uid = user["tailscale_login"]
+    if scope == "card":
+        if db.get_question(uid, target_id) is None:
+            raise HTTPException(404, "transform not found")
+    else:
+        with db.cursor() as c:
+            row = c.execute(
+                "SELECT name FROM decks WHERE id = ? AND user_id = ?",
+                (target_id, uid),
+            ).fetchone()
+        if not row:
+            raise HTTPException(404, "transform not found")
+    return scope, target_id
+
+
+@app.post("/question/{qid}/improve")
+async def improve_card(request: Request, qid: int, prompt: str = Form(...),
+                        user: dict = Depends(current_user)):
+    """Per-card free-text rewrite. Auto-applies on completion."""
+    uid = user["tailscale_login"]
+    if db.get_question(uid, qid) is None:
+        raise HTTPException(404, "question not found")
+    if not prompt.strip():
+        raise HTTPException(400, "empty prompt")
+    try:
+        result = await temporal_client.start_transform(
+            user_id=uid, scope="card", target_id=qid, prompt=prompt.strip(),
+        )
+    except Exception as e:
+        raise HTTPException(500, f"failed to start transform: {e}")
+    return _redirect(request, f"/transform/{result.workflow_id}")
+
+
+@app.post("/deck/{name}/transform")
+async def deck_transform(request: Request, name: str, prompt: str = Form(...),
+                          user: dict = Depends(current_user)):
+    """Deck-level free-text transform — replaces the old generate-N flow.
+    Returns a Plan and waits on apply/reject signal before writing."""
+    uid = user["tailscale_login"]
+    deck_id = db.get_or_create_deck(uid, name)  # materialize if first time
+    if not prompt.strip():
+        raise HTTPException(400, "empty prompt")
+    try:
+        result = await temporal_client.start_transform(
+            user_id=uid, scope="deck", target_id=deck_id, prompt=prompt.strip(),
+        )
+    except Exception as e:
+        raise HTTPException(500, f"failed to start transform: {e}")
+    return _redirect(request, f"/transform/{result.workflow_id}")
+
+
+@app.get("/transform/{wid}", response_class=HTMLResponse)
+async def transform_view(request: Request, wid: str,
+                          user: dict = Depends(current_user)):
+    scope, target_id = _require_owns_transform(user, wid)
+    progress = await temporal_client.get_transform_progress(wid)
+    desc = await temporal_client.describe_workflow(wid)
+    status = (progress or {}).get("status") or (desc or {}).get("status") or "unknown"
+
+    # On terminal completion the workflow's queryable handler is gone —
+    # fall back to the awaited result. Combine into one shape the template
+    # can render uniformly.
+    terminal = status in {"done", "failed", "rejected", "COMPLETED", "FAILED", "TERMINATED", "CANCELED"}
+    if terminal and progress is None:
+        progress = {"status": "done", "result": await temporal_client.get_transform_result(wid)}
+
+    deck_name = ""
+    if scope == "deck":
+        with db.cursor() as c:
+            row = c.execute(
+                "SELECT name FROM decks WHERE id = ? AND user_id = ?",
+                (target_id, user["tailscale_login"]),
+            ).fetchone()
+        if row:
+            deck_name = row["name"]
+    else:
+        # card scope — find the deck name via the question for the back link
+        q = db.get_question(user["tailscale_login"], target_id)
+        if q:
+            with db.cursor() as c:
+                row = c.execute(
+                    "SELECT name FROM decks WHERE id = ? AND user_id = ?",
+                    (q["deck_id"], user["tailscale_login"]),
+                ).fetchone()
+            if row:
+                deck_name = row["name"]
+
+    return templates.TemplateResponse(
+        "transform.html",
+        {
+            "request": request,
+            "user": user,
+            "wid": wid,
+            "scope": scope,
+            "target_id": target_id,
+            "deck_name": deck_name,
+            "progress": progress or {},
+            "desc": desc or {},
+            "status": status,
+        },
+    )
+
+
+@app.get("/transform/{wid}/status")
+async def transform_status(wid: str, user: dict = Depends(current_user)):
+    _require_owns_transform(user, wid)
+    progress = await temporal_client.get_transform_progress(wid)
+    desc = await temporal_client.describe_workflow(wid)
+    return JSONResponse({"progress": progress, "desc": desc})
+
+
+@app.post("/transform/{wid}/apply")
+async def transform_apply(request: Request, wid: str, user: dict = Depends(current_user)):
+    _require_owns_transform(user, wid)
+    try:
+        await temporal_client.signal_apply_transform(wid)
+    except Exception as e:
+        raise HTTPException(500, f"signal failed: {e}")
+    return _redirect(request, f"/transform/{wid}")
+
+
+@app.post("/transform/{wid}/reject")
+async def transform_reject(request: Request, wid: str, user: dict = Depends(current_user)):
+    _require_owns_transform(user, wid)
+    try:
+        await temporal_client.signal_reject_transform(wid)
+    except Exception as e:
+        raise HTTPException(500, f"signal failed: {e}")
+    return _redirect(request, f"/transform/{wid}")
+
+
 # ---- PWA install (manifest + service worker) ------------------------------
 #
 # These two routes are intentionally NOT gated by current_user: the manifest

@@ -4,9 +4,15 @@
 package shared
 
 const (
-	TaskQueue        = "prep-generation"
-	WorkflowGenerate = "GenerateCardsWorkflow"
-	WorkflowGrade    = "GradeAnswerWorkflow"
+	TaskQueue         = "prep-generation"
+	WorkflowGenerate  = "GenerateCardsWorkflow"
+	WorkflowGrade     = "GradeAnswerWorkflow"
+	WorkflowTransform = "TransformWorkflow"
+
+	// Signals + queries on TransformWorkflow.
+	SignalApplyTransform  = "applyTransform"
+	SignalRejectTransform = "rejectTransform"
+	QueryTransformProgress = "getTransformProgress"
 )
 
 // GenerateCardsInput is the workflow's input — what the FastAPI app
@@ -173,4 +179,77 @@ type GradeProgress struct {
 	StartedAt  string             `json:"started_at"`
 	FinishedAt string             `json:"finished_at,omitempty"`
 	Result     *GradeAnswerResult `json:"result,omitempty"` // populated when status=done
+}
+
+// ---- Transform workflow types -------------------------------------------
+//
+// One workflow that handles two scopes:
+//   • scope="card": improve a single question. Claude rewrites it and the
+//     workflow auto-applies (no preview — blast radius is one row).
+//   • scope="deck": apply a deck-wide transformation per the user's
+//     free-text prompt. Workflow returns a Plan (modifications,
+//     additions, deletions) and waits on a SignalApplyTransform or
+//     SignalRejectTransform from the user before writing.
+
+type TransformInput struct {
+	UserID   string `json:"user_id"`
+	Scope    string `json:"scope"`     // "card" | "deck"
+	TargetID int    `json:"target_id"` // question_id (card) | deck_id (deck)
+	Prompt   string `json:"prompt"`    // the user's free-text instruction
+}
+
+// CardModification is a full replacement of a card's user-visible fields.
+// Claude returns the new state, not a diff, so the merge logic is simple.
+type CardModification struct {
+	QuestionID int    `json:"question_id"`
+	Type       string `json:"type"`              // code|mcq|multi|short
+	Topic      string `json:"topic,omitempty"`
+	Prompt     string `json:"prompt"`
+	Choices    []string `json:"choices,omitempty"`
+	Answer     string `json:"answer"`
+	Rubric     string `json:"rubric,omitempty"`
+	Skeleton   string `json:"skeleton,omitempty"`
+	Language   string `json:"language,omitempty"`
+}
+
+type TransformPlan struct {
+	Scope         string             `json:"scope"`
+	Modifications []CardModification `json:"modifications,omitempty"`
+	Additions     []Card             `json:"additions,omitempty"`
+	Deletions     []int              `json:"deletions,omitempty"`
+	// Notes is a short human-readable summary of what claude decided to do
+	// (e.g., "added skeletons to 5 cards"). Surfaced on the preview page.
+	Notes string `json:"notes,omitempty"`
+}
+
+type TransformResult struct {
+	ModifiedIDs []int `json:"modified_ids"`
+	AddedIDs    []int `json:"added_ids"`
+	DeletedIDs  []int `json:"deleted_ids"`
+}
+
+type TransformProgress struct {
+	Scope      string           `json:"scope"`
+	Status     string           `json:"status"` // "computing" | "awaiting_apply" | "applying" | "done" | "rejected" | "failed"
+	StartedAt  string           `json:"started_at"`
+	FinishedAt string           `json:"finished_at,omitempty"`
+	Plan       *TransformPlan   `json:"plan,omitempty"`
+	Result     *TransformResult `json:"result,omitempty"`
+	Error      string           `json:"error,omitempty"`
+}
+
+// ComputeTransformInput is what the ComputeTransform activity takes.
+type ComputeTransformInput struct {
+	UserID   string `json:"user_id"`
+	Scope    string `json:"scope"`
+	TargetID int    `json:"target_id"`
+	Prompt   string `json:"prompt"`
+}
+
+// ApplyTransformInput is the apply-step activity input. The plan is
+// passed in directly so the activity is stateless re: workflow state.
+type ApplyTransformInput struct {
+	UserID string        `json:"user_id"`
+	DeckID int           `json:"deck_id"` // needed for additions; 0 for card-scope
+	Plan   TransformPlan `json:"plan"`
 }

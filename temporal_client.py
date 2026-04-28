@@ -22,6 +22,7 @@ TEMPORAL_NAMESPACE = os.environ.get("TEMPORAL_NAMESPACE", "prep")
 TASK_QUEUE = "prep-generation"
 WORKFLOW_NAME = "GenerateCardsWorkflow"
 GRADE_WORKFLOW_NAME = "GradeAnswerWorkflow"
+TRANSFORM_WORKFLOW_NAME = "TransformWorkflow"
 
 _client: Client | None = None
 
@@ -138,3 +139,62 @@ async def get_grade_result(workflow_id: str) -> dict[str, Any] | None:
         return await handle.result()
     except Exception:
         return None
+
+
+# ---- Transform workflow helpers ----
+
+
+async def start_transform(*, user_id: str, scope: str, target_id: int, prompt: str) -> StartResult:
+    """Start a TransformWorkflow run. scope is 'card' (target_id = qid)
+    or 'deck' (target_id = deck_id). Card scope auto-applies; deck scope
+    waits for an apply/reject signal before writing."""
+    if scope not in ("card", "deck"):
+        raise ValueError(f"unknown transform scope {scope!r}")
+    client = await _get_client()
+    wid = f"transform-{scope}-{target_id}-{uuid.uuid4().hex[:10]}"
+    handle = await client.start_workflow(
+        TRANSFORM_WORKFLOW_NAME,
+        {
+            "user_id": user_id,
+            "scope": scope,
+            "target_id": target_id,
+            "prompt": prompt,
+        },
+        id=wid,
+        task_queue=TASK_QUEUE,
+    )
+    return StartResult(workflow_id=handle.id, run_id=handle.first_execution_run_id or "")
+
+
+async def get_transform_progress(workflow_id: str) -> dict[str, Any] | None:
+    """Query the transform workflow's getTransformProgress handler.
+    Returns the latest TransformProgress dict; None if the workflow has
+    finished and there's no live handler — caller can fall back to
+    `get_transform_result`."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    try:
+        return await handle.query("getTransformProgress")
+    except Exception:
+        return None
+
+
+async def get_transform_result(workflow_id: str) -> dict[str, Any] | None:
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    try:
+        return await handle.result()
+    except Exception:
+        return None
+
+
+async def signal_apply_transform(workflow_id: str) -> None:
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("applyTransform")
+
+
+async def signal_reject_transform(workflow_id: str) -> None:
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("rejectTransform")
