@@ -47,27 +47,34 @@ if [[ -e "$DEST" && "$FORCE" != "1" ]]; then
   exit 1
 fi
 
-# Build into a temp dir, then atomically move into place. Avoids leaving
-# a half-built artifact behind on failure.
-STAGE="$(mktemp -d "$ARTIFACTS_ROOT/.build-XXXXXX")"
-trap 'rm -rf "$STAGE"' EXIT
+# Build directly at $DEST. Earlier versions used a STAGE temp dir + final
+# `mv`, but uv's .venv hardcodes the python interpreter path into binary
+# shebangs (/.../venv/bin/uvicorn → /.../.build-XXXXXX/.venv/bin/python),
+# so the venv is NOT relocatable — moving it breaks every entry point.
+# Building in place avoids the relocation step entirely. On failure, the
+# half-built dir gets cleaned up by the EXIT trap unless we succeeded.
+
+if [[ -e "$DEST" ]]; then rm -rf "$DEST"; fi
+mkdir -p "$DEST"
+SUCCESS=0
+trap '[[ $SUCCESS == 1 ]] || rm -rf "$DEST"' EXIT
 
 echo "==> building $ARTIFACT_ID (sha=$SHORT, ref=$REF) → $DEST"
 
 echo "==> [1/4] git archive $REF"
-git archive --format=tar "$SHA" | tar -x -C "$STAGE"
+git archive --format=tar "$SHA" | tar -x -C "$DEST"
 
 echo "==> [2/4] uv sync (python deps + .venv)"
-( cd "$STAGE" && mise exec -- uv sync --frozen --quiet )
+( cd "$DEST" && mise exec -- uv sync --frozen --quiet )
 
 echo "==> [3/4] go build (worker)"
-( cd "$STAGE/worker-go" && mise exec -- go build -o bin/worker . )
+( cd "$DEST/worker-go" && mise exec -- go build -o bin/worker . )
 
 echo "==> [4/4] bun build (cm-bundle.js)"
-( cd "$STAGE/static/cm" && mise exec -- bun install --silent && mise exec -- bun run build )
+( cd "$DEST/static/cm" && mise exec -- bun install --silent && mise exec -- bun run build )
 
 # Manifest for traceability — promote.sh and humans alike.
-cat > "$STAGE/MANIFEST.json" <<EOF
+cat > "$DEST/MANIFEST.json" <<EOF
 {
   "artifact_id": "$ARTIFACT_ID",
   "sha": "$SHA",
@@ -77,9 +84,7 @@ cat > "$STAGE/MANIFEST.json" <<EOF
 }
 EOF
 
-# Atomically move the staged dir to its final name.
-if [[ -e "$DEST" ]]; then rm -rf "$DEST"; fi
-mv "$STAGE" "$DEST"
+SUCCESS=1
 trap - EXIT
 
 echo "==> done: $DEST"

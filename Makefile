@@ -98,7 +98,7 @@ artifact:
 
 promote:
 	@[ -n "$(ENV)" ] && [ -n "$(REF)" ] || { echo "usage: make promote ENV=<staging|prod> REF=<artifact-id>"; exit 1; }
-	ENV=$(ENV) REF=$(REF) scripts/promote.sh
+	scripts/promote.sh $(ENV) $(REF)
 
 install-staging:
 	scripts/install-launchd.sh staging

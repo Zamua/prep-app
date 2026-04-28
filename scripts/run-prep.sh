@@ -30,13 +30,19 @@ set +a
 
 cd "$ACTIVE"
 
-# goreman is installed by `make setup` into $GOPATH/bin (or $HOME/go/bin
-# by default). Try both, plus mise, before giving up.
-if command -v goreman >/dev/null 2>&1; then
-  exec goreman -f Procfile.deployed start
+# mise activation: the artifact ships a .tool-versions file declaring
+# pinned python+go+bun (matching the versions used to build it). We need
+# those tools on PATH at runtime — the Procfile invokes `.venv/bin/uvicorn`
+# which depends on the matching python being resolvable, and goreman
+# itself was installed into mise's go bin. `mise exec --` puts everything
+# in scope for the exec'd command.
+MISE_BIN="$(command -v mise || echo /opt/homebrew/bin/mise)"
+if [[ ! -x "$MISE_BIN" ]]; then
+  echo "mise not found at $MISE_BIN" >&2
+  exit 1
 fi
-for c in "$HOME/go/bin/goreman" "/opt/homebrew/bin/goreman"; do
-  if [[ -x "$c" ]]; then exec "$c" -f Procfile.deployed start; fi
-done
-echo "goreman not found in PATH or known fallback locations" >&2
-exit 1
+# `-set-ports=false` keeps goreman from clobbering our $PORT (its
+# default behavior is to auto-assign 5000+offset per child, which fights
+# the env-file value). `-exit-on-error` makes the wrapper bubble up
+# child failures so launchd's KeepAlive can restart cleanly.
+exec "$MISE_BIN" exec -- goreman -f Procfile.deployed -set-ports=false -exit-on-error start
