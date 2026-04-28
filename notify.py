@@ -33,14 +33,20 @@ from pywebpush import WebPushException, webpush
 import db
 
 
+import os as _os
+
+# Key paths can be overridden via env so the artifact-based deploy can
+# keep VAPID keys in a persistent data dir outside the immutable artifact
+# (e.g. ~/Library/prep/data/<env>/vapid-*). Public-key + subscriptions
+# are tied to the keypair, so persisting them across deploys avoids
+# invalidating every push subscription on each promote.
 _HERE = Path(__file__).parent
-_KEYS_PATH = _HERE / "vapid-keys.json"
-_KEY_PEM_PATH = _HERE / "vapid-private.pem"
+_KEYS_PATH = Path(_os.environ.get("PREP_VAPID_KEYS_PATH") or (_HERE / "vapid-keys.json"))
+_KEY_PEM_PATH = Path(_os.environ.get("PREP_VAPID_PEM_PATH") or (_HERE / "vapid-private.pem"))
 
 # IANA "sub" claim for VAPID. Push services use this as a contact for
 # operational issues. Public deployments should set PREP_VAPID_SUB to a
 # real address; we fall back to the placeholder for local/dev.
-import os as _os
 VAPID_SUB = _os.environ.get("PREP_VAPID_SUB", "mailto:noreply@example.com")
 
 _log = logging.getLogger("prep.notify")

@@ -1,0 +1,20 @@
+# Procfile.deployed — used by the artifact-based deploy pipeline for
+# staging + prod. The plain Procfile is for `make dev`.
+#
+# Differences from Procfile:
+#   • no temporal devserver — staging/prod share an externally-managed
+#     temporal at $TEMPORAL_HOST_PORT (currently the pm2-managed
+#     prep-temporal devserver; see CLAUDE.md). Eventually that'll move
+#     into this Procfile too once we cut prod over.
+#   • no --reload on uvicorn (artifacts are immutable; the pipeline
+#     promotes a new artifact + kickstarts the launchd plist instead).
+#   • no inline env vars — values come from $HOME/Library/prep/config/
+#     <env>.env, sourced by scripts/run-prep.sh before exec'ing goreman.
+#
+# Required env vars (set in config/<env>.env):
+#   PORT, ROOT_PATH, TEMPORAL_NAMESPACE, TEMPORAL_HOST_PORT,
+#   PREP_DB_PATH, PREP_VAPID_KEYS_PATH, PREP_VAPID_PEM_PATH,
+#   PREP_AGENT_BIN. Optional: PREP_DEFAULT_USER (auth bypass).
+
+app: .venv/bin/uvicorn app:app --host 127.0.0.1 --port $PORT --no-access-log
+worker: ./worker-go/bin/worker

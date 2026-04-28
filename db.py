@@ -34,7 +34,12 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "data.sqlite"
+# PREP_DB_PATH lets the artifact-based deploy pipeline point a single
+# immutable artifact dir at a per-environment data.sqlite that lives
+# outside the artifact (e.g. ~/Library/prep/data/staging/data.sqlite).
+# Falls back to data.sqlite alongside this module for the dev case
+# where source dir == data dir.
+DB_PATH = Path(os.environ.get("PREP_DB_PATH") or (Path(__file__).parent / "data.sqlite"))
 
 INTERVAL_LADDER_MINUTES = [
     10,           # wrong -> see again very soon

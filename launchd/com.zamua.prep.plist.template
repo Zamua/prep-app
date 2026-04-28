@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Launchd plist template for prep, parameterized at install time by
+  scripts/install-launchd.sh. {{ENV}} is the environment name
+  (staging|prod), {{HOME}} the install user's home dir.
+
+  Replaces the per-service entries in ecosystem.config.js for the
+  artifact-based deploy. One plist per environment. RunAtLoad +
+  KeepAlive give us auto-start at login + auto-restart on crash, the
+  same survivability we had under pm2.
+
+  ThrottleInterval=10s prevents tight crash-loops from hammering the
+  log files.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zamua.prep-{{ENV}}</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{HOME}}/Library/prep/bin/run-prep.sh</string>
+    <string>{{ENV}}</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{{HOME}}/.local/bin:{{HOME}}/go/bin</string>
+    <key>HOME</key>
+    <string>{{HOME}}</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>{{HOME}}/Library/Logs/prep-{{ENV}}/stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{HOME}}/Library/Logs/prep-{{ENV}}/stderr.log</string>
+</dict>
+</plist>

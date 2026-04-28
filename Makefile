@@ -19,7 +19,8 @@ WORKER   := worker-go/bin/worker
 # Tailscale (see CLAUDE.md).
 export PREP_DEFAULT_USER ?= dev@example.com
 
-.PHONY: help setup tools deps build install-goreman dev run-app run-worker run-temporal test clean wipe-temporal-state
+.PHONY: help setup tools deps build install-goreman dev run-app run-worker run-temporal test clean wipe-temporal-state \
+        artifact promote install-staging install-prod
 
 help:
 	@echo "make setup    — mise install + uv sync + build worker + install goreman"
@@ -28,6 +29,12 @@ help:
 	@echo "make test     — placeholder; no test suite yet"
 	@echo "make clean    — kill stray dev processes; preserve data"
 	@echo "make wipe-temporal-state — reset temporal devserver state (data.sqlite untouched)"
+	@echo ""
+	@echo "Deploy pipeline (artifact-based, see DEPLOY.md):"
+	@echo "  make artifact REF=<sha-or-tag>    — build a deployable artifact"
+	@echo "  make promote ENV=<env> REF=<id>   — point staging|prod at an artifact"
+	@echo "  make install-staging              — one-time launchd setup for staging"
+	@echo "  make install-prod                 — one-time launchd setup for prod"
 
 setup: tools deps build install-goreman
 
@@ -76,3 +83,25 @@ clean:
 
 wipe-temporal-state:
 	rm -rf temporal-data/
+
+# ----- artifact-based deploy pipeline -----
+# See DEPLOY.md for the full story. Short version:
+#   work in this repo on main → tag when satisfied → build artifact from
+#   that tag → promote staging or prod to it. Artifacts are immutable
+#   directories under ~/Library/prep/artifacts/ with their own .venv +
+#   built worker + bundled cm. Data lives in ~/Library/prep/data/<env>/
+#   so it survives any promote.
+
+artifact:
+	@[ -n "$(REF)" ] || { echo "usage: make artifact REF=<sha-or-tag>"; exit 1; }
+	REF=$(REF) FORCE=$(FORCE) scripts/build.sh
+
+promote:
+	@[ -n "$(ENV)" ] && [ -n "$(REF)" ] || { echo "usage: make promote ENV=<staging|prod> REF=<artifact-id>"; exit 1; }
+	ENV=$(ENV) REF=$(REF) scripts/promote.sh
+
+install-staging:
+	scripts/install-launchd.sh staging
+
+install-prod:
+	scripts/install-launchd.sh prod
