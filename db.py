@@ -608,6 +608,7 @@ def list_questions(user_id: str, deck_id: int) -> list[dict]:
         rows = c.execute(
             """
             SELECT q.id, q.type, q.topic, q.prompt, q.suspended,
+                   q.answer, q.choices, q.rubric, q.skeleton, q.language,
                    cards.step, cards.next_due, cards.last_review,
                    (SELECT COUNT(*) FROM reviews r WHERE r.question_id=q.id) AS attempts,
                    (SELECT COUNT(*) FROM reviews r
@@ -619,7 +620,23 @@ def list_questions(user_id: str, deck_id: int) -> list[dict]:
             """,
             (deck_id, user_id),
         ).fetchall()
-        return [dict(r) for r in rows]
+        out: list[dict] = []
+        for r in rows:
+            d = dict(r)
+            # Decode choices JSON for the deck-page preview dialog. Stored
+            # as JSON text in DB; surfacing as a Python list keeps the
+            # template free of inline json.loads calls.
+            if d.get("choices"):
+                try:
+                    d["choices_list"] = _json.loads(d["choices"])
+                    if not isinstance(d["choices_list"], list):
+                        d["choices_list"] = []
+                except (ValueError, TypeError):
+                    d["choices_list"] = []
+            else:
+                d["choices_list"] = []
+            out.append(d)
+        return out
 
 
 def question_prompts_for_deck(user_id: str, deck_id: int) -> list[str]:

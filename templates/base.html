@@ -58,5 +58,36 @@
       <span class="colophon-text">set in <em>Fraunces</em> &amp; <em>JetBrains&nbsp;Mono</em></span>
     </footer>
   </div>
+
+  <script>
+  // Close any open <details> popover on Esc or outside-click. Native
+  // <details> only closes when its summary is tapped — fine for inline
+  // disclosures but unintuitive for our menu-style popovers (user
+  // indicator panel, qcard improve form, discuss popover, rubric
+  // details). One global handler covers all of them.
+  (function () {
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('details[open]').forEach((d) => {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+      });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        let any = false;
+        document.querySelectorAll('details[open]').forEach((d) => {
+          d.removeAttribute('open');
+          any = true;
+        });
+        // Also close any open <dialog> elements (showModal handles Esc
+        // natively, but a programmatically-opened modal without showModal
+        // wouldn't — this is belt-and-suspenders).
+        document.querySelectorAll('dialog[open]').forEach((d) => {
+          d.close();
+          any = true;
+        });
+      }
+    });
+  })();
+  </script>
 </body>
 </html>

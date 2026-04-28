@@ -53,9 +53,15 @@
 {% if questions %}
   <section class="card-index">
     <p class="section-eyebrow"><span>The collection</span><span class="rule"></span></p>
+    <p class="card-index-hint">Tap any card to preview its full contents.</p>
     <ol class="qcards" role="list" start="1">
       {% for q in questions %}
-        <li class="qcard{% if q.suspended %} is-suspended{% endif %}" style="--i: {{ loop.index }}">
+        <li class="qcard{% if q.suspended %} is-suspended{% endif %}"
+            style="--i: {{ loop.index }}"
+            data-qid="{{ q.id }}"
+            tabindex="0"
+            role="button"
+            aria-label="Preview card {{ q.id }}">
           <header class="qcard-head">
             <span class="qcard-num">№ {{ q.id }}</span>
             <span class="qcard-tags">
@@ -65,6 +71,51 @@
             </span>
           </header>
           <p class="qcard-prompt">{{ q.prompt[:220] }}{% if q.prompt|length > 220 %}…{% endif %}</p>
+
+          {# Pre-rendered full preview for the dialog. Lives in a <template>
+             so it doesn't render inline; JS clones it into the dialog body
+             on click. #}
+          <template class="qcard-preview-tpl">
+            <header class="card-preview-head">
+              <span class="qcard-num">№ {{ q.id }}</span>
+              <span class="qcard-tags">
+                <span class="tag tag-type tag-{{ q.type }}">{{ q.type }}</span>
+                {% if q.topic %}<span class="tag tag-topic">{{ q.topic }}</span>{% endif %}
+                {% if q.suspended %}<span class="tag tag-suspended">suspended</span>{% endif %}
+                {% if q.language %}<span class="tag lang-tag">{{ q.language }}</span>{% endif %}
+              </span>
+            </header>
+            <p class="section-eyebrow"><span>The question</span><span class="rule"></span></p>
+            <div class="study-prompt prose">{{ q.prompt | markdown }}</div>
+            {% if q.type in ('mcq', 'multi') and q.choices_list %}
+              <p class="section-eyebrow"><span>Choices</span><span class="rule"></span></p>
+              <ul class="card-preview-choices">
+                {% for c in q.choices_list %}<li>{{ c }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+            {% if q.skeleton %}
+              <p class="section-eyebrow"><span>Skeleton</span><span class="rule"></span></p>
+              <pre class="reproduction">{{ q.skeleton }}</pre>
+            {% endif %}
+            <p class="section-eyebrow"><span>Answer</span><span class="rule"></span></p>
+            {% if q.type == 'code' %}
+              <pre class="reproduction reproduction-model">{{ q.answer }}</pre>
+            {% else %}
+              <div class="prose-answer prose-answer-model prose">{{ q.answer | markdown }}</div>
+            {% endif %}
+            {% if q.rubric %}
+              <p class="section-eyebrow"><span>Rubric</span><span class="rule"></span></p>
+              <pre class="reproduction reproduction-rubric">{{ q.rubric }}</pre>
+            {% endif %}
+            <p class="section-eyebrow"><span>SRS state</span><span class="rule"></span></p>
+            <p class="card-preview-stats">
+              {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct
+              {% if q.next_due %} · next due {{ q.next_due[:10] }}{% endif %}
+              {% if q.last_review %} · last seen {{ q.last_review[:10] }}{% endif %}
+              {% if q.step is not none %} · step {{ q.step }}{% endif %}
+            </p>
+          </template>
+
           <footer class="qcard-foot">
             <span class="qcard-stats">
               {{ q.rights or 0 }}/{{ q.attempts or 0 }} correct{% if q.next_due %} <span class="qcard-stats-divider">·</span> next {{ q.next_due[:10] }}{% endif %}
@@ -102,4 +153,57 @@
     <p class="empty-sub">Use the box above to describe the first batch you'd like.</p>
   </section>
 {% endif %}
+
+{# Card-preview dialog. Native <dialog> handles Esc + tab focus trapping;
+   we wire backdrop-click to close as well. Content is filled per-click
+   from the matching qcard's <template>. #}
+<dialog id="card-preview" class="card-preview" aria-label="Card preview">
+  <form method="dialog" class="card-preview-close-form">
+    <button type="submit" class="card-preview-close" aria-label="Close">
+      {{ icon('x', class_='icon') }}
+    </button>
+  </form>
+  <div id="card-preview-body" class="card-preview-body"></div>
+</dialog>
+
+<script>
+(function () {
+  const dlg = document.getElementById('card-preview');
+  const body = document.getElementById('card-preview-body');
+  if (!dlg || !body) return;
+
+  function openPreview(card) {
+    const tpl = card.querySelector('.qcard-preview-tpl');
+    if (!tpl) return;
+    body.innerHTML = '';
+    body.appendChild(tpl.content.cloneNode(true));
+    body.scrollTop = 0;
+    dlg.showModal();
+  }
+
+  // Click-to-preview on each qcard. Skip the click if it landed on an
+  // interactive descendant (suspend / improve / forms / details summary)
+  // — those have their own handlers and shouldn't trigger preview.
+  document.querySelectorAll('.qcard').forEach((card) => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('form, button, summary, a, input, textarea, .qcard-actions, .qcard-foot')) return;
+      openPreview(card);
+    });
+    // Keyboard activation for tabindex=0 cards
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target.closest('form, button, summary, a, input, textarea')) return;
+        e.preventDefault();
+        openPreview(card);
+      }
+    });
+  });
+
+  // Backdrop click to close. Native <dialog> doesn't do this by default —
+  // a click on the dialog's padding area registers as target=dlg.
+  dlg.addEventListener('click', (e) => {
+    if (e.target === dlg) dlg.close();
+  });
+})();
+</script>
 {% endblock %}
