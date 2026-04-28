@@ -89,6 +89,9 @@ func main() {
 	w.RegisterWorkflowWithOptions(workflows.Transform, workflow.RegisterOptions{
 		Name: shared.WorkflowTransform,
 	})
+	w.RegisterWorkflowWithOptions(workflows.PlanGenerate, workflow.RegisterOptions{
+		Name: shared.WorkflowPlanGenerate,
+	})
 
 	a := &activities.Activities{Cfg: cfg}
 	w.RegisterActivity(a)

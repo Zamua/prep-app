@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}planning {{ deck_name }} · prep{% endblock %}
+{% block page_class %}plan{% endblock %}
+{% block main %}
+
+{# Defensive defaults — Go's json marshaller emits null for nil slices,
+   which jinja's |length / iteration choke on. #}
+{% set plan = progress.plan or [] %}
+{% set total = progress.total or (plan|length) %}
+{% set generated = progress.generated_count or 0 %}
+{% set status = progress.status or 'starting' %}
+{% set round = progress.round or 1 %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">{{ deck_name }} · plan</p>
+  <h1 class="display" id="display-headline">
+    {% if status == 'planning' %}<em>Planning</em><span class="ellipsis"></span>
+    {% elif status == 'replanning' %}<em>Refining</em><span class="ellipsis"></span>
+    {% elif status == 'awaiting_feedback' %}{{ plan|length }} card{{ '' if plan|length == 1 else 's' }}.
+    {% elif status == 'generating' %}<em>Writing cards</em><span class="ellipsis"></span>
+    {% elif status == 'applying' %}<em>Saving</em><span class="ellipsis"></span>
+    {% elif status == 'done' %}Done.
+    {% elif status == 'rejected' %}Cancelled.
+    {% elif status == 'failed' %}Failed.
+    {% else %}<em>Starting</em><span class="ellipsis"></span>{% endif %}
+  </h1>
+  <p class="lede">
+    {% if status == 'awaiting_feedback' %}
+      Skim the outline below. Send feedback to refine, or accept and we'll
+      write the full content for each card in parallel.
+    {% elif status == 'planning' %}
+      Claude is sketching the outline. About 5 seconds.
+    {% elif status == 'replanning' %}
+      Claude is reworking the outline based on your feedback.
+    {% elif status == 'generating' %}
+      Writing {{ total }} cards in parallel.
+      {% if generated %}{{ generated }} done so far.{% endif %}
+    {% elif status == 'applying' %}
+      Inserting cards into the deck.
+    {% endif %}
+  </p>
+</section>
+
+<div class="transform-panel plan-panel">
+  <p class="transform-status" id="t-status" data-status="{{ status }}">
+    {{ status }}
+    {% if status in ('awaiting_feedback', 'replanning') and round > 1 %}
+      <span class="plan-round">round {{ round }}</span>
+    {% endif %}
+    {% if status not in ('done', 'rejected', 'failed') %}
+      <a href="#" id="t-refresh" class="transform-refresh">refresh now</a>
+    {% endif %}
+  </p>
+
+  {% if plan %}
+    <ol class="plan-list" role="list">
+      {% for item in plan %}
+        <li class="plan-item">
+          <span class="plan-item-num">{{ loop.index }}</span>
+          <div class="plan-item-body">
+            <div class="plan-item-head">
+              <span class="plan-item-title">{{ item.title }}</span>
+              <span class="plan-item-tags">
+                {% if item.type %}<span class="tag tag-type tag-{{ item.type }}">{{ item.type }}</span>{% endif %}
+                {% if item.topic %}<span class="tag tag-topic">{{ item.topic }}</span>{% endif %}
+                {% if item.language %}<span class="tag lang-tag">{{ item.language }}</span>{% endif %}
+              </span>
+            </div>
+            <p class="plan-item-brief">{{ item.brief }}</p>
+          </div>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+
+  {% if status == 'generating' or status == 'applying' %}
+    <p class="plan-progress">
+      <progress value="{{ generated }}" max="{{ total }}"></progress>
+      <span class="plan-progress-text">{{ generated }} / {{ total }}</span>
+    </p>
+  {% endif %}
+
+  {% if status == 'awaiting_feedback' %}
+    <form method="post" action="{{ request.scope.get('root_path','') }}/plan/{{ wid }}/feedback" class="plan-feedback-form">
+      <label class="freetext">
+        <span class="freetext-label">Refine the plan</span>
+        <textarea name="feedback" rows="3" maxlength="2000"
+                  placeholder="e.g. add 2 more on goroutines · drop the mcq about syntax · split #4 into two cards · use python instead of go"
+                  required></textarea>
+      </label>
+      <div class="plan-actions">
+        <button class="btn btn-quiet" type="submit">Send feedback</button>
+      </div>
+    </form>
+
+    <div class="plan-decide">
+      <form method="post" action="{{ request.scope.get('root_path','') }}/plan/{{ wid }}/accept" style="flex:1;min-width:10rem">
+        <button class="btn btn-primary" type="submit" style="width:100%">Accept &amp; generate {{ plan|length }} cards</button>
+      </form>
+      <form method="post" action="{{ request.scope.get('root_path','') }}/plan/{{ wid }}/reject" style="flex:1;min-width:8rem">
+        <button class="btn btn-quiet" type="submit" style="width:100%">Cancel</button>
+      </form>
+    </div>
+  {% elif status == 'done' %}
+    <p class="transform-applied">
+      Generated {{ (progress.result.added_ids or [])|length }} card{{ '' if (progress.result.added_ids or [])|length == 1 else 's' }}.
+    </p>
+    <div class="study-actions">
+      <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Open deck</a>
+    </div>
+  {% elif status in ('rejected', 'failed') %}
+    <div class="study-actions">
+      <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
+    </div>
+  {% endif %}
+
+  {% if progress.error %}
+    <p class="form-error" style="margin-top:1rem">{{ progress.error }}</p>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  // Same poll-then-reload-on-transition pattern as transform.html. The
+  // server-side rendered status is the source of truth; we just notice
+  // changes and reload to pick them up. iOS PWA suspends setInterval when
+  // the tab is hidden — fire an immediate tick on visibilitychange→visible.
+  const root = "{{ request.scope.get('root_path','') }}";
+  const wid = "{{ wid }}";
+  const initialStatus = "{{ status }}";
+  const initialRound = {{ round }};
+  const initialGenerated = {{ generated }};
+  const TERMINAL = ['done', 'rejected', 'failed', 'gone'];
+  if (TERMINAL.includes(initialStatus)) return;
+
+  let lastStatus = initialStatus;
+  let lastRound = initialRound;
+  let lastGenerated = initialGenerated;
+  let pollHandle = null;
+
+  const tick = async () => {
+    try {
+      const r = await fetch(root + "/plan/" + wid + "/status?_=" + Date.now(),
+                            { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      const s = j.status || '';
+      const round = j.round || 1;
+      const generated = j.generated_count || 0;
+      // Reload on any visible state change: status, replan round, or
+      // running generation count.
+      if (s !== lastStatus || round !== lastRound || generated !== lastGenerated) {
+        location.reload();
+        return;
+      }
+    } catch (e) { /* swallow */ }
+  };
+
+  const startPolling = () => {
+    if (pollHandle) return;
+    pollHandle = setInterval(tick, 2000);
+  };
+  const stopPolling = () => {
+    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopPolling();
+    else { tick(); startPolling(); }
+  });
+
+  const refresh = document.getElementById('t-refresh');
+  if (refresh) refresh.addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
+
+  startPolling();
+  tick();
+})();
+</script>
+
+{% endblock %}

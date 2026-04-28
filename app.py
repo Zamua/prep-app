@@ -343,41 +343,61 @@ def deck_new_form(request: Request, user: dict = Depends(current_user)):
 
 
 @app.post("/decks/new", response_class=HTMLResponse)
-def deck_new_create(request: Request,
-                    name: str = Form(...),
-                    context_prompt: str = Form(""),
-                    user: dict = Depends(current_user)):
+async def deck_new_create(request: Request,
+                          user: dict = Depends(current_user)):
+    """Create a deck. The submit button name picks the path:
+      action=empty       → just create the deck row, redirect to /deck/<name>
+      action=plan        → create the deck row, kick off PlanGenerateWorkflow
+                           with the description, redirect to /plan/<wid>
+    The 'plan' action requires both an agent AND a non-empty description.
+    Re-renders the form with an inline error if either is missing.
+    """
     uid = user["tailscale_login"]
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    context_prompt = (form.get("context_prompt") or "").strip()
+    action = (form.get("action") or "empty").strip()
+
+    def rerender(error: str, status: int = 400):
+        return templates.TemplateResponse(
+            "deck_new.html",
+            {"request": request, "user": user,
+             "name_value": name, "context_value": context_prompt,
+             "error": error},
+            status_code=status,
+        )
+
     try:
         clean = _validate_deck_name(name)
     except HTTPException as e:
-        # Re-render the form with the error inline so the user keeps their
-        # context_prompt. Form errors don't deserve a full error page.
-        return templates.TemplateResponse(
-            "deck_new.html",
-            {"request": request, "user": user,
-             "name_value": name, "context_value": context_prompt,
-             "error": e.detail},
-            status_code=400,
-        )
+        return rerender(e.detail)
+
     if db.find_deck(uid, clean) is not None:
-        return templates.TemplateResponse(
-            "deck_new.html",
-            {"request": request, "user": user,
-             "name_value": name, "context_value": context_prompt,
-             "error": f"You already have a deck named \"{clean}\"."},
-            status_code=400,
-        )
-    cp = (context_prompt or "").strip()
-    if len(cp) > _MAX_CONTEXT_PROMPT_CHARS:
-        return templates.TemplateResponse(
-            "deck_new.html",
-            {"request": request, "user": user,
-             "name_value": name, "context_value": context_prompt,
-             "error": f"Description is too long ({len(cp)} chars; max {_MAX_CONTEXT_PROMPT_CHARS})."},
-            status_code=400,
-        )
-    db.create_deck(uid, clean, context_prompt=cp or None)
+        return rerender(f"You already have a deck named \"{clean}\".")
+
+    if len(context_prompt) > _MAX_CONTEXT_PROMPT_CHARS:
+        return rerender(f"Description is too long ({len(context_prompt)} chars; max {_MAX_CONTEXT_PROMPT_CHARS}).")
+
+    if action == "plan":
+        if not _AGENT_AVAILABLE:
+            return rerender("Plan & generate needs an AI agent. Set PREP_AGENT_URL or PREP_AGENT_BIN, or pick 'Create empty deck' instead.")
+        if not context_prompt:
+            return rerender("Plan & generate needs a description for claude to plan against.")
+
+    deck_id = db.create_deck(uid, clean, context_prompt=context_prompt or None)
+
+    if action == "plan":
+        try:
+            res = await temporal_client.start_plan_generate(
+                user_id=uid, deck_id=deck_id, deck_name=clean, prompt=context_prompt,
+            )
+        except Exception as e:
+            # Deck row was created but the workflow couldn't start. Don't
+            # silently leave it empty — surface the error and the user can
+            # retry from the deck page.
+            raise HTTPException(500, f"deck created but failed to start plan workflow: {e}")
+        return _redirect(request, f"/plan/{res.workflow_id}")
+
     return _redirect(request, f"/deck/{clean}")
 
 
@@ -1296,6 +1316,103 @@ async def transform_reject(request: Request, wid: str, user: dict = Depends(curr
     except Exception as e:
         raise HTTPException(500, f"signal failed: {e}")
     return _redirect(request, f"/transform/{wid}")
+
+
+# ---- Plan-first generation polling page + signals -------------------------
+#
+# Workflow IDs are formatted `plan-<deck_name>-<10-hex>`. Deck names may
+# contain hyphens, so we split off the trailing rand suffix to recover the
+# name. Ownership is verified by looking up the deck on the current user.
+
+def _parse_plan_wid(wid: str) -> str | None:
+    """Returns the deck_name embedded in a plan wid, or None if malformed."""
+    if not wid.startswith("plan-"):
+        return None
+    rest = wid[len("plan-"):]
+    if "-" not in rest:
+        return None
+    name, _, suffix = rest.rpartition("-")
+    if not name or len(suffix) < 6:
+        return None
+    return name
+
+
+def _require_owns_plan(user: dict, wid: str) -> tuple[str, int]:
+    name = _parse_plan_wid(wid)
+    if not name:
+        raise HTTPException(400, "malformed workflow id")
+    uid = user["tailscale_login"]
+    deck = db.find_deck(uid, name)
+    if not deck:
+        raise HTTPException(404, "plan not found")
+    return name, deck["id"]
+
+
+@app.get("/plan/{wid}", response_class=HTMLResponse)
+async def plan_view(request: Request, wid: str, user: dict = Depends(current_user)):
+    deck_name, _ = _require_owns_plan(user, wid)
+    progress = await temporal_client.get_plan_progress(wid)
+    if progress is None:
+        # Workflow gone — query handler is unavailable. The deck page is
+        # the canonical place to land.
+        return _redirect(request, f"/deck/{deck_name}")
+    return templates.TemplateResponse(
+        "plan.html",
+        {
+            "request": request,
+            "wid": wid,
+            "deck_name": deck_name,
+            "progress": progress,
+        },
+    )
+
+
+@app.get("/plan/{wid}/status")
+async def plan_status(wid: str, user: dict = Depends(current_user)):
+    """JSON status for the polling page. Returns the live PlanGenerateProgress
+    while the workflow is alive, or {"status": "gone"} once the query
+    handler is no longer registered."""
+    _require_owns_plan(user, wid)
+    progress = await temporal_client.get_plan_progress(wid)
+    if progress is None:
+        return JSONResponse({"status": "gone"})
+    return JSONResponse(progress)
+
+
+@app.post("/plan/{wid}/feedback")
+async def plan_feedback(request: Request, wid: str,
+                        user: dict = Depends(current_user)):
+    _require_owns_plan(user, wid)
+    form = await request.form()
+    fb = (form.get("feedback") or "").strip()
+    if not fb:
+        raise HTTPException(400, "feedback is required")
+    try:
+        await temporal_client.signal_plan_feedback(wid, fb)
+    except Exception as e:
+        raise HTTPException(500, f"signal failed: {e}")
+    return _redirect(request, f"/plan/{wid}")
+
+
+@app.post("/plan/{wid}/accept")
+async def plan_accept(request: Request, wid: str, user: dict = Depends(current_user)):
+    _require_owns_plan(user, wid)
+    try:
+        await temporal_client.signal_plan_accept(wid)
+    except Exception as e:
+        raise HTTPException(500, f"signal failed: {e}")
+    return _redirect(request, f"/plan/{wid}")
+
+
+@app.post("/plan/{wid}/reject")
+async def plan_reject(request: Request, wid: str, user: dict = Depends(current_user)):
+    deck_name, _ = _require_owns_plan(user, wid)
+    try:
+        await temporal_client.signal_plan_reject(wid)
+    except Exception as e:
+        raise HTTPException(500, f"signal failed: {e}")
+    # Reject = abandon. Bounce back to the (still-empty) deck.
+    return _redirect(request, f"/deck/{deck_name}")
 
 
 # ---- PWA install (manifest + service worker) ------------------------------

@@ -36,30 +36,40 @@
   {% endif %}
 </section>
 
-{% if agent_available %}
-  <section class="transform-section">
-    <p class="section-eyebrow"><span>Transform this deck</span><span class="rule"></span></p>
-    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform" method="post" class="transform-form">
-      <textarea name="prompt" rows="3" maxlength="4000"
-                placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add code skeletons where missing"
-                required></textarea>
-      <button type="submit" class="btn btn-primary">Apply</button>
-    </form>
-    <p class="transform-hint">
-      Free-form — type whatever change you want. Claude reads the deck,
-      proposes a patch, and you confirm before anything writes.
-    </p>
-  </section>
-{% endif %}
+{# Add-cards panel: manual + AI side-by-side, equal weight. Manual is
+   always present; AI is shown when an agent is configured. No mode
+   toggle — both surfaces are available, you pick. #}
+<section class="add-section">
+  <p class="section-eyebrow"><span>Add to this deck</span><span class="rule"></span></p>
+  <div class="add-cta-row">
+    <a class="btn btn-primary add-cta" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new">
+      {{ icon('plus', class_='icon icon-inline') }}
+      <span>Add a card by hand</span>
+    </a>
+    {% if agent_available %}
+      <a class="btn btn-primary add-cta" href="#ai-prompt">
+        {{ icon('sparkle', class_='icon icon-inline') }}
+        <span>Generate with AI</span>
+      </a>
+    {% endif %}
+  </div>
 
-<section class="transform-section">
-  <p class="section-eyebrow"><span>Add a card</span><span class="rule"></span></p>
-  <p class="transform-hint">
-    Write a question by hand{% if agent_available %} — useful when you have a specific card in mind that the bulk transform shouldn't generate{% else %} — manual entry is the only path until you wire up an AI agent{% endif %}.
-  </p>
-  <p>
-    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new">Add question manually</a>
-  </p>
+  {% if agent_available %}
+    <form id="ai-prompt"
+          action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+          method="post" class="transform-form add-ai-form">
+      <label class="freetext">
+        <span class="freetext-label">Tell claude what to add or change</span>
+        <textarea name="prompt" rows="3" maxlength="4000"
+                  placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing"
+                  required></textarea>
+      </label>
+      <button type="submit" class="btn btn-quiet">Apply</button>
+      <p class="transform-hint">
+        Claude reads the deck, proposes a patch, and you confirm before anything writes.
+      </p>
+    </form>
+  {% endif %}
 </section>
 
 {% if questions %}

@@ -4,15 +4,22 @@
 package shared
 
 const (
-	TaskQueue         = "prep-generation"
-	WorkflowGenerate  = "GenerateCardsWorkflow"
-	WorkflowGrade     = "GradeAnswerWorkflow"
-	WorkflowTransform = "TransformWorkflow"
+	TaskQueue           = "prep-generation"
+	WorkflowGenerate    = "GenerateCardsWorkflow"
+	WorkflowGrade       = "GradeAnswerWorkflow"
+	WorkflowTransform   = "TransformWorkflow"
+	WorkflowPlanGenerate = "PlanGenerateWorkflow"
 
 	// Signals + queries on TransformWorkflow.
-	SignalApplyTransform  = "applyTransform"
-	SignalRejectTransform = "rejectTransform"
+	SignalApplyTransform   = "applyTransform"
+	SignalRejectTransform  = "rejectTransform"
 	QueryTransformProgress = "getTransformProgress"
+
+	// Signals + queries on PlanGenerateWorkflow.
+	SignalPlanFeedback = "planFeedback"
+	SignalPlanAccept   = "planAccept"
+	SignalPlanReject   = "planReject"
+	QueryPlanProgress  = "getPlanProgress"
 )
 
 // GenerateCardsInput is the workflow's input — what the FastAPI app
@@ -252,4 +259,68 @@ type ApplyTransformInput struct {
 	UserID string        `json:"user_id"`
 	DeckID int           `json:"deck_id"` // needed for additions; 0 for card-scope
 	Plan   TransformPlan `json:"plan"`
+}
+
+// ---- Plan-first generation workflow types -------------------------------
+//
+// New flow used at deck creation (and any future "generate cards" path):
+//   1. Claude returns a list of brief PlanItems (titles + summaries, no full
+//      content). Cheap call, ~5s.
+//   2. The user reviews the list, optionally signals feedback (replan), and
+//      eventually signals accept or reject.
+//   3. On accept, each PlanItem is expanded into a full Card via parallel
+//      activities, then inserted in order.
+
+// PlanItem is a single brief card description. The full Card is generated
+// only after the user accepts the plan.
+type PlanItem struct {
+	Title    string `json:"title"`
+	Brief    string `json:"brief"`
+	Type     string `json:"type,omitempty"`     // claude's suggested type: code|mcq|multi|short
+	Topic    string `json:"topic,omitempty"`
+	Language string `json:"language,omitempty"` // for code items
+}
+
+type PlanGenerateInput struct {
+	UserID   string `json:"user_id"`
+	DeckID   int    `json:"deck_id"`
+	DeckName string `json:"deck_name"`
+	Prompt   string `json:"prompt"` // initial user prompt (== deck context_prompt)
+}
+
+type PlanGenerateResult struct {
+	Status   string `json:"status"` // "completed" | "rejected" | "timed_out"
+	AddedIDs []int  `json:"added_ids"`
+}
+
+type PlanGenerateProgress struct {
+	Status         string              `json:"status"` // see below
+	Round          int                 `json:"round"`  // increments each replan
+	Plan           []PlanItem          `json:"plan,omitempty"`
+	GeneratedCount int                 `json:"generated_count"` // cards built so far during "generating"
+	Total          int                 `json:"total"`           // == len(plan) once accepted
+	StartedAt      string              `json:"started_at"`
+	FinishedAt     string              `json:"finished_at,omitempty"`
+	Result         *PlanGenerateResult `json:"result,omitempty"`
+	Error          string              `json:"error,omitempty"`
+}
+// Status values: "planning" | "awaiting_feedback" | "replanning" |
+//                "generating" | "applying" | "done" | "rejected" | "failed"
+
+type PlanCardsInput struct {
+	UserID    string     `json:"user_id"`
+	DeckName  string     `json:"deck_name"`
+	Prompt    string     `json:"prompt"`               // deck description / topic
+	PriorPlan []PlanItem `json:"prior_plan,omitempty"` // for replan rounds
+	Feedback  string     `json:"feedback,omitempty"`   // for replan rounds
+}
+
+type GenerateCardFromBriefInput struct {
+	UserID         string   `json:"user_id"`
+	DeckName       string   `json:"deck_name"`
+	DeckPrompt     string   `json:"deck_prompt"` // deck description, for grounding
+	Item           PlanItem `json:"item"`
+	Index          int      `json:"index"`
+	Total          int      `json:"total"`
+	IdempotencyKey string   `json:"idempotency_key"`
 }

@@ -23,6 +23,7 @@ TASK_QUEUE = "prep-generation"
 WORKFLOW_NAME = "GenerateCardsWorkflow"
 GRADE_WORKFLOW_NAME = "GradeAnswerWorkflow"
 TRANSFORM_WORKFLOW_NAME = "TransformWorkflow"
+PLAN_GENERATE_WORKFLOW_NAME = "PlanGenerateWorkflow"
 
 _client: Client | None = None
 
@@ -198,3 +199,56 @@ async def signal_reject_transform(workflow_id: str) -> None:
     client = await _get_client()
     handle = client.get_workflow_handle(workflow_id)
     await handle.signal("rejectTransform")
+
+
+# ---- Plan-first generation workflow ---------------------------------------
+
+async def start_plan_generate(*, user_id: str, deck_id: int, deck_name: str,
+                              prompt: str) -> StartResult:
+    """Start a PlanGenerateWorkflow. Workflow plans cards (claude returns a
+    brief outline), waits for accept/reject/feedback signals, then expands
+    + inserts cards in parallel on accept."""
+    client = await _get_client()
+    wid = f"plan-{deck_name}-{uuid.uuid4().hex[:10]}"
+    handle = await client.start_workflow(
+        PLAN_GENERATE_WORKFLOW_NAME,
+        {
+            "user_id": user_id,
+            "deck_id": deck_id,
+            "deck_name": deck_name,
+            "prompt": prompt,
+        },
+        id=wid,
+        task_queue=TASK_QUEUE,
+    )
+    return StartResult(workflow_id=handle.id, run_id=handle.first_execution_run_id or "")
+
+
+async def get_plan_progress(workflow_id: str) -> dict[str, Any] | None:
+    """Query the plan workflow for current state. Returns the
+    PlanGenerateProgress dict; None if the workflow has completed and
+    the query handler is gone."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    try:
+        return await handle.query("getPlanProgress")
+    except Exception:
+        return None
+
+
+async def signal_plan_feedback(workflow_id: str, feedback: str) -> None:
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("planFeedback", feedback)
+
+
+async def signal_plan_accept(workflow_id: str) -> None:
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("planAccept")
+
+
+async def signal_plan_reject(workflow_id: str) -> None:
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("planReject")

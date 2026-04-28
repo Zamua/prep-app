@@ -42,8 +42,22 @@
     </span>
   </label>
 
-  <div class="study-actions">
-    <button type="submit" class="btn btn-primary">Create deck</button>
+  <div class="study-actions deck-new-actions">
+    {% if agent_available %}
+      {# Two submit buttons targeting the same /decks/new POST. Server
+         reads `action`: "plan" → kicks off PlanGenerateWorkflow, redirects
+         to /plan/<wid>; "empty" → just creates the deck row. #}
+      <button type="submit" name="action" value="plan" class="btn btn-primary">
+        Plan &amp; generate cards
+      </button>
+      <button type="submit" name="action" value="empty" class="btn btn-quiet">
+        Create empty deck
+      </button>
+    {% else %}
+      <button type="submit" name="action" value="empty" class="btn btn-primary">
+        Create deck
+      </button>
+    {% endif %}
     <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/">Cancel</a>
   </div>
 </form>

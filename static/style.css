@@ -2641,3 +2641,81 @@ textarea:focus-visible {
   .study-actions > .btn,
   .study-actions > form { min-width: 100%; }
 }
+
+/* ===== Add-cards panel + plan polling page ===== */
+
+.add-section {
+  margin: 2rem 0 2.4rem;
+}
+.add-section .section-eyebrow { margin-top: 0; margin-bottom: 1rem; }
+.add-cta-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 540px) {
+  .add-cta-row { grid-template-columns: 1fr; }
+}
+.add-cta {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 0.55rem; min-height: 3rem;
+  /* both ctas use btn-primary so they read as equal-weight; the AI
+     option doesn't outshout the manual one. */
+}
+.add-ai-form {
+  display: grid; gap: 0.6rem;
+  border-top: 1px dashed var(--rule);
+  padding-top: 0.9rem;
+}
+.add-ai-form .freetext { margin: 0; }
+.add-ai-form .btn { justify-self: end; min-width: 7rem; }
+
+.plan-panel { margin-top: 0.5rem; }
+.plan-round {
+  margin-left: 0.5rem; padding: 0.05rem 0.5rem;
+  border: 1px solid var(--rule); border-radius: 999px;
+  font-size: 0.78em; color: var(--ink-mute);
+  vertical-align: middle;
+}
+.plan-list {
+  list-style: none; margin: 1rem 0; padding: 0;
+  display: grid; gap: 0.55rem;
+}
+.plan-item {
+  display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.6rem;
+  padding: 0.85rem 1rem; border: 1px solid var(--rule);
+  border-radius: 8px; background: var(--code-bg, var(--paper-soft, #f5efe6));
+}
+.plan-item-num {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.05rem; color: var(--ink-mute);
+  align-self: start; padding-top: 0.1rem;
+}
+.plan-item-head {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  align-items: baseline; margin-bottom: 0.25rem;
+}
+.plan-item-title {
+  font-weight: 500; font-size: 1.02rem;
+}
+.plan-item-tags { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+.plan-item-brief {
+  margin: 0; color: var(--ink-mute); line-height: 1.5;
+  font-size: 0.95rem;
+}
+.plan-progress {
+  display: flex; align-items: center; gap: 0.7rem;
+  margin: 1.2rem 0;
+}
+.plan-progress progress { flex: 1; height: 0.5rem; }
+.plan-progress-text { color: var(--ink-mute); font-size: 0.9rem; }
+.plan-feedback-form {
+  margin-top: 1rem; display: grid; gap: 0.5rem;
+}
+.plan-feedback-form .btn { justify-self: end; }
+.plan-actions { display: flex; justify-content: flex-end; }
+.plan-decide {
+  display: flex; gap: 0.7rem; margin-top: 0.8rem;
+}
+@media (max-width: 540px) {
+  .plan-decide { flex-direction: column; }
+}
