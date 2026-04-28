@@ -23,18 +23,20 @@ Tag highlights so far:
 
 ## Deploy convention — staging-first, tag-based
 
-**This is the definitive flow. Every change goes through staging.**
+The author runs prep with a parallel staging+prod checkout convention.
+This is the definitive flow for the canonical deploy. Forks can use
+whatever workflow they like — the codebase doesn't depend on it.
 
 Two parallel checkouts of the same repo:
 
 ```
-~/Dropbox/workspace/macmini/prep-app/          ← prod, detached HEAD at a tag (v0.X.Y)
-~/Dropbox/workspace/macmini/prep-app-staging/  ← staging, on branch `main` (rolling)
+<deploy-root>/prep-app/          ← prod, detached HEAD at a tag (v0.X.Y)
+<deploy-root>/prep-app-staging/  ← staging, on branch `main` (rolling)
 ```
 
 | concern              | prod                              | staging                                   |
 |----------------------|-----------------------------------|-------------------------------------------|
-| URL                  | https://example-host.ts.net/prep/         | https://example-host.ts.net/prep-staging/    |
+| URL                  | tailnet `/prep/`                  | tailnet `/prep-staging/`                  |
 | FastAPI port         | 8081                              | 8082                                      |
 | pm2 services         | `prep-app`, `prep-worker`         | `prep-app-staging`, `prep-worker-staging` |
 | data.sqlite          | live user data                    | seeded copy; refresh as needed            |
@@ -44,17 +46,17 @@ Two parallel checkouts of the same repo:
 **The flow:**
 
 1. Develop in `prep-app-staging/` on `main`. Commit + push as you go.
-   • Refresh on phone, verify on `/prep-staging/`.
+   • Verify on `/prep-staging/` against your tailnet.
    • Staging always reflects `origin/main` HEAD.
 2. When staging is good, **promote by tagging from main:**
    ```
-   cd ~/Dropbox/workspace/macmini/prep-app-staging
+   cd <deploy-root>/prep-app-staging
    git tag -a v0.X.Y -m "release notes"
    git push origin v0.X.Y
    ```
 3. **Deploy that tag to prod:**
    ```
-   cd ~/Dropbox/workspace/macmini/prep-app
+   cd <deploy-root>/prep-app
    ./deploy.sh v0.X.Y
    ```
    `deploy.sh` does: `git fetch --tags && git checkout <tag>`, reinstalls Python deps,
@@ -67,7 +69,7 @@ Two parallel checkouts of the same repo:
 3. Tag `v0.X.(Y+1)`, push, deploy
 4. Merge hotfix back into `main` so it doesn't get lost on the next promotion
 
-**Rollback:** `cd ~/Dropbox/workspace/macmini/prep-app && ./deploy.sh v0.<previous>`. One command.
+**Rollback:** `cd <deploy-root>/prep-app && ./deploy.sh v0.<previous>`. One command.
 
 **Versioning:** semver — bump minor for features (v0.2.0), patch for fixes (v0.2.1),
 major when breaking. Pre-1.0 we're permissive about minor-vs-patch boundaries.
@@ -76,8 +78,8 @@ major when breaking. Pre-1.0 we're permissive about minor-vs-patch boundaries.
 
 **Staging data refresh** (when you want a fresh copy of prod data):
 ```
-cp ~/Dropbox/workspace/macmini/prep-app/data.sqlite \
-   ~/Dropbox/workspace/macmini/prep-app-staging/data.sqlite
+cp <deploy-root>/prep-app/data.sqlite \
+   <deploy-root>/prep-app-staging/data.sqlite
 pm2 restart prep-app-staging
 ```
 
@@ -100,23 +102,24 @@ browser ──→ Tailscale Serve :443 (or Caddy :8000 path /prep/) ──→ uv
 push services (Apple / Mozilla / FCM) ←── pywebpush ←── notify.scheduler tick (per user, per pref mode)
 ```
 
-**Card generation is durable.** When you click "Generate N", FastAPI starts a `GenerateCardsWorkflow` on Temporal and 303-redirects you to `/generation/{wid}` which polls the workflow's `getProgress` query every 2s. The Go worker (`worker-go/`) executes activities: `PrimeClaudeSession` (one-time) → `GenerateNextCard × N` (resumes the same Claude session for prompt-cache wins) → `InsertCard × N` → `Cleanup`. Per-card retries (3x exp backoff), per-card failure isolation, idempotency via `(workflowID, index)` keys recorded in the `questions_idempotency` table. **No Telegram notification on completion** — the in-app status page is the only progress UI (per user preference).
+**Card generation is durable.** When you click "Apply" on a deck-scope transform, FastAPI starts a `GenerateCardsWorkflow` (or `TransformWorkflow`) on Temporal and 303-redirects you to a polling page. The Go worker (`worker-go/`) executes activities: `PrimeClaudeSession` (one-time) → `GenerateNextCard × N` (resumes the same Claude session for prompt-cache wins) → `InsertCard × N` → `Cleanup`. Per-card retries (3× exp backoff), per-card failure isolation, idempotency via `(workflowID, index)` keys recorded in the `questions_idempotency` table.
 
 **Code/short answer grading is also durable.** Same pattern: POST `/study/{deck}` for `code`/`short` answers (not idk) starts a `GradeAnswerWorkflow` and 303-redirects to `/grading/{wid}`. Two activities: `GradeFreeText` (claude -p shell-out, returns Verdict) → `RecordReview` (DB write + SRS step advance, ported to Go). Idempotency via the workflow ID stored in `grading_idempotency`. The polling page at `/grading/{wid}` re-renders as the existing `result.html` once the workflow completes, so the post-grade UI is identical regardless of whether grading went through the synchronous path (mcq/multi/idk) or the workflow path. Workflow ID format: `grade-<deck>-q<qid>-<rand>` so the polling page can parse the deck + qid back without a side table.
 
-**Worker `claude` invocations MUST use `--strict-mcp-config --mcp-config '{"mcpServers":{}}'`.** Without disabling MCPs, each spawned `claude` would re-load the user's full plugin config and try to start its own Telegram MCP child. Telegram allows exactly one `getUpdates` poller per bot token, so the worker spawns race for the slot with the channel-mode Claude's MCP and one of them dies — usually the channel-mode one. Hit on 2026-04-26: a 5-card batch spawned 6 bun MCPs in 46 seconds and took down the user's Telegram MCP for the rest of the session. **DO NOT use `--bare` for this purpose** — `--bare` ALSO skips OAuth/keychain reads and breaks subscription auth (`Not logged in · Please run /login`). Tried it, regressed, reverted same day. `--strict-mcp-config` only suppresses MCPs and leaves auth alone. See `worker-go/activities/activities.go` comments.
+**Worker `claude` invocations use `--strict-mcp-config --mcp-config '{"mcpServers":{}}'`.** This loads NO MCP servers for the spawn. Without it, each invocation re-loads the user's full plugin config and tries to start every MCP child — fine in isolation, but if any of those MCPs is a singleton (e.g., a service that holds a network slot), parallel spawns from the worker race for that slot and break things. The user's bot-style MCPs were the specific case that motivated this; the general principle is "don't drag the user's whole agent environment into a one-shot generation call." **DO NOT use `--bare` for this purpose** — `--bare` ALSO skips OAuth/keychain reads and breaks subscription auth (`Not logged in · Please run /login`). `--strict-mcp-config` only suppresses MCPs and leaves auth intact. See `worker-go/activities/activities.go`.
 
 **Session IDs are minted inside the activity, not derived from workflow ID.** Originally I derived `--session-id` from the workflow ID for determinism, but Claude registers a session ID before fully creating the session — so a half-failed prime attempt left the ID in Claude's registry and retries collided with `Session ID X is already in use`. Fix: `PrimeClaudeSession` mints a fresh UUID per attempt and returns it; the workflow stores the returned ID and passes it to subsequent activities. Temporal's at-least-once delivery means a successful call's ID is recorded in workflow history and re-used on replay.
 
-The legacy synchronous `generator.py` is still on disk but unused by the FastAPI app. Kept for ad-hoc CLI use (`.venv/bin/python generator.py cherry 5`).
+The legacy synchronous `generator.py` is still on disk but unused by the FastAPI app. Kept for ad-hoc CLI use (`.venv/bin/python generator.py <user> <deck> <count>`).
 
-- pm2 process name: **prep-app** (defined in `~/Dropbox/workspace/macmini/ecosystem.config.js`).
-- Caddy route: **`/prep/`** → `127.0.0.1:8081`. Defined in `~/Dropbox/workspace/macmini/Caddyfile`. Uses `handle /prep*` (NOT `handle_path /prep/*`) — `handle_path` strips the prefix before forwarding, but Starlette's `StaticFiles` mount only resolves correctly when the prefix is present in the request path. Stripping it produced 404s on `/prep/static/style.css`. Don't regress.
+**Prod ops surface** (the canonical deploy; forks may differ):
+
+- pm2 manages the `prep-app` and `prep-worker` services.
+- Caddy fronts the app at `/prep/` → `127.0.0.1:8081`. Uses `handle /prep*` (NOT `handle_path /prep/*`) — `handle_path` strips the prefix before forwarding, but Starlette's `StaticFiles` mount only resolves correctly when the prefix is present in the request path. Stripping it produced 404s on `/prep/static/style.css`. Don't regress.
 - uvicorn launched with `ROOT_PATH=/prep` so generated URLs include the prefix.
-- DB lives at `data.sqlite` in this directory. Backed up via Dropbox (whole project is in Dropbox).
-- **Primary URL:** `https://example-host.ts.net/prep/` — HTTPS, no port, valid Let's Encrypt cert, reachable on the user's tailnet from anywhere. Set up via `tailscale serve --bg --https=443 http://127.0.0.1:8000` after enabling Serve at the tailnet level (one-click admin toggle, already done). Tailscale Serve persists across reboots — config lives in tailscaled state, re-applies on daemon start. Inspect with `tailscale serve status`; turn off with `tailscale serve --https=443 off`.
-- **LAN URLs:** `http://example-host.local:8000/prep/` (mDNS) or `http://192.0.2.27:8000/prep/` (IP). Caddy binds `:8000` on all interfaces so the same listener handles LAN + tailnet traffic.
-- **mDNS gotcha:** the hostname is `example-host.local` (NOT `Mac.local` / `Mac.lan` — that was a wrong guess that propagated through earlier docs and never actually resolved). Verify with `scutil --get LocalHostName`.
+- DB lives at `data.sqlite` in the repo dir. Per-deployment, gitignored.
+- **Primary URL:** `https://<your-tailnet-hostname>/prep/` — HTTPS via Tailscale Serve, valid LetsEncrypt cert via Tailscale's MagicDNS, reachable on your tailnet from anywhere. Set up via `tailscale serve --bg --https=443 http://127.0.0.1:8000` after enabling Serve at the tailnet level (one-click admin toggle in Tailscale's web console). Tailscale Serve persists across reboots — config lives in tailscaled state, re-applies on daemon start. Inspect with `tailscale serve status`; turn off with `tailscale serve --https=443 off`.
+- **LAN access:** Caddy binds `:8000` on all interfaces so the same listener handles LAN + tailnet traffic. Tailscale identity headers are stripped from non-loopback ingress (see security gotcha below).
 
 ## Multi-user (Tailscale identity)
 
@@ -124,8 +127,9 @@ Auth is **header-based**: Tailscale Serve sets `Tailscale-User-Login` (the user'
 tailnet email) on every request that comes through `:443`. The FastAPI dependency
 `current_user(request)` reads this header, calls `db.upsert_user(...)` to track
 the user, and falls back to the `PREP_DEFAULT_USER` env var if no header is
-present (set in staging only — `guest@example.com` — for dev convenience).
-Prod has it unset, so a header-less request 401s.
+present. The bundled `make dev` sets `PREP_DEFAULT_USER=dev@example.com` so
+contributors don't need Tailscale running just to develop. Prod typically
+has it unset, so a header-less request 401s.
 
 All user-owned tables (`decks`, `questions`, `study_sessions`, `cards`,
 `reviews`, `push_subscriptions`) carry `user_id` and every db.py accessor takes
@@ -317,7 +321,7 @@ for storage; the grader decodes it back.
 ## Ops
 
 - **Start/stop:** `pm2 start prep-app` / `pm2 restart prep-app` / `pm2 logs prep-app`
-- **Apply ecosystem changes:** `pm2 reload ~/Dropbox/workspace/macmini/ecosystem.config.js && pm2 save`
+- **Apply ecosystem changes:** `pm2 reload <deploy-root>/ecosystem.config.js && pm2 save`
 - **Reload Caddy:** `brew services restart caddy` (NOT `reload` — see ops gotcha).
 - **DB peek:** `sqlite3 data.sqlite '.schema'` then `SELECT * FROM questions LIMIT 5;`
 
@@ -361,9 +365,6 @@ understood, prefer `brew services restart caddy` over `reload`, and verify with
 
 ## Future (not built yet)
 
-- Hourly trigger via local launchd plist → POST a "create session" endpoint and
-  send the user a Telegram link. (Less urgent now that webpush notifications
-  exist; possibly redundant.)
 - Generation cost cap / per-deck rate limit.
 - Optional code-execution sandbox so `code` answers can actually be run, not just
   graded by Claude.

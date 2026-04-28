@@ -29,7 +29,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import chat_handoff
 import db
-import generator
 import grader
 import icons
 import notify
@@ -97,7 +96,9 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 _ERROR_COPY = {
     400: ("Bad request.", "Something in that URL didn't quite parse."),
-    401: ("Not signed in.", "Open prep on a tailnet device — your Tailscale identity is what authenticates you."),
+    401: ("Not signed in.",
+          "prep authenticates via Tailscale Serve — open this page through your tailnet so the server can read your Tailscale identity. "
+          "For local development, set PREP_DEFAULT_USER (the make dev shim does this automatically)."),
     403: ("Forbidden.", "That's not yours to look at."),
     404: ("Not found.", "We couldn't find what you were looking for. Maybe a typo, or the link is stale."),
     409: ("Out of date.", "Something changed since this page loaded. Reload and try again."),
@@ -217,12 +218,23 @@ def current_user(request: Request) -> dict:
 
 
 db.init()
-# No boot-seed: deck rows materialize per-user the first time they navigate
-# to /deck/{name} (or hit any route that calls get_or_create_deck). The
-# index page enumerates DECK_CONTEXT directly so configured decks appear
-# even before they exist in DB. Avoids the previous design where seeding
-# under PREP_DEFAULT_USER (or its "owner@local" fallback) leaked dev
-# fixtures into the prod users/decks tables on every restart.
+# No boot-seed: deck rows materialize per-user the first time they
+# navigate to /deck/{name} (or hit any route that calls
+# get_or_create_deck). v0.3.2 dropped a previous startup-seed block
+# that auto-created an "owner@local" placeholder user, leaving dev
+# fixtures in prod tables on every restart.
+
+# Surface PREP_DEFAULT_USER state at boot so an operator who's
+# accidentally left it set in prod sees it loudly. Useful as well
+# for `make dev` so the contributor knows auth is being bypassed.
+_default_user_at_boot = os.environ.get("PREP_DEFAULT_USER")
+if _default_user_at_boot:
+    import logging
+    logging.getLogger("prep").info(
+        "PREP_DEFAULT_USER=%s — every header-less request will be authenticated as this user. "
+        "Fine for local dev; remove in prod unless you really want a single-user shared identity.",
+        _default_user_at_boot,
+    )
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 import dev_preview
@@ -232,17 +244,10 @@ dev_preview.register(app, templates)
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, user: dict = Depends(current_user)):
     uid = user["tailscale_login"]
-    # Merge DECK_CONTEXT (the configured catalog) with DB rows for this user.
-    # Configured decks the user hasn't materialized yet show as 0/0; they get
-    # a real row in `decks` the first time the user navigates to /deck/{name}.
-    db_decks = {d["name"]: d for d in db.list_decks(uid)}
-    decks: list[dict] = []
-    for name in generator.DECK_CONTEXT:
-        decks.append(db_decks.pop(name, {"name": name, "total": 0, "due": 0}))
-    # Append any decks the user has that aren't in DECK_CONTEXT (legacy or
-    # decks added then removed from the catalog) so they aren't orphaned.
-    decks.extend(db_decks.values())
-    decks.sort(key=lambda d: d["name"])
+    # All decks live in the DB now (created via /decks/new or the legacy
+    # bootstrap-seed path that ran on early v0.x deploys). No more source-
+    # code DECK_CONTEXT catalog merging.
+    decks = sorted(db.list_decks(uid), key=lambda d: d["name"])
     return templates.TemplateResponse(
         "index.html",
         {
@@ -350,11 +355,8 @@ def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
 @app.post("/deck/{name}/add")
 async def deck_add(request: Request, name: str, count: int = Form(5),
                     user: dict = Depends(current_user)):
-    # The deck must exist in DB. UI-created decks have a context_prompt;
-    # legacy bootstrap decks (cherry, temporal) fall back to DECK_CONTEXT
-    # in the worker's loadDeckContext.
     uid = user["tailscale_login"]
-    if db.find_deck(uid, name) is None and name not in generator.DECK_CONTEXT:
+    if db.find_deck(uid, name) is None:
         raise HTTPException(404, f"Unknown deck \"{name}\".")
     count = max(1, min(count, 15))
     try:

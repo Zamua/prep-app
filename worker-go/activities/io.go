@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -16,56 +15,6 @@ import (
 	"prep-worker/shared"
 )
 
-// ---- Filesystem: read deck source dirs --------------------------------
-
-var readableExts = map[string]bool{
-	".md": true, ".txt": true, ".py": true, ".go": true, ".java": true,
-	".kt": true, ".js": true, ".ts": true, ".sql": true, ".yaml": true,
-	".yml": true, ".toml": true,
-}
-
-// readDirSummary mirrors the Python generator's _read_dir_summary —
-// concatenate readable text files under dir, capped at maxFiles and
-// maxBytesPerFile so the prompt doesn't blow the context window.
-func readDirSummary(dir string, maxFiles, maxBytesPerFile int) (string, error) {
-	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	}
-	var files []string
-	err := filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if readableExts[strings.ToLower(filepath.Ext(p))] {
-			files = append(files, p)
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	sort.Strings(files)
-	if len(files) > maxFiles {
-		files = files[:maxFiles]
-	}
-	parent := filepath.Dir(dir)
-	var out strings.Builder
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		if len(data) > maxBytesPerFile {
-			data = data[:maxBytesPerFile]
-		}
-		rel, _ := filepath.Rel(parent, f)
-		fmt.Fprintf(&out, "\n--- %s ---\n%s", rel, data)
-	}
-	return out.String(), nil
-}
 
 // ---- Filesystem: claude session jsonl paths ---------------------------
 

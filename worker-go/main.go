@@ -29,12 +29,16 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("prep-worker booting")
 
+	// Agent CLI: PREP_AGENT_BIN is the canonical name; CLAUDE_BIN is the
+	// backward-compat alias for users carrying older configs forward.
+	agentBin := os.Getenv("PREP_AGENT_BIN")
+	if agentBin == "" {
+		agentBin = os.Getenv("CLAUDE_BIN")
+	}
 	cfg := &activities.Config{
-		DBPath:         os.Getenv("PREP_DB_PATH"),
-		InterviewsDir:  os.Getenv("PREP_INTERVIEWS_DIR"),
-		ClaudeBin:      os.Getenv("CLAUDE_BIN"),
-		TelegramEnv:    os.Getenv("TELEGRAM_ENV"),
-		TelegramChatID: os.Getenv("TELEGRAM_CHAT_ID"),
+		DBPath:    os.Getenv("PREP_DB_PATH"),
+		AgentBin:  agentBin,
+		AgentArgs: os.Getenv("PREP_AGENT_ARGS"),
 	}
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("config invalid: %v", err)

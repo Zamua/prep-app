@@ -15,10 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -51,25 +49,48 @@ func newSessionUUID() string {
 }
 
 // Config holds host paths read from env at worker boot.
+//
+// AgentBin / AgentArgs configure the local agent CLI shell-out. Defaults
+// match claude-code; users with a different harness (opencode, aider, …)
+// can override via PREP_AGENT_BIN / PREP_AGENT_ARGS in main.go.
+//
+// CLAUDE_BIN is honored as a backward-compat alias for PREP_AGENT_BIN.
 type Config struct {
-	DBPath         string
-	InterviewsDir  string
-	ClaudeBin      string
-	TelegramEnv    string
-	TelegramChatID string
+	DBPath    string
+	AgentBin  string
+	AgentArgs string
 }
 
 func (c *Config) Validate() error {
 	if c.DBPath == "" {
 		return errors.New("PREP_DB_PATH unset")
 	}
-	if c.InterviewsDir == "" {
-		return errors.New("PREP_INTERVIEWS_DIR unset")
-	}
-	if c.ClaudeBin == "" {
-		return errors.New("CLAUDE_BIN unset")
+	if c.AgentBin == "" {
+		return errors.New("PREP_AGENT_BIN (or CLAUDE_BIN) unset — set to the local agent CLI binary")
 	}
 	return nil
+}
+
+// agentArgs renders the configured arg template, substituting placeholders
+// and appending the prompt as the last arg. Defaults match claude-code's
+// argument shape.
+const defaultAgentArgs = "--strict-mcp-config,--mcp-config,{mcp_config},-p"
+
+func (c *Config) agentArgs(prompt string) []string {
+	csv := c.AgentArgs
+	if csv == "" {
+		csv = defaultAgentArgs
+	}
+	out := []string{}
+	for _, a := range strings.Split(csv, ",") {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		a = strings.ReplaceAll(a, "{mcp_config}", emptyMCPConfig)
+		out = append(out, a)
+	}
+	return append(out, prompt)
 }
 
 // Activities groups all activity methods so we can register them under one
@@ -80,88 +101,31 @@ type Activities struct {
 
 // ---- Deck context loading ----------------------------------------------
 
-// DeckContext is bundled into the priming prompt — deck source files +
-// shared topic dirs + every existing prompt for the deck (for cross-batch dedup).
+// DeckContext is bundled into the priming prompt — the user-supplied focus
+// (from decks.context_prompt, set via the new-deck UI) plus every existing
+// prompt for the deck (for cross-batch dedup).
 type DeckContext struct {
-	deckName       string
-	focus          string
-	sourceText     string
-	topicTexts     string
+	deckName        string
+	focus           string
 	existingPrompts []string
 }
 
-// deckRegistry mirrors generator.DECK_CONTEXT in the Python app — we keep it
-// in sync by hand for now; long-term this could move to a shared JSON file.
-var deckRegistry = map[string]struct {
-	Source string
-	Topics []string
-	Focus  string
-}{
-	"cherry": {
-		Source: "cherry",
-		Topics: []string{"behavioral"},
-		Focus: "Cherry has a multi-round loop: hiring-manager (behavioral, " +
-			"decision-making, ownership), backend coding in Coderpad, system " +
-			"design, application/API design, and a final career-narrative round. " +
-			"Generate a balanced mix biased toward whichever round is closest in " +
-			"time per the schedule.md if visible. Stack is Kotlin primary, MySQL/" +
-			"MongoDB/Redis/Elasticsearch, AWS/GCP.",
-	},
-	"temporal": {
-		Source: "temporal-prep",
-		Topics: []string{"concurrency"},
-		Focus: "Temporal Senior SWE OSS interview is two back-to-back rounds: " +
-			"(1) Coding/Concurrency — Go/Java/Python multithreading primitives, " +
-			"synchronization, deadlock avoidance, channel patterns; " +
-			"(2) Design/Distributed Systems — durable execution, message queues, " +
-			"WAL, sharding, consistency, replication. Generate a balanced mix.",
-	},
-}
-
 func (a *Activities) loadDeckContext(userID, deckName string) (*DeckContext, error) {
-	// Prior prompts (cross-batch dedup signal) are independent of which
-	// context source we use — pull them up front.
 	prior, err := allPromptsForDeck(a.Cfg.DBPath, userID, deckName)
 	if err != nil {
 		return nil, fmt.Errorf("read prior prompts: %w", err)
 	}
-
-	// Prefer the user-supplied context_prompt from the DB (set via the
-	// new-deck UI). When set, it carries everything the model needs:
-	// notes, links, focus paragraph. No source dir / topic dirs in this
-	// path — UI-created decks don't have a filesystem-backed prep dir.
 	dbPrompt, err := getDeckContextPrompt(a.Cfg.DBPath, userID, deckName)
-	if err == nil && strings.TrimSpace(dbPrompt) != "" {
-		return &DeckContext{
-			deckName:        deckName,
-			focus:           strings.TrimSpace(dbPrompt),
-			sourceText:      "",
-			topicTexts:      "",
-			existingPrompts: prior,
-		}, nil
-	}
-
-	// Legacy fallback for the pre-UI decks (cherry, temporal). Reads the
-	// hardcoded focus + the filesystem prep dir + shared topic dirs.
-	cfg, ok := deckRegistry[deckName]
-	if !ok {
-		return nil, fmt.Errorf("deck %q has no context_prompt and no legacy registry entry", deckName)
-	}
-	srcDir := filepath.Join(a.Cfg.InterviewsDir, cfg.Source)
-	source, err := readDirSummary(srcDir, 30, 8000)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", srcDir, err)
+		return nil, fmt.Errorf("read context_prompt: %w", err)
 	}
-	var topics strings.Builder
-	for _, t := range cfg.Topics {
-		td, _ := readDirSummary(filepath.Join(a.Cfg.InterviewsDir, t), 30, 8000)
-		fmt.Fprintf(&topics, "\n## Shared topic: %s\n%s", t, td)
+	focus := strings.TrimSpace(dbPrompt)
+	if focus == "" {
+		return nil, fmt.Errorf("deck %q has no context_prompt — set one via the UI first", deckName)
 	}
 	return &DeckContext{
 		deckName:        deckName,
-		focus:           cfg.Focus,
-		sourceText:      source,
-		topicTexts:      topics.String(),
+		focus:           focus,
 		existingPrompts: prior,
 	}, nil
 }
@@ -191,15 +155,6 @@ func (a *Activities) PrimeClaudeSession(ctx context.Context, in shared.PrimeInpu
 			"deck context load failed", "BadDeckContext", err)
 	}
 
-	// Skip the "Source material" / topic blocks for UI-created decks where
-	// the user's free-form context_prompt is the entire focus — printing
-	// empty headers reads as broken context to the model.
-	sourceBlock := ""
-	if strings.TrimSpace(dctx.sourceText) != "" || strings.TrimSpace(dctx.topicTexts) != "" {
-		sourceBlock = fmt.Sprintf("\n**Source material (the user's own prep notes for this deck):**\n%s\n\n%s",
-			dctx.sourceText, dctx.topicTexts)
-	}
-
 	primePrompt := fmt.Sprintf(`You are about to generate flashcard questions for an interview-prep app, one card at a time, over multiple turns. This first message gives you ALL the context. Acknowledge in one short sentence — do not generate any cards yet.
 
 **Deck:** %s
@@ -211,7 +166,6 @@ If the description above contains URLs or references recent material, you may us
 
 **Existing question prompts in this deck (do NOT duplicate or paraphrase any of these in subsequent cards):**
 %s
-%s
 
 ---
 
@@ -219,25 +173,18 @@ Acknowledge: "Ready to generate cards for %s." Nothing else.`,
 		dctx.deckName,
 		dctx.focus,
 		joinPrompts(dctx.existingPrompts),
-		sourceBlock,
 		dctx.deckName,
 	)
 
-	// --strict-mcp-config + empty mcp config: load NO MCP servers for this
-	// invocation. Without this, each spawn would load the user's plugin
-	// config and try to start its own Telegram MCP child, racing for the
-	// bot's single getUpdates poll slot and killing the channel-mode Claude's
-	// MCP. Hit on 2026-04-26 — six bun spawns in 46s during a 5-card batch
-	// took down the user's Telegram MCP for the whole session.
-	//
-	// Do NOT use --bare for this — --bare also disables OAuth/keychain reads
-	// and breaks subscription auth ("Not logged in · Please run /login").
-	cmd := exec.CommandContext(ctx,
-		a.Cfg.ClaudeBin,
-		"--strict-mcp-config", "--mcp-config", emptyMCPConfig,
-		"--session-id", sessionID,
-		"-p", primePrompt,
-	)
+	// --session-id is the one extra arg PrimeClaudeSession passes that the
+	// agent helper doesn't (it's about session persistence for prompt-cache
+	// reuse, specific to claude). We splice it in at the front of the
+	// configured agent args. For non-claude agents that don't support
+	// --session-id, the user's PREP_AGENT_ARGS would need to include
+	// equivalent flags or this codepath needs adjustment — claude is the
+	// documented v1 agent.
+	args := append([]string{"--session-id", sessionID}, a.Cfg.agentArgs(primePrompt)...)
+	cmd := exec.CommandContext(ctx, a.Cfg.AgentBin, args...)
 	cmd.Env = os.Environ()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -323,15 +270,10 @@ Output ONLY the JSON object.`,
 	// --resume if --fork-session is also specified" (we DON'T want fork because
 	// fork creates a new session ID).
 	//
-	// --strict-mcp-config + empty mcp config disables all MCPs (see the long
-	// comment in PrimeClaudeSession). DO NOT use --bare here — it also breaks
-	// OAuth.
-	cmd := exec.CommandContext(ctx,
-		a.Cfg.ClaudeBin,
-		"--strict-mcp-config", "--mcp-config", emptyMCPConfig,
-		"--resume", in.SessionID,
-		"-p", prompt,
-	)
+	// Same agent helper, with --resume <id> spliced in to reuse the primed
+	// session for prompt-cache wins.
+	args := append([]string{"--resume", in.SessionID}, a.Cfg.agentArgs(prompt)...)
+	cmd := exec.CommandContext(ctx, a.Cfg.AgentBin, args...)
 	cmd.Env = os.Environ()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -355,33 +297,6 @@ Output ONLY the JSON object.`,
 // `idempotency_key` UNIQUE constraint added to the questions table.
 func (a *Activities) InsertCard(ctx context.Context, in shared.InsertInput) (shared.InsertResult, error) {
 	return insertCard(a.Cfg.DBPath, in)
-}
-
-// ---- Activity: NotifyTelegram ------------------------------------------
-
-// NotifyTelegram pings the user via the bot HTTP API. Not naturally
-// idempotent — each call sends a message — but for "done!" pings we accept
-// the rare duplicate as cheap.
-func (a *Activities) NotifyTelegram(ctx context.Context, in shared.NotifyInput) error {
-	if a.Cfg.TelegramEnv == "" || a.Cfg.TelegramChatID == "" {
-		return nil // telegram disabled
-	}
-	token, err := readTelegramToken(a.Cfg.TelegramEnv)
-	if err != nil {
-		return fmt.Errorf("read telegram env: %w", err)
-	}
-	api := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
-	form := url.Values{}
-	form.Set("chat_id", a.Cfg.TelegramChatID)
-	form.Set("text", in.Text)
-	cmd := exec.CommandContext(ctx, "curl",
-		"-fsS", "-m", "10", api, "--data-urlencode", "chat_id="+a.Cfg.TelegramChatID,
-		"--data-urlencode", "text="+in.Text)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("telegram notify failed: %w (%s)", err, truncate(string(out), 400))
-	}
-	return nil
 }
 
 // ---- Activity: Cleanup -------------------------------------------------
@@ -494,15 +409,3 @@ func joinPrompts(prompts []string) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func readTelegramToken(envFile string) (string, error) {
-	data, err := os.ReadFile(envFile)
-	if err != nil {
-		return "", err
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "TELEGRAM_BOT_TOKEN=") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "TELEGRAM_BOT_TOKEN=")), nil
-		}
-	}
-	return "", errors.New("TELEGRAM_BOT_TOKEN missing")
-}

@@ -7,11 +7,9 @@ For `code` and `short`, we shell out to `claude -p` with the rubric.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-from pathlib import Path
 
-CLAUDE_BIN = os.environ.get("CLAUDE_BIN", str(Path.home() / ".local" / "bin" / "claude"))
+from agent import agent_command
 
 
 def _grade_freetext(question: dict, user_answer: str, timeout_seconds: int = 90) -> dict:
@@ -42,7 +40,7 @@ Output a single JSON object (no prose, no fences) with:
 Output ONLY the JSON object."""
 
     proc = subprocess.run(
-        [CLAUDE_BIN, "-p", prompt],
+        agent_command(prompt),
         capture_output=True,
         text=True,
         timeout=timeout_seconds,

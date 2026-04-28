@@ -67,11 +67,7 @@ func (a *Activities) ComputeTransform(ctx context.Context, in shared.ComputeTran
 		}
 	}()
 
-	cmd := exec.CommandContext(ctx,
-		a.Cfg.ClaudeBin,
-		"--strict-mcp-config", "--mcp-config", emptyMCPConfig,
-		"-p", prompt,
-	)
+	cmd := exec.CommandContext(ctx, a.Cfg.AgentBin, a.Cfg.agentArgs(prompt)...)
 	cmd.Env = os.Environ()
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -1,120 +1,38 @@
-"""Generate new questions for a deck by shelling out to `claude -p`.
+"""Generate new questions for a deck via the local agent CLI.
 
-Reads:
-- the deck's source dir under ~/Dropbox/workspace/interviews/<deck_or_alias>
-- shared topic dirs that the deck lists in DECK_CONTEXT
-- all existing prompts in the deck (so we can tell the model not to repeat)
+Used as an ad-hoc CLI helper (`.venv/bin/python generator.py <deck> <n>`)
+for one-off batches outside the Temporal worker. The web UI's "transform
+this deck" flow is the modern path — that runs through the Go worker
+with proper retries, idempotency, and observability.
 
-Returns a list of dicts ready for db.add_question.
+The deck's `context_prompt` (set via the new-deck UI) is what claude
+reads. There is no filesystem prep-dir / DECK_CONTEXT fallback anymore;
+empty decks are valid (claude returns pure additions).
 """
 
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-from pathlib import Path
+import sys
 
 import db
-
-INTERVIEWS_DIR = Path.home() / "Dropbox" / "workspace" / "interviews"
-CLAUDE_BIN = os.environ.get("CLAUDE_BIN", str(Path.home() / ".local" / "bin" / "claude"))
-
-# A deck name maps to (its own dir under interviews/, list of shared topic dirs to also read).
-# The first dir is treated as the canonical source for the company/role.
-DECK_CONTEXT: dict[str, dict] = {
-    "cherry": {
-        "source": "cherry",
-        "topics": ["behavioral"],
-        "focus": (
-            "Cherry has a multi-round loop: hiring-manager (behavioral, "
-            "decision-making, ownership), backend coding in Coderpad, system "
-            "design, application/API design, and a final career-narrative round. "
-            "Generate a balanced mix biased toward whichever round is closest in "
-            "time per the schedule.md if visible. Stack is Kotlin primary, MySQL/"
-            "MongoDB/Redis/Elasticsearch, AWS/GCP."
-        ),
-    },
-    "temporal": {
-        "source": "temporal-prep",
-        "topics": ["concurrency"],
-        "focus": (
-            "Temporal Senior SWE OSS interview is two back-to-back rounds: "
-            "(1) Coding/Concurrency — Go/Java/Python multithreading primitives, "
-            "synchronization, deadlock avoidance, channel patterns; "
-            "(2) Design/Distributed Systems — durable execution, message queues, "
-            "WAL, sharding, consistency, replication. Generate a balanced mix."
-        ),
-    },
-}
+from agent import agent_command
 
 
-def _read_dir_summary(dir_path: Path, max_files: int = 30, max_bytes_per_file: int = 8000) -> str:
-    """Concat readable text files under dir_path with size caps."""
-    out: list[str] = []
-    if not dir_path.exists():
-        return ""
-    files = sorted(
-        [p for p in dir_path.rglob("*") if p.is_file() and p.suffix.lower() in
-         {".md", ".txt", ".py", ".go", ".java", ".kt", ".js", ".ts", ".sql", ".yaml", ".yml", ".toml"}]
-    )[:max_files]
-    for f in files:
-        try:
-            data = f.read_text(encoding="utf-8", errors="replace")[:max_bytes_per_file]
-        except Exception:
-            continue
-        rel = f.relative_to(dir_path.parent)
-        out.append(f"\n--- {rel} ---\n{data}")
-    return "".join(out)
-
-
-def _build_prompt(deck_name: str, count: int, existing_prompts: list[str],
-                   user_id: str | None = None) -> str:
-    """Construct the generation prompt. Prefers the user-supplied
-    `decks.context_prompt` (set via the UI); falls back to the legacy
-    DECK_CONTEXT entry for the bootstrap decks (cherry, temporal) if the
-    column is empty. Eventually DECK_CONTEXT can be deleted once those
-    two decks have been re-described via the UI."""
-    db_prompt = db.get_deck_context_prompt(user_id, deck_name) if user_id else None
-    legacy = DECK_CONTEXT.get(deck_name)
-
-    if db_prompt and db_prompt.strip():
-        focus_block = db_prompt.strip()
-        # No on-disk source dirs in the new flow — the user's prompt is
-        # expected to carry whatever context is needed (or invite claude
-        # to web-search for it).
-        source_block = ""
-    elif legacy:
-        focus_block = legacy["focus"]
-        source_text = _read_dir_summary(INTERVIEWS_DIR / legacy["source"])
-        topic_texts = "\n\n".join(
-            f"## Shared topic: {t}\n{_read_dir_summary(INTERVIEWS_DIR / t)}"
-            for t in legacy["topics"]
-        )
-        source_block = (
-            f"\n**Source material (the user's own prep notes for this deck):**\n"
-            f"{source_text}\n\n{topic_texts}"
-        )
-    else:
-        raise ValueError(
-            f"Deck '{deck_name}' has no context_prompt and no legacy DECK_CONTEXT entry. "
-            "Set one via the UI or seed the DB."
-        )
-
+def _build_prompt(deck_name: str, count: int, focus: str, existing_prompts: list[str]) -> str:
     existing_block = "\n".join(f"- {p[:200]}" for p in existing_prompts) or "(none yet)"
-
     return f"""You are generating flashcard questions for an interview-prep app. The user is preparing for a senior software engineering interview.
 
 **Deck:** {deck_name}
 
 **Focus / context for this deck (provided by the user):**
-{focus_block}
+{focus}
 
 If the description above contains URLs or references recent material, you may use your web-fetch / web-search tools to ground the questions in current information.
 
 **Existing question prompts in this deck — do NOT duplicate or paraphrase any of these:**
 {existing_block}
-{source_block}
 
 ---
 
@@ -140,19 +58,25 @@ Output ONLY the JSON array, nothing else.
 """
 
 
-def generate(deck_name: str, count: int = 5, timeout_seconds: int = 240) -> list[dict]:
-    deck_id = db.get_or_create_deck(deck_name)
-    existing = db.question_prompts_for_deck(deck_id)
-    prompt = _build_prompt(deck_name, count, existing)
+def generate(user_id: str, deck_name: str, count: int = 5, timeout_seconds: int = 240) -> list[dict]:
+    deck_id = db.get_or_create_deck(user_id, deck_name)
+    focus = db.get_deck_context_prompt(user_id, deck_name) or ""
+    if not focus.strip():
+        raise ValueError(
+            f"deck '{deck_name}' has no context_prompt; "
+            "set one via the web UI (/decks/new or the deck page) first"
+        )
+    existing = db.question_prompts_for_deck(user_id, deck_id)
+    prompt = _build_prompt(deck_name, count, focus, existing)
 
     proc = subprocess.run(
-        [CLAUDE_BIN, "-p", prompt],
+        agent_command(prompt),
         capture_output=True,
         text=True,
         timeout=timeout_seconds,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"claude -p failed: {proc.stderr.strip()}")
+        raise RuntimeError(f"agent failed: {proc.stderr.strip()}")
 
     raw = proc.stdout.strip()
     # Strip optional ```json fences just in case the model adds them.
@@ -165,7 +89,7 @@ def generate(deck_name: str, count: int = 5, timeout_seconds: int = 240) -> list
     start = raw.find("[")
     end = raw.rfind("]")
     if start == -1 or end == -1:
-        raise ValueError(f"no JSON array in claude output: {raw[:500]}")
+        raise ValueError(f"no JSON array in agent output: {raw[:500]}")
     raw = raw[start:end + 1]
 
     items = json.loads(raw)
@@ -176,6 +100,7 @@ def generate(deck_name: str, count: int = 5, timeout_seconds: int = 240) -> list
     for item in items:
         try:
             qid = db.add_question(
+                user_id=user_id,
                 deck_id=deck_id,
                 qtype=item["type"],
                 prompt=item["prompt"],
@@ -192,12 +117,15 @@ def generate(deck_name: str, count: int = 5, timeout_seconds: int = 240) -> list
 
 
 if __name__ == "__main__":
-    import sys
-    deck = sys.argv[1] if len(sys.argv) > 1 else "cherry"
-    n = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+    if len(sys.argv) < 3:
+        print("usage: generator.py <user_id> <deck> [count]", file=sys.stderr)
+        sys.exit(1)
+    uid = sys.argv[1]
+    deck = sys.argv[2]
+    n = int(sys.argv[3]) if len(sys.argv) > 3 else 5
     db.init()
-    print(f"Generating {n} questions for deck '{deck}'...")
-    out = generate(deck, n)
+    print(f"Generating {n} questions for deck '{deck}' (user={uid})...")
+    out = generate(uid, deck, n)
     print(f"Inserted {len(out)} questions:")
     for x in out:
         print(f"  #{x['id']} [{x['type']}] {x['topic']}")
