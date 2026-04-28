@@ -54,31 +54,63 @@ def agent_command(prompt: str) -> list[str]:
     return [bin_path, *args, prompt]
 
 
-def probe() -> bool:
-    """Return whether an AI agent is reachable.
+def status() -> dict:
+    """Return a structured agent status dict the UI can render.
 
-    Resolution order matches the Go worker's agent.FromEnv():
-      1. PREP_AGENT_URL set → GET <url>/healthz, accept any 2xx.
-      2. PREP_AGENT_BIN (or CLAUDE_BIN) set → check the file exists.
-      3. Default ~/.local/bin/claude → check it exists.
-      4. Otherwise False.
+    Shape:
+      {
+        "kind":         "http" | "shell" | "unconfigured",
+        "logged_in":    bool,
+        "email":        str (optional),
+        "org_name":     str (optional),
+        "subscription_type": str (optional),
+        "reason":       str (optional, when logged_in is False),
+      }
 
-    Network errors / timeouts on the URL probe count as unavailable —
-    we'd rather show "AI off" than block app startup on a dead server.
+    "logged_in" is the canonical "AI features should light up" flag —
+    matches the previous `probe()` boolean.
     """
     url = (os.environ.get("PREP_AGENT_URL") or "").strip()
     if url:
+        out = {"kind": "http", "logged_in": False}
         try:
             with urllib.request.urlopen(
                 url.rstrip("/") + "/healthz", timeout=2.0
             ) as resp:
-                return 200 <= resp.status < 300
-        except (urllib.error.URLError, TimeoutError, OSError):
-            return False
+                if 200 <= resp.status < 300:
+                    body = resp.read().decode("utf-8", errors="replace")
+                    import json as _json
+                    try:
+                        data = _json.loads(body)
+                        out["logged_in"] = bool(data.get("logged_in"))
+                        for k in ("email", "org_name", "subscription_type", "reason"):
+                            if data.get(k):
+                                out[k] = data[k]
+                    except _json.JSONDecodeError:
+                        out["reason"] = "agent-server returned non-JSON"
+                else:
+                    out["reason"] = f"agent-server returned HTTP {resp.status}"
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            out["reason"] = f"agent-server unreachable: {e}"
+        return out
 
     bin_path = (
         (os.environ.get("PREP_AGENT_BIN") or "").strip()
         or (os.environ.get("CLAUDE_BIN") or "").strip()
-        or _DEFAULT_BIN
     )
-    return os.path.isfile(bin_path) and os.access(bin_path, os.X_OK)
+    if not bin_path:
+        bin_path = _DEFAULT_BIN
+        if not (os.path.isfile(bin_path) and os.access(bin_path, os.X_OK)):
+            return {"kind": "unconfigured", "logged_in": False,
+                    "reason": "neither PREP_AGENT_URL nor PREP_AGENT_BIN is set"}
+    available = os.path.isfile(bin_path) and os.access(bin_path, os.X_OK)
+    out = {"kind": "shell", "logged_in": available}
+    if not available:
+        out["reason"] = f"PREP_AGENT_BIN={bin_path!r} doesn't exist or isn't executable"
+    return out
+
+
+def probe() -> bool:
+    """Boolean view of `status()` — whether AI features should light up.
+    Kept as a helper for code paths that just want True/False."""
+    return bool(status().get("logged_in"))

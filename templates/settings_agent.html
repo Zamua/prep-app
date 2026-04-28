@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}AI agent · settings · prep{% endblock %}
+{% block page_class %}settings settings-agent{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">AI agent</p>
+  <h1 class="display">{% if status.logged_in %}<em>Connected</em>.{% else %}Bring your <em>own</em> Claude.{% endif %}</h1>
+  <p class="lede">
+    Prep uses your Claude subscription to generate cards, grade
+    code/short answers, and run deck transforms. The app works
+    without it (manual cards + self-grading), but AI features need
+    a connected agent.
+  </p>
+</section>
+
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Status</span><span class="rule"></span></p>
+  <p class="agent-status" data-state="{{ 'on' if status.logged_in else 'off' }}">
+    {% if status.logged_in %}
+      {{ icon('check-circle', class_='icon icon-inline') }}
+      <strong>Connected</strong>
+      {% if status.email %} · {{ status.email }}{% endif %}
+      {% if status.subscription_type %} · {{ status.subscription_type }} subscription{% endif %}
+    {% elif status.kind == 'shell' %}
+      {{ icon('warning-circle', class_='icon icon-inline') }}
+      <strong>Managed by host CLI</strong> · this prep instance is configured
+      to call claude directly on the host (PREP_AGENT_BIN).
+      {% if status.reason %}<br><small>{{ status.reason }}</small>{% endif %}
+    {% elif status.kind == 'unconfigured' %}
+      {{ icon('warning-circle', class_='icon icon-inline') }}
+      <strong>Not configured</strong> — neither PREP_AGENT_URL nor PREP_AGENT_BIN is set.
+    {% else %}
+      {{ icon('warning-circle', class_='icon icon-inline') }}
+      <strong>Not connected</strong>{% if status.reason %} · {{ status.reason }}{% endif %}
+    {% endif %}
+  </p>
+
+  {% if error %}
+    <p class="form-error">{{ error }}</p>
+  {% endif %}
+  {% if flash %}
+    <p class="notify-status" data-kind="ok">{{ flash }}</p>
+  {% endif %}
+</section>
+
+{# Connect / disconnect controls only apply when the agent is an HTTP
+   server we can talk to. Shell-agent setups manage auth on the host
+   (keychain on mac, file on linux); this page can't drive that. #}
+{% if status.kind == 'http' and not status.logged_in %}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Connect Claude</span><span class="rule"></span></p>
+  <ol class="agent-steps">
+    <li>
+      On any machine where you have Claude Code installed and signed
+      in, run:
+      <pre class="reproduction agent-cmd"><code id="agent-cmd-copy">claude setup-token</code></pre>
+      <button type="button" class="btn btn-quiet btn-tiny" id="copy-agent-cmd">Copy command</button>
+    </li>
+    <li>
+      Authenticate in the browser when it opens, then copy the token
+      it prints to the terminal. The token starts with <code>sk-ant-oat01-</code>
+      and is good for one year.
+    </li>
+    <li>
+      Paste the token here and click <strong>Connect</strong>.
+    </li>
+  </ol>
+
+  <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
+    <label class="freetext">
+      <span class="freetext-label">Token</span>
+      <textarea name="token" rows="3" required spellcheck="false"
+                autocapitalize="off" autocorrect="off"
+                placeholder="sk-ant-oat01-…"></textarea>
+      <span class="freetext-hint">
+        Stored on this prep instance only — never sent to anthropic by us
+        beyond the requests you'd make anyway when generating cards.
+      </span>
+    </label>
+    <div class="study-actions">
+      <button type="submit" class="btn btn-primary">Connect</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+{% if status.kind == 'http' and status.logged_in %}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Disconnect</span><span class="rule"></span></p>
+  <p class="agent-disconnect-blurb">
+    Wipes the OAuth token from this prep instance. AI features hide;
+    manual flows keep working. You can reconnect any time with a new
+    <code>claude setup-token</code>.
+  </p>
+  <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/disconnect" class="agent-disconnect-form">
+    <button type="submit" class="btn btn-quiet">Disconnect</button>
+  </form>
+</section>
+{% endif %}
+
+<script>
+(function () {
+  const btn = document.getElementById('copy-agent-cmd');
+  const src = document.getElementById('agent-cmd-copy');
+  if (!btn || !src) return;
+  btn.addEventListener('click', async () => {
+    const original = btn.textContent;
+    try {
+      await navigator.clipboard.writeText(src.textContent.trim());
+      btn.textContent = 'copied';
+    } catch (e) {
+      btn.textContent = 'failed';
+    }
+    setTimeout(() => { btn.textContent = original; }, 1400);
+  });
+})();
+</script>
+
+{% endblock %}

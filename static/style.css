@@ -2808,3 +2808,38 @@ body:has(dialog[open]) {
 @media (max-width: 540px) {
   .plan-decide { flex-direction: column; }
 }
+
+/* ===== /settings/agent ===== */
+
+.agent-panel {
+  margin: 1.6rem 0;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.agent-panel + .agent-panel { margin-top: 1rem; }
+.agent-status {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin: 0.4rem 0 0;
+  font-size: 1rem;
+  flex-wrap: wrap;
+}
+.agent-status[data-state="on"] strong { color: var(--right); }
+.agent-status[data-state="off"] strong { color: var(--ink-mute); }
+.agent-cmd {
+  margin: 0.5rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+.agent-steps { margin: 0.6rem 0 0; padding-left: 1.2rem; }
+.agent-steps li { margin: 0.5rem 0; }
+.agent-connect-form { margin-top: 0.6rem; }
+.agent-connect-form textarea {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.agent-disconnect-blurb {
+  color: var(--ink-mute); font-style: italic;
+  margin: 0 0 0.6rem;
+}
