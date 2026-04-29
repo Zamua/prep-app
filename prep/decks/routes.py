@@ -16,14 +16,17 @@ HTML routes.
 
 from __future__ import annotations
 
+import json
 import re
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.datastructures import FormData
 
 from prep import db
 from prep.auth import current_user
 from prep.decks import service
+from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.web import responses
 from prep.web.templates import templates
@@ -70,6 +73,108 @@ def _validate_deck_name(name: str) -> str:
     if n in _RESERVED_DECK_NAMES:
         raise HTTPException(400, f'"{n}" is reserved — pick another name.')
     return n
+
+
+# ---- question-form parsing ---------------------------------------------
+#
+# Both the new-question and edit-question forms accept the same fields
+# in the same shape. Centralizing the parse + validation keeps the two
+# route handlers free of the duplication that built up in app.py.
+
+
+def _parse_question_form(form: FormData) -> tuple[NewQuestion | None, dict, str | None]:
+    """Extract a NewQuestion entity from a form submission.
+
+    Returns (entity_or_None, raw_dict, error_or_None). The raw dict is
+    what the template's `form` block re-renders on validation error,
+    so users don't lose their typed input. The entity is None when
+    validation fails (or pydantic itself rejects the values)."""
+    qtype_raw = (form.get("type") or "").strip()
+    prompt = (form.get("prompt") or "").strip()
+    answer_raw = (form.get("answer") or "").strip()
+    topic = (form.get("topic") or "").strip() or None
+    skeleton = (form.get("skeleton") or "").strip() or None
+    language = (form.get("language") or "").strip() or None
+    rubric = (form.get("rubric") or "").strip() or None
+    choices_raw = (form.get("choices") or "").strip()
+    choices = [ln.strip() for ln in choices_raw.splitlines() if ln.strip()] or None
+
+    raw = {
+        "type": qtype_raw,
+        "prompt": prompt,
+        "answer": answer_raw,
+        "topic": topic or "",
+        "skeleton": skeleton or "",
+        "language": language or "",
+        "rubric": rubric or "",
+        "choices": choices_raw,
+    }
+
+    err: str | None = None
+    valid_types = sorted(t.value for t in QuestionType)
+    if qtype_raw not in valid_types:
+        err = f"Type must be one of: {', '.join(valid_types)}."
+    elif not prompt:
+        err = "Prompt is required."
+    elif not answer_raw:
+        err = "Answer is required."
+    elif qtype_raw in ("mcq", "multi") and not choices:
+        err = f"{qtype_raw.upper()} questions need at least one choice (one per line)."
+    elif qtype_raw == "code" and not language:
+        err = "Code questions need a language."
+
+    if err:
+        return None, raw, err
+
+    # `multi` answers are stored as JSON arrays. Accept either a JSON
+    # literal or a newline-separated list — be forgiving.
+    answer: str = answer_raw
+    if qtype_raw == "multi":
+        try:
+            parsed = json.loads(answer_raw)
+            if isinstance(parsed, list):
+                answer = json.dumps(parsed)
+        except json.JSONDecodeError:
+            answer = json.dumps([ln.strip() for ln in answer_raw.splitlines() if ln.strip()])
+
+    return (
+        NewQuestion(
+            type=QuestionType(qtype_raw),
+            prompt=prompt,
+            answer=answer,
+            topic=topic,
+            choices=choices,
+            rubric=rubric,
+            skeleton=skeleton,
+            language=language,
+        ),
+        raw,
+        None,
+    )
+
+
+def _question_form_from_entity(q) -> dict:
+    """Convert a Question entity into the dict shape the question_edit
+    template's `form` block expects: list-typed fields rendered as
+    newline-joined strings, multi-answer JSON unwrapped."""
+    answer = q.answer or ""
+    if q.type is QuestionType.MULTI:
+        try:
+            parsed = json.loads(answer) if answer else []
+            if isinstance(parsed, list):
+                answer = "\n".join(parsed)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "type": q.type.value,
+        "topic": q.topic or "",
+        "prompt": q.prompt,
+        "choices": "\n".join(q.choices) if q.choices else "",
+        "answer": answer,
+        "rubric": q.rubric or "",
+        "skeleton": q.skeleton or "",
+        "language": q.language or "",
+    }
 
 
 # ---- workflow-id parsing ------------------------------------------------
@@ -276,6 +381,112 @@ def deck_delete(
 
 
 # ---- Question-level routes ----------------------------------------------
+
+
+@router.get("/deck/{name}/question/new", response_class=HTMLResponse)
+def question_new_form(
+    request: Request,
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Manual question entry form. The primary card-creation path when
+    no AI agent is configured; an additional path otherwise."""
+    uid = user["tailscale_login"]
+    if deck_repo.find_id(uid, name) is None:
+        raise HTTPException(404, "deck not found")
+    return templates.TemplateResponse(
+        "question_new.html",
+        {"request": request, "deck_name": name, "form": {}, "error": None},
+    )
+
+
+@router.post("/deck/{name}/question/new", response_class=HTMLResponse)
+async def question_new_submit(
+    request: Request,
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+
+    form = await request.form()
+    new, raw, err = _parse_question_form(form)
+    if err is not None or new is None:
+        return templates.TemplateResponse(
+            "question_new.html",
+            {"request": request, "deck_name": name, "form": raw, "error": err},
+            status_code=400,
+        )
+    service.add_question(q_repo, uid, deck_id, new)
+    return responses.redirect(request, f"/deck/{name}")
+
+
+@router.get("/question/{qid}/edit", response_class=HTMLResponse)
+def question_edit_form(
+    request: Request,
+    qid: int,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Manual edit form. Always available regardless of agent —
+    counterpart to the AI Improve button."""
+    uid = user["tailscale_login"]
+    q = q_repo.get(uid, qid)
+    if q is None:
+        raise HTTPException(404, "question not found")
+    deck_name = deck_repo.find_name(uid, q.deck_id)
+    if deck_name is None:
+        raise HTTPException(404, "deck not found")
+    return templates.TemplateResponse(
+        "question_edit.html",
+        {
+            "request": request,
+            "deck_name": deck_name,
+            "q": q,
+            "form": _question_form_from_entity(q),
+            "error": None,
+        },
+    )
+
+
+@router.post("/question/{qid}/edit", response_class=HTMLResponse)
+async def question_edit_submit(
+    request: Request,
+    qid: int,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    uid = user["tailscale_login"]
+    q = q_repo.get(uid, qid)
+    if q is None:
+        raise HTTPException(404, "question not found")
+    deck_name = deck_repo.find_name(uid, q.deck_id)
+    if deck_name is None:
+        raise HTTPException(404, "deck not found")
+
+    form = await request.form()
+    new, raw, err = _parse_question_form(form)
+    if err is not None or new is None:
+        return templates.TemplateResponse(
+            "question_edit.html",
+            {
+                "request": request,
+                "deck_name": deck_name,
+                "q": q,
+                "form": raw,
+                "error": err,
+            },
+            status_code=400,
+        )
+    service.update_question(q_repo, uid, qid, new)
+    return responses.redirect(request, f"/deck/{deck_name}")
 
 
 @router.post("/question/{qid}/suspend")
