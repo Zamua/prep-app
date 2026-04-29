@@ -1419,32 +1419,8 @@ async def transform_view(request: Request, wid: str, user: dict = Depends(curren
     )
 
 
-@app.get("/transform/{wid}/status")
-async def transform_status(wid: str, user: dict = Depends(current_user)):
-    _require_owns_transform(user, wid)
-    progress = await temporal_client.get_transform_progress(wid)
-    desc = await temporal_client.describe_workflow(wid)
-    return JSONResponse({"progress": progress, "desc": desc})
-
-
-@app.post("/transform/{wid}/apply")
-async def transform_apply(request: Request, wid: str, user: dict = Depends(current_user)):
-    _require_owns_transform(user, wid)
-    try:
-        await temporal_client.signal_apply_transform(wid)
-    except Exception as e:
-        raise HTTPException(500, f"signal failed: {e}")
-    return _redirect(request, f"/transform/{wid}")
-
-
-@app.post("/transform/{wid}/reject")
-async def transform_reject(request: Request, wid: str, user: dict = Depends(current_user)):
-    _require_owns_transform(user, wid)
-    try:
-        await temporal_client.signal_reject_transform(wid)
-    except Exception as e:
-        raise HTTPException(500, f"signal failed: {e}")
-    return _redirect(request, f"/transform/{wid}")
+# /transform/{wid}/status, /transform/{wid}/apply, /transform/{wid}/reject
+# moved to prep.decks.routes.
 
 
 # ---- Plan-first generation polling page + signals -------------------------
@@ -1497,51 +1473,8 @@ async def plan_view(request: Request, wid: str, user: dict = Depends(current_use
     )
 
 
-@app.get("/plan/{wid}/status")
-async def plan_status(wid: str, user: dict = Depends(current_user)):
-    """JSON status for the polling page. Returns the live PlanGenerateProgress
-    while the workflow is alive, or {"status": "gone"} once the query
-    handler is no longer registered."""
-    _require_owns_plan(user, wid)
-    progress = await temporal_client.get_plan_progress(wid)
-    if progress is None:
-        return JSONResponse({"status": "gone"})
-    return JSONResponse(progress)
-
-
-@app.post("/plan/{wid}/feedback")
-async def plan_feedback(request: Request, wid: str, user: dict = Depends(current_user)):
-    _require_owns_plan(user, wid)
-    form = await request.form()
-    fb = (form.get("feedback") or "").strip()
-    if not fb:
-        raise HTTPException(400, "feedback is required")
-    try:
-        await temporal_client.signal_plan_feedback(wid, fb)
-    except Exception as e:
-        raise HTTPException(500, f"signal failed: {e}")
-    return _redirect(request, f"/plan/{wid}")
-
-
-@app.post("/plan/{wid}/accept")
-async def plan_accept(request: Request, wid: str, user: dict = Depends(current_user)):
-    _require_owns_plan(user, wid)
-    try:
-        await temporal_client.signal_plan_accept(wid)
-    except Exception as e:
-        raise HTTPException(500, f"signal failed: {e}")
-    return _redirect(request, f"/plan/{wid}")
-
-
-@app.post("/plan/{wid}/reject")
-async def plan_reject(request: Request, wid: str, user: dict = Depends(current_user)):
-    deck_name, _ = _require_owns_plan(user, wid)
-    try:
-        await temporal_client.signal_plan_reject(wid)
-    except Exception as e:
-        raise HTTPException(500, f"signal failed: {e}")
-    # Reject = abandon. Bounce back to the (still-empty) deck.
-    return _redirect(request, f"/deck/{deck_name}")
+# /plan/{wid}/status, /plan/{wid}/feedback, /plan/{wid}/accept,
+# /plan/{wid}/reject moved to prep.decks.routes.
 
 
 # ---- PWA install (manifest + service worker) ------------------------------

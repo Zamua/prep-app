@@ -12,15 +12,12 @@ in one place (this file is the contract for the decks UI), keeps
 app.py thin, and makes it trivial to remount under a prefix later
 if we ever expose deck routes under /api/v1/decks/* alongside the
 HTML routes.
-
-Currently extracted: /deck/{name}/delete. Subsequent commits will
-move the rest of the deck/question routes here as the pattern
-proves out — full move covered by phase 5d's follow-on commits.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from prep.auth import current_user
 from prep.decks import service
@@ -28,6 +25,48 @@ from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.web import responses
 
 router = APIRouter()
+
+
+# ---- workflow-id parsing ------------------------------------------------
+#
+# Workflow IDs are constructed by prep.temporal_client when starting a
+# workflow. Their shapes are stable strings — the route layer parses
+# them to recover the resource being operated on (deck or question)
+# for ownership checks.
+
+
+def _parse_transform_wid(wid: str) -> tuple[str, int] | None:
+    """`transform-<scope>-<target_id>-<rand>`. Returns (scope, target_id)
+    or None if malformed. scope ∈ {card, deck}."""
+    if not wid.startswith("transform-"):
+        return None
+    parts = wid[len("transform-") :].split("-")
+    if len(parts) < 3:
+        return None
+    scope = parts[0]
+    if scope not in ("card", "deck"):
+        return None
+    try:
+        target_id = int(parts[1])
+    except ValueError:
+        return None
+    return scope, target_id
+
+
+def _parse_plan_wid(wid: str) -> str | None:
+    """`plan-<deck_name>-<rand>`. Returns deck_name or None.
+
+    deck_name may itself contain hyphens, so we split on the *trailing*
+    rand suffix (last hyphen) and treat what's left as the name."""
+    if not wid.startswith("plan-"):
+        return None
+    rest = wid[len("plan-") :]
+    if "-" not in rest:
+        return None
+    name, _, suffix = rest.rpartition("-")
+    if not name or len(suffix) < 6:
+        return None
+    return name
 
 
 def _deck_repo() -> DeckRepo:
@@ -137,3 +176,160 @@ async def question_improve(
     except Exception as e:
         raise HTTPException(500, f"failed to start transform: {e}")
     return responses.redirect(request, f"/transform/{result.workflow_id}")
+
+
+# ---- transform workflow signals + status -------------------------------
+
+
+def _require_owns_transform(
+    user: dict,
+    wid: str,
+    deck_repo: DeckRepo,
+    q_repo: QuestionRepo,
+) -> tuple[str, int]:
+    """Parse + verify ownership of a transform workflow id. Routes use
+    this as the gate before signaling. Returns (scope, target_id)."""
+    parsed = _parse_transform_wid(wid)
+    if not parsed:
+        raise HTTPException(400, "malformed workflow id")
+    scope, target_id = parsed
+    uid = user["tailscale_login"]
+    if scope == "card":
+        if q_repo.get(uid, target_id) is None:
+            raise HTTPException(404, "transform not found")
+    else:
+        if deck_repo.find_name(uid, target_id) is None:
+            raise HTTPException(404, "transform not found")
+    return scope, target_id
+
+
+@router.get("/transform/{wid}/status")
+async def transform_status(
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    _require_owns_transform(user, wid, deck_repo, q_repo)
+    from prep import temporal_client
+
+    progress = await temporal_client.get_transform_progress(wid)
+    desc = await temporal_client.describe_workflow(wid)
+    return JSONResponse({"progress": progress, "desc": desc})
+
+
+@router.post("/transform/{wid}/apply")
+async def transform_apply(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    _require_owns_transform(user, wid, deck_repo, q_repo)
+    from prep import temporal_client
+
+    try:
+        await service.apply_transform(temporal_client, wid)
+    except Exception as e:
+        raise HTTPException(500, f"signal failed: {e}")
+    return responses.redirect(request, f"/transform/{wid}")
+
+
+@router.post("/transform/{wid}/reject")
+async def transform_reject(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    _require_owns_transform(user, wid, deck_repo, q_repo)
+    from prep import temporal_client
+
+    try:
+        await service.reject_transform(temporal_client, wid)
+    except Exception as e:
+        raise HTTPException(500, f"signal failed: {e}")
+    return responses.redirect(request, f"/transform/{wid}")
+
+
+# ---- plan-first generation: signals + status ---------------------------
+
+
+def _require_owns_plan(user: dict, wid: str, deck_repo: DeckRepo) -> tuple[str, int]:
+    """Parse + verify ownership of a plan workflow id. Returns
+    (deck_name, deck_id)."""
+    name = _parse_plan_wid(wid)
+    if not name:
+        raise HTTPException(400, "malformed workflow id")
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "plan not found")
+    return name, deck_id
+
+
+@router.get("/plan/{wid}/status")
+async def plan_status(
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """JSON status for the plan polling page. Returns the live progress
+    while the workflow is alive, or {"status": "gone"} once the query
+    handler is no longer registered."""
+    _require_owns_plan(user, wid, deck_repo)
+    from prep import temporal_client
+
+    progress = await service.get_plan_progress(temporal_client, wid)
+    if progress is None:
+        return JSONResponse({"status": "gone"})
+    return JSONResponse(progress)
+
+
+@router.post("/plan/{wid}/feedback")
+async def plan_feedback(
+    request: Request,
+    wid: str,
+    feedback: str = Form(...),
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    _require_owns_plan(user, wid, deck_repo)
+    if not feedback.strip():
+        raise HTTPException(400, "empty feedback")
+    from prep import temporal_client
+
+    await service.submit_plan_feedback(temporal_client, wid, feedback.strip())
+    return responses.redirect(request, f"/plan/{wid}")
+
+
+@router.post("/plan/{wid}/accept")
+async def plan_accept(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    _require_owns_plan(user, wid, deck_repo)
+    from prep import temporal_client
+
+    await service.accept_plan(temporal_client, wid)
+    return responses.redirect(request, f"/plan/{wid}")
+
+
+@router.post("/plan/{wid}/reject")
+async def plan_reject(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    name, _ = _require_owns_plan(user, wid, deck_repo)
+    from prep import temporal_client
+
+    await service.reject_plan(temporal_client, wid)
+    # On reject, return to the deck view rather than the plan page —
+    # the plan workflow is being torn down, no use polling it.
+    return responses.redirect(request, f"/deck/{name}")
