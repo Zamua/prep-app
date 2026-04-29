@@ -108,8 +108,8 @@ func insertCard(dbPath string, in shared.InsertInput) (shared.InsertResult, erro
 	}
 
 	// Look up deck id (creating if missing — mirrors the Python helper).
-	// Scoped to user_id so two users with a deck named "cherry" each get
-	// their own deck row.
+	// Scoped to user_id so two users with a deck of the same name each
+	// get their own deck row.
 	var deckID int
 	err = tx.QueryRow(`SELECT id FROM decks WHERE name=? AND user_id=?`,
 		in.DeckName, in.UserID).Scan(&deckID)

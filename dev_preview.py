@@ -37,8 +37,8 @@ INDEX_FIXTURES: dict[str, dict[str, Any]] = {
     "empty": {"decks": []},
     "populated": {
         "decks": [
-            {"id": 1, "name": "cherry", "total": 12, "due": 5},
-            {"id": 2, "name": "temporal", "total": 18, "due": 0},
+            {"id": 1, "name": "go-systems", "total": 12, "due": 5},
+            {"id": 2, "name": "webhooks", "total": 18, "due": 0},
         ]
     },
 }
@@ -59,12 +59,12 @@ _QCARD_BASE = {
 
 DECK_FIXTURES: dict[str, dict[str, Any]] = {
     "empty": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "questions": [],
         "due_count": 0,
     },
     "populated": {
-        "deck_name": "temporal",
+        "deck_name": "webhooks",
         "due_count": 3,
         "questions": [
             {"id": 21, **_QCARD_BASE, "type": "code"},
@@ -79,8 +79,8 @@ DECK_FIXTURES: dict[str, dict[str, Any]] = {
                 "id": 23,
                 **_QCARD_BASE,
                 "type": "multi",
-                "topic": "behavioral-star",
-                "prompt": "Which of the following are senior-tell signals after a STAR story?",
+                "topic": "behavioral",
+                "prompt": "Which of the following are indicators of senior-level reflection in a project retro?",
             },
             {
                 "id": 24,
@@ -92,7 +92,7 @@ DECK_FIXTURES: dict[str, dict[str, Any]] = {
         ],
     },
     "with_suspended": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "due_count": 1,
         "questions": [
             {"id": 31, **_QCARD_BASE, "suspended": 0, "type": "code"},
@@ -112,27 +112,27 @@ DECK_FIXTURES: dict[str, dict[str, Any]] = {
 
 STUDY_FIXTURES: dict[str, dict[str, Any]] = {
     "mcq": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 22,
             "type": "mcq",
             "topic": "system-design",
-            "prompt": "You're designing Cherry's webhook delivery system. A provider's endpoint times out **after** the request has been sent but before the 200 ack is received. Which is the simplest correct guarantee you should ship?",
+            "prompt": "You're designing a webhook delivery system. A provider's endpoint times out **after** the request has been sent but before the 200 ack is received. Which is the simplest correct guarantee you should ship?",
             "choices_list": [
                 "A monotonically increasing sequence number on each webhook",
                 "An idempotency key (event ID) that the provider uses to dedupe",
-                "Exactly-once delivery guaranteed by Cherry's broker",
+                "Exactly-once delivery guaranteed by the broker",
                 "A signed HMAC header so the provider can verify authenticity",
             ],
         },
     },
     "multi": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 23,
             "type": "multi",
-            "topic": "behavioral-star",
-            "prompt": "Which of the following are senior-tell signals after a STAR story?",
+            "topic": "behavioral",
+            "prompt": "Which of the following are indicators of senior-level reflection in a project retro?",
             "choices_list": [
                 "A reflection: 'Knowing what I know now, I'd have done X differently'",
                 "A quantified result with a real number",
@@ -142,7 +142,7 @@ STUDY_FIXTURES: dict[str, dict[str, Any]] = {
         },
     },
     "code": {
-        "deck_name": "temporal",
+        "deck_name": "webhooks",
         "q": {
             "id": 21,
             "type": "code",
@@ -151,7 +151,7 @@ STUDY_FIXTURES: dict[str, dict[str, Any]] = {
         },
     },
     "short": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 24,
             "type": "short",
@@ -164,7 +164,7 @@ STUDY_FIXTURES: dict[str, dict[str, Any]] = {
 # study_empty.html
 
 STUDY_EMPTY_FIXTURES: dict[str, dict[str, Any]] = {
-    "default": {"deck_name": "cherry"},
+    "default": {"deck_name": "go-systems"},
 }
 
 # result.html — verdict + state, plus picked/correct sets for mcq/multi.
@@ -176,16 +176,16 @@ _RUBRIC = "- Names the core reason: floats can't represent decimal fractions exa
 
 RESULT_FIXTURES: dict[str, dict[str, Any]] = {
     "mcq-right": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 22,
             "type": "mcq",
             "topic": "system-design",
-            "prompt": "You're designing Cherry's webhook delivery system. A provider's endpoint times out **after** the request has been sent. Which is the simplest correct guarantee you should ship?",
+            "prompt": "You're designing a webhook delivery system. A provider's endpoint times out **after** the request has been sent. Which is the simplest correct guarantee you should ship?",
             "choices_list": [
                 "A monotonically increasing sequence number on each webhook",
                 "An idempotency key (event ID) that the provider uses to dedupe",
-                "Exactly-once delivery guaranteed by Cherry's broker",
+                "Exactly-once delivery guaranteed by the broker",
                 "A signed HMAC header so the provider can verify authenticity",
             ],
             "answer": "An idempotency key (event ID) that the provider uses to dedupe",
@@ -203,22 +203,22 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         "correct_set": ["An idempotency key (event ID) that the provider uses to dedupe"],
     },
     "mcq-wrong": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 22,
             "type": "mcq",
             "topic": "system-design",
-            "prompt": "You're designing Cherry's webhook delivery system. A provider's endpoint times out **after** the request has been sent. Which is the simplest correct guarantee you should ship?",
+            "prompt": "You're designing a webhook delivery system. A provider's endpoint times out **after** the request has been sent. Which is the simplest correct guarantee you should ship?",
             "choices_list": [
                 "A monotonically increasing sequence number on each webhook",
                 "An idempotency key (event ID) that the provider uses to dedupe",
-                "Exactly-once delivery guaranteed by Cherry's broker",
+                "Exactly-once delivery guaranteed by the broker",
                 "A signed HMAC header so the provider can verify authenticity",
             ],
             "answer": "An idempotency key (event ID) that the provider uses to dedupe",
             "rubric": _RUBRIC,
         },
-        "user_answer": "Exactly-once delivery guaranteed by Cherry's broker",
+        "user_answer": "Exactly-once delivery guaranteed by the broker",
         "idk": False,
         "verdict": {
             "result": "wrong",
@@ -226,16 +226,16 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
             "model_answer_summary": "An idempotency key (event ID) that the provider uses to dedupe",
         },
         "state": _BASE_STATE_WRONG,
-        "picked_set": ["Exactly-once delivery guaranteed by Cherry's broker"],
+        "picked_set": ["Exactly-once delivery guaranteed by the broker"],
         "correct_set": ["An idempotency key (event ID) that the provider uses to dedupe"],
     },
     "multi-right": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 23,
             "type": "multi",
-            "topic": "behavioral-star",
-            "prompt": "Which of the following are senior-tell signals after a STAR story?",
+            "topic": "behavioral",
+            "prompt": "Which of the following are indicators of senior-level reflection in a project retro?",
             "choices_list": [
                 "A reflection: 'Knowing what I know now, I'd have done X differently'",
                 "A quantified result with a real number",
@@ -265,12 +265,12 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         ],
     },
     "multi-wrong": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 23,
             "type": "multi",
-            "topic": "behavioral-star",
-            "prompt": "Which of the following are senior-tell signals after a STAR story?",
+            "topic": "behavioral",
+            "prompt": "Which of the following are indicators of senior-level reflection in a project retro?",
             "choices_list": [
                 "A reflection: 'Knowing what I know now, I'd have done X differently'",
                 "A quantified result with a real number",
@@ -299,7 +299,7 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         ],
     },
     "code-right": {
-        "deck_name": "temporal",
+        "deck_name": "webhooks",
         "q": {
             "id": 21,
             "type": "code",
@@ -320,7 +320,7 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         "correct_set": [],
     },
     "code-wrong": {
-        "deck_name": "temporal",
+        "deck_name": "webhooks",
         "q": {
             "id": 21,
             "type": "code",
@@ -341,7 +341,7 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         "correct_set": [],
     },
     "short-right": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 24,
             "type": "short",
@@ -362,7 +362,7 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         "correct_set": [],
     },
     "short-wrong": {
-        "deck_name": "cherry",
+        "deck_name": "go-systems",
         "q": {
             "id": 24,
             "type": "short",
@@ -383,7 +383,7 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         "correct_set": [],
     },
     "code-idk": {
-        "deck_name": "temporal",
+        "deck_name": "webhooks",
         "q": {
             "id": 21,
             "type": "code",
@@ -409,8 +409,8 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
 
 GENERATION_FIXTURES: dict[str, dict[str, Any]] = {
     "in-progress": {
-        "wid": "gen-temporal-PREVIEW01",
-        "deck_name": "temporal",
+        "wid": "gen-webhooks-PREVIEW01",
+        "deck_name": "webhooks",
         "progress": {
             "total": 5,
             "completed": 2,
@@ -427,8 +427,8 @@ GENERATION_FIXTURES: dict[str, dict[str, Any]] = {
         },
     },
     "complete": {
-        "wid": "gen-temporal-PREVIEW02",
-        "deck_name": "temporal",
+        "wid": "gen-webhooks-PREVIEW02",
+        "deck_name": "webhooks",
         "progress": {
             "total": 5,
             "completed": 5,
@@ -450,8 +450,8 @@ GENERATION_FIXTURES: dict[str, dict[str, Any]] = {
 
 GRADING_FIXTURES: dict[str, dict[str, Any]] = {
     "in-progress": {
-        "wid": "grade-temporal-q21-PREVIEW",
-        "deck_name": "temporal",
+        "wid": "grade-webhooks-q21-PREVIEW",
+        "deck_name": "webhooks",
         "progress": {"status": "grading", "started_at": _now_iso()},
         "desc": {
             "status": "RUNNING",

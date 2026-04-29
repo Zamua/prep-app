@@ -2,12 +2,13 @@
 
 Drives Chromium at iPhone 15 Pro Max viewport (430x932 logical, DPR 3) over
 the dev preview routes, plus the live index/deck pages, and saves a PNG per
-screen to ~/Dropbox/workspace/macmini/prep-app/ui-screenshots/<run-tag>/.
+screen to ./ui-screenshots/<run-tag>/ relative to the repo root.
 
 Usage:
     .venv/bin/python capture.py                  # tag = before-<timestamp>
     .venv/bin/python capture.py --tag after-foo  # tag = after-foo
     .venv/bin/python capture.py --only result    # only screens whose name contains "result"
+    .venv/bin/python capture.py --out /path/to/dir  # override output base
 
 Outputs one PNG per screen, deterministically named "<screen>.png" so the
 same screen across runs has the same filename — easy to diff before/after.
@@ -39,10 +40,9 @@ IPHONE_15_PRO_MAX = {
 
 # (screen_id, url-relative-to-BASE_URL). screen_id is the filename stem.
 SCREENS: list[tuple[str, str]] = [
-    # Live (real data) — for sanity vs the previews
+    # Live (real data) — for sanity vs the previews. Replace these
+    # paths with whatever decks actually exist in the running instance.
     ("live-index", "/"),
-    ("live-deck-cherry", "/deck/cherry"),
-    ("live-deck-temporal", "/deck/temporal"),
     # Index variants
     ("index-empty", "/dev/preview/index/empty"),
     ("index-populated", "/dev/preview/index/populated"),
@@ -73,7 +73,9 @@ SCREENS: list[tuple[str, str]] = [
     ("grading-in-progress", "/dev/preview/grading/in-progress"),
 ]
 
-OUT_BASE = Path.home() / "Dropbox" / "workspace" / "macmini" / "prep-app" / "ui-screenshots"
+# Default output dir is repo-relative (ui-tools/ sits one level below
+# the repo root); override with --out at invocation time.
+OUT_BASE = Path(__file__).resolve().parent.parent / "ui-screenshots"
 
 
 def capture_all(out_dir: Path, screens: list[tuple[str, str]]) -> None:
@@ -109,10 +111,16 @@ def main():
     ap.add_argument(
         "--only", default=None, help="Substring filter on screen_id; only those will be captured."
     )
+    ap.add_argument(
+        "--out",
+        default=None,
+        help="Output base dir. Default: <repo>/ui-screenshots/.",
+    )
     args = ap.parse_args()
 
     tag = args.tag or f"before-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    out_dir = OUT_BASE / tag
+    out_base = Path(args.out).expanduser().resolve() if args.out else OUT_BASE
+    out_dir = out_base / tag
 
     screens = SCREENS
     if args.only:
