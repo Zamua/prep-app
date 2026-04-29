@@ -91,23 +91,29 @@ class SessionRepo:
         user_id: str,
         sid: str,
         question_id: int,
-        expected_version: int,
-        user_answer: str,
         workflow_id: str,
+        expected_version: int,
     ) -> int:
+        """Mark the session as 'grading' (waiting on a Temporal
+        workflow). Version-checked. Returns new version."""
         return _legacy_db.set_session_grading(
-            user_id, sid, question_id, expected_version, user_answer, workflow_id
+            user_id, sid, question_id, workflow_id, expected_version
         )
 
     def grading_completed(
         self,
         user_id: str,
         sid: str,
-        workflow_id: str,
+        question_id: int,
         verdict: dict,
         state: dict,
-    ) -> int:
-        return _legacy_db.session_grading_completed(user_id, sid, workflow_id, verdict, state)
+        workflow_id: str,
+    ) -> None:
+        """Reconciliation path: a polling route saw the grading
+        workflow finish, so we stamp the answer and flip to
+        showing-result. Not version-checked (server-side, not user
+        input). Idempotent — second call is a no-op."""
+        _legacy_db.session_grading_completed(user_id, sid, question_id, verdict, state, workflow_id)
 
     def advance(self, user_id: str, sid: str, expected_version: int) -> int:
         """Advance the session to the next card. Returns new version.

@@ -117,20 +117,20 @@ async def start_grading(
     user_id: str,
     sid: str,
     qid: int,
+    deck_name: str,
     expected_version: int,
     user_answer: str,
-    question: dict,
+    idk: bool = False,
 ) -> str:
     """Kick off a GradeAnswer workflow + mark the session row as
-    'grading'. Returns the workflow id (which is what the route
-    redirects the user to). Raises StaleVersionError if the session
-    moved before we could mark it grading."""
-    result = await client.start_grading(
-        user_id=user_id,
-        question=question,
-        user_answer=user_answer,
-    )
-    session_repo.set_grading(user_id, sid, qid, expected_version, user_answer, result.workflow_id)
+    'grading'. Returns the workflow id. Raises StaleVersionError if
+    the session moved before we could mark it grading.
+
+    The temporal_client.start_grading signature is
+    (qid, deck_name, user_answer, idk, *, user_id), so we mirror it
+    here verbatim — adapter, not domain remodeling."""
+    result = await client.start_grading(qid, deck_name, user_answer, idk, user_id=user_id)
+    session_repo.set_grading(user_id, sid, qid, result.workflow_id, expected_version)
     return result.workflow_id
 
 
@@ -147,11 +147,12 @@ def grading_landed(
     *,
     user_id: str,
     sid: str,
+    question_id: int,
     workflow_id: str,
     verdict: dict,
     state: dict,
-) -> int:
+) -> None:
     """Called by the route after polling sees a terminal grading state.
-    Records the cached verdict + state on the session row and returns
-    the new session version."""
-    return repo.grading_completed(user_id, sid, workflow_id, verdict, state)
+    Records the cached verdict + state on the session row. Idempotent:
+    second call once we're already in showing-result is a no-op."""
+    repo.grading_completed(user_id, sid, question_id, verdict, state, workflow_id)
