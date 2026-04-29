@@ -33,11 +33,11 @@ from prep import agent as _agent_mod
 from prep import (
     chat_handoff,
     db,
-    grader,
     icons,
     notify,
     temporal_client,
 )
+from prep.domain import grading
 
 # REPO_ROOT (not BASE_DIR) — the package now lives one level below the
 # repo root, but `templates/` and `static/` stay at the repo root so
@@ -701,7 +701,7 @@ async def session_submit(request: Request, sid: str, user: dict = Depends(curren
         return _redirect(request, f"/grading/{res.workflow_id}?sid={sid}")
 
     # ---- Fast path: idk + mcq/multi grade synchronously.
-    verdict = grader.grade(question, user_answer, idk=idk)
+    verdict = grading.grade(question, user_answer, idk=idk)
     state = db.record_review(
         uid, qid, verdict["result"], user_answer, notes=verdict.get("feedback", "")
     )
@@ -833,7 +833,7 @@ async def study_submit(request: Request, name: str, user: dict = Depends(current
         return _redirect(request, f"/grading/{res.workflow_id}")
 
     # ---- Fast path: idk + mcq/multi grade synchronously (deterministic, ms).
-    verdict = grader.grade(question, user_answer, idk=idk)
+    verdict = grading.grade(question, user_answer, idk=idk)
     state = db.record_review(
         uid,
         qid,
