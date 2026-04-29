@@ -21,7 +21,7 @@ export PREP_DEFAULT_USER ?= dev@example.com
 
 .PHONY: help setup tools deps build dev run-app run-worker run-temporal \
         lint format hooks clean wipe-temporal-state \
-        docker-up docker-down docker-build docker-logs
+        deploy-stag deploy-prod promote logs-stag logs-prod down-stag down-prod
 
 help:
 	@echo "Local dev (no docker):"
@@ -33,11 +33,14 @@ help:
 	@echo "  make hooks    — install pre-commit hook (idempotent; runs as part of \`make setup\`)"
 	@echo "  make clean    — kill stray dev processes; preserve data"
 	@echo ""
-	@echo "Docker compose (canonical deploy shape):"
-	@echo "  make docker-build   — build prep + agent images"
-	@echo "  make docker-up      — bring the stack up in detached mode"
-	@echo "  make docker-down    — stop the stack (data volumes preserved)"
-	@echo "  make docker-logs    — tail compose logs"
+	@echo "Deploy (single-checkout, two stacks side-by-side):"
+	@echo "  make deploy-stag           — build current working tree, deploy as 'stag' on :8082"
+	@echo "  make deploy-prod           — build the tag in .prod-version, deploy as 'prod' on :8081"
+	@echo "  make promote v=v0.X.Y      — write v to .prod-version, commit, push, deploy-prod"
+	@echo "  make logs-stag             — tail the 'stag' stack"
+	@echo "  make logs-prod             — tail the 'prod' stack"
+	@echo "  make down-stag             — stop 'stag' (data volumes preserved)"
+	@echo "  make down-prod             — stop 'prod' (data volumes preserved)"
 
 setup: tools deps build hooks
 
@@ -101,21 +104,63 @@ clean:
 wipe-temporal-state:
 	rm -rf temporal-data/
 
-# ----- docker compose deploy -----
-# Canonical deploy shape as of v0.13.0. Two services: prep (app +
-# temporal devserver + go worker) and agent (claude wrapper). Volumes
-# preserved across `docker compose down` — only `down -v` wipes data.
-# `docker compose up` works without an .env file (compose has inline
-# ${VAR:-default} for every override); see README.md for tweaks.
+# ----- two-stack deploy from one checkout -----
+# Staging tracks main; prod is pinned to the tag in .prod-version.
+# Each stack is a distinct compose project (-p stag / -p prod) with
+# its own image tag (prep:staging / prep:vX.Y.Z) and named volumes
+# (prep-data / prod-data). Both run on the same docker daemon.
+#
+# Promote = update .prod-version (the source of truth for "what is
+# prod"), commit, deploy. Idempotent: re-running deploy-prod with the
+# same .prod-version is a no-op (cached build, container already on
+# that image).
 
-docker-build:
-	docker compose build
+DEPLOY_PROD_TAG := $(shell test -f .prod-version && tr -d '[:space:]' < .prod-version)
+DEPLOY_BUILD_DIR := /tmp/prep-build
 
-docker-up:
-	docker compose up -d
+deploy-stag:
+	@echo "→ deploy-stag (image=prep:staging, project=stag, port=8082)"
+	@# Explicitly clear PREP_DEFAULT_USER — the Makefile's `export ... ?=` for
+	@# `make dev` would otherwise leak into the deploy target and silently
+	@# enable bypass. Real auth comes from Tailscale headers.
+	env -u PREP_DEFAULT_USER IMAGE_TAG=staging \
+	  docker compose --env-file deploy/staging.env -p stag up -d --build
 
-docker-down:
-	docker compose down
+deploy-prod:
+	@if [ -z "$(DEPLOY_PROD_TAG)" ]; then \
+	  echo "no .prod-version — write a tag (e.g. \`echo v0.13.3 > .prod-version\`) first"; exit 1; fi
+	@if ! git rev-parse --verify "$(DEPLOY_PROD_TAG)" >/dev/null 2>&1; then \
+	  echo "tag $(DEPLOY_PROD_TAG) not found locally — try \`git fetch --tags\`"; exit 1; fi
+	@echo "→ deploy-prod (image=prep:$(DEPLOY_PROD_TAG), project=prod, port=8081)"
+	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
+	git worktree add --detach $(DEPLOY_BUILD_DIR) $(DEPLOY_PROD_TAG)
+	env -u PREP_DEFAULT_USER IMAGE_TAG=$(DEPLOY_PROD_TAG) \
+	  docker compose \
+	    -f docker-compose.yml \
+	    --project-directory $(DEPLOY_BUILD_DIR) \
+	    --env-file deploy/prod.env \
+	    -p prod \
+	    up -d --build
+	git worktree remove --force $(DEPLOY_BUILD_DIR)
 
-docker-logs:
-	docker compose logs -f --tail=200
+promote:
+	@if [ -z "$(v)" ]; then echo "usage: make promote v=v0.X.Y"; exit 1; fi
+	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
+	  echo "tag $(v) doesn't exist — create it first: \`git tag -a $(v) && git push --tags\`"; exit 1; fi
+	@echo "$(v)" > .prod-version
+	git add .prod-version
+	git commit -m "promote $(v) to prod"
+	git push origin main
+	$(MAKE) deploy-prod
+
+logs-stag:
+	docker compose -p stag logs -f --tail=200
+
+logs-prod:
+	docker compose -p prod logs -f --tail=200
+
+down-stag:
+	docker compose -p stag down
+
+down-prod:
+	docker compose -p prod down

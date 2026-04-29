@@ -165,30 +165,66 @@ clauses (cross-user lookups return None as if the row didn't exist).
 | Lint / format | `make lint` (read-only) / `make format` (writes). Pre-commit hook runs the same checks against staged files. |
 | New icon | `curl -o static/icons/<n>.svg https://raw.githubusercontent.com/phosphor-icons/core/main/assets/light/<n>-light.svg` |
 
-To validate the docker artifact: `make docker-build && make docker-up`.
-Reads `.env`. Logs via `make docker-logs`.
+To validate ad-hoc: `docker compose build && docker compose up -d`.
+For the staging-vs-prod two-stack split, use `make deploy-stag` /
+`make deploy-prod` (see below).
 
 ---
 
-## Author's deploy convention (macmini)
+## Deploy model (single checkout, two stacks)
 
-Two compose stacks side-by-side on the same host:
+One checkout (`prep-app-staging/`, on `main`), two compose stacks
+running on the same docker daemon:
 
-- `~/Dropbox/workspace/macmini/prep-app-staging/` — staging, on `main`
-  branch, `ENV_NAME=prep` → volumes `prep-data` + `prep-agent-data`.
-  Tailscale serves it at `/prep-staging/`.
-- `~/Dropbox/workspace/macmini/prep-app/` — prod, detached HEAD at a
-  tag, `ENV_NAME=prod` → volumes `prod-data` + `prod-agent-data`.
-  Tailscale serves it at `/prep/`.
+- **stag** — image `prep:staging`, project `stag`, host port 8082,
+  volumes `prep-data` + `prep-agent-data`. Tailscale serves at
+  `/prep-staging/`. Built from current working tree on every
+  `make deploy-stag`.
+- **prod** — image `prep:<tag>`, project `prod`, host port 8081,
+  volumes `prod-data` + `prod-agent-data`. Tailscale serves at
+  `/prep/`. Built from `git worktree add --detach <tag>` against
+  whatever tag is in `.prod-version`. The working tree never moves
+  during a prod build.
 
-**Promote flow**: develop in `prep-app-staging/` → `make docker-build`
-→ verify on `/prep-staging/` → `git tag v0.X.Y && git push --tags` →
-in `prep-app/`: `git fetch --tags && git checkout v0.X.Y &&
-docker compose build && docker compose up -d`.
+**Source of truth for "what is prod"** = `.prod-version` (single
+line, e.g., `v0.13.3`). Tracked in git so `git log .prod-version` is
+the prod-deploy history.
 
-**Important**: the user wants explicit go-ahead before promoting prod.
-Default to deploying only to staging during a session; wait for them
-to say "ship to prod" or equivalent.
+**Per-stack config** lives in `deploy/staging.env` and
+`deploy/prod.env` (tracked). A local `.env` (gitignored) layers on
+top for per-machine overrides. `PREP_DEFAULT_USER` is deliberately
+unset in both deploy env files — both stacks enforce real Tailscale
+auth.
+
+**Promote flow**:
+```bash
+# tag whatever's on main
+git tag -a v0.X.Y -m "..."
+git push origin --tags
+
+# promote: writes .prod-version, commits, pushes, builds at the tag,
+# brings up prod stack
+make promote v=v0.X.Y
+```
+
+`make deploy-prod` (without promote) just redeploys whatever
+`.prod-version` already says — idempotent. Use it after editing
+`deploy/prod.env` or to recreate prod containers from the same tag.
+
+**Important — wait for go-ahead before prod.** Default to
+`make deploy-stag` during a session; wait for the user to say
+"deploy prod" or equivalent before running `make promote` or
+`make deploy-prod`.
+
+Image tags are versioned (`prep:staging`, `prep:v0.13.3`) so all
+historical prod images coexist in the daemon's cache; running
+containers hold a reference to the image by ID, so a staging rebuild
+can't displace prod's bytes.
+
+The previous two-checkout convention (`prep-app/` at a detached HEAD
+in addition to `prep-app-staging/`) is retired as of 2026-04-29; the
+old prod checkout was renamed to `prep-app.retired-20260429/` and
+can be deleted.
 
 Tailscale serve direct mounts handle path routing (no caddy in front
 of prep anymore). `colima` auto-starts at login via

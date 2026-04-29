@@ -6,13 +6,21 @@
 # variable that affects runtime has a sensible default. Override any of
 # them by creating a .env file in this directory (see .env.example for
 # the full set + comments).
+#
+# For the staging-vs-prod split, prefer `make deploy-stag` /
+# `make deploy-prod` — they layer this base file with `deploy/*.env`
+# and stamp images with `IMAGE_TAG` so multiple versions can coexist
+# on the same daemon.
 
 services:
   prep:
     build:
       context: .
       dockerfile: docker/Dockerfile.prep
-    image: prep:dev
+    # Versioned image tag. Defaults to `:dev` for ad-hoc `docker compose
+    # up`. The deploy targets pass IMAGE_TAG=staging or IMAGE_TAG=v0.X.Y
+    # so prod and staging images live side-by-side in the daemon's cache.
+    image: prep:${IMAGE_TAG:-dev}
     restart: unless-stopped
     ports:
       - "${PREP_HOST_PORT:-8082}:8082"
@@ -37,14 +45,14 @@ services:
       # Internal temporal namespace. Doesn't matter for a single
       # deployment; differs between staging + prod when running both.
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-prep}
-      # Auth bypass: every header-less request becomes this user. The
-      # default makes a fresh `docker compose up` work as a single-user
-      # 'guest' deploy; the only real multi-user auth path prep offers
-      # is Tailscale Serve, which injects per-user identity headers.
-      # Set this to your tailnet email if you want a stable identity
-      # before tailscale is set up; remove it entirely once tailscale
-      # is fronting the deploy.
-      PREP_DEFAULT_USER: ${PREP_DEFAULT_USER:-guest}
+      # Auth bypass: when set (and non-empty), every header-less request
+      # becomes this user. Default is empty → bypass disabled → real
+      # Tailscale identity required. For a single-user single-machine
+      # bring-up without Tailscale, set PREP_DEFAULT_USER=guest in a
+      # local .env. The real multi-user auth path is Tailscale Serve,
+      # which injects per-user identity headers and makes this var
+      # redundant.
+      PREP_DEFAULT_USER: ${PREP_DEFAULT_USER:-}
       # IANA "sub" claim push services see if they need to contact
       # the operator. Optional but good practice in real deploys.
       PREP_VAPID_SUB: ${PREP_VAPID_SUB:-mailto:noreply@example.com}
@@ -53,7 +61,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.agent
-    image: prep-agent:dev
+    image: prep-agent:${IMAGE_TAG:-dev}
     restart: unless-stopped
     # No host port mapping by default — only the prep service needs to
     # reach this. Add a `ports:` stanza if you want to debug from the

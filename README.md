@@ -38,10 +38,17 @@ docker compose up -d
 ```
 
 The first `up` builds the images (~5 min); subsequent ones are <5s.
-Visit <http://127.0.0.1:8082/>. You're logged in as `guest` — that's
-the default identity for a single-user deploy. To change anything
-(port, URL prefix, identity), copy `.env.example` → `.env` and edit.
-Otherwise skip it.
+Visit <http://127.0.0.1:8082/> — you'll get a 401, because real auth
+is on by default and you don't have a Tailscale identity yet. Two
+ways forward:
+
+- **Quickest**: `echo PREP_DEFAULT_USER=guest > .env && docker compose
+  up -d`. Single-user, no Tailscale, you're now `guest`.
+- **Real**: skip the `.env` and go to step 3 — Tailscale Serve gives
+  you per-user identity headers automatically.
+
+For other tweaks (port, URL prefix, etc.), copy `.env.example` →
+`.env` and edit; everything in there is optional.
 
 ### 3. Reach it from anywhere — and add real auth
 
@@ -95,6 +102,17 @@ host. AI surfaces unhide on the next page load.
     tar -czf /dst/prep-backup-$(date +%F).tgz -C /src .
   ```
 
+### Running staging + prod side-by-side (advanced)
+
+If you want to iterate on `main` without touching what's deployed —
+the way the project author runs it — there's a separate **`make
+deploy-stag`** / **`make deploy-prod`** flow that runs two stacks on
+the same docker host. Skip this section if you just want one
+deploy; only worth the extra moving pieces if you'd otherwise have to
+make changes to the live URL while testing them. See [Hack on it →
+Two-stack deploy](#two-stack-deploy-staging--prod-from-one-checkout)
+below.
+
 ---
 
 ## Hack on it
@@ -119,9 +137,9 @@ Linux: skip `brew bundle`, install mise via the
 make dev                 # goreman starts temporal + uvicorn + worker
 ```
 
-Open <http://127.0.0.1:8081/>. You're auto-logged in as
-`dev@example.com` via `PREP_DEFAULT_USER`. `Ctrl-C` cleans up all
-three processes.
+Open <http://127.0.0.1:8081/>. The Makefile exports
+`PREP_DEFAULT_USER=dev@example.com` for `make dev` so you're
+auto-logged in. `Ctrl-C` cleans up all three processes.
 
 This is loopback-only, with `--reload` on uvicorn. Edit a Python file
 and the server restarts in <1s. Templates auto-reload. Static files
@@ -147,14 +165,58 @@ There are no automated tests yet — exercise via the UI.
 When you want to test the actual deploy shape:
 
 ```bash
-make docker-build        # multi-stage: go + bun + python:slim
-make docker-up           # bring up the prep + agent containers
-make docker-logs         # tail
+docker compose build      # multi-stage: go + bun + python:slim
+docker compose up -d      # bring up prep + agent containers
+docker compose logs -f    # tail
 ```
 
-Reads the same `.env` as the user-mode quickstart. If you ran
-`make dev` first, the docker stack uses port 8082 to avoid colliding
-with `make dev`'s 8081.
+Reads `.env` if present. If you ran `make dev` first, the docker
+stack uses port 8082 to avoid colliding with `make dev`'s 8081.
+
+### Two-stack deploy (staging + prod from one checkout)
+
+The author runs prep with two stacks side-by-side on a single Mac
+mini: `staging` tracks `main`, `prod` is pinned to a git tag. Both
+stacks share the docker daemon's image cache and the working tree —
+no second checkout, no `git checkout` dance.
+
+The whole flow:
+
+```bash
+# iterate on main, deploy to staging
+vim ...
+make deploy-stag                    # builds prep:staging, project=stag, port 8082
+
+# happy with what's on main; tag it
+git tag -a v0.14.0 -m "what's new"
+git push origin --tags
+
+# promote that tag to prod (writes the tag to .prod-version,
+# commits, pushes, builds, deploys)
+make promote v=v0.14.0              # builds prep:v0.14.0, project=prod, port 8081
+
+# back to iterating on main — staging gets new bytes, prod stays
+# pinned at v0.14.0 until the next promote.
+```
+
+Internals worth knowing:
+
+- **`.prod-version`** is the source of truth for what's running in
+  prod. `make deploy-prod` reads it; `make promote` updates it via a
+  commit. To redeploy whatever prod is currently on (e.g., after a
+  config change), just `make deploy-prod` — idempotent.
+- **`deploy/staging.env` + `deploy/prod.env`** carry the per-stack
+  shape (port, ROOT_PATH, namespace). Tracked in git. A local `.env`
+  layers on top for personal overrides.
+- **`make deploy-prod`** uses `git worktree add --detach <tag>` into
+  `/tmp/prep-build`, builds from there, then removes the worktree.
+  Your main working tree never moves — you can be mid-edit on main
+  and `make deploy-prod` is invisible to you.
+- Image tags are versioned (`prep:staging`, `prep:v0.14.0`) so
+  multiple versions coexist in the daemon's image cache without
+  fighting over a single `:dev` tag.
+- `make logs-stag` / `make logs-prod` / `make down-stag` /
+  `make down-prod` for per-stack ops.
 
 ### Repo layout
 

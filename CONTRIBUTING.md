@@ -38,12 +38,18 @@ What's intentionally out of scope (so don't expect these to land):
 ## Releasing (author convention)
 
 For your fork, use whatever workflow you like — the codebase doesn't
-depend on it. The author runs prep with two compose stacks on a
-single Mac mini:
+depend on it. The author runs prep as two compose stacks (`stag` +
+`prod`) side-by-side on a single Mac mini, both driven from one
+checkout. The README's "Two-stack deploy" section walks through the
+mechanics; the short version:
 
-- `prep-app-staging/` on `main` — develop here, verify, tag from here
-- `prep-app/` at a tag (detached HEAD) — prod, promote by checking
-  out the new tag and `docker compose build && up -d`
+- `make deploy-stag` builds current `main` and brings up the staging
+  stack on `:8082`.
+- `make promote v=v0.X.Y` writes `v0.X.Y` to `.prod-version`,
+  commits, pushes, builds *that tag* in a temporary git worktree,
+  and brings up the prod stack on `:8081`.
+- `make deploy-prod` (no `v=`) idempotently redeploys whatever tag
+  `.prod-version` already pins.
 
 Tags are semver: `v0.X.Y`. Bump minor for features, patch for
 fixes. Pre-1.0 we're permissive about the minor/patch boundary.
