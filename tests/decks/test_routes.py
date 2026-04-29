@@ -111,3 +111,27 @@ def test_suspend_other_users_question_404(client: TestClient, initialized_db: st
     assert r.status_code == 404
     # bob's question is still unsuspended.
     assert QuestionRepo().get("bob@example.com", qid).suspended is False
+
+
+# ---- deck view ---------------------------------------------------------
+
+
+def test_deck_view_renders_for_existing_deck(client: TestClient, initialized_db: str):
+    _seed_deck(initialized_db, name="reading-list", with_questions=2)
+    r = client.get("/deck/reading-list")
+    assert r.status_code == 200
+    # Template fields surface — deck name + at least one of the question
+    # prompts should appear in the rendered HTML.
+    assert "reading-list" in r.text
+    assert "q0" in r.text
+    assert "q1" in r.text
+
+
+def test_deck_view_lazy_materializes_empty_deck(client: TestClient, initialized_db: str):
+    """get_or_create_deck behavior: hitting /deck/<new-name> creates
+    the deck row on demand, then renders the empty-deck UI."""
+    user = initialized_db
+    assert DeckRepo().find_id(user, "fresh-deck") is None
+    r = client.get("/deck/fresh-deck")
+    assert r.status_code == 200
+    assert DeckRepo().find_id(user, "fresh-deck") is not None

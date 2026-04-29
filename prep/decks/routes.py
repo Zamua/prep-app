@@ -17,12 +17,14 @@ HTML routes.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
+from prep import db
 from prep.auth import current_user
 from prep.decks import service
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.web import responses
+from prep.web.templates import templates
 
 router = APIRouter()
 
@@ -82,6 +84,36 @@ def _question_repo() -> QuestionRepo:
 
 
 # ---- Deck-level routes --------------------------------------------------
+
+
+@router.get("/deck/{name}", response_class=HTMLResponse)
+def deck_view(
+    request: Request,
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Show every question in a deck (suspended + active), with
+    inline SRS state + the deck's free-form context_prompt. Uses
+    `get_or_create_deck` so first-time navigation lazily materializes
+    a deck row even if the user hasn't added any questions yet."""
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.get_or_create(uid, name)
+    cards = q_repo.list_in_deck(uid, deck_id)
+    now_ts = db.now()
+    return templates.TemplateResponse(
+        "deck.html",
+        {
+            "request": request,
+            "user": user,
+            "deck_name": name,
+            "questions": cards,
+            "due_count": sum(
+                1 for c in cards if not c.suspended and c.next_due and c.next_due <= now_ts
+            ),
+        },
+    )
 
 
 @router.post("/deck/{name}/delete")

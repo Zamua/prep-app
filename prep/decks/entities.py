@@ -118,6 +118,13 @@ class DeckCard(BaseModel):
     rights: int = 0
     attempts: int = 0
 
+    @property
+    def choices_list(self) -> list[str]:
+        """Template-friendly alias: deck.html iterates q.choices_list
+        unconditionally. Returns [] when there are no choices so the
+        template's `{% for c in q.choices_list %}` doesn't blow up."""
+        return self.choices or []
+
 
 class NewQuestion(BaseModel):
     """Request shape for adding a question — what the route handler

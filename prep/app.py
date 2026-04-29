@@ -428,25 +428,7 @@ async def deck_new_create(request: Request, user: dict = Depends(current_user)):
     return _redirect(request, f"/deck/{clean}")
 
 
-@app.get("/deck/{name}", response_class=HTMLResponse)
-def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
-    uid = user["tailscale_login"]
-    deck_id = db.get_or_create_deck(uid, name)
-    questions = db.list_questions(uid, deck_id)
-    return templates.TemplateResponse(
-        "deck.html",
-        {
-            "request": request,
-            "user": user,
-            "deck_name": name,
-            "questions": questions,
-            "due_count": sum(
-                1
-                for q in questions
-                if not q["suspended"] and q["next_due"] and q["next_due"] <= db.now()
-            ),
-        },
-    )
+# /deck/{name} moved to prep.decks.routes.
 
 
 # ---- Study sessions (cross-device, version-checked) ------------------------
