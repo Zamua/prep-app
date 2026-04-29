@@ -80,3 +80,26 @@ def status() -> dict:
 def probe() -> bool:
     """Boolean view of `status()` — whether AI features should light up."""
     return bool(status().get("logged_in"))
+
+
+# Module-level cache of the boot probe. Templates read this via the
+# Jinja context_processor in prep.web.templates so AI-driven UI is
+# gated everywhere consistently. /settings/agent/connect updates it
+# after a fresh token is pasted; /settings/agent/disconnect clears
+# it. set_available() is the only blessed mutation path so the UI
+# (templates), routes, and the probe stay in sync.
+is_available: bool = False
+
+
+def set_available(value: bool) -> None:
+    """Update the cached agent availability flag. Routes call this
+    after /connect or /disconnect lands; templates read the new value
+    on the next render."""
+    global is_available
+    is_available = bool(value)
+
+
+def init_availability() -> None:
+    """Re-run the probe and cache the result. Called once at app
+    startup; safe to call again to refresh."""
+    set_available(probe())

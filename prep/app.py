@@ -23,7 +23,6 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -45,31 +44,15 @@ from prep.domain import grading
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASE_DIR = REPO_ROOT
 
-_AGENT_AVAILABLE = _agent_mod.probe()
+# Cache the agent availability probe in the agent module so context
+# processors + AI-gating route guards share one source of truth. The
+# /settings/agent/connect route mutates it after a fresh token is
+# pasted via prep.agent.set_available().
+_agent_mod.init_availability()
 
-
-def _user_context(request: Request) -> dict:
-    """Jinja context_processor: surface `user` to every template that gets a
-    Request whose state was populated by current_user(). Lets routes /
-    error handlers omit the explicit `"user": user` entry without losing the
-    masthead chip + base.html `data-editor-mode` attribute."""
-    return {"user": getattr(request.state, "user", None)}
-
-
-def _agent_context(request: Request) -> dict:
-    """Jinja context_processor: every template gets `agent_available`.
-    True when an AI agent (PREP_AGENT_URL or PREP_AGENT_BIN) is reachable
-    at boot. Templates use it to hide AI-driven controls (Generate cards,
-    Transform, Improve) and surface manual paths instead — so the app
-    stays useful as a manual-flashcard SRS for users without claude
-    installed."""
-    return {"agent_available": _AGENT_AVAILABLE}
-
-
-templates = Jinja2Templates(
-    directory=str(BASE_DIR / "templates"),
-    context_processors=[_user_context, _agent_context],
-)
+# Templates instance lives in prep/web/templates.py so per-context
+# routers can render templates without cycling back through app.py.
+from prep.web.templates import templates  # noqa: E402,I001 — placement matters
 
 # Markdown rendering for prompts (and other free-form fields). Mistune escapes
 # raw HTML by default — input is already trusted (we generated it ourselves)
@@ -284,7 +267,7 @@ if _default_user_at_boot:
 # Surface agent availability at boot so the operator can tell whether AI
 # features will work without checking the UI. _AGENT_AVAILABLE was probed
 # at module import; we just log it here.
-if _AGENT_AVAILABLE:
+if _agent_mod.is_available:
     _log.info("agent: AI features ENABLED (PREP_AGENT_URL or PREP_AGENT_BIN reachable).")
 else:
     _log.info(
@@ -418,7 +401,7 @@ async def deck_new_create(request: Request, user: dict = Depends(current_user)):
         )
 
     if action == "plan":
-        if not _AGENT_AVAILABLE:
+        if not _agent_mod.is_available:
             return rerender(
                 "Plan & generate needs an AI agent. Set PREP_AGENT_URL or PREP_AGENT_BIN, or pick 'Create empty deck' instead."
             )
@@ -652,7 +635,7 @@ async def session_submit(request: Request, sid: str, user: dict = Depends(curren
                 (s["deck_id"], uid),
             ).fetchone()["name"]
 
-        if not _AGENT_AVAILABLE:
+        if not _agent_mod.is_available:
             return templates.TemplateResponse(
                 "self_grade.html",
                 {
@@ -790,7 +773,7 @@ async def study_submit(request: Request, name: str, user: dict = Depends(current
     # a small sync POST records the review. Same outcome as AI grading,
     # different judge.
     if qtype in ("code", "short") and not idk:
-        if not _AGENT_AVAILABLE:
+        if not _agent_mod.is_available:
             return templates.TemplateResponse(
                 "self_grade.html",
                 {
@@ -1574,12 +1557,11 @@ def _agent_server_url() -> str | None:
 
 
 def _refresh_agent_status() -> dict:
-    """Re-probe the agent and update the global flag the context_processor
-    surfaces. Called after a connect/disconnect so the UI sees the new
-    state immediately."""
-    global _AGENT_AVAILABLE
+    """Re-probe the agent and update the cached availability flag the
+    template context_processor surfaces. Called after a connect/disconnect
+    so the UI sees the new state immediately."""
     s = _agent_mod.status()
-    _AGENT_AVAILABLE = bool(s.get("logged_in"))
+    _agent_mod.set_available(bool(s.get("logged_in")))
     return s
 
 
