@@ -16,6 +16,8 @@ HTML routes.
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -27,6 +29,47 @@ from prep.web import responses
 from prep.web.templates import templates
 
 router = APIRouter()
+
+
+# ---- form-level validation ---------------------------------------------
+#
+# The deck-name regex is stricter than the entity's `min_length=1` —
+# user-typed names go through this guard before they hit the entity, so
+# we don't accept arbitrary unicode / spaces / uppercase via the form.
+# The entity tolerates legacy data with looser shapes.
+
+_DECK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,29}$")
+_RESERVED_DECK_NAMES = frozenset(
+    {
+        "new",
+        "create",
+        "edit",
+        "delete",
+        "static",
+        "dev",
+        "preview",
+        "notify",
+        "session",
+        "study",
+        "deck",
+        "decks",
+        "manifest",
+    }
+)
+_MAX_CONTEXT_PROMPT_CHARS = 8000
+
+
+def _validate_deck_name(name: str) -> str:
+    n = (name or "").strip().lower()
+    if not _DECK_NAME_RE.match(n):
+        raise HTTPException(
+            400,
+            "Deck name must be 2-30 chars, lowercase, alphanumerics or hyphens, "
+            "starting with a letter or digit.",
+        )
+    if n in _RESERVED_DECK_NAMES:
+        raise HTTPException(400, f'"{n}" is reserved — pick another name.')
+    return n
 
 
 # ---- workflow-id parsing ------------------------------------------------
@@ -84,6 +127,101 @@ def _question_repo() -> QuestionRepo:
 
 
 # ---- Deck-level routes --------------------------------------------------
+
+
+@router.get("/decks/new", response_class=HTMLResponse)
+def deck_new_form(request: Request, user: dict = Depends(current_user)):
+    """Render the new-deck form. The same form drives both the empty-deck
+    path and the plan-first AI generation path; the user picks the
+    submit button."""
+    return templates.TemplateResponse(
+        "deck_new.html",
+        {
+            "request": request,
+            "user": user,
+            "name_value": "",
+            "context_value": "",
+            "error": None,
+        },
+    )
+
+
+@router.post("/decks/new", response_class=HTMLResponse)
+async def deck_new_create(
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Create a deck. The submit button name picks the path:
+      action=empty       → just create the deck row, redirect to /deck/<name>
+      action=plan        → create the deck row, kick off PlanGenerateWorkflow
+                           with the description, redirect to /plan/<wid>
+    The 'plan' action requires both an agent AND a non-empty description.
+    Re-renders the form with an inline error if either is missing.
+    """
+    from prep import agent as _agent_mod
+    from prep import temporal_client
+
+    uid = user["tailscale_login"]
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    context_prompt = (form.get("context_prompt") or "").strip()
+    action = (form.get("action") or "empty").strip()
+
+    def rerender(error: str, status: int = 400):
+        return templates.TemplateResponse(
+            "deck_new.html",
+            {
+                "request": request,
+                "user": user,
+                "name_value": name,
+                "context_value": context_prompt,
+                "error": error,
+            },
+            status_code=status,
+        )
+
+    try:
+        clean = _validate_deck_name(name)
+    except HTTPException as e:
+        return rerender(e.detail)
+
+    if deck_repo.find_id(uid, clean) is not None:
+        return rerender(f'You already have a deck named "{clean}".')
+
+    if len(context_prompt) > _MAX_CONTEXT_PROMPT_CHARS:
+        return rerender(
+            f"Description is too long ({len(context_prompt)} chars; max "
+            f"{_MAX_CONTEXT_PROMPT_CHARS})."
+        )
+
+    if action == "plan":
+        if not _agent_mod.is_available:
+            return rerender(
+                "Plan & generate needs an AI agent. Set PREP_AGENT_URL or PREP_AGENT_BIN, "
+                "or pick 'Create empty deck' instead."
+            )
+        if not context_prompt:
+            return rerender("Plan & generate needs a description for claude to plan against.")
+
+    deck_id = service.create_deck(deck_repo, uid, clean, context_prompt or None)
+
+    if action == "plan":
+        try:
+            res = await service.start_plan_generation(
+                temporal_client,
+                user_id=uid,
+                deck_id=deck_id,
+                deck_name=clean,
+                prompt=context_prompt,
+            )
+        except Exception as e:
+            # Deck row was created but the workflow couldn't start —
+            # surface the error and the user can retry from the deck page.
+            raise HTTPException(500, f"deck created but failed to start plan workflow: {e}")
+        return responses.redirect(request, f"/plan/{res.workflow_id}")
+
+    return responses.redirect(request, f"/deck/{clean}")
 
 
 @router.get("/deck/{name}", response_class=HTMLResponse)
