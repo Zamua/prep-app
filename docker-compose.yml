@@ -52,14 +52,13 @@ services:
       - prep-agent-data:/data
 
 volumes:
-  # /data inside the prep container — sqlite db + vapid keys + temporal
-  # devserver state. Named explicitly (not <project>_prep-data) so a
-  # `docker compose down --volumes` doesn't surprise-delete data, and
-  # so the volume survives across project name changes.
+  # Volume names are env-driven so the same compose.yml can run as
+  # staging AND prod on the same machine without colliding. ENV_NAME
+  # defaults to "prep" for backwards compatibility with the original
+  # staging cutover (which named volumes literally `prep-data` +
+  # `prep-agent-data`). Prod's .env sets ENV_NAME=prod → `prod-data`
+  # + `prod-agent-data`.
   prep-data:
-    name: prep-data
-  # /data inside the agent container — the claude OAuth token only.
-  # Named to match the volume the standalone PR2 agent container used,
-  # so the user's already-pasted token survives the compose cutover.
+    name: ${ENV_NAME:-prep}-data
   prep-agent-data:
-    name: prep-agent-data
+    name: ${ENV_NAME:-prep}-agent-data
