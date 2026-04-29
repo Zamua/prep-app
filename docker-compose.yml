@@ -37,10 +37,14 @@ services:
       # Internal temporal namespace. Doesn't matter for a single
       # deployment; differs between staging + prod when running both.
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-prep}
-      # Auth bypass: every header-less request becomes this user.
-      # Required for non-Tailscale-Serve setups (Tailscale Serve
-      # injects real headers per-user; remove this var in that case).
-      PREP_DEFAULT_USER: ${PREP_DEFAULT_USER:-you@example.com}
+      # Auth bypass: every header-less request becomes this user. The
+      # default makes a fresh `docker compose up` work as a single-user
+      # 'guest' deploy; the only real multi-user auth path prep offers
+      # is Tailscale Serve, which injects per-user identity headers.
+      # Set this to your tailnet email if you want a stable identity
+      # before tailscale is set up; remove it entirely once tailscale
+      # is fronting the deploy.
+      PREP_DEFAULT_USER: ${PREP_DEFAULT_USER:-guest}
       # IANA "sub" claim push services see if they need to contact
       # the operator. Optional but good practice in real deploys.
       PREP_VAPID_SUB: ${PREP_VAPID_SUB:-mailto:noreply@example.com}

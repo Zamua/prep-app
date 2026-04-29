@@ -38,24 +38,33 @@ docker compose up -d
 ```
 
 The first `up` builds the images (~5 min); subsequent ones are <5s.
-Visit <http://127.0.0.1:8082/>. You're auto-logged in as the
-placeholder `you@example.com`.
+Visit <http://127.0.0.1:8082/>. You're logged in as `guest` — that's
+the default identity for a single-user deploy. To change anything
+(port, URL prefix, identity), copy `.env.example` → `.env` and edit.
+Otherwise skip it.
 
-That's it for the basic case. If you want to change anything (your
-email as the user, a non-default port, a URL prefix), copy
-`.env.example` → `.env` and edit. Otherwise skip it.
+### 3. Reach it from anywhere — and add real auth
 
-### 3. Open it from your phone (optional but recommended)
-
-prep is designed to live on your tailnet. Install
-[Tailscale](https://tailscale.com), sign in, then on the docker host:
+prep ships with one auth model: **Tailscale Serve**. Install
+[Tailscale](https://tailscale.com), sign in on the docker host and on
+your phone / laptop, then on the docker host:
 
 ```bash
 tailscale serve --bg --https=443 --set-path=/prep http://127.0.0.1:8082
 ```
 
-Now `https://<your-tailnet>.ts.net/prep/` works from any device on your
-tailscale network. Valid TLS certs, no DNS, no port-forwarding.
+Now `https://<your-tailnet>.ts.net/prep/` works from any device on
+your tailnet — valid TLS, no DNS, no port-forwarding. Tailscale Serve
+injects per-user identity headers, so each tailnet member who visits
+gets their own decks.
+
+If multiple people on your tailnet are using the same prep instance,
+also remove the `PREP_DEFAULT_USER` line from `.env` (or leave it
+unset — same effect) so the bypass doesn't override the real headers.
+
+There's no other auth path: no passwords, no OAuth, no magic links.
+prep is built for single-tailnet groups; if you need broader auth,
+this isn't the project for you.
 
 ### 4. Connect Claude (optional)
 
