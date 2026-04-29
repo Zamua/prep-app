@@ -172,3 +172,39 @@ def test_count_due_for_user_starts_at_one(review_repo: ReviewRepo, seeded_deck):
     """A fresh card lands due immediately (next_due = ts at insert)."""
     user, _, _ = seeded_deck
     assert review_repo.count_due_for_user(user) >= 1
+
+
+def test_find_active_decodes_cached_verdict_and_state(session_repo: SessionRepo, seeded_deck):
+    """Regression for the v0.14.0 bug Sean hit on /study/<deck>/begin:
+    the underlying sqlite query for find_active_session_for_deck does
+    SELECT *, returning last_answered_verdict + last_answered_state
+    as JSON-string TEXT columns. _row_to_session must decode them
+    before constructing the StudySession entity (which types both as
+    dict | None and would otherwise raise pydantic ValidationError).
+
+    Reproduces the bug by writing a session with a non-empty cached
+    verdict + state via record_answer_sync, then resuming via
+    find_active_for_deck and asserting the entity comes back with
+    decoded dicts."""
+    user, deck_id, qid = seeded_deck
+    sid = session_repo.create(user, deck_id, "Mac")
+
+    # Mark the question as answered so the session has cached verdict
+    # + state populated. record_answer_sync writes them as JSON text
+    # in sqlite — exactly the rowshape find_active returns.
+    verdict = {
+        "result": "wrong",
+        "feedback": "[parsed array of ['informal', 'formal or plural']]",
+    }
+    state = {"step": 0, "next_due": "2026-04-30T01:00:00Z", "interval_minutes": 10}
+    session_repo.record_answer_sync(
+        user, sid, qid, expected_version=1, user_answer="x", verdict=verdict, state=state
+    )
+
+    resumed = session_repo.find_active_for_deck(user, deck_id)
+    assert resumed is not None
+    assert isinstance(resumed.last_answered_verdict, dict)
+    assert resumed.last_answered_verdict["result"] == "wrong"
+    assert isinstance(resumed.last_answered_state, dict)
+    assert resumed.last_answered_state["step"] == 0
+    assert resumed.last_answered_state["interval_minutes"] == 10

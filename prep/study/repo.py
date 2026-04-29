@@ -16,6 +16,9 @@ entity types at the boundary.
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 from prep import db as _legacy_db
 from prep.study.entities import (
     CardState,
@@ -24,6 +27,27 @@ from prep.study.entities import (
     SessionStatus,
     StudySession,
 )
+
+
+def _maybe_decode_json(v: Any) -> Any:
+    """Coerce a JSON-encoded string into the python value, pass dicts /
+    None through. Used at the row-to-entity boundary for sqlite TEXT
+    columns we store JSON in (last_answered_verdict, last_answered_state
+    on study_sessions).
+
+    The legacy `prep.db.get_session` decodes these inline; legacy
+    `prep.db.find_active_session_for_deck` does NOT — that asymmetry
+    was invisible until phase-6 entity validation made it crash. This
+    helper centralizes the decode at the entity-construction step so
+    BOTH read paths end up with a dict (or None on un-parseable bytes).
+    """
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except json.JSONDecodeError:
+            return None
+    return v
+
 
 # Re-export StaleVersionError so callers in study/ don't need to dip
 # into prep.db directly.
@@ -168,8 +192,8 @@ def _row_to_session(row: dict) -> StudySession:
         current_draft=row.get("current_draft"),
         current_grading_workflow_id=row.get("current_grading_workflow_id"),
         last_answered_qid=row.get("last_answered_qid"),
-        last_answered_verdict=row.get("last_answered_verdict"),
-        last_answered_state=row.get("last_answered_state"),
+        last_answered_verdict=_maybe_decode_json(row.get("last_answered_verdict")),
+        last_answered_state=_maybe_decode_json(row.get("last_answered_state")),
         version=row.get("version") or 1,
         device_label=row.get("device_label"),
     )
