@@ -183,23 +183,36 @@ async def test_get_plan_progress_returns_client_payload():
 # ---- deck-wide transform -----------------------------------------------
 
 
-async def test_start_deck_transform_threads_existing_prompts():
-    """The service requires the caller to gather existing prompts
-    (no repo lookup hidden inside the use case). Verify they're
-    passed through to the workflow."""
+async def test_start_deck_transform_passes_scope_and_target():
+    """Deck-scope transform → scope='deck', target_id=deck_id."""
     client = FakeTemporalClient()
     await svc.start_deck_transform(
         client,
         user_id="alice@example.com",
         deck_id=7,
-        deck_name="go-systems",
-        instruction="Make every prompt shorter.",
-        existing_prompts=["P1", "P2", "P3"],
+        prompt="Make every prompt shorter.",
     )
     assert client.calls[0][0] == "start_transform"
     args = client.calls[0][1]
-    assert args["existing_prompts"] == ["P1", "P2", "P3"]
-    assert args["instruction"] == "Make every prompt shorter."
+    assert args["scope"] == "deck"
+    assert args["target_id"] == 7
+    assert args["prompt"] == "Make every prompt shorter."
+
+
+async def test_start_card_transform_passes_scope_and_target():
+    """Card-scope transform → scope='card', target_id=qid. Workflow
+    auto-applies on completion (no apply/reject signals expected)."""
+    client = FakeTemporalClient()
+    await svc.start_card_transform(
+        client,
+        user_id="alice@example.com",
+        qid=42,
+        prompt="Tighten the wording.",
+    )
+    assert client.calls[0][0] == "start_transform"
+    args = client.calls[0][1]
+    assert args["scope"] == "card"
+    assert args["target_id"] == 42
 
 
 async def test_transform_signals_pass_through():

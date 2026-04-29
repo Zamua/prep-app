@@ -160,20 +160,34 @@ async def start_deck_transform(
     *,
     user_id: str,
     deck_id: int,
-    deck_name: str,
-    instruction: str,
-    existing_prompts: list[str],
+    prompt: str,
 ) -> Any:
-    """Kick off a Transform Temporal workflow. Caller is expected to
-    have already gathered `existing_prompts` from the QuestionRepo —
-    threading the dependency in keeps this service layer pure
-    (no repo lookups inside an async use case)."""
+    """Kick off a deck-scope Transform Temporal workflow. Waits for an
+    apply/reject signal before writing — gives the user a chance to
+    review the proposed changes."""
     return await client.start_transform(
         user_id=user_id,
-        deck_id=deck_id,
-        deck_name=deck_name,
-        instruction=instruction,
-        existing_prompts=existing_prompts,
+        scope="deck",
+        target_id=deck_id,
+        prompt=prompt,
+    )
+
+
+async def start_card_transform(
+    client: Any,
+    *,
+    user_id: str,
+    qid: int,
+    prompt: str,
+) -> Any:
+    """Kick off a card-scope Transform — auto-applies on completion
+    (no apply/reject loop, since per-card improvements are usually
+    just the user nudging one prompt at a time)."""
+    return await client.start_transform(
+        user_id=user_id,
+        scope="card",
+        target_id=qid,
+        prompt=prompt,
     )
 
 

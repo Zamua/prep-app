@@ -1282,34 +1282,7 @@ async def question_edit_submit(request: Request, qid: int, user: dict = Depends(
     return _redirect(request, f"/deck/{deck_name}")
 
 
-@app.post("/question/{qid}/suspend")
-def suspend(request: Request, qid: int, user: dict = Depends(current_user)):
-    uid = user["tailscale_login"]
-    q = db.get_question(uid, qid)
-    if not q:
-        raise HTTPException(404, "question not found")
-    db.set_suspended(uid, qid, True)
-    with db.cursor() as c:
-        name = c.execute(
-            "SELECT name FROM decks WHERE id=? AND user_id=?",
-            (q["deck_id"], uid),
-        ).fetchone()["name"]
-    return _redirect(request, f"/deck/{name}")
-
-
-@app.post("/question/{qid}/unsuspend")
-def unsuspend(request: Request, qid: int, user: dict = Depends(current_user)):
-    uid = user["tailscale_login"]
-    q = db.get_question(uid, qid)
-    if not q:
-        raise HTTPException(404, "question not found")
-    db.set_suspended(uid, qid, False)
-    with db.cursor() as c:
-        name = c.execute(
-            "SELECT name FROM decks WHERE id=? AND user_id=?",
-            (q["deck_id"], uid),
-        ).fetchone()["name"]
-    return _redirect(request, f"/deck/{name}")
+# /question/{qid}/suspend + /unsuspend moved to prep.decks.routes.
 
 
 # ---- Transform (card-level improve + deck-level prompt) -------------------
@@ -1359,26 +1332,7 @@ def _require_owns_transform(user: dict, wid: str) -> tuple[str, int]:
     return scope, target_id
 
 
-@app.post("/question/{qid}/improve")
-async def improve_card(
-    request: Request, qid: int, prompt: str = Form(...), user: dict = Depends(current_user)
-):
-    """Per-card free-text rewrite. Auto-applies on completion."""
-    uid = user["tailscale_login"]
-    if db.get_question(uid, qid) is None:
-        raise HTTPException(404, "question not found")
-    if not prompt.strip():
-        raise HTTPException(400, "empty prompt")
-    try:
-        result = await temporal_client.start_transform(
-            user_id=uid,
-            scope="card",
-            target_id=qid,
-            prompt=prompt.strip(),
-        )
-    except Exception as e:
-        raise HTTPException(500, f"failed to start transform: {e}")
-    return _redirect(request, f"/transform/{result.workflow_id}")
+# /question/{qid}/improve moved to prep.decks.routes.
 
 
 # /deck/{name}/delete moved to prep.decks.routes (mounted below).

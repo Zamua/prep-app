@@ -69,3 +69,45 @@ def test_delete_other_users_deck_404(client: TestClient, initialized_db: str):
     assert r.status_code == 404
     # bob's deck still exists.
     assert DeckRepo().find_id("bob@example.com", "bobs-deck") is not None
+
+
+# ---- suspend / unsuspend -----------------------------------------------
+
+
+def test_suspend_then_unsuspend_via_http(client: TestClient, initialized_db: str):
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "deck-a")
+    qid = QuestionRepo().add(
+        user, deck_id, NewQuestion(type=QuestionType.MCQ, prompt="?", answer="A")
+    )
+
+    # suspend
+    r = client.post(f"/question/{qid}/suspend", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].endswith("/deck/deck-a")
+    assert QuestionRepo().get(user, qid).suspended is True
+
+    # unsuspend
+    r = client.post(f"/question/{qid}/unsuspend", follow_redirects=False)
+    assert r.status_code == 303
+    assert QuestionRepo().get(user, qid).suspended is False
+
+
+def test_suspend_404_on_missing_question(client: TestClient, initialized_db: str):
+    r = client.post("/question/999999/suspend", follow_redirects=False)
+    assert r.status_code == 404
+
+
+def test_suspend_other_users_question_404(client: TestClient, initialized_db: str):
+    """User isolation again — alice can't suspend bob's questions."""
+    from prep import db as _db
+
+    _db.upsert_user("bob@example.com")
+    deck_id = DeckRepo().create("bob@example.com", "bobs-deck")
+    qid = QuestionRepo().add(
+        "bob@example.com", deck_id, NewQuestion(type=QuestionType.MCQ, prompt="?", answer="A")
+    )
+    r = client.post(f"/question/{qid}/suspend", follow_redirects=False)
+    assert r.status_code == 404
+    # bob's question is still unsuspended.
+    assert QuestionRepo().get("bob@example.com", qid).suspended is False

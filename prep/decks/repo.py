@@ -43,6 +43,19 @@ class DeckRepo:
     def find_id(self, user_id: str, name: str) -> int | None:
         return _legacy_db.find_deck(user_id, name)
 
+    def find_name(self, user_id: str, deck_id: int) -> str | None:
+        """Reverse of find_id: deck_id → deck name. Used by routes
+        that need to redirect to a deck page after mutating one of
+        its questions."""
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            row = c.execute(
+                "SELECT name FROM decks WHERE id=? AND user_id=?",
+                (deck_id, user_id),
+            ).fetchone()
+        return row["name"] if row else None
+
     def create(self, user_id: str, name: str, context_prompt: str | None = None) -> int:
         return _legacy_db.create_deck(user_id, name, context_prompt)
 
