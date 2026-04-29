@@ -18,6 +18,9 @@ WORKER   := worker-go/bin/worker
 # Tailscale Serve installed. For a real auth flow, unset and set up
 # Tailscale (see CLAUDE.md).
 export PREP_DEFAULT_USER ?= dev@example.com
+# Surface the /dev/preview/* template-fixture routes for the UI sweep.
+# Never set this in prod images — prep/app.py gates registration on it.
+export PREP_DEV ?= 1
 
 .PHONY: help setup tools deps build dev run-app run-worker run-temporal \
         lint format hooks clean wipe-temporal-state test \
@@ -128,7 +131,7 @@ deploy-stag:
 	@# (single dash) treats this as "set to empty" → no bypass → real
 	@# Tailscale auth required. Without this, the Makefile's `make dev`
 	@# export of dev@example.com would leak through.
-	PREP_DEFAULT_USER= IMAGE_TAG=staging \
+	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
 	  docker compose --env-file deploy/staging.env -p stag up -d --build
 
 deploy-prod:
@@ -139,7 +142,7 @@ deploy-prod:
 	@echo "→ deploy-prod (image=prep:$(DEPLOY_PROD_TAG), project=prod, port=8081)"
 	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
 	git worktree add --detach $(DEPLOY_BUILD_DIR) $(DEPLOY_PROD_TAG)
-	PREP_DEFAULT_USER= IMAGE_TAG=$(DEPLOY_PROD_TAG) \
+	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=$(DEPLOY_PROD_TAG) \
 	  docker compose \
 	    -f docker-compose.yml \
 	    --project-directory $(DEPLOY_BUILD_DIR) \

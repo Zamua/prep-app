@@ -32,10 +32,11 @@ from markupsafe import Markup
 # Surfaced via the templates context_processor so AI-driven UI is
 # gated everywhere the operator's deploy doesn't have an agent.
 from prep import agent as _agent_mod
-from prep import dev_preview, icons, notify
+from prep import icons, notify
 from prep.agent.routes import router as agent_router
 from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
+from prep.dev import preview as dev_preview
 from prep.notify.routes import router as notify_router
 from prep.study.routes import router as study_router
 from prep.web import errors as _errors_mod
@@ -95,8 +96,12 @@ app.include_router(auth_router)
 app.include_router(index_router)
 app.include_router(pwa_router)
 
-# Dev-only template preview routes (read-only, no DB writes).
-dev_preview.register(app, templates)
+# Dev-only template preview routes (read-only, no DB writes). Gated
+# behind PREP_DEV — set in dev environments only, never in prod
+# images. The Dockerfile.prep does not set it, so prod containers
+# never expose /dev/preview/*.
+if os.environ.get("PREP_DEV") == "1":
+    dev_preview.register(app, templates)
 
 # ---- Boot logging ---------------------------------------------------------
 
