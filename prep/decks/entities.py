@@ -89,13 +89,29 @@ class Question(BaseModel):
     language: str | None = None
 
 
-class QuestionWithSrsState(Question):
-    """A question joined with its SRS state. Returned by routes that
-    need to render due-status (the deck page, the study session
-    "next card" lookup). Subclass of Question so existing handlers
-    that just want question fields keep working.
+class DeckCard(BaseModel):
+    """A question rendered as a card on the deck page.
+
+    Distinct from `Question` because the deck-listing query joins SRS
+    state (step / next_due / last_review / rights / attempts) and
+    deliberately omits user_id, deck_id, and created_at — the route
+    that calls it already knows the user + deck context, and the
+    template doesn't show creation time. A separate type makes those
+    omissions explicit at the type level rather than relying on
+    optionality on the full `Question` entity.
     """
 
+    id: int
+    type: QuestionType
+    topic: str | None = None
+    prompt: str = Field(min_length=1)
+    choices: list[str] | None = None
+    answer: str
+    rubric: str | None = None
+    suspended: bool = False
+    skeleton: str | None = None
+    language: str | None = None
+    # SRS state.
     step: int = 0
     next_due: str
     last_review: str | None = None

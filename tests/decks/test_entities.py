@@ -8,11 +8,11 @@ from pydantic import ValidationError
 
 from prep.decks.entities import (
     Deck,
+    DeckCard,
     DeckSummary,
     NewQuestion,
     Question,
     QuestionType,
-    QuestionWithSrsState,
 )
 
 # ---- Deck --------------------------------------------------------------
@@ -150,26 +150,35 @@ def test_question_round_trips_dict_for_repo():
     assert out == raw
 
 
-# ---- QuestionWithSrsState ----------------------------------------------
+# ---- DeckCard ----------------------------------------------------------
 
 
-def test_question_with_srs_inherits_question_fields():
-    q = QuestionWithSrsState(
-        **_q_kwargs(),
-        next_due="2026-04-30T12:00:00Z",
-        step=2,
-        rights=4,
-        attempts=5,
-    )
-    assert q.step == 2
-    assert q.attempts == 5
-    # Inherited from Question:
-    assert q.prompt == "What is 2 + 2?"
+def _card_kwargs(**overrides) -> dict:
+    """DeckCard-specific kwargs (no user_id/deck_id/created_at — by
+    design, since the route already knows that context)."""
+    base = {
+        "id": 42,
+        "type": QuestionType.MCQ,
+        "prompt": "What is 2 + 2?",
+        "answer": "4",
+        "next_due": "2026-04-30T12:00:00Z",
+    }
+    base.update(overrides)
+    return base
 
 
-def test_question_with_srs_step_defaults_to_zero():
-    q = QuestionWithSrsState(**_q_kwargs(), next_due="2026-04-30T12:00:00Z")
-    assert q.step == 0
+def test_deck_card_carries_srs_state():
+    c = DeckCard(**_card_kwargs(step=2, rights=4, attempts=5))
+    assert c.step == 2
+    assert c.attempts == 5
+    assert c.prompt == "What is 2 + 2?"
+
+
+def test_deck_card_step_defaults_to_zero():
+    c = DeckCard(**_card_kwargs())
+    assert c.step == 0
+    assert c.rights == 0
+    assert c.attempts == 0
 
 
 # ---- NewQuestion -------------------------------------------------------

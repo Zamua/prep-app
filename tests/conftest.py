@@ -74,5 +74,25 @@ def authed_headers() -> dict[str, str]:
     }
 
 
+@pytest.fixture
+def initialized_db(env: None):
+    """Run db.init() against the per-test sqlite path so a repo test
+    has tables to read/write. Returns the test user id (already
+    upserted into users) to thread through repo calls."""
+    import importlib
+
+    from prep.infrastructure import db as _infra_db
+
+    importlib.reload(_infra_db)
+    _infra_db.init()
+
+    from prep import db as _db_mod
+
+    importlib.reload(_db_mod)
+    user_id = "alice@example.com"
+    _db_mod.upsert_user(user_id, display_name="Alice")
+    return user_id
+
+
 # Force-disable noisy startup logs during tests.
 os.environ.setdefault("PYTHONWARNINGS", "ignore")
