@@ -66,7 +66,7 @@ func (a *Activities) GradeFreeText(ctx context.Context, in shared.GradeFreeTextI
 		rubric = "(no explicit rubric — judge against the model answer)"
 	}
 
-	prompt := fmt.Sprintf(`You are grading a flashcard answer for an interview-prep app. Be strict but fair.
+	prompt := fmt.Sprintf(`You are grading a flashcard answer in a spaced-repetition learning app. Be strict but fair.
 
 **Question type:** %s
 **Prompt:**

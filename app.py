@@ -1483,7 +1483,7 @@ def manifest(request: Request) -> JSONResponse:
     return JSONResponse({
         "name": f"prep · a commonplace book{' (staging)' if env_label else ''}",
         "short_name": short,
-        "description": "Spaced-repetition flashcards for interview prep.",
+        "description": "Spaced-repetition flashcards. Learn anything.",
         "display": "standalone",
         "scope": (root + "/") or "/",
         "start_url": (root + "/") or "/",

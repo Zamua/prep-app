@@ -77,7 +77,7 @@ func buildPlanPrompt(in shared.PlanCardsInput) string {
 	if len(in.PriorPlan) == 0 {
 		// First-round prompt.
 		b.WriteString(fmt.Sprintf(
-			`You are planning a set of interview-prep flashcards for the deck "%s".
+			`You are planning a set of spaced-repetition flashcards for the deck "%s".
 
 The user provided this description / topic:
 

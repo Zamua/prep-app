@@ -11,9 +11,9 @@
   <p class="eyebrow">A new deck</p>
   <h1 class="display">Tell prep&nbsp;<em>about it</em>.</h1>
   <p class="lede">
-    Pick a short name, then describe the deck — what you're prepping for,
-    what kinds of questions to ask, links to docs that should ground the
-    questions. The more concrete you are, the better the cards.
+    Pick a short name, then describe what you want to learn — a topic, a
+    textbook chapter, a paper, a syllabus. Paste links to docs that should
+    ground the questions. The more concrete you are, the better the cards.
   </p>
 </section>
 
@@ -34,7 +34,7 @@
   <label class="form-field">
     <span class="form-label">Description</span>
     <textarea name="context_prompt" rows="10" maxlength="8000"
-              placeholder="What is this deck for? What kinds of questions do you want? Paste links to specs, blog posts, the company's tech stack page, etc. Claude can web-search anything you reference."
+              placeholder="What do you want to learn? Be concrete: a topic, a textbook chapter, a paper, a syllabus, a body of code. Paste links — Claude will web-fetch anything you reference. The more specific you are, the better the cards."
               >{{ context_value }}</textarea>
     <span class="form-hint">
       Free-form. Claude reads this when generating cards. URLs are fine —

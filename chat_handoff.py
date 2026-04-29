@@ -52,7 +52,7 @@ def build_message(
     """Compose the markdown message that gets prefilled into the AI chat."""
     qtype = q.get("type", "short")
     parts: list[str] = []
-    parts.append("I'm reviewing an interview-prep flashcard and want to talk through it.\n")
+    parts.append("I'm reviewing a flashcard and want to talk through it.\n")
 
     parts.append(f"**Question** (deck: `{deck_name}`, type: `{qtype}`):")
     parts.append(_trim(q.get("prompt", "")))

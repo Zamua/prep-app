@@ -109,7 +109,7 @@ func (a *Activities) buildTransformPrompt(in shared.ComputeTransformInput) (stri
 
 func cardScopePrompt(card cardForTransform, userPrompt string) string {
 	cardJSON, _ := json.MarshalIndent(card, "", "  ")
-	return fmt.Sprintf(`You are improving a single flashcard in an interview-prep app, per the user's request.
+	return fmt.Sprintf(`You are improving a single flashcard in a spaced-repetition learning app, per the user's request.
 
 **Current card (JSON):**
 `+"```json"+`
@@ -151,7 +151,7 @@ func deckScopePrompt(cards []cardForTransform, userPrompt string) string {
 		cards = []cardForTransform{}
 	}
 	cardsJSON, _ := json.MarshalIndent(cards, "", "  ")
-	return fmt.Sprintf(`You are applying a deck-wide transformation to an interview-prep flashcard deck, per the user's request.
+	return fmt.Sprintf(`You are applying a deck-wide transformation to a spaced-repetition flashcard deck, per the user's request.
 
 **Current deck (JSON array of cards):**
 `+"```json"+`

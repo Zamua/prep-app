@@ -1,4 +1,4 @@
-"""SQLite layer for the interview-prep app.
+"""SQLite layer for prep — a self-hosted SRS flashcard tool.
 
 Schema:
   users       : one row per Tailscale identity (login email is the PK)
