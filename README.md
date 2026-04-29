@@ -34,13 +34,16 @@ A 5-minute walkthrough for self-hosting on any docker-capable box
 ```bash
 git clone https://github.com/zamua/prep prep
 cd prep
-cp .env.example .env
-$EDITOR .env       # set PREP_DEFAULT_USER to your email; pick a port
 docker compose up -d
 ```
 
 The first `up` builds the images (~5 min); subsequent ones are <5s.
-Visit `http://127.0.0.1:8082/$ROOT_PATH/` (whatever you set in `.env`).
+Visit <http://127.0.0.1:8082/>. You're auto-logged in as the
+placeholder `you@example.com`.
+
+That's it for the basic case. If you want to change anything (your
+email as the user, a non-default port, a URL prefix), copy
+`.env.example` → `.env` and edit. Otherwise skip it.
 
 ### 3. Open it from your phone (optional but recommended)
 

@@ -2,16 +2,10 @@
 # temporal devserver + worker, all in one container via goreman) and
 # the agent (claude wrapper, separate lifecycle + auth volume).
 #
-# The compose file deliberately drops the v0.9 separation between
-# "staging" and "prod" — for any given checkout you get ONE stack.
-# Run side-by-side environments by either: (a) two checkouts with
-# different .env files + different `-p <project>` namespaces, or
-# (b) on different hosts. The "two checkouts of the same repo" pattern
-# the author uses on the macmini falls under (a).
-#
-# .env file lives at the repo root and isn't committed (see
-# .gitignore). Copy from .env.example to start:
-#   cp .env.example .env && $EDITOR .env
+# `docker compose up -d` works out of the box with no .env file — every
+# variable that affects runtime has a sensible default. Override any of
+# them by creating a .env file in this directory (see .env.example for
+# the full set + comments).
 
 services:
   prep:
@@ -20,7 +14,6 @@ services:
       dockerfile: docker/Dockerfile.prep
     image: prep:dev
     restart: unless-stopped
-    env_file: .env
     ports:
       - "${PREP_HOST_PORT:-8082}:8082"
     volumes:
@@ -30,11 +23,27 @@ services:
         condition: service_started
         required: false
     environment:
+      # ---- network / topology (rarely changed) ----------------------
       # Worker reaches the agent via the compose service name.
       PREP_AGENT_URL: http://agent:9999
       # Internal temporal devserver runs in this same container —
       # 127.0.0.1 inside the container is correct.
       TEMPORAL_HOST_PORT: 127.0.0.1:7233
+
+      # ---- per-deploy overrides (defaulted) -------------------------
+      # URL prefix the app generates. Empty = serve at root. Set to
+      # /prep (or whatever) when path-mounting behind a reverse proxy.
+      ROOT_PATH: ${ROOT_PATH:-}
+      # Internal temporal namespace. Doesn't matter for a single
+      # deployment; differs between staging + prod when running both.
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-prep}
+      # Auth bypass: every header-less request becomes this user.
+      # Required for non-Tailscale-Serve setups (Tailscale Serve
+      # injects real headers per-user; remove this var in that case).
+      PREP_DEFAULT_USER: ${PREP_DEFAULT_USER:-you@example.com}
+      # IANA "sub" claim push services see if they need to contact
+      # the operator. Optional but good practice in real deploys.
+      PREP_VAPID_SUB: ${PREP_VAPID_SUB:-mailto:noreply@example.com}
 
   agent:
     build:
@@ -43,21 +52,16 @@ services:
     image: prep-agent:dev
     restart: unless-stopped
     # No host port mapping by default — only the prep service needs to
-    # reach this. To debug from the host (curl /healthz etc) uncomment
-    # the ports stanza or `docker compose up -d agent` then `docker
-    # compose port agent 9999`.
-    # ports:
-    #   - "9999:9999"
+    # reach this. Add a `ports:` stanza if you want to debug from the
+    # host (curl /healthz etc).
     volumes:
       - prep-agent-data:/data
 
 volumes:
   # Volume names are env-driven so the same compose.yml can run as
-  # staging AND prod on the same machine without colliding. ENV_NAME
-  # defaults to "prep" for backwards compatibility with the original
-  # staging cutover (which named volumes literally `prep-data` +
-  # `prep-agent-data`). Prod's .env sets ENV_NAME=prod → `prod-data`
-  # + `prod-agent-data`.
+  # staging AND prod on the same machine without colliding. Default
+  # 'prep' works for any single deployment; the author's macmini sets
+  # ENV_NAME=prod in prod's .env → `prod-data` + `prod-agent-data`.
   prep-data:
     name: ${ENV_NAME:-prep}-data
   prep-agent-data:
