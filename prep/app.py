@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import mistune
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -245,6 +245,7 @@ else:
 # mounts them — no decks/study/notify route-handler code lives here
 # anymore (or won't, by the end of phase 5+).
 from prep.agent.routes import router as agent_router
+from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
 from prep.notify.routes import router as notify_router
 from prep.study.routes import router as study_router
@@ -253,6 +254,7 @@ app.include_router(decks_router)
 app.include_router(study_router)
 app.include_router(notify_router)
 app.include_router(agent_router)
+app.include_router(auth_router)
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 from prep import dev_preview
@@ -326,40 +328,7 @@ def service_worker():
     return FileResponse(BASE_DIR / "static" / "sw.js", media_type="application/javascript")
 
 
-# ---- Editor settings ------------------------------------------------------
-
-
-@app.get("/settings/editor", response_class=HTMLResponse)
-def editor_settings(request: Request, user: dict = Depends(current_user)):
-    return templates.TemplateResponse(
-        "settings_editor.html",
-        {
-            "request": request,
-            "user": user,
-            "current_mode": db.get_editor_input_mode(user["tailscale_login"]),
-            "modes": db.EDITOR_INPUT_MODES,
-            "saved": False,
-        },
-    )
-
-
-@app.post("/settings/editor", response_class=HTMLResponse)
-def editor_settings_save(
-    request: Request, mode: str = Form(...), user: dict = Depends(current_user)
-):
-    if mode not in db.EDITOR_INPUT_MODES:
-        raise HTTPException(400, f'Unknown input mode "{mode}".')
-    db.set_editor_input_mode(user["tailscale_login"], mode)
-    return templates.TemplateResponse(
-        "settings_editor.html",
-        {
-            "request": request,
-            "user": {**user, "editor_input_mode": mode},  # reflect saved value in next render
-            "current_mode": mode,
-            "modes": db.EDITOR_INPUT_MODES,
-            "saved": True,
-        },
-    )
+# /settings/editor moved to prep.auth.routes.
 
 
 # Move the staging-experiment subscription file out of the way and start
