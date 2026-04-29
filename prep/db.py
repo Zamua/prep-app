@@ -40,17 +40,15 @@ from pathlib import Path
 # Falls back to data.sqlite at the repo root for the dev case where
 # source dir == data dir (the package lives at repo/prep/, so we go
 # up one level).
+from prep.domain.srs import LADDER_MINUTES, Verdict, advance_step, interval_for_step
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = Path(os.environ.get("PREP_DB_PATH") or (_REPO_ROOT / "data.sqlite"))
 
-INTERVAL_LADDER_MINUTES = [
-    10,  # wrong -> see again very soon
-    24 * 60,  # 1d
-    3 * 24 * 60,  # 3d
-    7 * 24 * 60,
-    14 * 24 * 60,
-    30 * 24 * 60,
-]
+# Backwards-compatible alias for older code paths that imported the
+# ladder directly. Prefer `from prep.domain.srs import LADDER_MINUTES`
+# in new code.
+INTERVAL_LADDER_MINUTES = list(LADDER_MINUTES)
 
 QUESTION_TYPES = {"code", "mcq", "multi", "short"}
 
@@ -793,8 +791,10 @@ def record_review(user_id: str, qid: int, result: str, user_answer: str, notes: 
 
     Returns the new card state.
     """
-    if result not in {"right", "wrong"}:
-        raise ValueError(f"unknown result: {result}")
+    try:
+        verdict = Verdict(result)
+    except ValueError as e:
+        raise ValueError(f"unknown result: {result}") from e
     ts = datetime.now(timezone.utc)
     with cursor() as c:
         # Verify ownership.
@@ -805,13 +805,10 @@ def record_review(user_id: str, qid: int, result: str, user_answer: str, notes: 
         if not row:
             raise ValueError(f"no card for question {qid}")
         step = row["step"]
-        if result == "wrong":
-            new_step = 0
-            interval = INTERVAL_LADDER_MINUTES[0]
-        else:
-            new_step = min(step + 1, len(INTERVAL_LADDER_MINUTES) - 1)
-            interval = INTERVAL_LADDER_MINUTES[new_step]
-        next_due = (ts + timedelta(minutes=interval)).isoformat()
+        new_step = advance_step(step, verdict)
+        interval_td = interval_for_step(new_step)
+        interval = int(interval_td.total_seconds() // 60)
+        next_due = (ts + interval_td).isoformat()
         c.execute(
             "INSERT INTO reviews (question_id, ts, result, user_answer, grader_notes) "
             "VALUES (?, ?, ?, ?, ?)",
