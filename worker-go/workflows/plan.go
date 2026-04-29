@@ -167,7 +167,22 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 		return *res, nil
 	}
 
-	// ---- Expansion: parallel claude calls, one per plan item ----
+	// ---- Expansion: bounded-parallel claude calls, batched ----
+	//
+	// We process the plan items in batches of `expandBatchSize`. Each
+	// claude invocation in the agent container is a `claude -p` shell
+	// process that loads the SDK and makes an Anthropic API call;
+	// running 20 of them in parallel against a small docker host blew
+	// the container's memory and got most of them OOM-killed (`signal:
+	// killed`) before they could heartbeat — Sean's first plan-first
+	// 20-card deck only landed 2 cards.
+	//
+	// Batched fan-out keeps wall-clock decent (4 simultaneous claude
+	// calls) without overwhelming the agent's resource footprint. The
+	// workflow stays deterministic (no Go channels — Temporal needs
+	// workflow ops to be replay-safe).
+	const expandBatchSize = 4
+
 	progress.Status = "generating"
 	progress.Total = len(plan)
 	progress.GeneratedCount = 0
@@ -193,33 +208,46 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 		index int
 		fut   workflow.Future
 	}
-	expansions := make([]expansion, 0, len(plan))
-	for i, item := range plan {
-		fut := workflow.ExecuteActivity(exCtx, a.GenerateCardFromBrief, shared.GenerateCardFromBriefInput{
-			UserID:         in.UserID,
-			DeckName:       in.DeckName,
-			DeckPrompt:     in.Prompt,
-			Item:           item,
-			Index:          i,
-			Total:          len(plan),
-			IdempotencyKey: fmt.Sprintf("%s-expand-%d", wfID, i),
-		})
-		expansions = append(expansions, expansion{index: i, fut: fut})
-	}
 
 	cards := make([]shared.Card, 0, len(plan))
-	for _, e := range expansions {
-		var c shared.Card
-		if err := e.fut.Get(ctx, &c); err != nil {
-			// Skip failed expansion; don't fail the whole workflow on
-			// one bad card. The plan list will be slightly smaller than
-			// the user expected — surfaced via GeneratedCount.
-			workflow.GetLogger(ctx).Warn("expand failed",
-				"index", e.index, "err", err.Error())
-			continue
+	for batchStart := 0; batchStart < len(plan); batchStart += expandBatchSize {
+		batchEnd := batchStart + expandBatchSize
+		if batchEnd > len(plan) {
+			batchEnd = len(plan)
 		}
-		cards = append(cards, c)
-		progress.GeneratedCount = len(cards)
+
+		// Schedule this batch all at once, then drain it. The next
+		// batch doesn't start until every member of this one has
+		// landed (success or failure) — Temporal's Future.Get serves
+		// as the synchronization barrier.
+		batch := make([]expansion, 0, batchEnd-batchStart)
+		for i := batchStart; i < batchEnd; i++ {
+			fut := workflow.ExecuteActivity(exCtx, a.GenerateCardFromBrief, shared.GenerateCardFromBriefInput{
+				UserID:         in.UserID,
+				DeckName:       in.DeckName,
+				DeckPrompt:     in.Prompt,
+				Item:           plan[i],
+				Index:          i,
+				Total:          len(plan),
+				IdempotencyKey: fmt.Sprintf("%s-expand-%d", wfID, i),
+			})
+			batch = append(batch, expansion{index: i, fut: fut})
+		}
+
+		for _, e := range batch {
+			var c shared.Card
+			if err := e.fut.Get(ctx, &c); err != nil {
+				// Skip failed expansion; don't fail the whole workflow
+				// on one bad card. The plan list will be slightly
+				// smaller than the user expected — surfaced via
+				// GeneratedCount.
+				workflow.GetLogger(ctx).Warn("expand failed",
+					"index", e.index, "err", err.Error())
+				continue
+			}
+			cards = append(cards, c)
+			progress.GeneratedCount = len(cards)
+		}
 	}
 
 	if len(cards) == 0 {
