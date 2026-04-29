@@ -32,23 +32,18 @@ A 5-minute walkthrough for self-hosting on any docker-capable box
 ### 2. Get prep
 
 ```bash
-git clone https://github.com/zamua/prep prep
+git clone https://github.com/Zamua/prep-app.git prep
 cd prep
 docker compose up -d
 ```
 
 The first `up` builds the images (~5 min); subsequent ones are <5s.
-Visit <http://127.0.0.1:8082/> — you'll get a 401, because real auth
-is on by default and you don't have a Tailscale identity yet. Two
-ways forward:
+Visit <http://127.0.0.1:8082/>. You're logged in as `guest` —
+that's the single-user default for a fresh deploy. To go multi-user,
+keep `guest` for now and skip to step 3 (Tailscale).
 
-- **Quickest**: `echo PREP_DEFAULT_USER=guest > .env && docker compose
-  up -d`. Single-user, no Tailscale, you're now `guest`.
-- **Real**: skip the `.env` and go to step 3 — Tailscale Serve gives
-  you per-user identity headers automatically.
-
-For other tweaks (port, URL prefix, etc.), copy `.env.example` →
-`.env` and edit; everything in there is optional.
+For other tweaks (port, URL prefix, custom default user), copy
+`.env.example` → `.env` and edit; everything in there is optional.
 
 ### 3. Reach it from anywhere — and add real auth
 
@@ -122,7 +117,7 @@ For contributors who want a fast iteration loop on the source.
 ### Setup (one-time, macOS)
 
 ```bash
-git clone https://github.com/zamua/prep prep
+git clone https://github.com/Zamua/prep-app.git prep
 cd prep
 brew bundle              # installs mise (only)
 make setup               # mise pulls python+go+bun+goreman+temporal-cli; uv sync; go build
@@ -170,8 +165,10 @@ docker compose up -d      # bring up prep + agent containers
 docker compose logs -f    # tail
 ```
 
-Reads `.env` if present. If you ran `make dev` first, the docker
-stack uses port 8082 to avoid colliding with `make dev`'s 8081.
+Reads `.env` if present. The default host port is 8082 so it doesn't
+collide with `make dev`'s 8081. If 8082 is *also* in use (e.g.,
+because `make deploy-stag` is already running on this host),
+override with `PREP_HOST_PORT=8083 docker compose up -d`.
 
 ### Two-stack deploy (staging + prod from one checkout)
 

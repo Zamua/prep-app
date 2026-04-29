@@ -120,10 +120,11 @@ DEPLOY_BUILD_DIR := /tmp/prep-build
 
 deploy-stag:
 	@echo "→ deploy-stag (image=prep:staging, project=stag, port=8082)"
-	@# Explicitly clear PREP_DEFAULT_USER — the Makefile's `export ... ?=` for
-	@# `make dev` would otherwise leak into the deploy target and silently
-	@# enable bypass. Real auth comes from Tailscale headers.
-	env -u PREP_DEFAULT_USER IMAGE_TAG=staging \
+	@# Pass PREP_DEFAULT_USER='' explicitly. compose's ${VAR-guest}
+	@# (single dash) treats this as "set to empty" → no bypass → real
+	@# Tailscale auth required. Without this, the Makefile's `make dev`
+	@# export of dev@example.com would leak through.
+	PREP_DEFAULT_USER= IMAGE_TAG=staging \
 	  docker compose --env-file deploy/staging.env -p stag up -d --build
 
 deploy-prod:
@@ -134,7 +135,7 @@ deploy-prod:
 	@echo "→ deploy-prod (image=prep:$(DEPLOY_PROD_TAG), project=prod, port=8081)"
 	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
 	git worktree add --detach $(DEPLOY_BUILD_DIR) $(DEPLOY_PROD_TAG)
-	env -u PREP_DEFAULT_USER IMAGE_TAG=$(DEPLOY_PROD_TAG) \
+	PREP_DEFAULT_USER= IMAGE_TAG=$(DEPLOY_PROD_TAG) \
 	  docker compose \
 	    -f docker-compose.yml \
 	    --project-directory $(DEPLOY_BUILD_DIR) \

@@ -46,13 +46,17 @@ services:
       # deployment; differs between staging + prod when running both.
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-prep}
       # Auth bypass: when set (and non-empty), every header-less request
-      # becomes this user. Default is empty → bypass disabled → real
-      # Tailscale identity required. For a single-user single-machine
-      # bring-up without Tailscale, set PREP_DEFAULT_USER=guest in a
-      # local .env. The real multi-user auth path is Tailscale Serve,
-      # which injects per-user identity headers and makes this var
-      # redundant.
-      PREP_DEFAULT_USER: ${PREP_DEFAULT_USER:-}
+      # becomes this user. The default is `guest` so a fresh
+      # `docker compose up` is single-user-usable with zero config.
+      # Tailscale headers (when present) always win over this default.
+      #
+      # Note the single-dash form (${VAR-default}, not ${VAR:-default}):
+      # single-dash treats an explicit empty as "set to empty" rather
+      # than falling back to the default. The multi-user deploy targets
+      # (`make deploy-stag` / `make deploy-prod`) pass an explicit empty
+      # to disable the bypass for header-less requests, since those
+      # stacks must enforce real Tailscale identity.
+      PREP_DEFAULT_USER: ${PREP_DEFAULT_USER-guest}
       # IANA "sub" claim push services see if they need to contact
       # the operator. Optional but good practice in real deploys.
       PREP_VAPID_SUB: ${PREP_VAPID_SUB:-mailto:noreply@example.com}
