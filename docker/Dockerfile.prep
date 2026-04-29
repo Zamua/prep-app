@@ -101,7 +101,7 @@ COPY --from=builder-go /out/goreman /usr/local/bin/goreman
 COPY --from=builder-bun /src/static/cm-bundle.js ./static/cm-bundle.js
 
 # App source. The Procfile.docker (below) is what goreman runs.
-COPY *.py ./
+COPY prep/ ./prep/
 COPY templates/ ./templates/
 COPY static/ ./static/
 COPY docker/Procfile.docker ./Procfile.docker

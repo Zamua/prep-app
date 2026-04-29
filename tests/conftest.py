@@ -51,11 +51,11 @@ def client(env: None):
     """
     import importlib
 
-    import db as db_mod
+    from prep import db as db_mod
 
     importlib.reload(db_mod)
 
-    import app as app_mod
+    from prep import app as app_mod
 
     importlib.reload(app_mod)
 

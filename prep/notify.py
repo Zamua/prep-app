@@ -31,16 +31,18 @@ from zoneinfo import ZoneInfo
 from py_vapid import Vapid01
 from pywebpush import WebPushException, webpush
 
-import db
+from prep import db
 
 # Key paths can be overridden via env so the artifact-based deploy can
 # keep VAPID keys in a persistent data dir outside the immutable artifact
 # (e.g. ~/Library/prep/data/<env>/vapid-*). Public-key + subscriptions
 # are tied to the keypair, so persisting them across deploys avoids
 # invalidating every push subscription on each promote.
-_HERE = Path(__file__).parent
-_KEYS_PATH = Path(_os.environ.get("PREP_VAPID_KEYS_PATH") or (_HERE / "vapid-keys.json"))
-_KEY_PEM_PATH = Path(_os.environ.get("PREP_VAPID_PEM_PATH") or (_HERE / "vapid-private.pem"))
+# The package lives at <repo>/prep/, but VAPID keys default to the
+# repo root (alongside data.sqlite) for the dev case.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_KEYS_PATH = Path(_os.environ.get("PREP_VAPID_KEYS_PATH") or (_REPO_ROOT / "vapid-keys.json"))
+_KEY_PEM_PATH = Path(_os.environ.get("PREP_VAPID_PEM_PATH") or (_REPO_ROOT / "vapid-private.pem"))
 
 # IANA "sub" claim for VAPID. Push services use this as a contact for
 # operational issues. Public deployments should set PREP_VAPID_SUB to a

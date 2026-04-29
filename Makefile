@@ -64,7 +64,7 @@ dev: tools
 
 # Helpers if you want to run one process at a time (e.g. for debugging):
 run-app: tools
-	$(RUN) .venv/bin/uvicorn app:app --host 127.0.0.1 --port 8081 --reload
+	$(RUN) .venv/bin/uvicorn prep.app:app --host 127.0.0.1 --port 8081 --reload
 
 run-worker: build
 	$(WORKER)
@@ -100,7 +100,7 @@ hooks:
 	@echo "git hooks installed (.githooks/pre-commit)"
 
 clean:
-	@-pkill -f "uvicorn app:app" 2>/dev/null || true
+	@-pkill -f "uvicorn prep.app:app" 2>/dev/null || true
 	@-pkill -f "worker-go/bin/worker" 2>/dev/null || true
 	@-pkill -f "temporal server start-dev" 2>/dev/null || true
 	@echo "stopped (data.sqlite + vapid keys preserved)"

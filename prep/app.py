@@ -27,18 +27,23 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-import chat_handoff
-import db
-import grader
-import icons
-import notify
-import temporal_client
-
-BASE_DIR = Path(__file__).parent
-
 # Probed once at module import (cheap — file stat / one HTTP call max).
 # Surfaced via _agent_context so templates can gate AI-driven UI.
-import agent as _agent_mod
+from prep import agent as _agent_mod
+from prep import (
+    chat_handoff,
+    db,
+    grader,
+    icons,
+    notify,
+    temporal_client,
+)
+
+# REPO_ROOT (not BASE_DIR) — the package now lives one level below the
+# repo root, but `templates/` and `static/` stay at the repo root so
+# they aren't shipped into the python package's import surface.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BASE_DIR = REPO_ROOT
 
 _AGENT_AVAILABLE = _agent_mod.probe()
 
@@ -315,7 +320,7 @@ else:
     )
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
-import dev_preview
+from prep import dev_preview
 
 dev_preview.register(app, templates)
 

@@ -7,5 +7,5 @@
 # .env file). HOST + PORT are baked into Dockerfile.prep's ENV.
 
 temporal: sh -c 'mkdir -p /data/temporal /data/prep && exec temporal server start-dev --ip 127.0.0.1 --port 7233 --ui-port 8233 --db-filename /data/temporal/temporal.db --namespace $TEMPORAL_NAMESPACE --log-level warn'
-app: .venv/bin/uvicorn app:app --host $HOST --port $PORT --no-access-log --root-path $ROOT_PATH
+app: .venv/bin/uvicorn prep.app:app --host $HOST --port $PORT --no-access-log --root-path $ROOT_PATH
 worker: ./worker-go/bin/worker

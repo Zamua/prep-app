@@ -37,9 +37,11 @@ from pathlib import Path
 # PREP_DB_PATH lets the artifact-based deploy pipeline point a single
 # immutable artifact dir at a per-environment data.sqlite that lives
 # outside the artifact (e.g. ~/Library/prep/data/staging/data.sqlite).
-# Falls back to data.sqlite alongside this module for the dev case
-# where source dir == data dir.
-DB_PATH = Path(os.environ.get("PREP_DB_PATH") or (Path(__file__).parent / "data.sqlite"))
+# Falls back to data.sqlite at the repo root for the dev case where
+# source dir == data dir (the package lives at repo/prep/, so we go
+# up one level).
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+DB_PATH = Path(os.environ.get("PREP_DB_PATH") or (_REPO_ROOT / "data.sqlite"))
 
 INTERVAL_LADDER_MINUTES = [
     10,  # wrong -> see again very soon

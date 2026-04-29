@@ -20,7 +20,8 @@ from pathlib import Path
 
 from markupsafe import Markup
 
-_ICONS_DIR = Path(__file__).parent / "static" / "icons"
+# static/ lives at the repo root, not under the prep/ package.
+_ICONS_DIR = Path(__file__).resolve().parent.parent / "static" / "icons"
 
 # Loaded lazily on first call; cached process-wide. Editing an SVG on disk
 # requires an app restart (same as templates/CSS in production).

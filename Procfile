@@ -12,7 +12,7 @@ temporal: temporal server start-dev --db-filename ./temporal-data/temporal.db --
 # FastAPI app via uvicorn. Binds 127.0.0.1:8081 directly — for tailscale-served
 # prod, see ARCHITECTURE.md (or CLAUDE.md). For dev, hit http://127.0.0.1:8081/
 # directly (PREP_DEFAULT_USER bypasses auth — see Makefile).
-app: .venv/bin/uvicorn app:app --host 127.0.0.1 --port 8081 --reload
+app: .venv/bin/uvicorn prep.app:app --host 127.0.0.1 --port 8081 --reload
 
 # Go worker — durable card generation + grading + transform workflows.
 # Built by `make build`; binary lives at worker-go/bin/worker.
