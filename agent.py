@@ -1,57 +1,28 @@
-"""Agent CLI / HTTP invocation helper + availability probe.
+"""Agent availability probe — used by the FastAPI app at startup.
 
-prep shells out to a local AI CLI (claude-code by default) for question
-generation, grading, and transform work — rather than using an API key.
-This keeps the user's subscription credentials in the CLI's keychain and
-lets them swap to other harnesses (opencode, aider, …) by env var.
+The actual agent shell-out happens entirely in the Go worker; this
+module exists so the Python side can answer "is AI configured + reachable
+right now?" without taking a hard dependency on the worker boot order.
 
-Configuration:
-    PREP_AGENT_URL  = http://host:9999     (preferred when running
-                                            containerized; talks to a
-                                            host-side agent-server)
-    PREP_AGENT_BIN  = ~/.local/bin/claude  (fallback: direct CLI shell-out)
-    PREP_AGENT_ARGS = --strict-mcp-config,--mcp-config,{mcp_config},-p
+The probe checks:
+  1. PREP_AGENT_URL → GET <url>/healthz, parse JSON, surface logged_in.
+  2. PREP_AGENT_BIN (or CLAUDE_BIN) → check the file is executable.
+  3. ~/.local/bin/claude — last-resort default that maps to the
+     conventional Claude Code installer path.
 
-PREP_AGENT_URL takes precedence over PREP_AGENT_BIN if both are set.
-CLAUDE_BIN is honored as a backward-compat alias for PREP_AGENT_BIN.
-
-The agent CLI invocation logic itself lives in the Go worker (see
-worker-go/agent/). This module only provides:
-  * `agent_command(prompt)` — argv for legacy synchronous Python paths
-    (grader.py, generator.py — kept for ad-hoc CLI use).
-  * `probe()` — returns whether AI is reachable at boot. Used by
-    app.py's startup to set `app.state.agent_available` so templates
-    can hide AI-driven UI when no agent is configured.
+Result feeds the `agent_available` jinja context flag, which gates AI
+surfaces in the UI.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 _DEFAULT_BIN = str(Path.home() / ".local" / "bin" / "claude")
-_DEFAULT_ARGS = "--strict-mcp-config,--mcp-config,{mcp_config},-p"
-_EMPTY_MCP_CONFIG = '{"mcpServers":{}}'
-
-
-def agent_command(prompt: str) -> list[str]:
-    """Return argv for a one-shot agent invocation (legacy CLI path)."""
-    bin_path = (
-        os.environ.get("PREP_AGENT_BIN")
-        or os.environ.get("CLAUDE_BIN")
-        or _DEFAULT_BIN
-    )
-    args_csv = os.environ.get("PREP_AGENT_ARGS") or _DEFAULT_ARGS
-    args: list[str] = []
-    for a in args_csv.split(","):
-        a = a.strip()
-        if not a:
-            continue
-        a = a.replace("{mcp_config}", _EMPTY_MCP_CONFIG)
-        args.append(a)
-    return [bin_path, *args, prompt]
 
 
 def status() -> dict:
@@ -66,9 +37,6 @@ def status() -> dict:
         "subscription_type": str (optional),
         "reason":       str (optional, when logged_in is False),
       }
-
-    "logged_in" is the canonical "AI features should light up" flag —
-    matches the previous `probe()` boolean.
     """
     url = (os.environ.get("PREP_AGENT_URL") or "").strip()
     if url:
@@ -79,14 +47,13 @@ def status() -> dict:
             ) as resp:
                 if 200 <= resp.status < 300:
                     body = resp.read().decode("utf-8", errors="replace")
-                    import json as _json
                     try:
-                        data = _json.loads(body)
+                        data = json.loads(body)
                         out["logged_in"] = bool(data.get("logged_in"))
                         for k in ("email", "org_name", "subscription_type", "reason"):
                             if data.get(k):
                                 out[k] = data[k]
-                    except _json.JSONDecodeError:
+                    except json.JSONDecodeError:
                         out["reason"] = "agent-server returned non-JSON"
                 else:
                     out["reason"] = f"agent-server returned HTTP {resp.status}"
@@ -111,6 +78,5 @@ def status() -> dict:
 
 
 def probe() -> bool:
-    """Boolean view of `status()` — whether AI features should light up.
-    Kept as a helper for code paths that just want True/False."""
+    """Boolean view of `status()` — whether AI features should light up."""
     return bool(status().get("logged_in"))

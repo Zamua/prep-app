@@ -82,9 +82,6 @@ func main() {
 
 	// Explicit workflow names so the FastAPI starter doesn't have to know
 	// the Go package paths.
-	w.RegisterWorkflowWithOptions(workflows.GenerateCards, workflow.RegisterOptions{
-		Name: shared.WorkflowGenerate,
-	})
 	w.RegisterWorkflowWithOptions(workflows.GradeAnswer, workflow.RegisterOptions{
 		Name: shared.WorkflowGrade,
 	})

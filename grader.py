@@ -1,82 +1,19 @@
-"""Grade a free-text answer against a question's model answer + rubric.
+"""Synchronous grader for the deterministic question types.
 
-For `mcq` and `multi`, grading is deterministic — no Claude needed.
-For `code` and `short`, we shell out to `claude -p` with the rubric.
+Used by the FastAPI request thread for `mcq`, `multi`, and "I don't know"
+submissions — these resolve in microseconds and don't need a workflow.
+Free-text grading (`code` / `short` answers requiring an LLM judge) is
+NOT here; that path goes through the Temporal worker so the request
+doesn't block on a multi-second claude call. See:
+
+  - app.py: study_submit / session_submit dispatch the slow path to
+    temporal_client.start_grading
+  - worker-go/activities/grading.go: the GradeFreeText activity
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
-
-from agent import agent_command
-
-
-def _grade_freetext(question: dict, user_answer: str, timeout_seconds: int = 90) -> dict:
-    rubric = question.get("rubric") or "(no explicit rubric — judge against the model answer)"
-    answer_block = user_answer if user_answer else "(blank — user pressed I don't know)"
-    prompt = f"""You are grading a flashcard answer for an interview-prep app. Be strict but fair.
-
-**Question type:** {question['type']}
-**Prompt:**
-{question['prompt']}
-
-**Model answer:**
-{question['answer']}
-
-**Rubric (what a correct answer must demonstrate):**
-{rubric}
-
-**User's answer:**
-{answer_block}
-
-Decide: is the user's answer substantively correct? Partial credit counts as wrong (we'll re-show it soon). For `code` questions, accept any correct approach — don't require the exact syntax of the model answer.
-
-Output a single JSON object (no prose, no fences) with:
-- "result": "right" or "wrong"
-- "feedback": 1–3 sentences of feedback the user will see. Be concrete: name what they got/missed.
-- "model_answer_summary": 1–2 sentence summary of the model answer for the user to compare against.
-
-Output ONLY the JSON object."""
-
-    proc = subprocess.run(
-        agent_command(prompt),
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-    )
-    if proc.returncode != 0:
-        return {
-            "result": "wrong",
-            "feedback": f"(grader error: {proc.stderr.strip()[:300]})",
-            "model_answer_summary": question.get("answer", "")[:400],
-        }
-
-    raw = proc.stdout.strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        if raw.lower().startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start == -1 or end == -1:
-        return {
-            "result": "wrong",
-            "feedback": f"(grader returned non-JSON: {raw[:300]})",
-            "model_answer_summary": question.get("answer", "")[:400],
-        }
-    try:
-        parsed = json.loads(raw[start:end + 1])
-    except json.JSONDecodeError as e:
-        return {
-            "result": "wrong",
-            "feedback": f"(grader JSON error: {e})",
-            "model_answer_summary": question.get("answer", "")[:400],
-        }
-    if parsed.get("result") not in {"right", "wrong"}:
-        parsed["result"] = "wrong"
-    return parsed
 
 
 def grade(question: dict, user_answer: str, idk: bool = False) -> dict:
@@ -106,4 +43,8 @@ def grade(question: dict, user_answer: str, idk: bool = False) -> dict:
             "feedback": "Correct." if correct else f"Expected: {sorted(expected)}; you picked: {sorted(picked)}.",
             "model_answer_summary": str(sorted(expected)),
         }
-    return _grade_freetext(question, user_answer)
+    raise ValueError(
+        f"grader.grade() called with type={qtype!r}; free-text grading "
+        f"goes through the Temporal worker (GradeFreeText activity), not "
+        f"this synchronous helper."
+    )

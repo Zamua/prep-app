@@ -5,39 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
 
 	"prep-worker/shared"
 )
-
-
-// ---- Filesystem: claude session jsonl paths ---------------------------
-
-// claudeSessionPaths returns candidate locations where Claude Code stores
-// the session's transcript. We try a few — the layout has shifted across
-// versions and we don't want to be wrong.
-func claudeSessionPaths(sessionID string) []string {
-	home, _ := os.UserHomeDir()
-	cwd := home // launched from $HOME by the wrapper / activities
-	projectDir := strings.ReplaceAll(strings.TrimPrefix(cwd, "/"), "/", "-")
-	return []string{
-		filepath.Join(home, ".claude", "projects", "-"+projectDir, sessionID+".jsonl"),
-	}
-}
-
-func claudeSessionExists(sessionID string) (bool, error) {
-	for _, p := range claudeSessionPaths(sessionID) {
-		if _, err := os.Stat(p); err == nil {
-			return true, nil
-		}
-	}
-	return false, nil
-}
 
 // ---- SQLite ------------------------------------------------------------
 
@@ -73,63 +46,9 @@ func openDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// getDeckContextPrompt returns the user-supplied free-form deck description
-// stored in `decks.context_prompt`. Returns empty string + nil error if the
-// deck row exists but the column is NULL (legacy decks that pre-date UI
-// creation). Returns sql.ErrNoRows if no row matches.
-func getDeckContextPrompt(dbPath, userID, deckName string) (string, error) {
-	db, err := openDB(dbPath)
-	if err != nil {
-		return "", err
-	}
-	defer db.Close()
-	var prompt sql.NullString
-	err = db.QueryRow(
-		"SELECT context_prompt FROM decks WHERE user_id = ? AND name = ?",
-		userID, deckName,
-	).Scan(&prompt)
-	if err != nil {
-		return "", err
-	}
-	if prompt.Valid {
-		return prompt.String, nil
-	}
-	return "", nil
-}
-
-// allPromptsForDeck returns every prior prompt for a (user, deck) — used
-// to seed the priming context so the model doesn't repeat across batches.
-// Scoped to user_id so different users can have decks with the same name
-// without their prompts polluting each other.
-func allPromptsForDeck(dbPath, userID, deckName string) ([]string, error) {
-	db, err := openDB(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	rows, err := db.Query(`
-		SELECT q.prompt
-		  FROM questions q JOIN decks d ON d.id = q.deck_id
-		 WHERE d.name = ? AND d.user_id = ? AND q.user_id = ?`,
-		deckName, userID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var p string
-		if err := rows.Scan(&p); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
 // getCardByIdempotencyKey checks if a card with this key already exists
-// (the at-least-once delivery guard for GenerateNextCard).
+// (the at-least-once delivery guard — used by plan.go's
+// GenerateCardFromBrief before paying for a fresh claude call).
 func getCardByIdempotencyKey(dbPath, key string) (shared.Card, bool, error) {
 	db, err := openDB(dbPath)
 	if err != nil {

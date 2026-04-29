@@ -1,16 +1,16 @@
-"""FastAPI app for the interview-prep flashcard tool.
+"""FastAPI app for prep — a self-hosted spaced-repetition flashcard tool.
 
-Routes:
-  GET  /                                -> deck list
-  GET  /deck/{name}                     -> deck overview (questions + Add More + Study)
-  POST /deck/{name}/add                 -> kick off a Temporal workflow that generates N cards;
-                                           redirects to the generation status page
-  GET  /generation/{wid}                -> live progress page (polls the workflow's getProgress query)
-  GET  /generation/{wid}/status         -> JSON progress (consumed by the polling JS)
-  POST /generation/{wid}/cancel         -> send the cancelGeneration signal
-  GET  /study/{name}                    -> next due card
-  POST /study/{name}                    -> submit answer, grade, advance SRS
-  POST /question/{id}/suspend / unsuspend
+Surfaces:
+  - Deck index, deck view, manual + AI card creation flows
+  - Study sessions (cross-device, version-checked) with SRS advancement
+  - Plan-first generation (claude outline → review/replan/accept → expand)
+  - Transform (claude rewrites cards / decks; preview before apply)
+  - Web push notifications (VAPID), PWA manifest + service worker
+  - Settings: editor input mode, AI agent connect, notification prefs
+
+The Temporal worker (worker-go/) handles long-running AI work; this
+module just starts workflows + polls them. All AI calls go through the
+agent-server container (see worker-go/cmd/agent-server) over HTTP.
 """
 
 from __future__ import annotations
@@ -417,86 +417,6 @@ def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
                               if not q["suspended"] and q["next_due"] and q["next_due"] <= db.now()),
         },
     )
-
-
-@app.post("/deck/{name}/add")
-async def deck_add(request: Request, name: str, count: int = Form(5),
-                    user: dict = Depends(current_user)):
-    uid = user["tailscale_login"]
-    if db.find_deck(uid, name) is None:
-        raise HTTPException(404, f"Unknown deck \"{name}\".")
-    count = max(1, min(count, 15))
-    try:
-        result = await temporal_client.start_generation(
-            name, count, user_id=user["tailscale_login"],
-        )
-    except Exception as e:
-        raise HTTPException(500, f"failed to start workflow: {e}")
-    return _redirect(request, f"/generation/{result.workflow_id}")
-
-
-def _parse_generation_wid(wid: str) -> str | None:
-    """Workflow IDs are formatted `gen-<deck>-<rand>`. Returns deck_name
-    or None if malformed. Deck names can contain hyphens, so we walk from
-    the right (rand is always the last segment)."""
-    if not wid.startswith("gen-"):
-        return None
-    parts = wid[len("gen-"):].split("-")
-    if len(parts) < 2:
-        return None
-    return "-".join(parts[:-1])
-
-
-def _require_owns_generation(user: dict, wid: str) -> str:
-    """Verifies the current user owns the deck this workflow is generating
-    cards for. Returns deck_name on success, raises HTTPException otherwise.
-    Used as the auth gate for /generation/{wid}* routes — without this, any
-    authed user could poll/cancel any other user's generation by guessing
-    the workflow id."""
-    deck_name = _parse_generation_wid(wid)
-    if not deck_name:
-        raise HTTPException(400, "malformed workflow id")
-    deck_id = db.find_deck(user["tailscale_login"], deck_name)
-    if deck_id is None:
-        raise HTTPException(404, "workflow not found")
-    return deck_name
-
-
-@app.get("/generation/{wid}", response_class=HTMLResponse)
-async def generation_view(request: Request, wid: str,
-                          user: dict = Depends(current_user)):
-    deck_name = _require_owns_generation(user, wid)
-    progress = await temporal_client.get_progress(wid)
-    desc = await temporal_client.describe_workflow(wid)
-    return templates.TemplateResponse(
-        "generation.html",
-        {
-            "request": request,
-            "wid": wid,
-            "deck_name": deck_name,
-            "progress": progress,
-            "desc": desc,
-        },
-    )
-
-
-@app.get("/generation/{wid}/status")
-async def generation_status(wid: str, user: dict = Depends(current_user)):
-    _require_owns_generation(user, wid)
-    progress = await temporal_client.get_progress(wid)
-    desc = await temporal_client.describe_workflow(wid)
-    return JSONResponse({"progress": progress, "desc": desc})
-
-
-@app.post("/generation/{wid}/cancel")
-async def generation_cancel(request: Request, wid: str,
-                            user: dict = Depends(current_user)):
-    _require_owns_generation(user, wid)
-    try:
-        await temporal_client.cancel_generation(wid)
-    except Exception as e:
-        raise HTTPException(500, f"cancel failed: {e}")
-    return _redirect(request, f"/generation/{wid}")
 
 
 # ---- Study sessions (cross-device, version-checked) ------------------------
