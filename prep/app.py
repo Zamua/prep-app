@@ -246,10 +246,12 @@ else:
 # mounts them — no decks/study/notify route-handler code lives here
 # anymore (or won't, by the end of phase 5+).
 from prep.decks.routes import router as decks_router
+from prep.notify.routes import router as notify_router
 from prep.study.routes import router as study_router
 
 app.include_router(decks_router)
 app.include_router(study_router)
+app.include_router(notify_router)
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 from prep import dev_preview
@@ -514,106 +516,6 @@ def settings_agent_disconnect(request: Request, user: dict = Depends(current_use
             "flash": "Disconnected. AI features are now hidden; manual flows still work.",
         },
     )
-
-
-# ---- Notifications (settings + subscribe) ---------------------------------
-
-_VALID_MODES = {"off", "digest", "when-ready"}
-
-
-def _validate_prefs(p: dict) -> dict:
-    """Validate + clamp incoming preference values. Anything missing or
-    out-of-range falls back to the existing default; we don't reject
-    partial updates because the form may only submit a subset."""
-    base = dict(db.DEFAULT_NOTIFICATION_PREFS)
-    mode = str(p.get("mode", base["mode"]))
-    if mode not in _VALID_MODES:
-        mode = base["mode"]
-    base["mode"] = mode
-    base["digest_hour"] = max(0, min(23, int(p.get("digest_hour", base["digest_hour"]))))
-    base["threshold"] = max(1, min(99, int(p.get("threshold", base["threshold"]))))
-    base["quiet_hours_enabled"] = bool(p.get("quiet_hours_enabled", base["quiet_hours_enabled"]))
-    base["quiet_start_hour"] = max(
-        0, min(23, int(p.get("quiet_start_hour", base["quiet_start_hour"])))
-    )
-    base["quiet_end_hour"] = max(0, min(23, int(p.get("quiet_end_hour", base["quiet_end_hour"]))))
-    tz = str(p.get("tz", base["tz"]) or base["tz"])[:64]
-    base["tz"] = tz
-    return base
-
-
-@app.get("/notify", response_class=HTMLResponse)
-def notify_settings(request: Request, user: dict = Depends(current_user)):
-    uid = user["tailscale_login"]
-    prefs = db.get_notification_prefs(uid)
-    devices = len(db.list_push_subscriptions(uid))
-    return templates.TemplateResponse(
-        "notify_settings.html",
-        {
-            "request": request,
-            "user": user,
-            "prefs": prefs,
-            "devices": devices,
-            "vapid_key": notify.public_key_b64(),
-        },
-    )
-
-
-@app.post("/notify/prefs")
-async def notify_prefs_save(request: Request, user: dict = Depends(current_user)):
-    raw = await request.json()
-    # Merge submitted values over the user's existing prefs so state-only
-    # fields (last_digest_date, last_when_ready_at) survive an update.
-    existing = db.get_notification_prefs(user["tailscale_login"])
-    validated = _validate_prefs({**existing, **raw})
-    # Preserve scheduler-managed state untouched.
-    for k in ("last_digest_date", "last_when_ready_at"):
-        validated[k] = existing.get(k)
-    db.set_notification_prefs(user["tailscale_login"], validated)
-    return JSONResponse({"ok": True, "prefs": validated})
-
-
-@app.get("/notify/vapid-public-key")
-def vapid_public_key():
-    return JSONResponse({"key": notify.public_key_b64()})
-
-
-@app.post("/notify/subscribe")
-async def notify_subscribe(request: Request, user: dict = Depends(current_user)):
-    sub = await request.json()
-    if not isinstance(sub, dict) or "endpoint" not in sub:
-        raise HTTPException(400, "bad subscription payload")
-    notify.subscribe(user["tailscale_login"], sub)
-    return JSONResponse({"ok": True})
-
-
-@app.post("/notify/unsubscribe")
-async def notify_unsubscribe(request: Request, user: dict = Depends(current_user)):
-    """Remove a single device's push subscription. Endpoint is the natural
-    key — same endpoint can only belong to one user, so the auth check
-    here is for sanity (the endpoint is opaque and unguessable, so even
-    without ownership filtering, an attacker would need the endpoint URL
-    to remove someone else's subscription)."""
-    body = await request.json()
-    endpoint = body.get("endpoint") if isinstance(body, dict) else None
-    if not endpoint:
-        raise HTTPException(400, "missing endpoint")
-    db.delete_push_subscription(endpoint)
-    return JSONResponse({"ok": True})
-
-
-@app.post("/notify/test")
-async def notify_send_test(user: dict = Depends(current_user)):
-    """Send a one-off "test push" to the current user's devices so they
-    can verify subscription is alive end-to-end. Useful after first
-    install or after toggling off→on."""
-    res = notify.send_to_user(
-        user["tailscale_login"],
-        "Prep — test push",
-        "If you can read this, notifications are working on this device.",
-        url="/notify",
-    )
-    return JSONResponse(res)
 
 
 # Move the staging-experiment subscription file out of the way and start
