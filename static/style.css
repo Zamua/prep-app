@@ -2844,37 +2844,42 @@ body:has(dialog[open]) {
   margin: 0 0 0.6rem;
 }
 
-/* ===== session-card discard button (top-left) ===== */
+/* ===== session-card discard button ===== */
 
 .session-card { position: relative; }
 .session-discard-form {
-  position: absolute; top: 0.55rem; left: 0.55rem;
+  /* Vertically center on the left edge so the discard mirrors the
+     resume-arrow's right placement — feels like a paired pair of
+     affordances rather than a floating ui chrome corner. */
+  position: absolute; top: 50%; left: 0.5rem;
+  transform: translateY(-50%);
   z-index: 2; margin: 0;
 }
 .session-discard {
-  /* Apple HIG ≥44pt tap target, but visually small. The padding
-     gives the touch area; the icon stays compact. */
+  /* Borderless icon-only button. The pill-with-border version felt
+     ui-chrome-y on a card that already has its own border; this
+     version reads as part of the card's typography. Mute by default;
+     terracotta on hover/focus so the destructive intent is only
+     legible when you're aiming at it. */
   display: inline-flex; align-items: center; justify-content: center;
-  width: 1.9rem; height: 1.9rem;
+  width: 2.2rem; height: 2.2rem;
   padding: 0;
   background: transparent;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
+  border: none;
   color: var(--ink-mute);
+  opacity: 0.55;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease;
+  transition: color 160ms ease, opacity 160ms ease;
 }
 .session-discard:hover, .session-discard:focus-visible {
-  color: var(--wrong); border-color: var(--wrong); outline: none;
+  color: var(--wrong); opacity: 1; outline: none;
 }
-.session-discard:active { background: color-mix(in srgb, var(--wrong) 8%, var(--paper)); }
-.session-discard .icon { width: 0.85em; height: 0.85em; }
+.session-discard .icon { width: 1em; height: 1em; }
 
-/* Make room on the session-link so the deck name doesn't sit under the
-   discard button. The link's grid template can stay; we just push its
-   left padding in by the button's footprint + a small gap. */
-.session-card .session-link { padding-left: 3.1rem; }
+/* Make room on the session-link so the deck name doesn't sit under
+   the discard. Symmetric with the right-side arrow's gutter. */
+.session-card .session-link { padding-left: 2.6rem; }
 
 /* Section divider between sessions and decks */
 .decks-section { margin-top: 1.6rem; }
