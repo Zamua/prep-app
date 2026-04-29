@@ -63,4 +63,22 @@ if [ -n "$go_files" ]; then
     fi
 fi
 
+# ---- Python tests -------------------------------------------------------
+#
+# Always run the test suite — fast (<2s today) and catches behavior
+# regressions earlier than CI would. Skip only if there's no python in
+# the change AND no test file changed (a pure-go or pure-doc commit).
+
+test_files=$(staged_files | grep -E '^(tests/|prep/.*\.py$|.*\.py$)' || true)
+
+if [ -n "$test_files" ] && [ -x .venv/bin/pytest ]; then
+    echo "pre-commit: pytest -x"
+    if ! .venv/bin/pytest -x --tb=short -q; then
+        echo "" >&2
+        echo "pre-commit: tests failing — fix or add coverage before committing." >&2
+        echo "(use \`git commit --no-verify\` to bypass for an emergency)" >&2
+        exit 1
+    fi
+fi
+
 exit 0

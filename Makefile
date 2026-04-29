@@ -20,7 +20,7 @@ WORKER   := worker-go/bin/worker
 export PREP_DEFAULT_USER ?= dev@example.com
 
 .PHONY: help setup tools deps build dev run-app run-worker run-temporal \
-        lint format hooks clean wipe-temporal-state \
+        lint format hooks clean wipe-temporal-state test \
         deploy-stag deploy-prod promote logs-stag logs-prod down-stag down-prod
 
 help:
@@ -30,6 +30,7 @@ help:
 	@echo "  make build    — Go worker build only"
 	@echo "  make lint     — ruff check + go vet (read-only)"
 	@echo "  make format   — ruff format + gofmt (writes)"
+	@echo "  make test     — pytest (python unit + integration tests)"
 	@echo "  make hooks    — install pre-commit hook (idempotent; runs as part of \`make setup\`)"
 	@echo "  make clean    — kill stray dev processes; preserve data"
 	@echo ""
@@ -87,6 +88,9 @@ format: tools
 	$(RUN) .venv/bin/ruff format .
 	$(RUN) .venv/bin/ruff check --fix .
 	cd worker-go && $(RUN) gofmt -w .
+
+test: tools
+	$(RUN) .venv/bin/pytest -x
 
 # Wire .githooks/ as the git hooks dir for this checkout. Idempotent.
 # Contributors get this for free via `make setup`. To bypass for a
