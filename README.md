@@ -112,7 +112,11 @@ below.
 
 ## Hack on it
 
-For contributors who want a fast iteration loop on the source.
+For contributors who want a fast iteration loop on the source. If
+you want the conceptual map first — bounded contexts, the FastAPI +
+Temporal-worker + agent-container split, the SRS state machine,
+the deploy shape — read [`docs/architecture.md`](docs/architecture.md)
+before diving into the code.
 
 ### Setup (one-time, macOS)
 
@@ -221,8 +225,9 @@ Internals worth knowing:
 
 DDD-style — one package per bounded context, pure domain logic
 isolated under `prep/domain/`, infrastructure under
-`prep/infrastructure/`. See [CLAUDE.md](CLAUDE.md) for the detailed
-map. Highlights:
+`prep/infrastructure/`. See [`docs/architecture.md`](docs/architecture.md)
+for the deeper map (layering rules, end-to-end flow walkthroughs,
+schema overview, deploy shape). Highlights:
 
 ```
 prep/

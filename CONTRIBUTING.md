@@ -28,8 +28,11 @@ Code is organized DDD-style: one package per bounded context
 (`prep/decks/`, `prep/study/`, `prep/notify/`, `prep/agent/`,
 `prep/auth/`), each with `entities.py` / `repo.py` / `service.py` /
 `routes.py`. Pure domain logic lives in `prep/domain/`;
-infrastructure adapters in `prep/infrastructure/`. See
-[CLAUDE.md](CLAUDE.md) for the full layout + invariants.
+infrastructure adapters in `prep/infrastructure/`.
+[`docs/architecture.md`](docs/architecture.md) is the deep-dive
+(layering rules, end-to-end flow walkthroughs, schema, deploy
+shape); [`CLAUDE.md`](CLAUDE.md) is the terser version oriented at
+AI agents.
 
 A few rules to keep the boundary clean:
 - `prep/domain/` imports nothing from bounded contexts, repos, or
