@@ -80,6 +80,11 @@ docker/
   Procfile.docker     temporal | uvicorn | worker, all under goreman in the prep container
 docker-compose.yml    prep + agent services, env-driven volume names
 .env.example          template for per-deploy config (PORT, ROOT_PATH, ENV_NAME, etc.)
+ui-tools/capture.py   playwright screenshot harness — drives Chromium at iPhone-15-Pro-Max
+                      viewport over /dev/preview/* + live pages, dumps PNGs to ui-screenshots/.
+                      Run before/after a UI change to eyeball regressions:
+                      `cd ui-tools && uv run capture.py --tag before-foo` (then `--tag after-foo`).
+.dockerignore         keeps build context lean (.venv, .git, build outputs, secrets out).
 ```
 
 ---

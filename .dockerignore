@@ -1,0 +1,55 @@
+# What docker build sees as context. Anything matched here is excluded
+# from the tarball sent to the daemon, so it can't be `COPY`'d in and
+# can't leak into image layers.
+
+# Version control / IDE / OS noise
+.git
+.gitignore
+.idea
+.vscode
+**/.DS_Store
+**/*.swp
+
+# Python local state — runtime venv is built inside the image
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Go build artifacts — image rebuilds these from source
+worker-go/bin
+
+# CodeMirror node_modules — image rebuilds via bun
+static/cm/node_modules
+
+# Local SQLite + WAL — never into images, container mounts a volume
+**/*.sqlite
+**/*.sqlite-shm
+**/*.sqlite-wal
+**/data.sqlite.bak*
+
+# Per-deployment runtime state (lives in volumes, not images)
+vapid-keys.json
+vapid-private.pem
+push-subscriptions.json
+push-subscriptions.json.archived-*
+
+# Local Temporal devserver state
+temporal-data
+
+# Per-deploy env file — secret-bearing, must not bake into images
+.env
+
+# UI screenshot tooling — local-only
+ui-screenshots
+ui-tools/.venv
+
+# Top-level docs aren't needed at runtime
+README.md
+CLAUDE.md
+CONTRIBUTING.md
+LICENSE
+
+# tmp / build artifacts
+.dockerignore.bak
+*.tgz
