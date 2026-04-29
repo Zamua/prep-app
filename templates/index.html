@@ -17,7 +17,21 @@
   <p class="section-eyebrow"><span>Pick up where you left off</span><span class="rule"></span></p>
   <ul class="session-list" role="list">
     {% for s in recent_sessions %}
-      <li class="session-card">
+      <li class="session-card" data-session-id="{{ s.id }}">
+        {# discard button: top-LEFT, opposite the resume arrow on the right.
+           same `/session/<id>/abandon` endpoint behind the scenes — soft
+           delete, status flips to 'abandoned' which falls out of the
+           recent-sessions query (db.list_recent_sessions filters by
+           status='active'). JS intercepts to fetch + remove inline. #}
+        <form method="post"
+              action="{{ request.scope.get('root_path','') }}/session/{{ s.id }}/abandon"
+              class="session-discard-form">
+          <button type="submit" class="session-discard"
+                  aria-label="Discard this session"
+                  data-deck="{{ s.deck_name }}">
+            {{ icon('x', class_='icon icon-inline') }}
+          </button>
+        </form>
         <a href="{{ request.scope.get('root_path','') }}/session/{{ s.id }}" class="session-link">
           <span class="session-deck">{{ s.deck_name }}</span>
           <span class="session-meta">
@@ -33,8 +47,45 @@
     {% endfor %}
   </ul>
 </section>
+
+<script>
+// Inline session discard. confirm() before fetch, optimistic DOM remove on
+// success, fall back to a real form submit on failure. The cards aren't
+// many so we don't worry about empty-state handling here — if you discard
+// the last one, the section just becomes empty until next page load.
+(function () {
+  document.addEventListener('submit', async (e) => {
+    const form = e.target;
+    if (!form.classList.contains('session-discard-form')) return;
+    e.preventDefault();
+    const card = form.closest('.session-card');
+    const btn = form.querySelector('.session-discard');
+    const deck = btn?.dataset.deck || 'this session';
+    if (!confirm(`Discard your in-progress session for "${deck}"?\n\nReviews already recorded are kept; the session itself becomes abandoned.`)) return;
+    try {
+      const r = await fetch(form.action, {
+        method: 'POST',
+        headers: { 'accept': 'text/html' },
+        redirect: 'manual',
+      });
+      if (!r.ok && r.type !== 'opaqueredirect' && r.status !== 0) {
+        throw new Error('non-success: ' + r.status);
+      }
+      card.style.transition = 'opacity 180ms ease, transform 180ms ease';
+      card.style.opacity = '0';
+      card.style.transform = 'translateX(-1rem)';
+      setTimeout(() => card.remove(), 200);
+    } catch (err) {
+      // Fall back to a real submit so the canonical error path runs.
+      form.submit();
+    }
+  });
+})();
+</script>
 {% endif %}
 
+<section class="decks-section">
+  <p class="section-eyebrow"><span>{% if recent_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
 <ol class="deck-list" role="list">
   {% for d in decks %}
     {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][loop.index0] %}
@@ -73,4 +124,5 @@
     </a>
   </li>
 </ol>
+</section>
 {% endblock %}
