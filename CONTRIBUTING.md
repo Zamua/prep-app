@@ -9,16 +9,38 @@ is just a few extra notes for people sending PRs.
 ## Code style
 
 - Python: 4-space indent, type hints where they add clarity. Linted
-  + formatted with `ruff` (config in `pyproject.toml`).
+  + formatted with `ruff` (config in `pyproject.toml`). Entities
+  use pydantic v2.
 - Go: `gofmt` + `go vet`.
 - HTML/CSS/JS: 2-space indent.
 - Comments: explain *why* (the non-obvious constraint, the gotcha,
   the past incident). Don't narrate *what* — the code does that.
 
 `make setup` installs a pre-commit hook that runs `ruff format --check`,
-`ruff check`, and `gofmt -l` against staged files. Run `make format`
-to fix drift, `make lint` to read-only check the whole tree.
-`git commit --no-verify` bypasses the hook for one-off cases.
+`ruff check`, `gofmt -l`, AND `pytest -x` against staged python/go.
+Run `make format` to fix drift, `make lint` for a read-only check
+across the whole tree, `make test` for the pytest suite.
+`git commit --no-verify` bypasses the hook for one-off emergencies.
+
+## Architecture
+
+Code is organized DDD-style: one package per bounded context
+(`prep/decks/`, `prep/study/`, `prep/notify/`, `prep/agent/`,
+`prep/auth/`), each with `entities.py` / `repo.py` / `service.py` /
+`routes.py`. Pure domain logic lives in `prep/domain/`;
+infrastructure adapters in `prep/infrastructure/`. See
+[CLAUDE.md](CLAUDE.md) for the full layout + invariants.
+
+A few rules to keep the boundary clean:
+- `prep/domain/` imports nothing from bounded contexts, repos, or
+  infrastructure. Pure stdlib + pydantic only.
+- Routes call services (or repos for trivial reads); they don't
+  reach into temporal_client or sqlite directly.
+- Repos return entities, not raw dicts.
+
+If you're adding a new domain concept, ask: which bounded context
+does it belong in? If the answer is "more than one", that's a sign
+the cross-cut belongs in `prep/web/` or wants a new context.
 
 ## What to file as an issue
 

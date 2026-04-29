@@ -153,7 +153,9 @@ need a browser hard-refresh.
 | Add a go dep | `cd worker-go && mise exec -- go get <mod>` |
 | Schema change | edit `db.init()` (idempotent), restart `make dev` |
 
-There are no automated tests yet — exercise via the UI.
+Tests live under `tests/`, organized per bounded context (decks,
+study, domain, etc.). `make test` runs the suite (pytest); the
+pre-commit hook runs `pytest -x` against changes touching python.
 
 ### Validate the docker artifact
 
@@ -217,27 +219,33 @@ Internals worth knowing:
 
 ### Repo layout
 
+DDD-style — one package per bounded context, pure domain logic
+isolated under `prep/domain/`, infrastructure under
+`prep/infrastructure/`. See [CLAUDE.md](CLAUDE.md) for the detailed
+map. Highlights:
+
 ```
-app.py                FastAPI routes + startup
-db.py                 sqlite schema + accessors + SRS state machine
-agent.py              startup probe for AI availability
-notify.py             VAPID web push + scheduler
-grader.py             deterministic mcq/multi/idk grading (fast path)
-chat_handoff.py       "Discuss this card" handoff URL builder
-icons.py              Jinja `icon('name')` global → inlined SVG
-dev_preview.py        /dev/preview routes for UI sweeps
-temporal_client.py    Python → Temporal client helpers
-templates/            Jinja2 templates
-static/               style.css, icons/, pwa/, cm-bundle.js
-worker-go/            Go Temporal worker
-  agent/              Client interface (ShellAgent + HTTPAgent impls)
-  cmd/agent-server/   HTTP wrapper around the claude CLI
-  workflows/          GradeAnswer, Transform, PlanGenerate
-  activities/         side effects the workflows orchestrate
-  shared/types.go     workflow input/output schemas
-docker/               Dockerfile.prep + Dockerfile.agent + Procfile.docker
-docker-compose.yml    canonical deploy: prep + agent containers
+prep/
+├── app.py                  FastAPI() bootstrap + router mounts (~130 loc)
+├── domain/                 pure: SRS state machine, deterministic grader
+├── infrastructure/db.py    sqlite connection + schema + migrations
+├── decks/                  bounded context: deck + question lifecycle
+├── study/                  bounded context: sessions + reviews + grading
+├── notify/                 bounded context: web push + scheduler
+├── agent/                  bounded context: AI integration
+├── auth/                   bounded context: identity + per-user prefs
+└── web/                    cross-cutting HTTP layer (errors, pwa, index)
+templates/                  Jinja2 templates (at repo root)
+static/                     style.css, icons/, pwa/, cm-bundle.js (at repo root)
+tests/<context>/            per-context test pyramid (entities, repo, service, routes)
+worker-go/                  Go Temporal worker
+docker/                     Dockerfile.prep + Dockerfile.agent + Procfile.docker
+docker-compose.yml          canonical deploy: prep + agent containers
 ```
+
+Each `prep/<context>/` typically holds `entities.py` (pydantic
+types), `repo.py` (read/write surface), `service.py` (use cases),
+and `routes.py` (HTTP handlers).
 
 ### Contributing back
 

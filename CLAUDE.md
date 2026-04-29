@@ -54,37 +54,100 @@ so staging and prod can run side-by-side on one host without colliding.
 
 ## Layout
 
+The python source is organized DDD-style — one package per bounded
+context, each with its own entities / repo / service / routes split.
+Domain logic (pure, I/O-free) lives under `prep/domain/`;
+infrastructure adapters under `prep/infrastructure/`.
+
 ```
-app.py                FastAPI routes + startup probe + jinja context_processors
-db.py                 sqlite schema (idempotent migrations in init()), accessors
-agent.py              status() probe — reports HTTP agent /healthz or shell-bin existence
-grader.py             deterministic grade() for mcq/multi/idk only (fast sync path)
-notify.py             VAPID web push + asyncio-scheduled per-user digest/when-ready
-chat_handoff.py       builds prefilled URLs for the "Discuss this card" popover
-icons.py              Jinja `icon('name')` global → inlined Phosphor Light SVG
-dev_preview.py        /dev/preview/<template>/<fixture> routes for UI sweeps
-temporal_client.py    Python helpers: start_grading, start_transform, start_plan_generate, signals/queries
-templates/            Jinja2. base.html sets data-editor-mode + masthead chip via context_processor
-static/               style.css (single file, CSS vars, light/dark), icons/, pwa/, cm-bundle.js
-worker-go/
-  agent/agent.go      Client interface + ShellAgent + HTTPAgent + FromEnv()
-  cmd/agent-server/   The agent container's binary: /run + /healthz + /connect + /disconnect
-  workflows/          GradeAnswer, Transform, PlanGenerate
-  activities/         Side effects: GradeFreeText, ComputeTransform, ApplyTransform,
-                      PlanCards, GenerateCardFromBrief, InsertCard
-  shared/types.go     Workflow input/output schemas
+prep/
+├── app.py                   FastAPI() bootstrap + middleware + mount routers
+├── db.py                    re-export facade over prep.infrastructure.db +
+│                            per-table accessors not yet split into context repos
+├── icons.py                 Jinja `icon('name')` global → inlined Phosphor Light SVG
+├── chat_handoff.py          builds prefilled URLs for the "Discuss this card" popover
+├── temporal_client.py       Python helpers: start_grading, start_transform,
+│                            start_plan_generate, signals/queries
+├── notify/                  bounded context: web push + scheduler
+│   ├── _legacy_module.py    VAPID + send + asyncio scheduler (will split to
+│   │                        push.py + scheduler.py in a future pass)
+│   ├── entities.py          NotificationPrefs, PushSubscription
+│   ├── repo.py              NotifyPrefsRepo, PushSubsRepo
+│   └── routes.py            /notify/* HTTP surface
+├── decks/                   bounded context: deck + question lifecycle
+│   ├── entities.py          Deck, DeckSummary, Question, DeckCard, NewQuestion
+│   ├── repo.py              DeckRepo, QuestionRepo
+│   ├── service.py           use cases (sync CRUD + temporal-orchestrated plan/transform)
+│   └── routes.py            /decks/*, /deck/*, /question/*, /transform/*, /plan/*
+├── study/                   bounded context: study sessions + reviews
+│   ├── entities.py          StudySession, RecentSession, Review, CardState
+│   ├── repo.py              SessionRepo, ReviewRepo (re-exports StaleVersionError)
+│   ├── service.py           start_session, submit_sync_answer, advance, abandon,
+│   │                        async start_grading + grading_landed
+│   └── routes.py            /study/*, /session/*, /grading/*
+├── agent/                   bounded context: AI integration
+│   ├── status.py            probe + structured status() + cached is_available
+│   └── routes.py            /settings/agent + connect/disconnect to agent-server
+├── auth/                    bounded context: identity + per-user prefs
+│   ├── identity.py          current_user FastAPI dependency, Tailscale headers
+│   ├── repo.py              UserRepo (upsert, editor_input_mode)
+│   └── routes.py            /settings/editor
+├── domain/                  PURE — no I/O, no DB, no FastAPI imports
+│   ├── srs.py               SRS state machine (LADDER_MINUTES, advance_step, Verdict)
+│   └── grading.py           deterministic mcq/multi/idk grader
+├── infrastructure/
+│   └── db.py                sqlite connection factory + cursor() + init() + now()
+├── web/                     cross-cutting HTTP layer
+│   ├── templates.py         Jinja2Templates instance + context processors
+│   ├── responses.py         redirect() helper (root_path-aware)
+│   ├── errors.py            friendly error pages + json-aware exception handlers
+│   ├── pwa.py               /manifest.json + /sw.js
+│   └── index.py             GET / (cross-cuts decks + study)
+└── dev/
+    └── preview.py           /dev/preview/* template fixtures (gated by PREP_DEV=1;
+                             never set in prod images)
+
+tests/                       per-context test pyramid
+├── conftest.py              tmp-path sqlite, TestClient, initialized_db fixtures
+├── test_smoke.py            pre-refactor characterization tests (still green)
+├── domain/                  pure unit tests (SRS, grading)
+├── decks/                   entity + repo (real sqlite) + service (fake client) + routes
+├── study/                   same shape
+
+worker-go/                   Go Temporal worker
+├── agent/agent.go           Client interface + ShellAgent + HTTPAgent
+├── cmd/agent-server/        agent container binary: /run + /healthz + /connect + /disconnect
+├── workflows/               GradeAnswer, Transform, PlanGenerate
+├── activities/              GradeFreeText, ComputeTransform, ApplyTransform,
+│                            PlanCards, GenerateCardFromBrief, InsertCard
+└── shared/types.go          Workflow input/output schemas
+
 docker/
-  Dockerfile.prep     multi-stage: golang:1.26 (worker+goreman), oven/bun:1.1.0 (cm-bundle),
-                      python:3.11-slim runtime with uv-installed venv + temporal CLI baked
-  Dockerfile.agent    node:22-slim + npm-installed claude-code + go-built agent-server
-  Procfile.docker     temporal | uvicorn | worker, all under goreman in the prep container
-docker-compose.yml    prep + agent services, env-driven volume names
-.env.example          template for per-deploy config (PORT, ROOT_PATH, ENV_NAME, etc.)
-ui-tools/capture.py   playwright screenshot harness — drives Chromium at iPhone-15-Pro-Max
-                      viewport over /dev/preview/* + live pages, dumps PNGs to ui-screenshots/.
-                      Run before/after a UI change to eyeball regressions:
-                      `cd ui-tools && uv run capture.py --tag before-foo` (then `--tag after-foo`).
-.dockerignore         keeps build context lean (.venv, .git, build outputs, secrets out).
+├── Dockerfile.prep          multi-stage: golang:1.26 (worker+goreman), oven/bun:1.1.0
+│                            (cm-bundle), python:3.11-slim runtime with uv-installed
+│                            venv + temporal CLI baked
+├── Dockerfile.agent         node:22-slim + npm-installed claude-code + go-built agent-server
+└── Procfile.docker          temporal | uvicorn | worker, all under goreman in the prep
+                             container
+
+docker-compose.yml           prep + agent services, env-driven volume + image names
+.env.example                 per-deploy config template (PORT, ROOT_PATH, ENV_NAME, ...)
+deploy/{staging,prod}.env    tracked deploy-shape env files for `make deploy-{stag,prod}`
+.prod-version                single-line tag pinning what's running in prod
+ui-tools/capture.py          playwright screenshot harness for the UI sweep
+.dockerignore                keeps build context lean (.venv, .git, build outputs, secrets out)
+```
+
+**DDD invariants worth preserving as the codebase grows:**
+- `prep/domain/` imports nothing from bounded contexts or infrastructure.
+  Pure functions + value objects only.
+- Bounded-context modules import from each other only via entities or
+  via the public shape of another context's service. No reaching into
+  another context's repo directly.
+- Routes call services (or repos for trivial reads). They don't
+  call temporal_client or sqlite directly.
+- Repos return entities, not dicts. The conversion happens at the
+  boundary; templates and HTTP responses see entity-shape data.
 ```
 
 ---
