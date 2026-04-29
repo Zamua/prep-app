@@ -40,7 +40,9 @@ def grade(question: dict, user_answer: str, idk: bool = False) -> dict:
         correct = picked == expected
         return {
             "result": "right" if correct else "wrong",
-            "feedback": "Correct." if correct else f"Expected: {sorted(expected)}; you picked: {sorted(picked)}.",
+            "feedback": "Correct."
+            if correct
+            else f"Expected: {sorted(expected)}; you picked: {sorted(picked)}.",
             "model_answer_summary": str(sorted(expected)),
         }
     raise ValueError(

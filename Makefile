@@ -19,14 +19,18 @@ WORKER   := worker-go/bin/worker
 # Tailscale (see CLAUDE.md).
 export PREP_DEFAULT_USER ?= dev@example.com
 
-.PHONY: help setup tools deps build dev run-app run-worker run-temporal test clean wipe-temporal-state \
+.PHONY: help setup tools deps build dev run-app run-worker run-temporal \
+        lint format hooks clean wipe-temporal-state \
         docker-up docker-down docker-build docker-logs
 
 help:
 	@echo "Local dev (no docker):"
-	@echo "  make setup    — mise install (toolchain incl. goreman) + uv sync + build worker"
+	@echo "  make setup    — mise install + uv sync (incl. dev tools) + build worker + install hooks"
 	@echo "  make dev      — start temporal + app + worker via goreman (Procfile)"
 	@echo "  make build    — Go worker build only"
+	@echo "  make lint     — ruff check + go vet (read-only)"
+	@echo "  make format   — ruff format + gofmt (writes)"
+	@echo "  make hooks    — install pre-commit hook (idempotent; runs as part of \`make setup\`)"
 	@echo "  make clean    — kill stray dev processes; preserve data"
 	@echo ""
 	@echo "Docker compose (canonical deploy shape):"
@@ -35,7 +39,7 @@ help:
 	@echo "  make docker-down    — stop the stack (data volumes preserved)"
 	@echo "  make docker-logs    — tail compose logs"
 
-setup: tools deps build
+setup: tools deps build hooks
 
 tools:
 	@command -v $(MISE) >/dev/null 2>&1 || { \
@@ -43,7 +47,7 @@ tools:
 	$(MISE) install --quiet
 
 deps: tools
-	$(RUN) uv sync --quiet
+	$(RUN) uv sync --group dev --quiet
 
 build: $(WORKER)
 
@@ -65,8 +69,28 @@ run-temporal:
 	@mkdir -p temporal-data
 	temporal server start-dev --db-filename ./temporal-data/temporal.db --namespace prep --log-level warn
 
-test:
-	@echo "(no test suite yet — see docs/oss-readiness.md Phase 1 backlog)"
+# ----- lint / format -----
+# `make lint` is read-only — fails if drift exists. CI / pre-commit hook
+# territory. `make format` rewrites files in place.
+
+lint: tools
+	$(RUN) .venv/bin/ruff format --check .
+	$(RUN) .venv/bin/ruff check .
+	cd worker-go && $(RUN) go vet ./...
+	@cd worker-go && bad=$$($(RUN) gofmt -l .); \
+	  if [ -n "$$bad" ]; then echo "gofmt drift in:"; echo "$$bad"; exit 1; fi
+
+format: tools
+	$(RUN) .venv/bin/ruff format .
+	$(RUN) .venv/bin/ruff check --fix .
+	cd worker-go && $(RUN) gofmt -w .
+
+# Wire .githooks/ as the git hooks dir for this checkout. Idempotent.
+# Contributors get this for free via `make setup`. To bypass for a
+# single commit, use `git commit --no-verify`.
+hooks:
+	@git config core.hooksPath .githooks
+	@echo "git hooks installed (.githooks/pre-commit)"
 
 clean:
 	@-pkill -f "uvicorn app:app" 2>/dev/null || true
@@ -81,14 +105,13 @@ wipe-temporal-state:
 # Canonical deploy shape as of v0.13.0. Two services: prep (app +
 # temporal devserver + go worker) and agent (claude wrapper). Volumes
 # preserved across `docker compose down` — only `down -v` wipes data.
-# See README.md for the .env setup + the one-time `claude setup-token`
-# auth flow.
+# `docker compose up` works without an .env file (compose has inline
+# ${VAR:-default} for every override); see README.md for tweaks.
 
 docker-build:
 	docker compose build
 
 docker-up:
-	@[ -f .env ] || { echo "missing .env — copy .env.example and edit"; exit 1; }
 	docker compose up -d
 
 docker-down:

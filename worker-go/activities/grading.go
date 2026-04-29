@@ -29,9 +29,9 @@ import (
 // SRS interval ladder in minutes. Mirrors db.py:INTERVAL_LADDER_MINUTES.
 // Wrong → step 0; right → step += 1, capped at len-1.
 var srsLadderMinutes = []int{
-	10,           // 10 min
-	24 * 60,      // 1d
-	3 * 24 * 60,  // 3d
+	10,          // 10 min
+	24 * 60,     // 1d
+	3 * 24 * 60, // 3d
 	7 * 24 * 60,
 	14 * 24 * 60,
 	30 * 24 * 60,

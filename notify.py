@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os as _os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,9 +32,6 @@ from py_vapid import Vapid01
 from pywebpush import WebPushException, webpush
 
 import db
-
-
-import os as _os
 
 # Key paths can be overridden via env so the artifact-based deploy can
 # keep VAPID keys in a persistent data dir outside the immutable artifact
@@ -55,9 +53,12 @@ _lock = threading.Lock()
 
 # ---- VAPID key bootstrap --------------------------------------------------
 
+
 def _public_key_b64url(vapid: Vapid01) -> str:
     import base64
+
     from cryptography.hazmat.primitives import serialization
+
     raw = vapid.public_key.public_bytes(
         encoding=serialization.Encoding.X962,
         format=serialization.PublicFormat.UncompressedPoint,
@@ -90,6 +91,7 @@ def public_key_b64() -> str:
 
 # ---- Send glue ------------------------------------------------------------
 
+
 def _send_one(sub_row: dict, payload: dict) -> str:
     """Send a single push. Returns 'ok', 'gone' (subscription invalid;
     caller should prune), or 'fail'. Never raises."""
@@ -111,8 +113,11 @@ def _send_one(sub_row: dict, payload: dict) -> str:
         status = getattr(e.response, "status_code", None) if e.response is not None else None
         if status in (404, 410):
             return "gone"
-        _log.warning("webpush failed: status=%s body=%s",
-                     status, e.response.text[:200] if e.response is not None else "")
+        _log.warning(
+            "webpush failed: status=%s body=%s",
+            status,
+            e.response.text[:200] if e.response is not None else "",
+        )
         return "fail"
     except Exception as e:
         _log.warning("webpush error: %s", e)
@@ -140,6 +145,7 @@ def send_to_user(user_id: str, title: str, body: str, url: str | None = None) ->
 
 # ---- Subscribe / migrate from old file storage ----------------------------
 
+
 def subscribe(user_id: str, sub: dict) -> None:
     """Store the browser's push subscription. Called by /notify/subscribe."""
     endpoint = sub.get("endpoint")
@@ -159,7 +165,7 @@ def subscribe(user_id: str, sub: dict) -> None:
 # modes — we won't fire pushes during the configured night window even if
 # the digest hour falls inside it.
 
-_TICK_SECONDS = 300   # 5 minutes
+_TICK_SECONDS = 300  # 5 minutes
 _WHEN_READY_DEBOUNCE_SECONDS = 4 * 60 * 60  # don't re-fire within 4h
 
 
@@ -245,8 +251,9 @@ async def _tick() -> None:
                 # via last_digest_date so a 5-minute tick window won't double-fire.
                 if _should_send_digest(prefs, local):
                     breakdown = db.deck_due_breakdown(uid)
-                    send_to_user(uid, "Prep — daily digest",
-                                 _digest_body(breakdown, due_total), url="/")
+                    send_to_user(
+                        uid, "Prep — daily digest", _digest_body(breakdown, due_total), url="/"
+                    )
                     prefs["last_digest_date"] = local.date().isoformat()
                     db.set_notification_prefs(uid, prefs)
             elif mode == "when-ready":
@@ -260,9 +267,12 @@ async def _tick() -> None:
                 ):
                     continue
                 if _should_send_when_ready(prefs, due_total, now_utc):
-                    send_to_user(uid, "Prep — cards ready",
-                                 f"{due_total} card{'s' if due_total != 1 else ''} due to study.",
-                                 url="/")
+                    send_to_user(
+                        uid,
+                        "Prep — cards ready",
+                        f"{due_total} card{'s' if due_total != 1 else ''} due to study.",
+                        url="/",
+                    )
                     prefs["last_when_ready_at"] = now_utc.isoformat()
                     db.set_notification_prefs(uid, prefs)
         except Exception as e:
@@ -281,7 +291,6 @@ async def _scheduler_loop() -> None:
 def start_scheduler() -> None:
     """Launch the background scheduler task on the running event loop.
     Call once from app startup. Idempotent — a second call is a no-op."""
-    global _scheduler_task
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:

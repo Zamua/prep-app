@@ -1,8 +1,8 @@
 // Transform workflow — replaces the count-based "generate N cards" flow
 // with a free-form prompt the user types into the deck page (or a
 // per-card "improve" form). Two scopes:
-//   • scope="card": auto-applies the rewrite once claude returns it
-//   • scope="deck": returns a Plan via query, waits for an apply or
+//   - scope="card": auto-applies the rewrite once claude returns it
+//   - scope="deck": returns a Plan via query, waits for an apply or
 //     reject signal from the user before writing to the DB
 //
 // State exposed via `getTransformProgress` query so the polling page can

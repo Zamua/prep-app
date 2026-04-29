@@ -42,9 +42,7 @@ def status() -> dict:
     if url:
         out = {"kind": "http", "logged_in": False}
         try:
-            with urllib.request.urlopen(
-                url.rstrip("/") + "/healthz", timeout=2.0
-            ) as resp:
+            with urllib.request.urlopen(url.rstrip("/") + "/healthz", timeout=2.0) as resp:
                 if 200 <= resp.status < 300:
                     body = resp.read().decode("utf-8", errors="replace")
                     try:
@@ -61,15 +59,17 @@ def status() -> dict:
             out["reason"] = f"agent-server unreachable: {e}"
         return out
 
-    bin_path = (
-        (os.environ.get("PREP_AGENT_BIN") or "").strip()
-        or (os.environ.get("CLAUDE_BIN") or "").strip()
-    )
+    bin_path = (os.environ.get("PREP_AGENT_BIN") or "").strip() or (
+        os.environ.get("CLAUDE_BIN") or ""
+    ).strip()
     if not bin_path:
         bin_path = _DEFAULT_BIN
         if not (os.path.isfile(bin_path) and os.access(bin_path, os.X_OK)):
-            return {"kind": "unconfigured", "logged_in": False,
-                    "reason": "neither PREP_AGENT_URL nor PREP_AGENT_BIN is set"}
+            return {
+                "kind": "unconfigured",
+                "logged_in": False,
+                "reason": "neither PREP_AGENT_URL nor PREP_AGENT_BIN is set",
+            }
     available = os.path.isfile(bin_path) and os.access(bin_path, os.X_OK)
     out = {"kind": "shell", "logged_in": available}
     if not available:

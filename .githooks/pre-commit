@@ -1,0 +1,66 @@
+#!/bin/sh
+# Pre-commit hook for prep.
+#
+# What it does:
+#   - Runs `ruff format --check` and `ruff check` against staged Python files
+#   - Runs `gofmt -l` against staged Go files
+#
+# How it's wired up:
+#   `git config core.hooksPath .githooks` (run once per checkout — `make
+#   hooks` in this repo, also called by `make setup`).
+#
+# Bypass (intentionally): `git commit --no-verify`. Use sparingly.
+
+set -e
+
+# Stage list, NUL-delimited so spaces/specials don't break us. Includes
+# only ADDED, COPIED, MODIFIED — skips DELETED + RENAMED (no content).
+staged_files() {
+    git diff --cached --name-only --diff-filter=ACM -z | tr '\0' '\n'
+}
+
+py_files=$(staged_files | grep -E '\.py$' | grep -vE '^(\.venv/|ui-tools/\.venv/)' || true)
+go_files=$(staged_files | grep -E '\.go$' || true)
+
+# ---- Python: ruff format-check + lint -----------------------------------
+
+if [ -n "$py_files" ]; then
+    if [ ! -x .venv/bin/ruff ]; then
+        echo "pre-commit: .venv/bin/ruff not found — run \`uv sync --group dev\` first" >&2
+        exit 1
+    fi
+
+    echo "pre-commit: ruff format --check"
+    # shellcheck disable=SC2086  # word-split intended
+    if ! .venv/bin/ruff format --check $py_files; then
+        echo "" >&2
+        echo "pre-commit: formatting issues — run \`make format\` and re-stage." >&2
+        exit 1
+    fi
+
+    echo "pre-commit: ruff check"
+    # shellcheck disable=SC2086
+    if ! .venv/bin/ruff check $py_files; then
+        echo "" >&2
+        echo "pre-commit: lint issues — fix manually or run \`.venv/bin/ruff check --fix <files>\`." >&2
+        exit 1
+    fi
+fi
+
+# ---- Go: gofmt drift check ----------------------------------------------
+
+if [ -n "$go_files" ]; then
+    # gofmt -l prints any file that would change. Empty output = clean.
+    # We pipe through grep to keep only the staged files (gofmt -l . would
+    # walk the whole tree).
+    bad=$(echo "$go_files" | xargs -r gofmt -l 2>/dev/null)
+    if [ -n "$bad" ]; then
+        echo "pre-commit: gofmt drift in:" >&2
+        echo "$bad" >&2
+        echo "" >&2
+        echo "fix with \`make format\` and re-stage." >&2
+        exit 1
+    fi
+fi
+
+exit 0

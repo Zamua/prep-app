@@ -42,8 +42,8 @@ from pathlib import Path
 DB_PATH = Path(os.environ.get("PREP_DB_PATH") or (Path(__file__).parent / "data.sqlite"))
 
 INTERVAL_LADDER_MINUTES = [
-    10,           # wrong -> see again very soon
-    24 * 60,      # 1d
+    10,  # wrong -> see again very soon
+    24 * 60,  # 1d
     3 * 24 * 60,  # 3d
     7 * 24 * 60,
     14 * 24 * 60,
@@ -185,11 +185,14 @@ def init() -> None:
             # "owner@local" only because there's no real identity to attribute
             # the legacy data to.
             default_user = os.environ.get("PREP_DEFAULT_USER", "owner@local")
-            c.execute("""
+            c.execute(
+                """
                 INSERT OR IGNORE INTO users
                   (tailscale_login, display_name, created_at, last_seen_at)
                 VALUES (?, ?, ?, ?)
-            """, (default_user, default_user.split("@")[0], now(), now()))
+            """,
+                (default_user, default_user.split("@")[0], now(), now()),
+            )
 
             # Add user_id columns and backfill. SQLite ALTER doesn't allow
             # NOT NULL with non-constant default, so we add nullable, backfill
@@ -198,7 +201,9 @@ def init() -> None:
                 cols = {r["name"] for r in c.execute(f"PRAGMA table_info({tbl})").fetchall()}
                 if "user_id" not in cols:
                     c.execute(f"ALTER TABLE {tbl} ADD COLUMN user_id TEXT")
-                    c.execute(f"UPDATE {tbl} SET user_id = ? WHERE user_id IS NULL", (default_user,))
+                    c.execute(
+                        f"UPDATE {tbl} SET user_id = ? WHERE user_id IS NULL", (default_user,)
+                    )
 
         # 3. The decks table originally had `name TEXT UNIQUE NOT NULL`. Now we
         #    want `UNIQUE(user_id, name)` so different users can have decks
@@ -206,7 +211,9 @@ def init() -> None:
         has_compound_unique = False
         for idx in c.execute("PRAGMA index_list(decks)").fetchall():
             if idx["unique"]:
-                cols = {r["name"] for r in c.execute(f"PRAGMA index_info({idx['name']})").fetchall()}
+                cols = {
+                    r["name"] for r in c.execute(f"PRAGMA index_info({idx['name']})").fetchall()
+                }
                 if cols == {"user_id", "name"}:
                     has_compound_unique = True
                     break
@@ -255,7 +262,9 @@ def init() -> None:
         # 4. user_id-dependent indexes — created last, after every table has
         #    the column. CREATE IF NOT EXISTS so re-running is a no-op.
         c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON study_sessions(user_id, status)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_questions_user_deck ON questions(user_id, deck_id)")
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_questions_user_deck ON questions(user_id, deck_id)"
+        )
         c.execute("CREATE INDEX IF NOT EXISTS idx_decks_user ON decks(user_id)")
 
         # 5. Notifications: per-user prefs (JSON blob) + push subscription table.
@@ -298,8 +307,10 @@ def now() -> str:
 # Users
 # =============================================================================
 
-def upsert_user(tailscale_login: str, display_name: str | None = None,
-                profile_pic_url: str | None = None) -> dict:
+
+def upsert_user(
+    tailscale_login: str, display_name: str | None = None, profile_pic_url: str | None = None
+) -> dict:
     """Called on every authenticated request. Upserts the user row and bumps
     last_seen_at. Returns the user dict."""
     ts = now()
@@ -311,12 +322,22 @@ def upsert_user(tailscale_login: str, display_name: str | None = None,
                  display_name = COALESCE(?, users.display_name),
                  profile_pic_url = COALESCE(?, users.profile_pic_url),
                  last_seen_at = ?""",
-            (tailscale_login, display_name, profile_pic_url, ts, ts,
-             display_name, profile_pic_url, ts),
+            (
+                tailscale_login,
+                display_name,
+                profile_pic_url,
+                ts,
+                ts,
+                display_name,
+                profile_pic_url,
+                ts,
+            ),
         )
-        return dict(c.execute(
-            "SELECT * FROM users WHERE tailscale_login = ?", (tailscale_login,)
-        ).fetchone())
+        return dict(
+            c.execute(
+                "SELECT * FROM users WHERE tailscale_login = ?", (tailscale_login,)
+            ).fetchone()
+        )
 
 
 # ---- Editor input mode (single-key user setting) --------------------------
@@ -357,16 +378,16 @@ import json as _json
 
 # Default prefs for a fresh user — explicit opt-in, so mode starts off.
 DEFAULT_NOTIFICATION_PREFS = {
-    "mode": "off",                      # off | digest | when-ready
-    "digest_hour": 9,                   # 0..23 local-tz hour for digest mode
-    "tz": "America/New_York",           # IANA timezone name
-    "threshold": 3,                     # min due cards for when-ready mode
-    "quiet_hours_enabled": False,       # opt-in; when false, no quiet window
-    "quiet_start_hour": 22,             # 0..23, only honored when enabled
+    "mode": "off",  # off | digest | when-ready
+    "digest_hour": 9,  # 0..23 local-tz hour for digest mode
+    "tz": "America/New_York",  # IANA timezone name
+    "threshold": 3,  # min due cards for when-ready mode
+    "quiet_hours_enabled": False,  # opt-in; when false, no quiet window
+    "quiet_start_hour": 22,  # 0..23, only honored when enabled
     "quiet_end_hour": 8,
     # State (not user-edited; updated by the scheduler):
-    "last_digest_date": None,           # ISO date "YYYY-MM-DD" in user tz
-    "last_when_ready_at": None,         # ISO datetime UTC, debounce window
+    "last_digest_date": None,  # ISO date "YYYY-MM-DD" in user tz
+    "last_when_ready_at": None,  # ISO datetime UTC, debounce window
 }
 
 
@@ -394,6 +415,7 @@ def set_notification_prefs(user_id: str, prefs: dict) -> None:
 
 
 # ---- Push subscriptions (DB-backed, one row per device) -------------------
+
 
 def upsert_push_subscription(user_id: str, endpoint: str, p256dh: str, auth: str) -> None:
     ts = now()
@@ -431,9 +453,7 @@ def list_users_with_push_subs() -> list[str]:
     push subscription. Used by the scheduler so we don't iterate users who
     can't be reached anyway."""
     with cursor() as c:
-        rows = c.execute(
-            "SELECT DISTINCT user_id FROM push_subscriptions"
-        ).fetchall()
+        rows = c.execute("SELECT DISTINCT user_id FROM push_subscriptions").fetchall()
     return [r["user_id"] for r in rows]
 
 
@@ -475,6 +495,7 @@ def deck_due_breakdown(user_id: str) -> list[tuple[str, int]]:
 # =============================================================================
 # Decks (per-user)
 # =============================================================================
+
 
 def get_or_create_deck(user_id: str, name: str) -> int:
     with cursor() as c:
@@ -775,14 +796,10 @@ def record_review(user_id: str, qid: int, result: str, user_answer: str, notes: 
     ts = datetime.now(timezone.utc)
     with cursor() as c:
         # Verify ownership.
-        owner = c.execute(
-            "SELECT user_id FROM questions WHERE id = ?", (qid,)
-        ).fetchone()
+        owner = c.execute("SELECT user_id FROM questions WHERE id = ?", (qid,)).fetchone()
         if not owner or owner["user_id"] != user_id:
             raise ValueError(f"question {qid} not owned by {user_id}")
-        row = c.execute(
-            "SELECT step FROM cards WHERE question_id = ?", (qid,)
-        ).fetchone()
+        row = c.execute("SELECT step FROM cards WHERE question_id = ?", (qid,)).fetchone()
         if not row:
             raise ValueError(f"no card for question {qid}")
         step = row["step"]
@@ -799,8 +816,7 @@ def record_review(user_id: str, qid: int, result: str, user_answer: str, notes: 
             (qid, ts.isoformat(), result, user_answer, notes),
         )
         c.execute(
-            "UPDATE cards SET step = ?, next_due = ?, last_review = ? "
-            "WHERE question_id = ?",
+            "UPDATE cards SET step = ?, next_due = ?, last_review = ? " "WHERE question_id = ?",
             (new_step, next_due, ts.isoformat(), qid),
         )
         return {"step": new_step, "next_due": next_due, "interval_minutes": interval}
@@ -877,8 +893,16 @@ def create_session(user_id: str, deck_id: int, device_label: str) -> str:
                  current_question_id, current_draft, version, device_label)
             VALUES (?, ?, ?, ?, ?, 'active', 'awaiting-answer', ?, ?, 1, ?)
             """,
-            (sid, user_id, deck_id, ts, ts, next_q["id"] if next_q else None,
-             initial_draft, device_label),
+            (
+                sid,
+                user_id,
+                deck_id,
+                ts,
+                ts,
+                next_q["id"] if next_q else None,
+                initial_draft,
+                device_label,
+            ),
         )
     return sid
 
@@ -974,6 +998,7 @@ def list_recent_sessions(user_id: str, limit: int = 5) -> list[dict]:
 # defense in depth so a forgetful route can't accidentally let one user
 # mutate another's session.
 
+
 def update_session_draft(user_id: str, sid: str, draft: str, expected_version: int) -> int:
     """Save the in-progress draft. Version-checked. Returns the new version."""
     ts = now()
@@ -1036,14 +1061,14 @@ def record_session_answer_sync(
                 last_active = ?,
                 version = ?
               WHERE id = ? AND user_id = ?""",
-            (question_id, json.dumps(verdict), json.dumps(state),
-             ts, new_v, sid, user_id),
+            (question_id, json.dumps(verdict), json.dumps(state), ts, new_v, sid, user_id),
         )
         return new_v
 
 
-def set_session_grading(user_id: str, sid: str, question_id: int, workflow_id: str,
-                        expected_version: int) -> int:
+def set_session_grading(
+    user_id: str, sid: str, question_id: int, workflow_id: str, expected_version: int
+) -> int:
     """Used when a code/short submission kicks off a grading workflow.
     Sets state='grading', stores the workflow id, version-checked."""
     ts = now()
@@ -1069,8 +1094,9 @@ def set_session_grading(user_id: str, sid: str, question_id: int, workflow_id: s
         return new_v
 
 
-def session_grading_completed(user_id: str, sid: str, question_id: int, verdict: dict,
-                               state: dict, workflow_id: str) -> None:
+def session_grading_completed(
+    user_id: str, sid: str, question_id: int, verdict: dict, state: dict, workflow_id: str
+) -> None:
     """Called from a polling endpoint once the grading workflow finishes.
     Stamps the answer + transitions to showing-result. Not version-checked
     because this is server-side reconciliation, not user input. Scoped to

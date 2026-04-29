@@ -26,3 +26,40 @@ dependencies = [
 # at the root as a candidate package and warns about the missing build
 # config.
 package = false
+
+[dependency-groups]
+# Dev-only tooling. Installed by `uv sync --group dev` (or `--all-groups`).
+# Not pulled into the runtime image — the Dockerfile uses `uv sync`
+# without --group dev.
+dev = [
+    "ruff==0.7.4",
+]
+
+[tool.ruff]
+# Codebase house style: 4-space indent, conservative line length.
+# Excludes generated artifacts that we don't lint or format.
+line-length = 100
+extend-exclude = [
+    ".venv",
+    "static/cm/node_modules",
+    "worker-go",
+    "ui-tools/.venv",
+]
+
+[tool.ruff.lint]
+# Default ruleset is `E,F` (pycodestyle errors + pyflakes). We add `I`
+# for import sorting and `B` for likely bugs. Skipping style rules
+# (line-too-long etc.) — the formatter handles that.
+select = ["E", "F", "I", "B"]
+ignore = [
+    "E501", # long lines: formatter handles, and we wrap by intent
+    "E402", # late module-level imports: deliberate in app.py + db.py
+    "B008", # function-call default args (FastAPI Depends() is the canonical pattern)
+    "B904", # raise-from inside except: codebase translates to HTTP errors that embed `e` in the message
+]
+
+[tool.ruff.format]
+# Match the codebase: 4-space indent, double quotes, trailing commas
+# in multi-line collections.
+quote-style = "double"
+indent-style = "space"

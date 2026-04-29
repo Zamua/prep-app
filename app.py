@@ -18,13 +18,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import mistune
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
-import mistune
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import chat_handoff
@@ -39,6 +39,7 @@ BASE_DIR = Path(__file__).parent
 # Probed once at module import (cheap — file stat / one HTTP call max).
 # Surfaced via _agent_context so templates can gate AI-driven UI.
 import agent as _agent_mod
+
 _AGENT_AVAILABLE = _agent_mod.probe()
 
 
@@ -70,21 +71,33 @@ templates = Jinja2Templates(
 # but we still want **bold** / `code` / fenced blocks / lists / headings to
 # render rather than show as raw markdown text.
 _md = mistune.create_markdown(
-    escape=True,           # escape any raw HTML; we don't want pass-through
+    escape=True,  # escape any raw HTML; we don't want pass-through
     hard_wrap=False,
     plugins=["strikethrough", "table"],
 )
 
 
-def _handoff_ctx(*, deck_name: str, q: dict, user_answer: str, verdict: dict | None,
-                 idk: bool, picked_set: list[str], correct_set: list[str]) -> dict:
+def _handoff_ctx(
+    *,
+    deck_name: str,
+    q: dict,
+    user_answer: str,
+    verdict: dict | None,
+    idk: bool,
+    picked_set: list[str],
+    correct_set: list[str],
+) -> dict:
     """Build the AI-chat-handoff payload that result.html embeds as data
     attributes. Same shape across all three result-rendering paths
     (study_submit, session_view, grading_view terminal)."""
     msg = chat_handoff.build_message(
-        deck_name=deck_name, q=q, user_answer=user_answer,
-        verdict=verdict, idk=idk,
-        picked_set=picked_set, correct_set=correct_set,
+        deck_name=deck_name,
+        q=q,
+        user_answer=user_answer,
+        verdict=verdict,
+        idk=idk,
+        picked_set=picked_set,
+        correct_set=correct_set,
     )
     return {
         "handoff_message": msg,
@@ -107,6 +120,7 @@ templates.env.globals["icon"] = icons.icon
 
 # When fronted by Caddy at a path prefix, set ROOT_PATH so generated URLs include it.
 import os
+
 ROOT_PATH = os.environ.get("ROOT_PATH", "")
 
 app = FastAPI(root_path=ROOT_PATH)
@@ -124,11 +138,16 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 _ERROR_COPY = {
     400: ("Bad request.", "Something in that URL didn't quite parse."),
-    401: ("Not signed in.",
-          "prep authenticates via Tailscale Serve — open this page through your tailnet so the server can read your Tailscale identity. "
-          "For local development, set PREP_DEFAULT_USER (the make dev shim does this automatically)."),
+    401: (
+        "Not signed in.",
+        "prep authenticates via Tailscale Serve — open this page through your tailnet so the server can read your Tailscale identity. "
+        "For local development, set PREP_DEFAULT_USER (the make dev shim does this automatically).",
+    ),
     403: ("Forbidden.", "That's not yours to look at."),
-    404: ("Not found.", "We couldn't find what you were looking for. Maybe a typo, or the link is stale."),
+    404: (
+        "Not found.",
+        "We couldn't find what you were looking for. Maybe a typo, or the link is stale.",
+    ),
     409: ("Out of date.", "Something changed since this page loaded. Reload and try again."),
     422: ("Bad input.", "The form didn't validate. Go back and try again."),
     500: ("Something broke.", "Sorry — that's on our end. The error has been logged."),
@@ -142,9 +161,13 @@ def _wants_json(request: Request) -> bool:
     # Any /notify/* JSON endpoint should not get an HTML error page on its
     # POST responses — the JS code on the demo / settings page expects JSON.
     path = request.url.path
-    if path.endswith("/subscribe") or path.endswith("/unsubscribe") \
-       or path.endswith("/test") or path.endswith("/prefs") \
-       or path.endswith("/vapid-public-key"):
+    if (
+        path.endswith("/subscribe")
+        or path.endswith("/unsubscribe")
+        or path.endswith("/test")
+        or path.endswith("/prefs")
+        or path.endswith("/vapid-public-key")
+    ):
         return True
     return False
 
@@ -187,10 +210,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def server_exception_handler(request: Request, exc: Exception):
-    import logging, traceback
+    import logging
+    import traceback
+
     logging.getLogger("prep").error(
         "unhandled exception on %s %s: %s\n%s",
-        request.method, request.url.path, exc, traceback.format_exc(),
+        request.method,
+        request.url.path,
+        exc,
+        traceback.format_exc(),
     )
     if _wants_json(request):
         return JSONResponse({"detail": "internal server error"}, status_code=500)
@@ -239,7 +267,9 @@ def _resolve_login(request: Request) -> str | None:
 def current_user(request: Request) -> dict:
     login = _resolve_login(request)
     if not login:
-        raise HTTPException(401, "no Tailscale identity (set Tailscale-User-Login header or PREP_DEFAULT_USER)")
+        raise HTTPException(
+            401, "no Tailscale identity (set Tailscale-User-Login header or PREP_DEFAULT_USER)"
+        )
     display_name = request.headers.get("tailscale-user-name") or login.split("@", 1)[0]
     profile_pic = request.headers.get("tailscale-user-profile-pic") or None
     user = db.upsert_user(login, display_name, profile_pic)
@@ -259,6 +289,7 @@ db.init()
 # fixtures in prod tables on every restart.
 
 import logging
+
 _log = logging.getLogger("prep")
 
 # Surface PREP_DEFAULT_USER state at boot so an operator who's
@@ -285,6 +316,7 @@ else:
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 import dev_preview
+
 dev_preview.register(app, templates)
 
 
@@ -313,18 +345,33 @@ import re
 # Deck names go in the URL, so they're constrained to URL-safe chars.
 # Lowercase + digits + hyphens; must start alphanumeric; 2-30 chars.
 _DECK_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,29}$")
-_RESERVED_DECK_NAMES = {"new", "create", "edit", "delete", "static",
-                        "dev", "preview", "notify", "session", "study",
-                        "deck", "decks", "manifest"}
+_RESERVED_DECK_NAMES = {
+    "new",
+    "create",
+    "edit",
+    "delete",
+    "static",
+    "dev",
+    "preview",
+    "notify",
+    "session",
+    "study",
+    "deck",
+    "decks",
+    "manifest",
+}
 _MAX_CONTEXT_PROMPT_CHARS = 8000
 
 
 def _validate_deck_name(name: str) -> str:
     n = (name or "").strip().lower()
     if not _DECK_NAME_RE.match(n):
-        raise HTTPException(400, "Deck name must be 2-30 chars, lowercase, alphanumerics or hyphens, starting with a letter or digit.")
+        raise HTTPException(
+            400,
+            "Deck name must be 2-30 chars, lowercase, alphanumerics or hyphens, starting with a letter or digit.",
+        )
     if n in _RESERVED_DECK_NAMES:
-        raise HTTPException(400, f"\"{n}\" is reserved — pick another name.")
+        raise HTTPException(400, f'"{n}" is reserved — pick another name.')
     return n
 
 
@@ -343,8 +390,7 @@ def deck_new_form(request: Request, user: dict = Depends(current_user)):
 
 
 @app.post("/decks/new", response_class=HTMLResponse)
-async def deck_new_create(request: Request,
-                          user: dict = Depends(current_user)):
+async def deck_new_create(request: Request, user: dict = Depends(current_user)):
     """Create a deck. The submit button name picks the path:
       action=empty       → just create the deck row, redirect to /deck/<name>
       action=plan        → create the deck row, kick off PlanGenerateWorkflow
@@ -361,9 +407,13 @@ async def deck_new_create(request: Request,
     def rerender(error: str, status: int = 400):
         return templates.TemplateResponse(
             "deck_new.html",
-            {"request": request, "user": user,
-             "name_value": name, "context_value": context_prompt,
-             "error": error},
+            {
+                "request": request,
+                "user": user,
+                "name_value": name,
+                "context_value": context_prompt,
+                "error": error,
+            },
             status_code=status,
         )
 
@@ -373,14 +423,18 @@ async def deck_new_create(request: Request,
         return rerender(e.detail)
 
     if db.find_deck(uid, clean) is not None:
-        return rerender(f"You already have a deck named \"{clean}\".")
+        return rerender(f'You already have a deck named "{clean}".')
 
     if len(context_prompt) > _MAX_CONTEXT_PROMPT_CHARS:
-        return rerender(f"Description is too long ({len(context_prompt)} chars; max {_MAX_CONTEXT_PROMPT_CHARS}).")
+        return rerender(
+            f"Description is too long ({len(context_prompt)} chars; max {_MAX_CONTEXT_PROMPT_CHARS})."
+        )
 
     if action == "plan":
         if not _AGENT_AVAILABLE:
-            return rerender("Plan & generate needs an AI agent. Set PREP_AGENT_URL or PREP_AGENT_BIN, or pick 'Create empty deck' instead.")
+            return rerender(
+                "Plan & generate needs an AI agent. Set PREP_AGENT_URL or PREP_AGENT_BIN, or pick 'Create empty deck' instead."
+            )
         if not context_prompt:
             return rerender("Plan & generate needs a description for claude to plan against.")
 
@@ -389,7 +443,10 @@ async def deck_new_create(request: Request,
     if action == "plan":
         try:
             res = await temporal_client.start_plan_generate(
-                user_id=uid, deck_id=deck_id, deck_name=clean, prompt=context_prompt,
+                user_id=uid,
+                deck_id=deck_id,
+                deck_name=clean,
+                prompt=context_prompt,
             )
         except Exception as e:
             # Deck row was created but the workflow couldn't start. Don't
@@ -413,8 +470,11 @@ def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
             "user": user,
             "deck_name": name,
             "questions": questions,
-            "due_count": sum(1 for q in questions
-                              if not q["suspended"] and q["next_due"] and q["next_due"] <= db.now()),
+            "due_count": sum(
+                1
+                for q in questions
+                if not q["suspended"] and q["next_due"] and q["next_due"] <= db.now()
+            ),
         },
     )
 
@@ -423,8 +483,7 @@ def deck_view(request: Request, name: str, user: dict = Depends(current_user)):
 
 
 @app.post("/study/{name}/begin")
-def session_begin(request: Request, name: str, fresh: int = 0,
-                   user: dict = Depends(current_user)):
+def session_begin(request: Request, name: str, fresh: int = 0, user: dict = Depends(current_user)):
     """Auto-resume an active session on this deck, or create a fresh one.
     Pass ?fresh=1 to abandon any existing active session and start over."""
     uid = user["tailscale_login"]
@@ -475,11 +534,11 @@ def session_view(request: Request, sid: str, user: dict = Depends(current_user))
         st = s["last_answered_state"]
         with db.cursor() as c:
             r = c.execute(
-                "SELECT user_answer FROM reviews WHERE question_id = ? "
-                "ORDER BY id DESC LIMIT 1", (qid,)
+                "SELECT user_answer FROM reviews WHERE question_id = ? " "ORDER BY id DESC LIMIT 1",
+                (qid,),
             ).fetchone()
             user_answer = r["user_answer"] if r else ""
-        idk = (user_answer == "")  # idk submissions store empty user_answer
+        idk = user_answer == ""  # idk submissions store empty user_answer
         # Mcq/multi need parsed picked + correct sets for the answer grid.
         picked_set: list[str] = []
         correct_set: list[str] = []
@@ -507,9 +566,15 @@ def session_view(request: Request, sid: str, user: dict = Depends(current_user))
                 "correct_set": correct_set,
                 "session_id": sid,
                 "session_version": s["version"],
-                **_handoff_ctx(deck_name=deck_name, q=q, user_answer=user_answer,
-                               verdict=verdict, idk=idk,
-                               picked_set=picked_set, correct_set=correct_set),
+                **_handoff_ctx(
+                    deck_name=deck_name,
+                    q=q,
+                    user_answer=user_answer,
+                    verdict=verdict,
+                    idk=idk,
+                    picked_set=picked_set,
+                    correct_set=correct_set,
+                ),
             },
         )
 
@@ -549,8 +614,10 @@ async def session_draft(request: Request, sid: str, user: dict = Depends(current
     body = await request.json()
     try:
         new_v = db.update_session_draft(
-            user["tailscale_login"], sid,
-            body.get("draft", ""), int(body["version"]),
+            user["tailscale_login"],
+            sid,
+            body.get("draft", ""),
+            int(body["version"]),
         )
     except db.StaleVersionError as e:
         return JSONResponse(
@@ -613,7 +680,11 @@ async def session_submit(request: Request, sid: str, user: dict = Depends(curren
 
         try:
             res = await temporal_client.start_grading(
-                qid, deck_name, user_answer, idk, user_id=uid,
+                qid,
+                deck_name,
+                user_answer,
+                idk,
+                user_id=uid,
             )
             db.set_session_grading(uid, sid, qid, res.workflow_id, expected_version)
         except db.StaleVersionError as e:
@@ -626,11 +697,18 @@ async def session_submit(request: Request, sid: str, user: dict = Depends(curren
 
     # ---- Fast path: idk + mcq/multi grade synchronously.
     verdict = grader.grade(question, user_answer, idk=idk)
-    state = db.record_review(uid, qid, verdict["result"], user_answer,
-                              notes=verdict.get("feedback", ""))
+    state = db.record_review(
+        uid, qid, verdict["result"], user_answer, notes=verdict.get("feedback", "")
+    )
     try:
         db.record_session_answer_sync(
-            uid, sid, qid, expected_version, user_answer, verdict, state,
+            uid,
+            sid,
+            qid,
+            expected_version,
+            user_answer,
+            verdict,
+            state,
         )
     except db.StaleVersionError as e:
         return _stale_response(request, sid, e.current_version)
@@ -739,7 +817,11 @@ async def study_submit(request: Request, name: str, user: dict = Depends(current
             )
         try:
             res = await temporal_client.start_grading(
-                qid, name, user_answer, idk, user_id=uid,
+                qid,
+                name,
+                user_answer,
+                idk,
+                user_id=uid,
             )
         except Exception as e:
             raise HTTPException(500, f"failed to start grading workflow: {e}")
@@ -748,7 +830,10 @@ async def study_submit(request: Request, name: str, user: dict = Depends(current
     # ---- Fast path: idk + mcq/multi grade synchronously (deterministic, ms).
     verdict = grader.grade(question, user_answer, idk=idk)
     state = db.record_review(
-        uid, qid, verdict["result"], user_answer,
+        uid,
+        qid,
+        verdict["result"],
+        user_answer,
         notes=verdict.get("feedback", ""),
     )
 
@@ -780,9 +865,15 @@ async def study_submit(request: Request, name: str, user: dict = Depends(current
             # For mcq/multi: parsed sets; template uses them to colour each choice.
             "picked_set": picked_set,
             "correct_set": correct_set,
-            **_handoff_ctx(deck_name=name, q=question, user_answer=user_answer,
-                           verdict=verdict, idk=idk,
-                           picked_set=picked_set, correct_set=correct_set),
+            **_handoff_ctx(
+                deck_name=name,
+                q=question,
+                user_answer=user_answer,
+                verdict=verdict,
+                idk=idk,
+                picked_set=picked_set,
+                correct_set=correct_set,
+            ),
         },
     )
 
@@ -795,7 +886,7 @@ def _parse_grading_wid(wid: str) -> tuple[str, int] | None:
     Returns (deck_name, question_id) or None if the format doesn't match."""
     if not wid.startswith("grade-"):
         return None
-    parts = wid[len("grade-"):].split("-")
+    parts = wid[len("grade-") :].split("-")
     # Find the q-prefixed segment (deck name itself can contain hyphens, e.g.
     # "temporal-prep" if we add one). Walk from the right: rand is last,
     # q<qid> is second-to-last, everything before is the deck name.
@@ -813,8 +904,9 @@ def _parse_grading_wid(wid: str) -> tuple[str, int] | None:
 
 
 @app.get("/grading/{wid}", response_class=HTMLResponse)
-async def grading_view(request: Request, wid: str, sid: str = "",
-                         user: dict = Depends(current_user)):
+async def grading_view(
+    request: Request, wid: str, sid: str = "", user: dict = Depends(current_user)
+):
     parsed = _parse_grading_wid(wid)
     if not parsed:
         raise HTTPException(400, "malformed workflow id")
@@ -842,8 +934,14 @@ async def grading_view(request: Request, wid: str, sid: str = "",
         if result is None:
             return templates.TemplateResponse(
                 "grading.html",
-                {"request": request, "wid": wid, "deck_name": deck_name,
-                 "progress": progress, "desc": desc, "failed": True},
+                {
+                    "request": request,
+                    "wid": wid,
+                    "deck_name": deck_name,
+                    "progress": progress,
+                    "desc": desc,
+                    "failed": True,
+                },
             )
         question = db.get_question(uid, qid)
         if not question:
@@ -885,18 +983,30 @@ async def grading_view(request: Request, wid: str, sid: str = "",
                 "state": state,
                 "picked_set": picked_set,
                 "correct_set": correct_set,
-                **_handoff_ctx(deck_name=deck_name, q=question,
-                               user_answer=result["user_answer"],
-                               verdict=verdict, idk=result["idk"],
-                               picked_set=picked_set, correct_set=correct_set),
+                **_handoff_ctx(
+                    deck_name=deck_name,
+                    q=question,
+                    user_answer=result["user_answer"],
+                    verdict=verdict,
+                    idk=result["idk"],
+                    picked_set=picked_set,
+                    correct_set=correct_set,
+                ),
             },
         )
 
     # Still grading — render the polling page.
     return templates.TemplateResponse(
         "grading.html",
-        {"request": request, "wid": wid, "deck_name": deck_name,
-         "progress": progress, "desc": desc, "failed": False, "sid": sid},
+        {
+            "request": request,
+            "wid": wid,
+            "deck_name": deck_name,
+            "progress": progress,
+            "desc": desc,
+            "failed": False,
+            "sid": sid,
+        },
     )
 
 
@@ -914,8 +1024,9 @@ async def grading_status(wid: str, user: dict = Depends(current_user)):
 
 
 @app.post("/study/{name}/self-grade/{qid}")
-async def study_self_grade(request: Request, name: str, qid: int,
-                           user: dict = Depends(current_user)):
+async def study_self_grade(
+    request: Request, name: str, qid: int, user: dict = Depends(current_user)
+):
     """No-agent grading. The user submitted a code/short answer, the
     workflow path was skipped (no agent to grade with), and they picked
     right/wrong themselves on the self_grade.html page. We record a
@@ -935,13 +1046,18 @@ async def study_self_grade(request: Request, name: str, qid: int,
     sver = form.get("session_version") or None
 
     verdict = {"result": verdict_str, "feedback": "(self-graded)"}
-    state = db.record_review(uid, qid, verdict_str, user_answer,
-                             notes="(self-graded)")
+    state = db.record_review(uid, qid, verdict_str, user_answer, notes="(self-graded)")
 
     if sid and sver:
         try:
             db.record_session_answer_sync(
-                uid, sid, qid, int(sver), user_answer, verdict, state,
+                uid,
+                sid,
+                qid,
+                int(sver),
+                user_answer,
+                verdict,
+                state,
             )
         except db.StaleVersionError as e:
             return _stale_response(request, sid, e.current_version)
@@ -963,8 +1079,7 @@ def question_new(request: Request, name: str, user: dict = Depends(current_user)
 
 
 @app.post("/deck/{name}/question/new", response_class=HTMLResponse)
-async def question_new_submit(request: Request, name: str,
-                              user: dict = Depends(current_user)):
+async def question_new_submit(request: Request, name: str, user: dict = Depends(current_user)):
     uid = user["tailscale_login"]
     deck_id = db.find_deck(uid, name)
     if deck_id is None:
@@ -1001,9 +1116,13 @@ async def question_new_submit(request: Request, name: str,
                 "request": request,
                 "deck_name": name,
                 "form": {
-                    "type": qtype, "prompt": prompt, "answer": answer_raw,
-                    "topic": topic or "", "skeleton": skeleton or "",
-                    "language": language or "", "rubric": rubric or "",
+                    "type": qtype,
+                    "prompt": prompt,
+                    "answer": answer_raw,
+                    "topic": topic or "",
+                    "skeleton": skeleton or "",
+                    "language": language or "",
+                    "rubric": rubric or "",
                     "choices": choices_raw,
                 },
                 "error": err,
@@ -1023,9 +1142,16 @@ async def question_new_submit(request: Request, name: str,
             answer = [ln.strip() for ln in answer_raw.splitlines() if ln.strip()]
 
     db.add_question(
-        uid, deck_id, qtype, prompt, answer,
-        topic=topic, choices=choices, rubric=rubric,
-        skeleton=skeleton, language=language,
+        uid,
+        deck_id,
+        qtype,
+        prompt,
+        answer,
+        topic=topic,
+        choices=choices,
+        rubric=rubric,
+        skeleton=skeleton,
+        language=language,
     )
     return _redirect(request, f"/deck/{name}")
 
@@ -1091,8 +1217,7 @@ def question_edit_form(request: Request, qid: int, user: dict = Depends(current_
 
 
 @app.post("/question/{qid}/edit", response_class=HTMLResponse)
-async def question_edit_submit(request: Request, qid: int,
-                               user: dict = Depends(current_user)):
+async def question_edit_submit(request: Request, qid: int, user: dict = Depends(current_user)):
     uid = user["tailscale_login"]
     q = db.get_question(uid, qid)
     if not q:
@@ -1132,9 +1257,13 @@ async def question_edit_submit(request: Request, qid: int,
                 "deck_name": deck_name,
                 "q": q,
                 "form": {
-                    "type": qtype, "prompt": prompt, "answer": answer_raw,
-                    "topic": topic or "", "skeleton": skeleton or "",
-                    "language": language or "", "rubric": rubric or "",
+                    "type": qtype,
+                    "prompt": prompt,
+                    "answer": answer_raw,
+                    "topic": topic or "",
+                    "skeleton": skeleton or "",
+                    "language": language or "",
+                    "rubric": rubric or "",
                     "choices": choices_raw,
                 },
                 "error": err,
@@ -1152,10 +1281,16 @@ async def question_edit_submit(request: Request, qid: int,
             answer = [ln.strip() for ln in answer_raw.splitlines() if ln.strip()]
 
     db.update_question(
-        uid, qid,
-        qtype=qtype, prompt=prompt, answer=answer,
-        topic=topic, choices=choices, rubric=rubric,
-        skeleton=skeleton, language=language,
+        uid,
+        qid,
+        qtype=qtype,
+        prompt=prompt,
+        answer=answer,
+        topic=topic,
+        choices=choices,
+        rubric=rubric,
+        skeleton=skeleton,
+        language=language,
     )
     return _redirect(request, f"/deck/{deck_name}")
 
@@ -1198,12 +1333,13 @@ def unsuspend(request: Request, qid: int, user: dict = Depends(current_user)):
 #   • POST /deck/{name}/transform  — returns a Plan, redirects to preview;
 #                                    user signals apply or reject
 
+
 def _parse_transform_wid(wid: str) -> tuple[str, int] | None:
     """transform workflow IDs are `transform-<scope>-<target_id>-<rand>`.
     Returns (scope, target_id) or None if malformed. scope ∈ {card, deck}."""
     if not wid.startswith("transform-"):
         return None
-    parts = wid[len("transform-"):].split("-")
+    parts = wid[len("transform-") :].split("-")
     if len(parts) < 3:
         return None
     scope = parts[0]
@@ -1237,8 +1373,9 @@ def _require_owns_transform(user: dict, wid: str) -> tuple[str, int]:
 
 
 @app.post("/question/{qid}/improve")
-async def improve_card(request: Request, qid: int, prompt: str = Form(...),
-                        user: dict = Depends(current_user)):
+async def improve_card(
+    request: Request, qid: int, prompt: str = Form(...), user: dict = Depends(current_user)
+):
     """Per-card free-text rewrite. Auto-applies on completion."""
     uid = user["tailscale_login"]
     if db.get_question(uid, qid) is None:
@@ -1247,7 +1384,10 @@ async def improve_card(request: Request, qid: int, prompt: str = Form(...),
         raise HTTPException(400, "empty prompt")
     try:
         result = await temporal_client.start_transform(
-            user_id=uid, scope="card", target_id=qid, prompt=prompt.strip(),
+            user_id=uid,
+            scope="card",
+            target_id=qid,
+            prompt=prompt.strip(),
         )
     except Exception as e:
         raise HTTPException(500, f"failed to start transform: {e}")
@@ -1255,8 +1395,9 @@ async def improve_card(request: Request, qid: int, prompt: str = Form(...),
 
 
 @app.post("/deck/{name}/delete")
-def deck_delete(request: Request, name: str, confirm: str = Form(...),
-                 user: dict = Depends(current_user)):
+def deck_delete(
+    request: Request, name: str, confirm: str = Form(...), user: dict = Depends(current_user)
+):
     """Delete a deck and everything in it (questions/cards/reviews/sessions
     all cascade). Requires the user to type the deck name into a `confirm`
     field on the dialog form — guards against accidental clicks."""
@@ -1270,8 +1411,9 @@ def deck_delete(request: Request, name: str, confirm: str = Form(...),
 
 
 @app.post("/deck/{name}/transform")
-async def deck_transform(request: Request, name: str, prompt: str = Form(...),
-                          user: dict = Depends(current_user)):
+async def deck_transform(
+    request: Request, name: str, prompt: str = Form(...), user: dict = Depends(current_user)
+):
     """Deck-level free-text transform — replaces the old generate-N flow.
     Returns a Plan and waits on apply/reject signal before writing."""
     uid = user["tailscale_login"]
@@ -1280,7 +1422,10 @@ async def deck_transform(request: Request, name: str, prompt: str = Form(...),
         raise HTTPException(400, "empty prompt")
     try:
         result = await temporal_client.start_transform(
-            user_id=uid, scope="deck", target_id=deck_id, prompt=prompt.strip(),
+            user_id=uid,
+            scope="deck",
+            target_id=deck_id,
+            prompt=prompt.strip(),
         )
     except Exception as e:
         raise HTTPException(500, f"failed to start transform: {e}")
@@ -1288,8 +1433,7 @@ async def deck_transform(request: Request, name: str, prompt: str = Form(...),
 
 
 @app.get("/transform/{wid}", response_class=HTMLResponse)
-async def transform_view(request: Request, wid: str,
-                          user: dict = Depends(current_user)):
+async def transform_view(request: Request, wid: str, user: dict = Depends(current_user)):
     scope, target_id = _require_owns_transform(user, wid)
     progress = await temporal_client.get_transform_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
@@ -1298,7 +1442,15 @@ async def transform_view(request: Request, wid: str,
     # On terminal completion the workflow's queryable handler is gone —
     # fall back to the awaited result. Combine into one shape the template
     # can render uniformly.
-    terminal = status in {"done", "failed", "rejected", "COMPLETED", "FAILED", "TERMINATED", "CANCELED"}
+    terminal = status in {
+        "done",
+        "failed",
+        "rejected",
+        "COMPLETED",
+        "FAILED",
+        "TERMINATED",
+        "CANCELED",
+    }
     if terminal and progress is None:
         progress = {"status": "done", "result": await temporal_client.get_transform_result(wid)}
 
@@ -1373,11 +1525,12 @@ async def transform_reject(request: Request, wid: str, user: dict = Depends(curr
 # contain hyphens, so we split off the trailing rand suffix to recover the
 # name. Ownership is verified by looking up the deck on the current user.
 
+
 def _parse_plan_wid(wid: str) -> str | None:
     """Returns the deck_name embedded in a plan wid, or None if malformed."""
     if not wid.startswith("plan-"):
         return None
-    rest = wid[len("plan-"):]
+    rest = wid[len("plan-") :]
     if "-" not in rest:
         return None
     name, _, suffix = rest.rpartition("-")
@@ -1429,8 +1582,7 @@ async def plan_status(wid: str, user: dict = Depends(current_user)):
 
 
 @app.post("/plan/{wid}/feedback")
-async def plan_feedback(request: Request, wid: str,
-                        user: dict = Depends(current_user)):
+async def plan_feedback(request: Request, wid: str, user: dict = Depends(current_user)):
     _require_owns_plan(user, wid)
     form = await request.form()
     fb = (form.get("feedback") or "").strip()
@@ -1472,6 +1624,7 @@ async def plan_reject(request: Request, wid: str, user: dict = Depends(current_u
 # on its first hit. Auth kicks in for any actual app view the moment the
 # PWA navigates into one.
 
+
 @app.get("/manifest.json")
 def manifest(request: Request) -> JSONResponse:
     """Web App Manifest, dynamic so the scope/start_url match whatever
@@ -1480,20 +1633,22 @@ def manifest(request: Request) -> JSONResponse:
     root = ROOT_PATH or ""
     env_label = "staging" if "staging" in root else ""
     short = "prep" + (f" ({env_label})" if env_label else "")
-    return JSONResponse({
-        "name": f"prep · a commonplace book{' (staging)' if env_label else ''}",
-        "short_name": short,
-        "description": "Spaced-repetition flashcards. Learn anything.",
-        "display": "standalone",
-        "scope": (root + "/") or "/",
-        "start_url": (root + "/") or "/",
-        "background_color": "#f4ecdc",
-        "theme_color": "#f5efe6",
-        "icons": [
-            {"src": f"{root}/static/pwa/icon-192.png", "sizes": "192x192", "type": "image/png"},
-            {"src": f"{root}/static/pwa/icon-512.png", "sizes": "512x512", "type": "image/png"},
-        ],
-    })
+    return JSONResponse(
+        {
+            "name": f"prep · a commonplace book{' (staging)' if env_label else ''}",
+            "short_name": short,
+            "description": "Spaced-repetition flashcards. Learn anything.",
+            "display": "standalone",
+            "scope": (root + "/") or "/",
+            "start_url": (root + "/") or "/",
+            "background_color": "#f4ecdc",
+            "theme_color": "#f5efe6",
+            "icons": [
+                {"src": f"{root}/static/pwa/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                {"src": f"{root}/static/pwa/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            ],
+        }
+    )
 
 
 @app.get("/sw.js")
@@ -1505,6 +1660,7 @@ def service_worker():
 
 
 # ---- Editor settings ------------------------------------------------------
+
 
 @app.get("/settings/editor", response_class=HTMLResponse)
 def editor_settings(request: Request, user: dict = Depends(current_user)):
@@ -1521,10 +1677,11 @@ def editor_settings(request: Request, user: dict = Depends(current_user)):
 
 
 @app.post("/settings/editor", response_class=HTMLResponse)
-def editor_settings_save(request: Request, mode: str = Form(...),
-                         user: dict = Depends(current_user)):
+def editor_settings_save(
+    request: Request, mode: str = Form(...), user: dict = Depends(current_user)
+):
     if mode not in db.EDITOR_INPUT_MODES:
-        raise HTTPException(400, f"Unknown input mode \"{mode}\".")
+        raise HTTPException(400, f'Unknown input mode "{mode}".')
     db.set_editor_input_mode(user["tailscale_login"], mode)
     return templates.TemplateResponse(
         "settings_editor.html",
@@ -1548,6 +1705,7 @@ def editor_settings_save(request: Request, mode: str = Form(...),
 #
 # When PREP_AGENT_BIN is set instead (legacy shell-agent deploy), the
 # page just shows status — auth is managed by the host claude CLI.
+
 
 def _agent_server_url() -> str | None:
     u = (os.environ.get("PREP_AGENT_URL") or "").strip()
@@ -1583,9 +1741,12 @@ async def settings_agent_connect(request: Request, user: dict = Depends(current_
         # against direct posts.
         return templates.TemplateResponse(
             "settings_agent.html",
-            {"request": request, "status": _agent_mod.status(),
-             "error": "PREP_AGENT_URL is not set on this prep instance — connect flow only applies to the docker / agent-server deploy.",
-             "flash": None},
+            {
+                "request": request,
+                "status": _agent_mod.status(),
+                "error": "PREP_AGENT_URL is not set on this prep instance — connect flow only applies to the docker / agent-server deploy.",
+                "flash": None,
+            },
             status_code=400,
         )
     form = await request.form()
@@ -1593,19 +1754,26 @@ async def settings_agent_connect(request: Request, user: dict = Depends(current_
     if not token:
         return templates.TemplateResponse(
             "settings_agent.html",
-            {"request": request, "status": _agent_mod.status(),
-             "error": "Token is required.", "flash": None},
+            {
+                "request": request,
+                "status": _agent_mod.status(),
+                "error": "Token is required.",
+                "flash": None,
+            },
             status_code=400,
         )
 
     # Forward to agent-server. Use urllib (already used for the probe);
     # avoids pulling in httpx for one call.
-    import urllib.request
     import urllib.error
+    import urllib.request
+
     payload = json.dumps({"token": token}).encode("utf-8")
     req = urllib.request.Request(
-        url + "/connect", data=payload,
-        headers={"content-type": "application/json"}, method="POST",
+        url + "/connect",
+        data=payload,
+        headers={"content-type": "application/json"},
+        method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=10.0) as resp:
@@ -1618,23 +1786,35 @@ async def settings_agent_connect(request: Request, user: dict = Depends(current_
             err = body
         return templates.TemplateResponse(
             "settings_agent.html",
-            {"request": request, "status": _agent_mod.status(),
-             "error": f"Agent rejected the token: {err}", "flash": None},
+            {
+                "request": request,
+                "status": _agent_mod.status(),
+                "error": f"Agent rejected the token: {err}",
+                "flash": None,
+            },
             status_code=400,
         )
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         return templates.TemplateResponse(
             "settings_agent.html",
-            {"request": request, "status": _agent_mod.status(),
-             "error": f"Couldn't reach agent-server: {e}", "flash": None},
+            {
+                "request": request,
+                "status": _agent_mod.status(),
+                "error": f"Couldn't reach agent-server: {e}",
+                "flash": None,
+            },
             status_code=502,
         )
 
     s = _refresh_agent_status()
     return templates.TemplateResponse(
         "settings_agent.html",
-        {"request": request, "status": s, "error": None,
-         "flash": "Connected. AI features should be available now."},
+        {
+            "request": request,
+            "status": s,
+            "error": None,
+            "flash": "Connected. AI features should be available now.",
+        },
     )
 
 
@@ -1643,8 +1823,9 @@ def settings_agent_disconnect(request: Request, user: dict = Depends(current_use
     url = _agent_server_url()
     if not url:
         raise HTTPException(400, "PREP_AGENT_URL is not set on this prep instance.")
-    import urllib.request
     import urllib.error
+    import urllib.request
+
     req = urllib.request.Request(url + "/disconnect", data=b"", method="POST")
     try:
         with urllib.request.urlopen(req, timeout=5.0) as resp:
@@ -1652,15 +1833,23 @@ def settings_agent_disconnect(request: Request, user: dict = Depends(current_use
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         return templates.TemplateResponse(
             "settings_agent.html",
-            {"request": request, "status": _agent_mod.status(),
-             "error": f"Couldn't reach agent-server: {e}", "flash": None},
+            {
+                "request": request,
+                "status": _agent_mod.status(),
+                "error": f"Couldn't reach agent-server: {e}",
+                "flash": None,
+            },
             status_code=502,
         )
     s = _refresh_agent_status()
     return templates.TemplateResponse(
         "settings_agent.html",
-        {"request": request, "status": s, "error": None,
-         "flash": "Disconnected. AI features are now hidden; manual flows still work."},
+        {
+            "request": request,
+            "status": s,
+            "error": None,
+            "flash": "Disconnected. AI features are now hidden; manual flows still work.",
+        },
     )
 
 
@@ -1681,7 +1870,9 @@ def _validate_prefs(p: dict) -> dict:
     base["digest_hour"] = max(0, min(23, int(p.get("digest_hour", base["digest_hour"]))))
     base["threshold"] = max(1, min(99, int(p.get("threshold", base["threshold"]))))
     base["quiet_hours_enabled"] = bool(p.get("quiet_hours_enabled", base["quiet_hours_enabled"]))
-    base["quiet_start_hour"] = max(0, min(23, int(p.get("quiet_start_hour", base["quiet_start_hour"]))))
+    base["quiet_start_hour"] = max(
+        0, min(23, int(p.get("quiet_start_hour", base["quiet_start_hour"])))
+    )
     base["quiet_end_hour"] = max(0, min(23, int(p.get("quiet_end_hour", base["quiet_end_hour"]))))
     tz = str(p.get("tz", base["tz"]) or base["tz"])[:64]
     base["tz"] = tz
@@ -1693,13 +1884,16 @@ def notify_settings(request: Request, user: dict = Depends(current_user)):
     uid = user["tailscale_login"]
     prefs = db.get_notification_prefs(uid)
     devices = len(db.list_push_subscriptions(uid))
-    return templates.TemplateResponse("notify_settings.html", {
-        "request": request,
-        "user": user,
-        "prefs": prefs,
-        "devices": devices,
-        "vapid_key": notify.public_key_b64(),
-    })
+    return templates.TemplateResponse(
+        "notify_settings.html",
+        {
+            "request": request,
+            "user": user,
+            "prefs": prefs,
+            "devices": devices,
+            "vapid_key": notify.public_key_b64(),
+        },
+    )
 
 
 @app.post("/notify/prefs")

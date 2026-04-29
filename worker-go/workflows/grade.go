@@ -22,8 +22,8 @@ const (
 // shared.WorkflowGrade.
 //
 // Two-step shape:
-//   1. GradeFreeText activity — claude -p shell-out, returns Verdict
-//   2. RecordReview activity   — writes review row + advances SRS, returns SRSState
+//  1. GradeFreeText activity — claude -p shell-out, returns Verdict
+//  2. RecordReview activity   — writes review row + advances SRS, returns SRSState
 //
 // State exposed via the getGradeProgress query so the polling page can
 // render "grading…" → "recording…" → "done" + verdict + state.

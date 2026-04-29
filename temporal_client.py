@@ -43,8 +43,9 @@ class StartResult:
 # ---- Grading workflow helpers ----
 
 
-async def start_grading(question_id: int, deck_name: str, user_answer: str, idk: bool, *,
-                          user_id: str) -> StartResult:
+async def start_grading(
+    question_id: int, deck_name: str, user_answer: str, idk: bool, *, user_id: str
+) -> StartResult:
     """Start a GradeAnswerWorkflow run. workflow_id encodes deck_name and
     question_id so the polling page (and the eventual result render) can
     parse them back without a side table. user_id is passed through so the
@@ -149,8 +150,10 @@ async def signal_reject_transform(workflow_id: str) -> None:
 
 # ---- Plan-first generation workflow ---------------------------------------
 
-async def start_plan_generate(*, user_id: str, deck_id: int, deck_name: str,
-                              prompt: str) -> StartResult:
+
+async def start_plan_generate(
+    *, user_id: str, deck_id: int, deck_name: str, prompt: str
+) -> StartResult:
     """Start a PlanGenerateWorkflow. Workflow plans cards (claude returns a
     brief outline), waits for accept/reject/feedback signals, then expands
     + inserts cards in parallel on accept."""

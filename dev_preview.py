@@ -46,27 +46,49 @@ INDEX_FIXTURES: dict[str, dict[str, Any]] = {
 # deck.html
 
 _QCARD_BASE = {
-    "type": "code", "topic": "concurrency-go", "suspended": 0,
-    "next_due": _next_due_in(1440), "last_review": None,
-    "rights": 1, "attempts": 2, "step": 1,
+    "type": "code",
+    "topic": "concurrency-go",
+    "suspended": 0,
+    "next_due": _next_due_in(1440),
+    "last_review": None,
+    "rights": 1,
+    "attempts": 2,
+    "step": 1,
     "prompt": "Implement a thread-safe bounded blocking queue in Go (capacity N) with Put and Take that block when full/empty. No external libraries.",
 }
 
 DECK_FIXTURES: dict[str, dict[str, Any]] = {
     "empty": {
-        "deck_name": "cherry", "questions": [], "due_count": 0,
+        "deck_name": "cherry",
+        "questions": [],
+        "due_count": 0,
     },
     "populated": {
         "deck_name": "temporal",
         "due_count": 3,
         "questions": [
             {"id": 21, **_QCARD_BASE, "type": "code"},
-            {"id": 22, **_QCARD_BASE, "type": "mcq", "topic": "system-design",
-             "prompt": "Which retry strategy is best for webhook delivery to a flaky downstream?"},
-            {"id": 23, **_QCARD_BASE, "type": "multi", "topic": "behavioral-star",
-             "prompt": "Which of the following are senior-tell signals after a STAR story?"},
-            {"id": 24, **_QCARD_BASE, "type": "short", "topic": "system-design-money",
-             "prompt": "Why should monetary amounts be stored as bigint cents rather than floats?"},
+            {
+                "id": 22,
+                **_QCARD_BASE,
+                "type": "mcq",
+                "topic": "system-design",
+                "prompt": "Which retry strategy is best for webhook delivery to a flaky downstream?",
+            },
+            {
+                "id": 23,
+                **_QCARD_BASE,
+                "type": "multi",
+                "topic": "behavioral-star",
+                "prompt": "Which of the following are senior-tell signals after a STAR story?",
+            },
+            {
+                "id": 24,
+                **_QCARD_BASE,
+                "type": "short",
+                "topic": "system-design-money",
+                "prompt": "Why should monetary amounts be stored as bigint cents rather than floats?",
+            },
         ],
     },
     "with_suspended": {
@@ -74,8 +96,14 @@ DECK_FIXTURES: dict[str, dict[str, Any]] = {
         "due_count": 1,
         "questions": [
             {"id": 31, **_QCARD_BASE, "suspended": 0, "type": "code"},
-            {"id": 32, **_QCARD_BASE, "suspended": 1, "type": "mcq",
-             "topic": "broken", "prompt": "(busted card — typo in the answer key)"},
+            {
+                "id": 32,
+                **_QCARD_BASE,
+                "suspended": 1,
+                "type": "mcq",
+                "topic": "broken",
+                "prompt": "(busted card — typo in the answer key)",
+            },
         ],
     },
 }
@@ -86,7 +114,9 @@ STUDY_FIXTURES: dict[str, dict[str, Any]] = {
     "mcq": {
         "deck_name": "cherry",
         "q": {
-            "id": 22, "type": "mcq", "topic": "system-design",
+            "id": 22,
+            "type": "mcq",
+            "topic": "system-design",
             "prompt": "You're designing Cherry's webhook delivery system. A provider's endpoint times out **after** the request has been sent but before the 200 ack is received. Which is the simplest correct guarantee you should ship?",
             "choices_list": [
                 "A monotonically increasing sequence number on each webhook",
@@ -99,7 +129,9 @@ STUDY_FIXTURES: dict[str, dict[str, Any]] = {
     "multi": {
         "deck_name": "cherry",
         "q": {
-            "id": 23, "type": "multi", "topic": "behavioral-star",
+            "id": 23,
+            "type": "multi",
+            "topic": "behavioral-star",
             "prompt": "Which of the following are senior-tell signals after a STAR story?",
             "choices_list": [
                 "A reflection: 'Knowing what I know now, I'd have done X differently'",
@@ -112,14 +144,18 @@ STUDY_FIXTURES: dict[str, dict[str, Any]] = {
     "code": {
         "deck_name": "temporal",
         "q": {
-            "id": 21, "type": "code", "topic": "concurrency-go",
+            "id": 21,
+            "type": "code",
+            "topic": "concurrency-go",
             "prompt": "Implement a thread-safe bounded blocking queue in Go (capacity `N`) with `Put(v)` and `Take()` that block when full/empty. Don't use external libraries. Show the type definition and the two methods.",
         },
     },
     "short": {
         "deck_name": "cherry",
         "q": {
-            "id": 24, "type": "short", "topic": "system-design-money",
+            "id": 24,
+            "type": "short",
+            "topic": "system-design-money",
             "prompt": "Why should monetary amounts be stored as `bigint` (minor units, e.g. cents) rather than as floating-point? Give the one-line reason plus one concrete failure mode.",
         },
     },
@@ -142,7 +178,9 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
     "mcq-right": {
         "deck_name": "cherry",
         "q": {
-            "id": 22, "type": "mcq", "topic": "system-design",
+            "id": 22,
+            "type": "mcq",
+            "topic": "system-design",
             "prompt": "You're designing Cherry's webhook delivery system. A provider's endpoint times out **after** the request has been sent. Which is the simplest correct guarantee you should ship?",
             "choices_list": [
                 "A monotonically increasing sequence number on each webhook",
@@ -155,8 +193,11 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         },
         "user_answer": "An idempotency key (event ID) that the provider uses to dedupe",
         "idk": False,
-        "verdict": {"result": "right", "feedback": "Correct.",
-                     "model_answer_summary": "An idempotency key (event ID) that the provider uses to dedupe"},
+        "verdict": {
+            "result": "right",
+            "feedback": "Correct.",
+            "model_answer_summary": "An idempotency key (event ID) that the provider uses to dedupe",
+        },
         "state": _BASE_STATE_RIGHT,
         "picked_set": ["An idempotency key (event ID) that the provider uses to dedupe"],
         "correct_set": ["An idempotency key (event ID) that the provider uses to dedupe"],
@@ -164,7 +205,9 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
     "mcq-wrong": {
         "deck_name": "cherry",
         "q": {
-            "id": 22, "type": "mcq", "topic": "system-design",
+            "id": 22,
+            "type": "mcq",
+            "topic": "system-design",
             "prompt": "You're designing Cherry's webhook delivery system. A provider's endpoint times out **after** the request has been sent. Which is the simplest correct guarantee you should ship?",
             "choices_list": [
                 "A monotonically increasing sequence number on each webhook",
@@ -177,8 +220,11 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         },
         "user_answer": "Exactly-once delivery guaranteed by Cherry's broker",
         "idk": False,
-        "verdict": {"result": "wrong", "feedback": "Wrong choice.",
-                     "model_answer_summary": "An idempotency key (event ID) that the provider uses to dedupe"},
+        "verdict": {
+            "result": "wrong",
+            "feedback": "Wrong choice.",
+            "model_answer_summary": "An idempotency key (event ID) that the provider uses to dedupe",
+        },
         "state": _BASE_STATE_WRONG,
         "picked_set": ["Exactly-once delivery guaranteed by Cherry's broker"],
         "correct_set": ["An idempotency key (event ID) that the provider uses to dedupe"],
@@ -186,7 +232,9 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
     "multi-right": {
         "deck_name": "cherry",
         "q": {
-            "id": 23, "type": "multi", "topic": "behavioral-star",
+            "id": 23,
+            "type": "multi",
+            "topic": "behavioral-star",
             "prompt": "Which of the following are senior-tell signals after a STAR story?",
             "choices_list": [
                 "A reflection: 'Knowing what I know now, I'd have done X differently'",
@@ -199,7 +247,11 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         },
         "user_answer": "[]",
         "idk": False,
-        "verdict": {"result": "right", "feedback": "All three correct picks landed.", "model_answer_summary": ""},
+        "verdict": {
+            "result": "right",
+            "feedback": "All three correct picks landed.",
+            "model_answer_summary": "",
+        },
         "state": _BASE_STATE_RIGHT,
         "picked_set": [
             "A reflection: 'Knowing what I know now, I'd have done X differently'",
@@ -215,7 +267,9 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
     "multi-wrong": {
         "deck_name": "cherry",
         "q": {
-            "id": 23, "type": "multi", "topic": "behavioral-star",
+            "id": 23,
+            "type": "multi",
+            "topic": "behavioral-star",
             "prompt": "Which of the following are senior-tell signals after a STAR story?",
             "choices_list": [
                 "A reflection: 'Knowing what I know now, I'd have done X differently'",
@@ -228,7 +282,11 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
         },
         "user_answer": "[]",
         "idk": False,
-        "verdict": {"result": "wrong", "feedback": "Missed two correct picks; included one wrong one.", "model_answer_summary": ""},
+        "verdict": {
+            "result": "wrong",
+            "feedback": "Missed two correct picks; included one wrong one.",
+            "model_answer_summary": "",
+        },
         "state": _BASE_STATE_WRONG,
         "picked_set": [
             "Reciting the company's values verbatim",
@@ -243,7 +301,9 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
     "code-right": {
         "deck_name": "temporal",
         "q": {
-            "id": 21, "type": "code", "topic": "concurrency-go",
+            "id": 21,
+            "type": "code",
+            "topic": "concurrency-go",
             "prompt": "Implement a thread-safe bounded blocking queue in Go (capacity N).",
             "answer": "type BBQ struct {\n    items chan any\n}\nfunc New(n int) *BBQ           { return &BBQ{items: make(chan any, n)} }\nfunc (q *BBQ) Put(v any)       { q.items <- v }\nfunc (q *BBQ) Take() any       { return <-q.items }",
             "rubric": _RUBRIC,
@@ -256,12 +316,15 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
             "model_answer_summary": "Wrap a buffered channel.",
         },
         "state": _BASE_STATE_RIGHT,
-        "picked_set": [], "correct_set": [],
+        "picked_set": [],
+        "correct_set": [],
     },
     "code-wrong": {
         "deck_name": "temporal",
         "q": {
-            "id": 21, "type": "code", "topic": "concurrency-go",
+            "id": 21,
+            "type": "code",
+            "topic": "concurrency-go",
             "prompt": "Implement a thread-safe bounded blocking queue in Go (capacity N).",
             "answer": "type BBQ struct { items chan any }\n// ... (canonical channel-based impl)",
             "rubric": _RUBRIC,
@@ -274,12 +337,15 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
             "model_answer_summary": "Wrap a buffered channel — the channel handles both blocking conditions naturally.",
         },
         "state": _BASE_STATE_WRONG,
-        "picked_set": [], "correct_set": [],
+        "picked_set": [],
+        "correct_set": [],
     },
     "short-right": {
         "deck_name": "cherry",
         "q": {
-            "id": 24, "type": "short", "topic": "system-design-money",
+            "id": 24,
+            "type": "short",
+            "topic": "system-design-money",
             "prompt": "Why should monetary amounts be stored as bigint cents rather than floats?",
             "answer": "Floats can't represent most decimal fractions exactly, so arithmetic accumulates rounding error. A concrete failure: summing thousands of payment amounts in a float drifts by fractions of a cent and breaks reconciliation against the bank's ledger.",
             "rubric": _RUBRIC,
@@ -292,12 +358,15 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
             "model_answer_summary": "Floats can't represent most decimals exactly → accumulating rounding error → reconciliation drift.",
         },
         "state": _BASE_STATE_RIGHT,
-        "picked_set": [], "correct_set": [],
+        "picked_set": [],
+        "correct_set": [],
     },
     "short-wrong": {
         "deck_name": "cherry",
         "q": {
-            "id": 24, "type": "short", "topic": "system-design-money",
+            "id": 24,
+            "type": "short",
+            "topic": "system-design-money",
             "prompt": "Why should monetary amounts be stored as bigint cents rather than floats?",
             "answer": "Floats can't represent most decimal fractions exactly, so arithmetic accumulates rounding error. Use bigint cents.",
             "rubric": _RUBRIC,
@@ -310,12 +379,15 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
             "model_answer_summary": "Floats can't represent most decimals exactly → reconciliation drift.",
         },
         "state": _BASE_STATE_WRONG,
-        "picked_set": [], "correct_set": [],
+        "picked_set": [],
+        "correct_set": [],
     },
     "code-idk": {
         "deck_name": "temporal",
         "q": {
-            "id": 21, "type": "code", "topic": "concurrency-go",
+            "id": 21,
+            "type": "code",
+            "topic": "concurrency-go",
             "prompt": "Implement a thread-safe bounded blocking queue in Go (capacity N).",
             "answer": "type BBQ struct { items chan any }\n// ...",
             "rubric": _RUBRIC,
@@ -328,7 +400,8 @@ RESULT_FIXTURES: dict[str, dict[str, Any]] = {
             "model_answer_summary": "Wrap a buffered channel.",
         },
         "state": _BASE_STATE_WRONG,
-        "picked_set": [], "correct_set": [],
+        "picked_set": [],
+        "correct_set": [],
     },
 }
 
@@ -338,20 +411,38 @@ GENERATION_FIXTURES: dict[str, dict[str, Any]] = {
     "in-progress": {
         "wid": "gen-temporal-PREVIEW01",
         "deck_name": "temporal",
-        "progress": {"total": 5, "completed": 2, "current_topic": "consistent-hashing",
-                     "started_at": _now_iso(), "last_card_at": _now_iso(),
-                     "status": "generating"},
-        "desc": {"status": "RUNNING", "started_at": _now_iso(),
-                 "closed_at": None, "task_queue": "prep-generation"},
+        "progress": {
+            "total": 5,
+            "completed": 2,
+            "current_topic": "consistent-hashing",
+            "started_at": _now_iso(),
+            "last_card_at": _now_iso(),
+            "status": "generating",
+        },
+        "desc": {
+            "status": "RUNNING",
+            "started_at": _now_iso(),
+            "closed_at": None,
+            "task_queue": "prep-generation",
+        },
     },
     "complete": {
         "wid": "gen-temporal-PREVIEW02",
         "deck_name": "temporal",
-        "progress": {"total": 5, "completed": 5, "current_topic": "wal-recovery",
-                     "started_at": _now_iso(), "last_card_at": _now_iso(),
-                     "status": "done"},
-        "desc": {"status": "COMPLETED", "started_at": _now_iso(),
-                 "closed_at": _now_iso(), "task_queue": "prep-generation"},
+        "progress": {
+            "total": 5,
+            "completed": 5,
+            "current_topic": "wal-recovery",
+            "started_at": _now_iso(),
+            "last_card_at": _now_iso(),
+            "status": "done",
+        },
+        "desc": {
+            "status": "COMPLETED",
+            "started_at": _now_iso(),
+            "closed_at": _now_iso(),
+            "task_queue": "prep-generation",
+        },
     },
 }
 
@@ -362,8 +453,12 @@ GRADING_FIXTURES: dict[str, dict[str, Any]] = {
         "wid": "grade-temporal-q21-PREVIEW",
         "deck_name": "temporal",
         "progress": {"status": "grading", "started_at": _now_iso()},
-        "desc": {"status": "RUNNING", "started_at": _now_iso(),
-                 "closed_at": None, "task_queue": "prep-generation"},
+        "desc": {
+            "status": "RUNNING",
+            "started_at": _now_iso(),
+            "closed_at": None,
+            "task_queue": "prep-generation",
+        },
         "failed": False,
     },
 }
@@ -395,25 +490,32 @@ def all_fixtures() -> list[tuple[str, str]]:
 def register(app: FastAPI, templates: Jinja2Templates) -> None:
     """Mount the dev preview routes onto an existing FastAPI app."""
 
-    @app.get("/dev/preview/{template}/{fixture}", response_class=HTMLResponse,
-             include_in_schema=False)
+    @app.get(
+        "/dev/preview/{template}/{fixture}", response_class=HTMLResponse, include_in_schema=False
+    )
     async def preview(request: Request, template: str, fixture: str):
         fixtures = _REGISTRY.get(template)
         if fixtures is None:
             raise HTTPException(404, f"unknown template '{template}' (have: {sorted(_REGISTRY)})")
         ctx = fixtures.get(fixture)
         if ctx is None:
-            raise HTTPException(404, f"unknown fixture '{fixture}' for template '{template}' "
-                                       f"(have: {sorted(fixtures)})")
+            raise HTTPException(
+                404,
+                f"unknown fixture '{fixture}' for template '{template}' "
+                f"(have: {sorted(fixtures)})",
+            )
         ctx = {**ctx}
         # Result fixtures don't carry the handoff payload (it's computed in
         # the live route from the same question + answer data). Recompute
         # on the fly so the discuss popup is visible in dev preview too.
         if template == "result" and "handoff_urls" not in ctx:
             import chat_handoff
+
             msg = chat_handoff.build_message(
-                deck_name=ctx.get("deck_name", ""), q=ctx.get("q", {}),
-                user_answer=ctx.get("user_answer", ""), verdict=ctx.get("verdict"),
+                deck_name=ctx.get("deck_name", ""),
+                q=ctx.get("q", {}),
+                user_answer=ctx.get("user_answer", ""),
+                verdict=ctx.get("verdict"),
                 idk=ctx.get("idk", False),
                 picked_set=ctx.get("picked_set", []),
                 correct_set=ctx.get("correct_set", []),
@@ -432,14 +534,15 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
         the fizzbuzz card for the skeleton-feature verification) without
         mutating the cards.next_due column to force them due."""
         import db as _db  # local import to avoid circular
+
         q = _db.get_question(qid)
         if not q:
             raise HTTPException(404, f"no question {qid}")
         # Pick deck_name from the questions/decks join.
         with _db.cursor() as c:
             row = c.execute(
-                "SELECT d.name FROM decks d JOIN questions q ON q.deck_id=d.id "
-                "WHERE q.id = ?", (qid,)
+                "SELECT d.name FROM decks d JOIN questions q ON q.deck_id=d.id " "WHERE q.id = ?",
+                (qid,),
             ).fetchone()
         return templates.TemplateResponse(
             "study.html",

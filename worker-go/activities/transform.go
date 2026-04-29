@@ -2,11 +2,12 @@
 // "improve a card" / "transform a deck" feature.
 //
 // Two activities:
-//   ComputeTransform — shells out to claude with the current card(s) +
-//     the user's prompt; parses claude's JSON response into a Plan.
-//   ApplyTransform   — writes the Plan to the DB in a single transaction
-//     (modifications via UPDATE, additions via INSERT, deletions via DELETE
-//     which CASCADES through cards/reviews per existing FKs).
+//
+//	ComputeTransform — shells out to claude with the current card(s) +
+//	  the user's prompt; parses claude's JSON response into a Plan.
+//	ApplyTransform   — writes the Plan to the DB in a single transaction
+//	  (modifications via UPDATE, additions via INSERT, deletions via DELETE
+//	  which CASCADES through cards/reviews per existing FKs).
 //
 // The workflow decides whether to auto-apply (card scope) or wait for a
 // user signal before applying (deck scope).

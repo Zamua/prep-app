@@ -20,7 +20,6 @@ from pathlib import Path
 
 from markupsafe import Markup
 
-
 _ICONS_DIR = Path(__file__).parent / "static" / "icons"
 
 # Loaded lazily on first call; cached process-wide. Editing an SVG on disk

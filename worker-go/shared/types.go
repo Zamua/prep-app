@@ -24,7 +24,7 @@ const (
 // Card mirrors the JSON payload Claude returns and the prep-app's
 // questions schema.
 type Card struct {
-	Type    string   `json:"type"`    // code | mcq | multi | short
+	Type    string   `json:"type"` // code | mcq | multi | short
 	Topic   string   `json:"topic"`
 	Prompt  string   `json:"prompt"`
 	Choices []string `json:"choices,omitempty"`
@@ -70,9 +70,9 @@ type GradeAnswerInput struct {
 // Verdict is what GradeFreeText returns and what the workflow ultimately
 // surfaces. Mirrors the shape grader.py:_grade_freetext returns.
 type Verdict struct {
-	Result              string `json:"result"` // "right" | "wrong"
-	Feedback            string `json:"feedback"`
-	ModelAnswerSummary  string `json:"model_answer_summary"`
+	Result             string `json:"result"` // "right" | "wrong"
+	Feedback           string `json:"feedback"`
+	ModelAnswerSummary string `json:"model_answer_summary"`
 }
 
 // GradeFreeTextInput is the activity input. Question is fetched inside the
@@ -142,15 +142,15 @@ type TransformInput struct {
 // CardModification is a full replacement of a card's user-visible fields.
 // Claude returns the new state, not a diff, so the merge logic is simple.
 type CardModification struct {
-	QuestionID int    `json:"question_id"`
-	Type       string `json:"type"`              // code|mcq|multi|short
-	Topic      string `json:"topic,omitempty"`
-	Prompt     string `json:"prompt"`
+	QuestionID int      `json:"question_id"`
+	Type       string   `json:"type"` // code|mcq|multi|short
+	Topic      string   `json:"topic,omitempty"`
+	Prompt     string   `json:"prompt"`
 	Choices    []string `json:"choices,omitempty"`
-	Answer     string `json:"answer"`
-	Rubric     string `json:"rubric,omitempty"`
-	Skeleton   string `json:"skeleton,omitempty"`
-	Language   string `json:"language,omitempty"`
+	Answer     string   `json:"answer"`
+	Rubric     string   `json:"rubric,omitempty"`
+	Skeleton   string   `json:"skeleton,omitempty"`
+	Language   string   `json:"language,omitempty"`
 }
 
 type TransformPlan struct {
@@ -210,7 +210,7 @@ type ApplyTransformInput struct {
 type PlanItem struct {
 	Title    string `json:"title"`
 	Brief    string `json:"brief"`
-	Type     string `json:"type,omitempty"`     // claude's suggested type: code|mcq|multi|short
+	Type     string `json:"type,omitempty"` // claude's suggested type: code|mcq|multi|short
 	Topic    string `json:"topic,omitempty"`
 	Language string `json:"language,omitempty"` // for code items
 }
@@ -238,6 +238,7 @@ type PlanGenerateProgress struct {
 	Result         *PlanGenerateResult `json:"result,omitempty"`
 	Error          string              `json:"error,omitempty"`
 }
+
 // Status values: "planning" | "awaiting_feedback" | "replanning" |
 //                "generating" | "applying" | "done" | "rejected" | "failed"
 

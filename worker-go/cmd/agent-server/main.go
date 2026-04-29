@@ -3,13 +3,14 @@
 // without needing claude on the worker's PATH or in its keychain.
 //
 // Endpoints:
-//   POST /run         — invoke `claude -p` with the prompt, return stdout
-//   GET  /healthz     — claude auth status; tells the prep app whether
-//                       AI features should light up
-//   POST /connect     — accept a CLAUDE_CODE_OAUTH_TOKEN (the user got
-//                       it from `claude setup-token` on any machine
-//                       they own) and persist it in our volume
-//   POST /disconnect  — wipe the token; back to "not connected"
+//
+//	POST /run         — invoke `claude -p` with the prompt, return stdout
+//	GET  /healthz     — claude auth status; tells the prep app whether
+//	                    AI features should light up
+//	POST /connect     — accept a CLAUDE_CODE_OAUTH_TOKEN (the user got
+//	                    it from `claude setup-token` on any machine
+//	                    they own) and persist it in our volume
+//	POST /disconnect  — wipe the token; back to "not connected"
 //
 // Auth model: anthropic explicitly forbids embedding the subscription
 // OAuth flow in third-party apps (their feb 2026 policy update). We
@@ -45,11 +46,11 @@ const (
 )
 
 type Server struct {
-	mu         sync.RWMutex
-	token      string
-	tokenPath  string
-	claudeBin  string
-	argsCSV    string
+	mu        sync.RWMutex
+	token     string
+	tokenPath string
+	claudeBin string
+	argsCSV   string
 }
 
 type runReq struct {

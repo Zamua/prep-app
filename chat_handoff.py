@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import urllib.parse
 
-
 CHAT_PROVIDERS: dict[str, dict[str, str]] = {
-    "claude":     {"label": "Claude",     "url": "https://claude.ai/new?q={q}"},
-    "chatgpt":    {"label": "ChatGPT",    "url": "https://chatgpt.com/?q={q}"},
+    "claude": {"label": "Claude", "url": "https://claude.ai/new?q={q}"},
+    "chatgpt": {"label": "ChatGPT", "url": "https://chatgpt.com/?q={q}"},
     "perplexity": {"label": "Perplexity", "url": "https://www.perplexity.ai/?q={q}"},
 }
 
@@ -105,7 +104,4 @@ def build_message(
 def provider_urls(message: str) -> dict[str, str]:
     """Return {provider_key: prefilled_url} for every known provider."""
     encoded = urllib.parse.quote(message, safe="")
-    return {
-        key: cfg["url"].format(q=encoded)
-        for key, cfg in CHAT_PROVIDERS.items()
-    }
+    return {key: cfg["url"].format(q=encoded) for key, cfg in CHAT_PROVIDERS.items()}

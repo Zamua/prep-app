@@ -43,25 +43,20 @@ SCREENS: list[tuple[str, str]] = [
     ("live-index", "/"),
     ("live-deck-cherry", "/deck/cherry"),
     ("live-deck-temporal", "/deck/temporal"),
-
     # Index variants
     ("index-empty", "/dev/preview/index/empty"),
     ("index-populated", "/dev/preview/index/populated"),
-
     # Deck variants
     ("deck-empty", "/dev/preview/deck/empty"),
     ("deck-populated", "/dev/preview/deck/populated"),
     ("deck-with-suspended", "/dev/preview/deck/with_suspended"),
-
     # Study variants — one per type
     ("study-mcq", "/dev/preview/study/mcq"),
     ("study-multi", "/dev/preview/study/multi"),
     ("study-code", "/dev/preview/study/code"),
     ("study-short", "/dev/preview/study/short"),
-
     # Study empty
     ("study-empty", "/dev/preview/study_empty/default"),
-
     # Result — 4 types × 2 verdicts + idk
     ("result-mcq-right", "/dev/preview/result/mcq-right"),
     ("result-mcq-wrong", "/dev/preview/result/mcq-wrong"),
@@ -72,7 +67,6 @@ SCREENS: list[tuple[str, str]] = [
     ("result-short-right", "/dev/preview/result/short-right"),
     ("result-short-wrong", "/dev/preview/result/short-wrong"),
     ("result-code-idk", "/dev/preview/result/code-idk"),
-
     # Workflow status pages
     ("generation-in-progress", "/dev/preview/generation/in-progress"),
     ("generation-complete", "/dev/preview/generation/complete"),
@@ -111,10 +105,10 @@ def capture_all(out_dir: Path, screens: list[tuple[str, str]]) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tag", default=None,
-                    help="Output dir suffix. Default: before-<timestamp>.")
-    ap.add_argument("--only", default=None,
-                    help="Substring filter on screen_id; only those will be captured.")
+    ap.add_argument("--tag", default=None, help="Output dir suffix. Default: before-<timestamp>.")
+    ap.add_argument(
+        "--only", default=None, help="Substring filter on screen_id; only those will be captured."
+    )
     args = ap.parse_args()
 
     tag = args.tag or f"before-{datetime.now().strftime('%Y%m%d-%H%M%S')}"

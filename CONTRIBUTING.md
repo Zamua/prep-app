@@ -8,11 +8,17 @@ is just a few extra notes for people sending PRs.
 
 ## Code style
 
-- Python: 4-space indent, type hints where they add clarity.
-- Go: `gofmt` (vendored via `go fmt` on save).
+- Python: 4-space indent, type hints where they add clarity. Linted
+  + formatted with `ruff` (config in `pyproject.toml`).
+- Go: `gofmt` + `go vet`.
 - HTML/CSS/JS: 2-space indent.
 - Comments: explain *why* (the non-obvious constraint, the gotcha,
   the past incident). Don't narrate *what* — the code does that.
+
+`make setup` installs a pre-commit hook that runs `ruff format --check`,
+`ruff check`, and `gofmt -l` against staged files. Run `make format`
+to fix drift, `make lint` to read-only check the whole tree.
+`git commit --no-verify` bypasses the hook for one-off cases.
 
 ## What to file as an issue
 

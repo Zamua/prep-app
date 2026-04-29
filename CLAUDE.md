@@ -162,6 +162,7 @@ clauses (cross-user lookups return None as if the row didn't exist).
 | Schema change | edit `db.init()`, restart `make dev` |
 | New dep (python) | `mise exec -- uv add <pkg>` |
 | New dep (go) | `cd worker-go && mise exec -- go get <mod>` |
+| Lint / format | `make lint` (read-only) / `make format` (writes). Pre-commit hook runs the same checks against staged files. |
 | New icon | `curl -o static/icons/<n>.svg https://raw.githubusercontent.com/phosphor-icons/core/main/assets/light/<n>-light.svg` |
 
 To validate the docker artifact: `make docker-build && make docker-up`.
