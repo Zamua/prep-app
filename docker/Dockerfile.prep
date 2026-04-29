@@ -18,8 +18,9 @@
 #   runtime       → composes the above into a slim python:3.11 image
 #                   with the temporal CLI binary baked in.
 #
-# Built for the host arch by default (linux/arm64 on the macmini);
-# multi-arch publishing is a future PR (github actions on tag push).
+# Built for the host arch by default (linux/arm64 on Apple Silicon
+# / Linux ARM hosts; linux/amd64 on x86 hosts). Multi-arch publishing
+# is a future PR (github actions on tag push).
 
 ARG TARGETARCH=arm64
 

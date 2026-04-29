@@ -71,9 +71,10 @@ services:
 
 volumes:
   # Volume names are env-driven so the same compose.yml can run as
-  # staging AND prod on the same machine without colliding. Default
-  # 'prep' works for any single deployment; the author's macmini sets
-  # ENV_NAME=prod in prod's .env → `prod-data` + `prod-agent-data`.
+  # staging AND prod on the same docker daemon without colliding.
+  # Default 'prep' works for any single deployment. The two-stack
+  # flow (`make deploy-prod`) sets ENV_NAME=prod via deploy/prod.env
+  # → volumes named `prod-data` + `prod-agent-data`.
   prep-data:
     name: ${ENV_NAME:-prep}-data
   prep-agent-data:

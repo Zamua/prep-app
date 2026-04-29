@@ -38,10 +38,10 @@ What's intentionally out of scope (so don't expect these to land):
 ## Releasing (author convention)
 
 For your fork, use whatever workflow you like — the codebase doesn't
-depend on it. The author runs prep as two compose stacks (`stag` +
-`prod`) side-by-side on a single Mac mini, both driven from one
-checkout. The README's "Two-stack deploy" section walks through the
-mechanics; the short version:
+depend on it. The bundled flow is two compose stacks (`stag` +
+`prod`) running side-by-side on a single docker host, both driven
+from one checkout. The README's "Two-stack deploy" section walks
+through the mechanics; the short version:
 
 - `make deploy-stag` builds current `main` and brings up the staging
   stack on `:8082`.

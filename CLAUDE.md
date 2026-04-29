@@ -221,14 +221,9 @@ historical prod images coexist in the daemon's cache; running
 containers hold a reference to the image by ID, so a staging rebuild
 can't displace prod's bytes.
 
-The previous two-checkout convention (`prep-app/` at a detached HEAD
-in addition to `prep-app-staging/`) is retired as of 2026-04-29; the
-old prod checkout was renamed to `prep-app.retired-20260429/` and
-can be deleted.
-
-Tailscale serve direct mounts handle path routing (no caddy in front
-of prep anymore). `colima` auto-starts at login via
-`~/Library/LaunchAgents/com.zamua.colima.plist`.
+Tailscale Serve direct mounts handle path routing (`tailscale serve
+--set-path=/prep ...` and `--set-path=/prep-staging ...`) — no
+reverse proxy required.
 
 ---
 
