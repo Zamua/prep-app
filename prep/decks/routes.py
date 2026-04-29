@@ -527,6 +527,35 @@ def question_unsuspend(
     return responses.redirect(request, f"/deck/{deck_name}")
 
 
+@router.post("/deck/{name}/transform")
+async def deck_transform(
+    request: Request,
+    name: str,
+    prompt: str = Form(...),
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Deck-level free-text transform — returns a Plan and waits on
+    apply/reject signal before writing. The user is redirected to the
+    transform polling page where they can review the proposed changes."""
+    uid = user["tailscale_login"]
+    if not prompt.strip():
+        raise HTTPException(400, "empty prompt")
+    deck_id = deck_repo.get_or_create(uid, name)  # materialize if first time
+    from prep import temporal_client
+
+    try:
+        result = await service.start_deck_transform(
+            temporal_client,
+            user_id=uid,
+            deck_id=deck_id,
+            prompt=prompt.strip(),
+        )
+    except Exception as e:
+        raise HTTPException(500, f"failed to start transform: {e}")
+    return responses.redirect(request, f"/transform/{result.workflow_id}")
+
+
 @router.post("/question/{qid}/improve")
 async def question_improve(
     request: Request,
@@ -582,6 +611,63 @@ def _require_owns_transform(
         if deck_repo.find_name(uid, target_id) is None:
             raise HTTPException(404, "transform not found")
     return scope, target_id
+
+
+@router.get("/transform/{wid}", response_class=HTMLResponse)
+async def transform_view(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Transform polling page — shows live progress while the workflow
+    is alive, falls back to the awaited result on terminal completion
+    (since the queryable handler is gone by then)."""
+    scope, target_id = _require_owns_transform(user, wid, deck_repo, q_repo)
+    from prep import temporal_client
+
+    progress = await temporal_client.get_transform_progress(wid)
+    desc = await temporal_client.describe_workflow(wid)
+    status = (progress or {}).get("status") or (desc or {}).get("status") or "unknown"
+
+    terminal = status in {
+        "done",
+        "failed",
+        "rejected",
+        "COMPLETED",
+        "FAILED",
+        "TERMINATED",
+        "CANCELED",
+    }
+    if terminal and progress is None:
+        progress = {"status": "done", "result": await temporal_client.get_transform_result(wid)}
+
+    # Recover the deck name for the back link. Card-scope walks
+    # question → deck.
+    uid = user["tailscale_login"]
+    deck_name = ""
+    if scope == "deck":
+        deck_name = deck_repo.find_name(uid, target_id) or ""
+    else:
+        q = q_repo.get(uid, target_id)
+        if q is not None:
+            deck_name = deck_repo.find_name(uid, q.deck_id) or ""
+
+    return templates.TemplateResponse(
+        "transform.html",
+        {
+            "request": request,
+            "user": user,
+            "wid": wid,
+            "scope": scope,
+            "target_id": target_id,
+            "deck_name": deck_name,
+            "progress": progress or {},
+            "desc": desc or {},
+            "status": status,
+        },
+    )
 
 
 @router.get("/transform/{wid}/status")
@@ -649,6 +735,33 @@ def _require_owns_plan(user: dict, wid: str, deck_repo: DeckRepo) -> tuple[str, 
     if deck_id is None:
         raise HTTPException(404, "plan not found")
     return name, deck_id
+
+
+@router.get("/plan/{wid}", response_class=HTMLResponse)
+async def plan_view(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Plan polling page — renders the live planner UI while the
+    workflow is alive. If the query handler is gone (workflow ended),
+    fall back to the deck page since there's nothing to poll."""
+    deck_name, _ = _require_owns_plan(user, wid, deck_repo)
+    from prep import temporal_client
+
+    progress = await service.get_plan_progress(temporal_client, wid)
+    if progress is None:
+        return responses.redirect(request, f"/deck/{deck_name}")
+    return templates.TemplateResponse(
+        "plan.html",
+        {
+            "request": request,
+            "wid": wid,
+            "deck_name": deck_name,
+            "progress": progress,
+        },
+    )
 
 
 @router.get("/plan/{wid}/status")
