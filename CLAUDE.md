@@ -134,7 +134,6 @@ docker-compose.yml           prep + agent services, env-driven volume + image na
 .env.example                 per-deploy config template (PORT, ROOT_PATH, ENV_NAME, ...)
 deploy/{staging,prod}.env    tracked deploy-shape env files for `make deploy-{stag,prod}`
 .prod-version                single-line tag pinning what's running in prod
-ui-tools/capture.py          playwright screenshot harness for the UI sweep
 .dockerignore                keeps build context lean (.venv, .git, build outputs, secrets out)
 ```
 
