@@ -78,8 +78,14 @@ def authed_headers() -> dict[str, str]:
 def initialized_db(env: None):
     """Run db.init() against the per-test sqlite path so a repo test
     has tables to read/write. Returns the test user id (already
-    upserted into users) to thread through repo calls."""
+    upserted into users) to thread through repo calls.
+
+    Uses whatever PREP_DEFAULT_USER `env` set so route tests (driven
+    via TestClient → app's auth dependency) and repo tests (direct
+    function calls) operate on the same user without an additional
+    headers dance."""
     import importlib
+    import os
 
     from prep.infrastructure import db as _infra_db
 
@@ -89,8 +95,8 @@ def initialized_db(env: None):
     from prep import db as _db_mod
 
     importlib.reload(_db_mod)
-    user_id = "alice@example.com"
-    _db_mod.upsert_user(user_id, display_name="Alice")
+    user_id = os.environ["PREP_DEFAULT_USER"]
+    _db_mod.upsert_user(user_id, display_name=user_id.split("@")[0])
     return user_id
 
 

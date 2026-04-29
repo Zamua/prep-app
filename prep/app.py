@@ -21,7 +21,7 @@ from pathlib import Path
 import mistune
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
@@ -230,16 +230,9 @@ async def server_exception_handler(request: Request, exc: Exception):
     return _render_error(request, 500)
 
 
-def _redirect(request: Request, path: str, status_code: int = 303) -> RedirectResponse:
-    """Build a RedirectResponse whose Location header includes the request's
-    root_path. FastAPI's RedirectResponse takes the URL verbatim — it does
-    NOT auto-prepend root_path — so a bare /deck/foo would land outside the
-    /prep/ Caddy route and the user gets a white screen. Hit on 2026-04-26.
-    """
-    prefix = request.scope.get("root_path", "") or ""
-    if path.startswith("/"):
-        return RedirectResponse(f"{prefix}{path}", status_code=status_code)
-    return RedirectResponse(f"{prefix}/{path}", status_code=status_code)
+# Backwards-compat alias for the in-app routes that haven't migrated to
+# the per-context routers yet. New code imports from prep.web.responses.
+from prep.web.responses import redirect as _redirect  # noqa: E402,I001 — placement matters
 
 
 # ---- Auth dependency -------------------------------------------------------
@@ -260,30 +253,10 @@ def _redirect(request: Request, path: str, status_code: int = 303) -> RedirectRe
 
 from fastapi import Depends
 
-
-def _resolve_login(request: Request) -> str | None:
-    hdr = request.headers.get("tailscale-user-login")
-    if hdr:
-        return hdr.strip()
-    fallback = os.environ.get("PREP_DEFAULT_USER")
-    return fallback or None
-
-
-def current_user(request: Request) -> dict:
-    login = _resolve_login(request)
-    if not login:
-        raise HTTPException(
-            401, "no Tailscale identity (set Tailscale-User-Login header or PREP_DEFAULT_USER)"
-        )
-    display_name = request.headers.get("tailscale-user-name") or login.split("@", 1)[0]
-    profile_pic = request.headers.get("tailscale-user-profile-pic") or None
-    user = db.upsert_user(login, display_name, profile_pic)
-    # Stash on request.state so the Jinja context_processor (`_user_context`)
-    # can surface it to every template without each route having to remember
-    # to pass `"user": user` in the context dict. Keeps masthead chip +
-    # data-editor-mode consistent across all authenticated pages.
-    request.state.user = user
-    return user
+# Auth dependency lives in prep.auth so other routers (decks, study,
+# etc.) can import it without cycling back through app.py. The shape
+# is unchanged from when it was inlined here.
+from prep.auth import current_user
 
 
 db.init()
@@ -318,6 +291,15 @@ else:
         "agent: AI features DISABLED — no PREP_AGENT_URL set, and PREP_AGENT_BIN "
         "(default ~/.local/bin/claude) doesn't exist. Manual flashcard mode only."
     )
+
+# Bounded-context routers. Each per-context module owns the HTTP
+# surface for its slice; routes call into the context's service layer
+# (which holds repos + temporal-client orchestration). app.py just
+# mounts them — no decks/study/notify route-handler code lives here
+# anymore (or won't, by the end of phase 5+).
+from prep.decks.routes import router as decks_router
+
+app.include_router(decks_router)
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 from prep import dev_preview
@@ -1399,20 +1381,7 @@ async def improve_card(
     return _redirect(request, f"/transform/{result.workflow_id}")
 
 
-@app.post("/deck/{name}/delete")
-def deck_delete(
-    request: Request, name: str, confirm: str = Form(...), user: dict = Depends(current_user)
-):
-    """Delete a deck and everything in it (questions/cards/reviews/sessions
-    all cascade). Requires the user to type the deck name into a `confirm`
-    field on the dialog form — guards against accidental clicks."""
-    uid = user["tailscale_login"]
-    if confirm.strip() != name:
-        raise HTTPException(400, "deck name didn't match — delete not performed")
-    if db.find_deck(uid, name) is None:
-        raise HTTPException(404, "deck not found")
-    db.delete_deck(uid, name)
-    return _redirect(request, "/")
+# /deck/{name}/delete moved to prep.decks.routes (mounted below).
 
 
 @app.post("/deck/{name}/transform")
