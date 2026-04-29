@@ -15,7 +15,6 @@ agent-server container (see worker-go/cmd/agent-server) over HTTP.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import mistune
@@ -245,6 +244,7 @@ else:
 # (which holds repos + temporal-client orchestration). app.py just
 # mounts them — no decks/study/notify route-handler code lives here
 # anymore (or won't, by the end of phase 5+).
+from prep.agent.routes import router as agent_router
 from prep.decks.routes import router as decks_router
 from prep.notify.routes import router as notify_router
 from prep.study.routes import router as study_router
@@ -252,6 +252,7 @@ from prep.study.routes import router as study_router
 app.include_router(decks_router)
 app.include_router(study_router)
 app.include_router(notify_router)
+app.include_router(agent_router)
 
 # Dev-only template preview routes for the UI sweep — read-only, no DB writes.
 from prep import dev_preview
@@ -357,163 +358,6 @@ def editor_settings_save(
             "current_mode": mode,
             "modes": db.EDITOR_INPUT_MODES,
             "saved": True,
-        },
-    )
-
-
-# ---- AI agent settings + connect/disconnect -------------------------------
-#
-# When PREP_AGENT_URL is set (the docker / agent-server deploy shape),
-# this page drives the connect flow: user pastes a `claude setup-token`
-# OAuth token, we forward it to the agent-server's POST /connect, which
-# persists it in its volume. Subsequent /run calls inject the token as
-# CLAUDE_CODE_OAUTH_TOKEN env var.
-#
-# When PREP_AGENT_BIN is set instead (legacy shell-agent deploy), the
-# page just shows status — auth is managed by the host claude CLI.
-
-
-def _agent_server_url() -> str | None:
-    u = (os.environ.get("PREP_AGENT_URL") or "").strip()
-    return u.rstrip("/") if u else None
-
-
-def _refresh_agent_status() -> dict:
-    """Re-probe the agent and update the cached availability flag the
-    template context_processor surfaces. Called after a connect/disconnect
-    so the UI sees the new state immediately."""
-    s = _agent_mod.status()
-    _agent_mod.set_available(bool(s.get("logged_in")))
-    return s
-
-
-@app.get("/settings/agent", response_class=HTMLResponse)
-def settings_agent_view(request: Request, user: dict = Depends(current_user)):
-    s = _agent_mod.status()
-    return templates.TemplateResponse(
-        "settings_agent.html",
-        {"request": request, "status": s, "error": None, "flash": None},
-    )
-
-
-@app.post("/settings/agent/connect", response_class=HTMLResponse)
-async def settings_agent_connect(request: Request, user: dict = Depends(current_user)):
-    """Forward a setup-token to the agent-server's /connect endpoint."""
-    url = _agent_server_url()
-    if not url:
-        # Shell-agent deploy or no agent at all — there's nothing for us
-        # to connect to. The UI hides this form in that case but defend
-        # against direct posts.
-        return templates.TemplateResponse(
-            "settings_agent.html",
-            {
-                "request": request,
-                "status": _agent_mod.status(),
-                "error": "PREP_AGENT_URL is not set on this prep instance — connect flow only applies to the docker / agent-server deploy.",
-                "flash": None,
-            },
-            status_code=400,
-        )
-    form = await request.form()
-    token = (form.get("token") or "").strip()
-    if not token:
-        return templates.TemplateResponse(
-            "settings_agent.html",
-            {
-                "request": request,
-                "status": _agent_mod.status(),
-                "error": "Token is required.",
-                "flash": None,
-            },
-            status_code=400,
-        )
-
-    # Forward to agent-server. Use urllib (already used for the probe);
-    # avoids pulling in httpx for one call.
-    import urllib.error
-    import urllib.request
-
-    payload = json.dumps({"token": token}).encode("utf-8")
-    req = urllib.request.Request(
-        url + "/connect",
-        data=payload,
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10.0) as resp:
-            resp.read()
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        try:
-            err = json.loads(body).get("error") or body
-        except json.JSONDecodeError:
-            err = body
-        return templates.TemplateResponse(
-            "settings_agent.html",
-            {
-                "request": request,
-                "status": _agent_mod.status(),
-                "error": f"Agent rejected the token: {err}",
-                "flash": None,
-            },
-            status_code=400,
-        )
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        return templates.TemplateResponse(
-            "settings_agent.html",
-            {
-                "request": request,
-                "status": _agent_mod.status(),
-                "error": f"Couldn't reach agent-server: {e}",
-                "flash": None,
-            },
-            status_code=502,
-        )
-
-    s = _refresh_agent_status()
-    return templates.TemplateResponse(
-        "settings_agent.html",
-        {
-            "request": request,
-            "status": s,
-            "error": None,
-            "flash": "Connected. AI features should be available now.",
-        },
-    )
-
-
-@app.post("/settings/agent/disconnect", response_class=HTMLResponse)
-def settings_agent_disconnect(request: Request, user: dict = Depends(current_user)):
-    url = _agent_server_url()
-    if not url:
-        raise HTTPException(400, "PREP_AGENT_URL is not set on this prep instance.")
-    import urllib.error
-    import urllib.request
-
-    req = urllib.request.Request(url + "/disconnect", data=b"", method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
-            resp.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        return templates.TemplateResponse(
-            "settings_agent.html",
-            {
-                "request": request,
-                "status": _agent_mod.status(),
-                "error": f"Couldn't reach agent-server: {e}",
-                "flash": None,
-            },
-            status_code=502,
-        )
-    s = _refresh_agent_status()
-    return templates.TemplateResponse(
-        "settings_agent.html",
-        {
-            "request": request,
-            "status": s,
-            "error": None,
-            "flash": "Disconnected. AI features are now hidden; manual flows still work.",
         },
     )
 
