@@ -280,6 +280,19 @@ async def _tick() -> None:
         except Exception as e:
             _log.exception("scheduler tick failed for user %s: %s", uid, e)
 
+    # ---- trivia decks --------------------------------------------------
+    # Distinct from the per-user srs digest/when-ready logic above. Each
+    # trivia deck has its own per-deck interval (`notification_interval_
+    # minutes`), so the dispatch logic lives in `prep.trivia.scheduler`
+    # rather than inlined here. Late import keeps notify → trivia
+    # one-way (trivia.scheduler imports send_to_user from us).
+    try:
+        from prep.trivia.scheduler import tick as _trivia_tick
+
+        _trivia_tick(now_utc)
+    except Exception as e:
+        _log.exception("trivia scheduler tick threw: %s", e)
+
 
 async def _scheduler_loop() -> None:
     while True:

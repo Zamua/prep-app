@@ -84,6 +84,64 @@ class DeckRepo:
         the notifications digest."""
         return _legacy_db.deck_due_breakdown(user_id)
 
+    # ---- trivia-deck-specific helpers ----------------------------------
+
+    def create_trivia(
+        self,
+        user_id: str,
+        name: str,
+        *,
+        topic: str,
+        interval_minutes: int,
+    ) -> int:
+        """Create a deck with deck_type='trivia'. `topic` is stored in
+        the existing context_prompt column (claude reads it during
+        generation). `interval_minutes` is per-deck.
+        """
+        from prep.infrastructure.db import cursor, now
+
+        with cursor() as c:
+            cur = c.execute(
+                """
+                INSERT INTO decks (user_id, name, created_at, context_prompt,
+                                   deck_type, notification_interval_minutes)
+                VALUES (?, ?, ?, ?, 'trivia', ?)
+                """,
+                (user_id, name, now(), topic, interval_minutes),
+            )
+            return cur.lastrowid
+
+    def list_trivia_decks(self) -> list[dict]:
+        """All trivia decks across all users. Returned as raw dicts
+        because the scheduler needs each row's user_id, interval, and
+        last_notified_at — fields not all on the Deck entity. Returns
+        list of {id, user_id, name, context_prompt,
+        notification_interval_minutes, last_notified_at}.
+        """
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            rows = c.execute(
+                """
+                SELECT id, user_id, name, context_prompt,
+                       notification_interval_minutes, last_notified_at
+                FROM decks
+                WHERE deck_type = 'trivia'
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def set_last_notified_at(self, deck_id: int, ts: str) -> None:
+        """Stamp `decks.last_notified_at` after the scheduler fires a
+        push for this trivia deck. Used as the interval debounce key."""
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            c.execute(
+                "UPDATE decks SET last_notified_at = ? WHERE id = ?",
+                (ts, deck_id),
+            )
+
 
 class QuestionRepo:
     """Read/write access to the `questions` table."""
