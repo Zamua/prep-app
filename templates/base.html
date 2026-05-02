@@ -11,7 +11,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ root }}/static/style.css">
+  {# Cache-bust style.css with the file's current mtime so a fresh
+     deploy invalidates browsers that grabbed the old bytes. The
+     mtime is exposed by app.py as `static_css_mtime` (a stable int
+     in the templates context). Fall back to 0 if missing so dev
+     auto-reload still works. #}
+  <link rel="stylesheet" href="{{ root }}/static/style.css?v={{ static_css_mtime|default(0) }}">
 
   {# PWA install — manifest + iOS-specific meta. iOS doesn't read the
      manifest's icons[]; it reads `apple-touch-icon` instead, and the home
