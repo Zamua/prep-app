@@ -1,0 +1,52 @@
+{# Single-card trivia view. Designed for arrival-from-push: one
+   question, free-text input, submit. No "next card" UI; user
+   dismisses to leave. When `result` is set (post-submit), the
+   verdict block reveals with the correct answer + dismiss CTA. #}
+{% extends "base.html" %}
+{% block title %}{{ deck_name or 'trivia' }} · prep{% endblock %}
+{% block page_class %}trivia-card{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name or 'home' }}</a>
+  <span class="card-id">№ {{ q.id }}</span>
+</nav>
+
+<article class="trivia-card-body">
+  <div class="trivia-prompt">{{ q.prompt }}</div>
+
+  {% if result is none %}
+    <form method="post"
+          action="{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/answer"
+          class="trivia-answer-form"
+          autocomplete="off">
+      <input
+        type="text"
+        name="answer"
+        class="trivia-answer-input"
+        placeholder="Your answer"
+        autofocus
+        required>
+      <button type="submit" class="btn btn-primary">Submit</button>
+    </form>
+  {% else %}
+    <div class="trivia-result trivia-result-{{ 'right' if result.correct else 'wrong' }}">
+      <div class="trivia-result-mark">
+        {% if result.correct %}
+          {{ icon('check', class_='icon icon-lg') }}
+          <span class="trivia-result-label">Correct</span>
+        {% else %}
+          {{ icon('x', class_='icon icon-lg') }}
+          <span class="trivia-result-label">Not quite</span>
+        {% endif %}
+      </div>
+      <dl class="trivia-result-detail">
+        <dt>You said</dt>
+        <dd>{{ result.given or '(empty)' }}</dd>
+        <dt>Answer</dt>
+        <dd>{{ result.expected }}</dd>
+      </dl>
+      <a href="{{ request.scope.get('root_path','') }}/" class="btn btn-secondary trivia-dismiss">Dismiss</a>
+    </div>
+  {% endif %}
+</article>
+{% endblock %}

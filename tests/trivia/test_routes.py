@@ -1,0 +1,98 @@
+"""HTTP route tests for the trivia bounded context.
+
+Exercise the card view, answer submission, and (mocked) generate
+endpoint via TestClient. Generation tests stub `run_prompt` so we
+don't shell out to claude.
+"""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from prep.decks.entities import NewQuestion, QuestionType
+from prep.decks.repo import DeckRepo, QuestionRepo
+from prep.trivia import service as svc
+from prep.trivia.repo import TriviaQueueRepo
+
+
+def _seed_trivia_question(initialized_db: str, prompt="Capital of France?", answer="Paris"):
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "capitals")
+    qid = QuestionRepo().add(
+        user,
+        deck_id,
+        NewQuestion(type=QuestionType.SHORT, topic="capitals", prompt=prompt, answer=answer),
+    )
+    TriviaQueueRepo().append_card(qid, deck_id)
+    return deck_id, qid
+
+
+# ---- GET /trivia/<id> --------------------------------------------------
+
+
+def test_card_view_renders_prompt(client: TestClient, initialized_db: str):
+    _, qid = _seed_trivia_question(initialized_db)
+    r = client.get(f"/trivia/{qid}")
+    assert r.status_code == 200
+    assert "Capital of France?" in r.text
+    # No result block yet — only the form.
+    assert "trivia-answer-form" in r.text
+    assert "trivia-result" not in r.text
+
+
+def test_card_view_404_for_unknown_question(client: TestClient, initialized_db: str):
+    r = client.get("/trivia/99999")
+    assert r.status_code == 404
+
+
+# ---- POST /trivia/<id>/answer ------------------------------------------
+
+
+def test_answer_correct_renders_result_block(client: TestClient, initialized_db: str):
+    _, qid = _seed_trivia_question(initialized_db)
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "paris"})
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    assert "Correct" in r.text
+    # Card was rotated — count_unanswered should now be 0.
+    assert TriviaQueueRepo().count_unanswered(deck_id=1) == 0
+
+
+def test_answer_wrong_shows_correct_answer(client: TestClient, initialized_db: str):
+    _, qid = _seed_trivia_question(initialized_db)
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "london"})
+    assert r.status_code == 200
+    assert "trivia-result-wrong" in r.text
+    # Correct answer is shown so the user can learn from the miss.
+    assert "Paris" in r.text
+
+
+def test_answer_blank_grades_wrong(client: TestClient, initialized_db: str):
+    _, qid = _seed_trivia_question(initialized_db)
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": ""})
+    assert r.status_code == 200
+    assert "trivia-result-wrong" in r.text
+
+
+# ---- POST /trivia/decks/<id>/generate ----------------------------------
+
+
+def test_generate_route_inserts_via_mocked_agent(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Generate route calls service.generate_batch, which calls the
+    agent. We monkey-patch the agent call to return canned JSON."""
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "history", context_prompt="World War II turning points")
+    monkeypatch.setattr(svc, "run_prompt", lambda _p: '[{"q": "Year of D-Day?", "a": "1944"}]')
+    r = client.post(f"/trivia/decks/{deck_id}/generate", follow_redirects=False)
+    assert r.status_code == 200
+    # The stub redirect page mentions the count.
+    assert "Generated 1" in r.text
+    # And the question landed in the queue.
+    assert TriviaQueueRepo().pick_next_for_deck(deck_id).prompt == "Year of D-Day?"
+
+
+def test_generate_route_404_for_unknown_deck(client: TestClient, initialized_db: str):
+    r = client.post("/trivia/decks/99999/generate", follow_redirects=False)
+    assert r.status_code == 404

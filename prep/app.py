@@ -39,6 +39,7 @@ from prep.decks.routes import router as decks_router
 from prep.dev import preview as dev_preview
 from prep.notify.routes import router as notify_router
 from prep.study.routes import router as study_router
+from prep.trivia.routes import router as trivia_router
 from prep.web import errors as _errors_mod
 from prep.web.index import router as index_router
 from prep.web.pwa import router as pwa_router
@@ -90,6 +91,7 @@ _errors_mod.register(app)
 # handlers should live here.
 app.include_router(decks_router)
 app.include_router(study_router)
+app.include_router(trivia_router)
 app.include_router(notify_router)
 app.include_router(agent_router)
 app.include_router(auth_router)
