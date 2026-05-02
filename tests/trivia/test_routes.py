@@ -117,18 +117,22 @@ def test_decks_new_trivia_form_renders(client: TestClient, initialized_db: str):
     assert 'name="notification_interval_minutes"' in r.text
 
 
-def test_decks_new_trivia_creates_deck_and_generates(
+def test_decks_new_trivia_creates_deck_and_starts_workflow(
     monkeypatch, client: TestClient, initialized_db: str
 ):
-    """POST /decks/new/trivia creates a deck_type='trivia' deck, fires
-    the initial batch (claude mocked), redirects to the deck page."""
+    """POST /decks/new/trivia creates the deck (sync) + kicks off the
+    TriviaGenerateWorkflow (async) and redirects to the polling page.
+    The workflow starter is monkey-patched so we don't need a real
+    Temporal server in the test loop."""
     import prep.agent
+    from prep import temporal_client as _tc
 
     prep.agent.is_available = True
-    monkeypatch.setattr(
-        "prep.trivia.service.run_prompt",
-        lambda _p: '[{"q": "Capital of Italy?", "a": "Rome"}]',
-    )
+
+    async def fake_start(**kwargs):
+        return _tc.StartResult(workflow_id=f"trivia-{kwargs['deck_name']}-deadbeef01", run_id="r")
+
+    monkeypatch.setattr(_tc, "start_trivia_generate", fake_start)
     r = client.post(
         "/decks/new/trivia",
         data={
@@ -139,14 +143,13 @@ def test_decks_new_trivia_creates_deck_and_generates(
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"].endswith("/deck/geo")
-    # Deck exists with deck_type='trivia' and the right interval.
+    assert r.headers["location"].endswith("/trivia/gen/trivia-geo-deadbeef01")
+    # Deck row landed sync with deck_type='trivia' and the right interval.
     rows = DeckRepo().list_trivia_decks()
     geo = next(d for d in rows if d["name"] == "geo")
     assert geo["notification_interval_minutes"] == 15
-    # And the initial batch is in the queue.
-    nxt = TriviaQueueRepo().pick_next_for_deck(geo["id"])
-    assert nxt.prompt == "Capital of Italy?"
+    # Queue starts empty (workflow does the inserts; we faked it).
+    assert TriviaQueueRepo().pick_next_for_deck(geo["id"]) is None
 
 
 def test_decks_new_trivia_rejects_empty_topic(monkeypatch, client: TestClient, initialized_db: str):

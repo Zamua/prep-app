@@ -4,10 +4,11 @@
 package shared
 
 const (
-	TaskQueue            = "prep-generation"
-	WorkflowGrade        = "GradeAnswerWorkflow"
-	WorkflowTransform    = "TransformWorkflow"
-	WorkflowPlanGenerate = "PlanGenerateWorkflow"
+	TaskQueue              = "prep-generation"
+	WorkflowGrade          = "GradeAnswerWorkflow"
+	WorkflowTransform      = "TransformWorkflow"
+	WorkflowPlanGenerate   = "PlanGenerateWorkflow"
+	WorkflowTriviaGenerate = "TriviaGenerateWorkflow"
 
 	// Signals + queries on TransformWorkflow.
 	SignalApplyTransform   = "applyTransform"
@@ -19,7 +20,72 @@ const (
 	SignalPlanAccept   = "planAccept"
 	SignalPlanReject   = "planReject"
 	QueryPlanProgress  = "getPlanProgress"
+
+	// Queries on TriviaGenerateWorkflow.
+	QueryTriviaProgress = "getTriviaProgress"
 )
+
+// ---- TriviaGenerate (notification-driven decks) -------------------------
+//
+// Single-claude-call workflow: ask the agent for N short-Q-short-A pairs,
+// dedupe against the deck's existing prompts, insert each via a tiny
+// per-pair activity (so a transient db blip doesn't lose the whole batch),
+// expose progress via a query handler so the UI can poll.
+
+type TriviaGenerateInput struct {
+	UserID    string `json:"user_id"`
+	DeckID    int    `json:"deck_id"`
+	DeckName  string `json:"deck_name"`
+	Topic     string `json:"topic"`      // free-text user prompt; claude reads it
+	BatchSize int    `json:"batch_size"` // 0 → use default (25)
+}
+
+type TriviaGenerateProgress struct {
+	Status         string `json:"status"` // "starting" | "asking_claude" | "inserting" | "done" | "failed"
+	Total          int    `json:"total"`
+	Inserted       int    `json:"inserted"`
+	SkippedDups    int    `json:"skipped_dups"`
+	SkippedInvalid int    `json:"skipped_invalid"`
+	StartedAt      string `json:"started_at"`
+	FinishedAt     string `json:"finished_at,omitempty"`
+	Error          string `json:"error,omitempty"`
+}
+
+type TriviaGenerateResult struct {
+	Inserted       int `json:"inserted"`
+	SkippedDups    int `json:"skipped_dups"`
+	SkippedInvalid int `json:"skipped_invalid"`
+}
+
+// TriviaPair is one Q/A from claude. Mirrors the JSON the agent returns.
+type TriviaPair struct {
+	Q string `json:"q"`
+	A string `json:"a"`
+}
+
+// GenerateTriviaInput drives the agent-call activity.
+type GenerateTriviaInput struct {
+	UserID    string   `json:"user_id"`
+	DeckID    int      `json:"deck_id"`
+	Topic     string   `json:"topic"`
+	Existing  []string `json:"existing"` // existing prompts for dedupe
+	BatchSize int      `json:"batch_size"`
+}
+
+// InsertTriviaCardInput drives the per-card insert activity.
+type InsertTriviaCardInput struct {
+	UserID string `json:"user_id"`
+	DeckID int    `json:"deck_id"`
+	Topic  string `json:"topic"`
+	Prompt string `json:"prompt"`
+	Answer string `json:"answer"`
+}
+
+type InsertTriviaCardResult struct {
+	QuestionID    int  `json:"question_id"`
+	Duplicate     bool `json:"duplicate"`
+	QueuePosition int  `json:"queue_position"`
+}
 
 // Card mirrors the JSON payload Claude returns and the prep-app's
 // questions schema.

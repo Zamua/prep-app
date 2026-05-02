@@ -91,6 +91,9 @@ func main() {
 	w.RegisterWorkflowWithOptions(workflows.PlanGenerate, workflow.RegisterOptions{
 		Name: shared.WorkflowPlanGenerate,
 	})
+	w.RegisterWorkflowWithOptions(workflows.TriviaGenerate, workflow.RegisterOptions{
+		Name: shared.WorkflowTriviaGenerate,
+	})
 
 	a := &activities.Activities{Cfg: cfg}
 	w.RegisterActivity(a)

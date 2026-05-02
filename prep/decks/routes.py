@@ -359,12 +359,13 @@ async def deck_new_trivia_create(
     user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
 ):
-    """Create a trivia deck. Validates topic + interval, persists the
-    deck row with deck_type='trivia', fires the initial 25-question
-    batch synchronously so the user lands on a populated deck. Falls
-    back gracefully if the agent is unreachable — deck row stands and
-    the scheduler retries on its next tick."""
+    """Create a trivia deck + kick off the initial-batch generation as
+    a background Temporal workflow. The deck row lands sync; the
+    response is an immediate redirect to /trivia/gen/<wid> which polls
+    a status endpoint until the workflow's `done` (then jumps to the
+    deck page). Same pattern as /plan/<wid> for SRS plan-generate."""
     from prep import agent as _agent_mod
+    from prep import temporal_client
 
     uid = user["tailscale_login"]
     form = await request.form()
@@ -420,25 +421,21 @@ async def deck_new_trivia_create(
         return rerender("Notification interval must be 1–720 minutes.")
 
     deck_id = deck_repo.create_trivia(uid, clean, topic=topic, interval_minutes=interval)
-    # Fire the initial generation synchronously so the user lands on a
-    # populated deck. If the agent is flaky the deck row stands and the
-    # scheduler retries on its next tick.
+    # Kick off the workflow that does the actual claude call + per-card
+    # inserts. Returns immediately — UI redirects to a polling page.
     try:
-        from prep.decks.repo import QuestionRepo
-        from prep.trivia import service as _trivia_svc
-        from prep.trivia.repo import TriviaQueueRepo
-
-        _trivia_svc.generate_batch(
+        res = await temporal_client.start_trivia_generate(
             user_id=uid,
             deck_id=deck_id,
+            deck_name=clean,
             topic=topic,
-            questions_repo=QuestionRepo(),
-            trivia_repo=TriviaQueueRepo(),
         )
-    except Exception:
-        pass
-
-    return responses.redirect(request, f"/deck/{clean}")
+    except Exception as e:
+        # Deck row was created but the workflow couldn't start. Surface
+        # the error so the user can either retry or hit the manual
+        # /trivia/decks/<id>/generate route.
+        raise HTTPException(500, f"deck created but failed to start trivia workflow: {e}") from e
+    return responses.redirect(request, f"/trivia/gen/{res.workflow_id}")
 
 
 @router.get("/deck/{name}", response_class=HTMLResponse)

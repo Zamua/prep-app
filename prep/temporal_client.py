@@ -23,6 +23,7 @@ TASK_QUEUE = "prep-generation"
 GRADE_WORKFLOW_NAME = "GradeAnswerWorkflow"
 TRANSFORM_WORKFLOW_NAME = "TransformWorkflow"
 PLAN_GENERATE_WORKFLOW_NAME = "PlanGenerateWorkflow"
+TRIVIA_GENERATE_WORKFLOW_NAME = "TriviaGenerateWorkflow"
 
 _client: Client | None = None
 
@@ -201,3 +202,42 @@ async def signal_plan_reject(workflow_id: str) -> None:
     client = await _get_client()
     handle = client.get_workflow_handle(workflow_id)
     await handle.signal("planReject")
+
+
+# ---- TriviaGenerate workflow helpers ----
+
+
+async def start_trivia_generate(
+    *, user_id: str, deck_id: int, deck_name: str, topic: str, batch_size: int = 25
+) -> StartResult:
+    """Start a TriviaGenerateWorkflow. The workflow asks claude for a
+    batch of short-Q-short-A pairs and inserts each one into the deck's
+    trivia queue. Workflow ID encodes deck_name so the polling page
+    URL stays human-readable."""
+    client = await _get_client()
+    wid = f"trivia-{deck_name}-{uuid.uuid4().hex[:10]}"
+    handle = await client.start_workflow(
+        TRIVIA_GENERATE_WORKFLOW_NAME,
+        {
+            "user_id": user_id,
+            "deck_id": deck_id,
+            "deck_name": deck_name,
+            "topic": topic,
+            "batch_size": batch_size,
+        },
+        id=wid,
+        task_queue=TASK_QUEUE,
+    )
+    return StartResult(workflow_id=handle.id, run_id=handle.first_execution_run_id or "")
+
+
+async def get_trivia_progress(workflow_id: str) -> dict[str, Any] | None:
+    """Query the trivia workflow for current progress. Returns the
+    TriviaGenerateProgress dict, or None if the workflow's done +
+    its query handler is gone."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    try:
+        return await handle.query("getTriviaProgress")
+    except Exception:
+        return None

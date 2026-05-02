@@ -1,0 +1,95 @@
+{# Polling page for TriviaGenerateWorkflow. JS hits
+   /trivia/gen/<wid>/status every 1.5s, surfaces the workflow's
+   progress (status + inserted/total counts), and redirects to the
+   deck page when status flips to 'done'. #}
+{% extends "base.html" %}
+{% block title %}generating · {{ deck_name }} · prep{% endblock %}
+{% block page_class %}trivia-generating{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} home</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">{{ deck_name }}</p>
+  <h1 class="display">Generating&nbsp;<em>your batch</em>.</h1>
+  <p class="lede">
+    Claude is writing 25 short-answer questions on your topic. Usually
+    takes 10-30 seconds. The deck is already created — you can navigate
+    away and the workflow will keep running; it's safe to come back later.
+  </p>
+</section>
+
+<div class="trivia-gen-status" data-wid="{{ wid }}" data-deck-name="{{ deck_name }}">
+  <div class="trivia-gen-status-row">
+    <span class="trivia-gen-status-label" id="trivia-gen-label">Starting…</span>
+    <span class="trivia-gen-status-counts" id="trivia-gen-counts"></span>
+  </div>
+  <progress class="trivia-gen-progress" id="trivia-gen-progress" value="0" max="100"></progress>
+  <p class="trivia-gen-error" id="trivia-gen-error" hidden></p>
+  <p class="form-hint">
+    <a id="trivia-gen-jump" class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">
+      Skip the wait — open the deck page
+    </a>
+  </p>
+</div>
+
+<script>
+  (function () {
+    var root = document.querySelector('.trivia-gen-status');
+    if (!root) return;
+    var wid = root.dataset.wid;
+    var deck = root.dataset.deckName;
+    var rootPath = "{{ request.scope.get('root_path','') }}";
+    var label = document.getElementById('trivia-gen-label');
+    var counts = document.getElementById('trivia-gen-counts');
+    var bar = document.getElementById('trivia-gen-progress');
+    var err = document.getElementById('trivia-gen-error');
+    var labels = {
+      'starting': 'Starting…',
+      'asking_claude': 'Asking claude for a batch…',
+      'inserting': 'Inserting questions…',
+      'done': 'Done — redirecting…',
+      'failed': 'Generation failed',
+    };
+    function tick() {
+      fetch(rootPath + '/trivia/gen/' + wid + '/status', {credentials: 'same-origin'})
+        .then(function (r) { return r.json(); })
+        .then(function (p) {
+          var status = p.status || 'starting';
+          label.textContent = labels[status] || status;
+          if (p.error) {
+            err.textContent = p.error;
+            err.hidden = false;
+          }
+          var inserted = p.inserted || 0;
+          var total = p.total || 0;
+          if (total > 0) {
+            bar.value = Math.round(100 * inserted / total);
+            bar.max = 100;
+            counts.textContent = inserted + ' / ' + total;
+          } else if (status === 'asking_claude') {
+            bar.removeAttribute('value');  // indeterminate
+          }
+          if (status === 'done') {
+            bar.value = 100;
+            counts.textContent = (inserted || 0) + ' inserted';
+            window.location.href = rootPath + '/deck/' + (p.deck_name || deck);
+            return;
+          }
+          if (status === 'failed') {
+            return;  // stop polling, show the error
+          }
+          setTimeout(tick, 1500);
+        })
+        .catch(function () {
+          // Transient network blip — keep polling.
+          setTimeout(tick, 3000);
+        });
+    }
+    tick();
+  })();
+</script>
+
+{% endblock %}
