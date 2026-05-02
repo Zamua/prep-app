@@ -54,12 +54,43 @@
     </span>
   </label>
 
+  <p class="form-hint deck-new-trivia-hint">
+    Heads up: claude generates the first batch synchronously, so the
+    submit takes ~10-30s to come back. The page will look idle during
+    that wait — that's normal.
+  </p>
+
   <div class="study-actions deck-new-actions">
-    <button type="submit" class="btn btn-primary">
+    <button type="submit" class="btn btn-primary" id="trivia-submit"
+            data-pending-label="Generating 25 questions…">
       Create trivia deck
     </button>
     <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/decks/new">Cancel</a>
   </div>
 </form>
 
+<script>
+  // Block the user from staring at a frozen-looking form during the
+  // 10-30s synchronous claude call. Disable the button + swap its
+  // label to "Generating…" the moment they submit. Re-enables on
+  // pageshow if the user back-navigates here (so the form is usable
+  // again after a server-side validation 400).
+  (function () {
+    var form = document.querySelector('.deck-new-form');
+    var btn = document.getElementById('trivia-submit');
+    if (!form || !btn) return;
+    var orig = btn.textContent.trim();
+    var pending = btn.dataset.pendingLabel || 'Working…';
+    form.addEventListener('submit', function () {
+      btn.disabled = true;
+      btn.textContent = pending;
+      btn.classList.add('is-loading');
+    });
+    window.addEventListener('pageshow', function () {
+      btn.disabled = false;
+      btn.textContent = orig;
+      btn.classList.remove('is-loading');
+    });
+  })();
+</script>
 {% endblock %}
