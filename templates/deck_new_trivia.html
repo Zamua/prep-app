@@ -1,0 +1,65 @@
+{# Step 2 (trivia path): name + topic + interval. Single submit. #}
+{% extends "base.html" %}
+{% block title %}new trivia deck · prep{% endblock %}
+{% block page_class %}deck-new{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/decks/new" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">A new trivia deck</p>
+  <h1 class="display">Push&nbsp;<em>me</em>&nbsp;a question.</h1>
+  <p class="lede">
+    Tell prep what to quiz you on, then pick how often you want to see
+    a card. Claude generates a batch up front, the scheduler pings you
+    on the interval, you tap to answer in seconds. Cards rotate
+    forever; new batches drop in when you've cycled through.
+  </p>
+</section>
+
+{% if error %}
+<p class="form-error">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="{{ request.scope.get('root_path','') }}/decks/new/trivia" class="deck-new-form" autocomplete="off">
+  <label class="form-field">
+    <span class="form-label">Deck name</span>
+    <input type="text" name="name" value="{{ name_value }}" required
+           pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
+           placeholder="e.g. capitals, oncall-on-prem"
+           autocapitalize="none" autocorrect="off">
+    <span class="form-hint">2–30 chars, lowercase letters/digits/hyphens, used in the URL.</span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">Topic</span>
+    <textarea name="topic" rows="6" maxlength="8000"
+              placeholder="What should claude quiz you on? Be specific: 'world capitals', 'Rust ownership rules', '1990s NBA finals MVPs'. The more focused, the better the questions."
+              required>{{ topic_value }}</textarea>
+    <span class="form-hint">
+      Free-form. Claude reads this and generates 25 short-answer
+      questions per batch. URLs are fine.
+    </span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">Notification interval (minutes)</span>
+    <input type="number" name="notification_interval_minutes"
+           min="1" max="720" value="{{ interval_value }}" required>
+    <span class="form-hint">
+      How often you want a question pushed to you. Default 30 min.
+      Range 1–720 (12 hours).
+    </span>
+  </label>
+
+  <div class="study-actions deck-new-actions">
+    <button type="submit" class="btn btn-primary">
+      Create trivia deck
+    </button>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/decks/new">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

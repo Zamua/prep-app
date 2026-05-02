@@ -98,20 +98,30 @@ def test_generate_route_404_for_unknown_deck(client: TestClient, initialized_db:
     assert r.status_code == 404
 
 
-# ---- /decks/new with action=trivia -------------------------------------
+# ---- /decks/new chooser + /decks/new/trivia ----------------------------
+
+
+def test_decks_new_chooser_offers_both_paths(client: TestClient, initialized_db: str):
+    """The chooser page links to both type-specific forms."""
+    r = client.get("/decks/new")
+    assert r.status_code == 200
+    assert "/decks/new/srs" in r.text
+    assert "/decks/new/trivia" in r.text
+
+
+def test_decks_new_trivia_form_renders(client: TestClient, initialized_db: str):
+    r = client.get("/decks/new/trivia")
+    assert r.status_code == 200
+    assert "Topic" in r.text
+    assert 'name="topic"' in r.text
+    assert 'name="notification_interval_minutes"' in r.text
 
 
 def test_decks_new_trivia_creates_deck_and_generates(
     monkeypatch, client: TestClient, initialized_db: str
 ):
-    """POST /decks/new with action=trivia creates a deck_type='trivia'
-    deck, fires the initial batch (claude mocked), redirects to the
-    deck page."""
-    monkeypatch.setattr("prep.agent.is_available", lambda: True)
-    # Ensure the deck-routes import path's reference to is_available
-    # is also patched. The route does `if not _agent_mod.is_available:`
-    # and `_agent_mod` is the `prep.agent` module — so patch its
-    # attribute directly.
+    """POST /decks/new/trivia creates a deck_type='trivia' deck, fires
+    the initial batch (claude mocked), redirects to the deck page."""
     import prep.agent
 
     prep.agent.is_available = True
@@ -120,11 +130,10 @@ def test_decks_new_trivia_creates_deck_and_generates(
         lambda _p: '[{"q": "Capital of Italy?", "a": "Rome"}]',
     )
     r = client.post(
-        "/decks/new",
+        "/decks/new/trivia",
         data={
             "name": "geo",
-            "context_prompt": "world capitals",
-            "action": "trivia",
+            "topic": "world capitals",
             "notification_interval_minutes": "15",
         },
         follow_redirects=False,
@@ -145,14 +154,13 @@ def test_decks_new_trivia_rejects_empty_topic(monkeypatch, client: TestClient, i
 
     prep.agent.is_available = True
     r = client.post(
-        "/decks/new",
+        "/decks/new/trivia",
         data={
             "name": "geo",
-            "context_prompt": "",
-            "action": "trivia",
+            "topic": "",
             "notification_interval_minutes": "30",
         },
         follow_redirects=False,
     )
     assert r.status_code == 400
-    assert "topic" in r.text.lower() or "description" in r.text.lower()
+    assert "topic" in r.text.lower()

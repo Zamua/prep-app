@@ -235,12 +235,23 @@ def _question_repo() -> QuestionRepo:
 
 
 @router.get("/decks/new", response_class=HTMLResponse)
-def deck_new_form(request: Request, user: dict = Depends(current_user)):
-    """Render the new-deck form. The same form drives both the empty-deck
-    path and the plan-first AI generation path; the user picks the
-    submit button."""
+def deck_new_chooser(request: Request, user: dict = Depends(current_user)):
+    """Step 1 of deck creation — pick which kind. Each option leads
+    to its own type-specific form (`/decks/new/srs` or
+    `/decks/new/trivia`). Keeps each form focused on the fields that
+    flow actually needs, instead of one mega-form with a multi-action
+    submit row."""
     return templates.TemplateResponse(
-        "deck_new.html",
+        "deck_new_chooser.html",
+        {"request": request, "user": user},
+    )
+
+
+@router.get("/decks/new/srs", response_class=HTMLResponse)
+def deck_new_srs_form(request: Request, user: dict = Depends(current_user)):
+    """Step 2 (SRS): name + description + plan-vs-empty submit."""
+    return templates.TemplateResponse(
+        "deck_new_srs.html",
         {
             "request": request,
             "user": user,
@@ -251,18 +262,33 @@ def deck_new_form(request: Request, user: dict = Depends(current_user)):
     )
 
 
-@router.post("/decks/new", response_class=HTMLResponse)
-async def deck_new_create(
+@router.get("/decks/new/trivia", response_class=HTMLResponse)
+def deck_new_trivia_form(request: Request, user: dict = Depends(current_user)):
+    """Step 2 (trivia): name + topic + interval. Single submit
+    button — there's no empty/plan branch here."""
+    return templates.TemplateResponse(
+        "deck_new_trivia.html",
+        {
+            "request": request,
+            "user": user,
+            "name_value": "",
+            "topic_value": "",
+            "interval_value": 30,
+            "error": None,
+        },
+    )
+
+
+@router.post("/decks/new/srs", response_class=HTMLResponse)
+async def deck_new_srs_create(
     request: Request,
     user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
 ):
-    """Create a deck. The submit button name picks the path:
-      action=empty       → just create the deck row, redirect to /deck/<name>
-      action=plan        → create the deck row, kick off PlanGenerateWorkflow
-                           with the description, redirect to /plan/<wid>
-    The 'plan' action requires both an agent AND a non-empty description.
-    Re-renders the form with an inline error if either is missing.
+    """Create an SRS deck. `action` chooses the path:
+    action=empty       → just create the deck row, redirect to /deck/<name>
+    action=plan        → create the deck row, kick off PlanGenerateWorkflow,
+                         redirect to /plan/<wid>
     """
     from prep import agent as _agent_mod
     from prep import temporal_client
@@ -275,7 +301,7 @@ async def deck_new_create(
 
     def rerender(error: str, status: int = 400):
         return templates.TemplateResponse(
-            "deck_new.html",
+            "deck_new_srs.html",
             {
                 "request": request,
                 "user": user,
@@ -309,49 +335,6 @@ async def deck_new_create(
         if not context_prompt:
             return rerender("Plan & generate needs a description for claude to plan against.")
 
-    if action == "trivia":
-        if not _agent_mod.is_available:
-            return rerender(
-                "Trivia decks need an AI agent for the initial batch generation. "
-                "Set PREP_AGENT_URL or PREP_AGENT_BIN, or pick 'Create empty deck' instead."
-            )
-        if not context_prompt:
-            return rerender("Trivia decks need a description — claude reads it as the topic.")
-        # Validate interval. Form-level min/max also enforce; defense
-        # in depth here.
-        try:
-            interval = int(form.get("notification_interval_minutes") or 30)
-        except ValueError:
-            return rerender("Notification interval must be an integer.")
-        if interval < 1 or interval > 720:
-            return rerender("Notification interval must be 1–720 minutes.")
-
-        deck_id = deck_repo.create_trivia(
-            uid, clean, topic=context_prompt, interval_minutes=interval
-        )
-        # Fire the initial generation synchronously so the user lands
-        # on a populated deck. ~30-60s. If the agent is down we still
-        # have the deck row — the scheduler will try again on its
-        # next tick.
-        try:
-            from prep.decks.repo import QuestionRepo
-            from prep.trivia import service as _trivia_svc
-            from prep.trivia.repo import TriviaQueueRepo
-
-            _trivia_svc.generate_batch(
-                user_id=uid,
-                deck_id=deck_id,
-                topic=context_prompt,
-                questions_repo=QuestionRepo(),
-                trivia_repo=TriviaQueueRepo(),
-            )
-        except Exception:
-            # Already-created deck is fine; agent troubles surface in
-            # the scheduler logs. Don't 500 the user-facing route.
-            pass
-
-        return responses.redirect(request, f"/deck/{clean}")
-
     deck_id = service.create_deck(deck_repo, uid, clean, context_prompt or None)
 
     if action == "plan":
@@ -364,10 +347,96 @@ async def deck_new_create(
                 prompt=context_prompt,
             )
         except Exception as e:
-            # Deck row was created but the workflow couldn't start —
-            # surface the error and the user can retry from the deck page.
             raise HTTPException(500, f"deck created but failed to start plan workflow: {e}")
         return responses.redirect(request, f"/plan/{res.workflow_id}")
+
+    return responses.redirect(request, f"/deck/{clean}")
+
+
+@router.post("/decks/new/trivia", response_class=HTMLResponse)
+async def deck_new_trivia_create(
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Create a trivia deck. Validates topic + interval, persists the
+    deck row with deck_type='trivia', fires the initial 25-question
+    batch synchronously so the user lands on a populated deck. Falls
+    back gracefully if the agent is unreachable — deck row stands and
+    the scheduler retries on its next tick."""
+    from prep import agent as _agent_mod
+
+    uid = user["tailscale_login"]
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    topic = (form.get("topic") or "").strip()
+    raw_interval = (form.get("notification_interval_minutes") or "30").strip()
+
+    def rerender(error: str, status: int = 400):
+        # Best-effort coerce interval back to an int for the form's
+        # value attribute; fall back to the default if the user typed
+        # garbage that we're complaining about.
+        try:
+            interval_value = int(raw_interval)
+        except ValueError:
+            interval_value = 30
+        return templates.TemplateResponse(
+            "deck_new_trivia.html",
+            {
+                "request": request,
+                "user": user,
+                "name_value": name,
+                "topic_value": topic,
+                "interval_value": interval_value,
+                "error": error,
+            },
+            status_code=status,
+        )
+
+    try:
+        clean = _validate_deck_name(name)
+    except HTTPException as e:
+        return rerender(e.detail)
+
+    if deck_repo.find_id(uid, clean) is not None:
+        return rerender(f'You already have a deck named "{clean}".')
+
+    if len(topic) > _MAX_CONTEXT_PROMPT_CHARS:
+        return rerender(f"Topic is too long ({len(topic)} chars; max {_MAX_CONTEXT_PROMPT_CHARS}).")
+    if not topic:
+        return rerender("Topic is required — claude reads it to generate questions.")
+
+    if not _agent_mod.is_available:
+        return rerender(
+            "Trivia decks need an AI agent for the initial batch. "
+            "Set PREP_AGENT_URL or PREP_AGENT_BIN."
+        )
+
+    try:
+        interval = int(raw_interval)
+    except ValueError:
+        return rerender("Notification interval must be an integer.")
+    if interval < 1 or interval > 720:
+        return rerender("Notification interval must be 1–720 minutes.")
+
+    deck_id = deck_repo.create_trivia(uid, clean, topic=topic, interval_minutes=interval)
+    # Fire the initial generation synchronously so the user lands on a
+    # populated deck. If the agent is flaky the deck row stands and the
+    # scheduler retries on its next tick.
+    try:
+        from prep.decks.repo import QuestionRepo
+        from prep.trivia import service as _trivia_svc
+        from prep.trivia.repo import TriviaQueueRepo
+
+        _trivia_svc.generate_batch(
+            user_id=uid,
+            deck_id=deck_id,
+            topic=topic,
+            questions_repo=QuestionRepo(),
+            trivia_repo=TriviaQueueRepo(),
+        )
+    except Exception:
+        pass
 
     return responses.redirect(request, f"/deck/{clean}")
 
