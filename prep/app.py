@@ -128,10 +128,20 @@ else:
 
 
 @app.on_event("startup")
-async def _notify_boot() -> None:
-    """Move the staging-experiment subscription file out of the way
-    (one-time legacy cleanup) and start the notification scheduler.
-    Idempotent: a second start_scheduler() call is a no-op."""
+async def _boot() -> None:
+    """Run on app boot:
+
+    1. db.init() — schema bootstrap + idempotent migrations. Was
+       removed during the DDD refactor; re-added here because
+       schema changes (e.g. the trivia phase 1 ALTER TABLEs) need
+       a deterministic migration trigger that isn't 'remember to
+       exec into the container.'
+    2. legacy push-subscriptions.json cleanup (one-time).
+    3. start the notification scheduler.
+    """
+    from prep.infrastructure.db import init as _db_init
+
+    _db_init()
     legacy = BASE_DIR / "push-subscriptions.json"
     if legacy.exists():
         legacy.rename(legacy.with_suffix(".json.archived-pre-v0.5"))
