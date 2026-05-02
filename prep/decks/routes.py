@@ -309,6 +309,49 @@ async def deck_new_create(
         if not context_prompt:
             return rerender("Plan & generate needs a description for claude to plan against.")
 
+    if action == "trivia":
+        if not _agent_mod.is_available:
+            return rerender(
+                "Trivia decks need an AI agent for the initial batch generation. "
+                "Set PREP_AGENT_URL or PREP_AGENT_BIN, or pick 'Create empty deck' instead."
+            )
+        if not context_prompt:
+            return rerender("Trivia decks need a description — claude reads it as the topic.")
+        # Validate interval. Form-level min/max also enforce; defense
+        # in depth here.
+        try:
+            interval = int(form.get("notification_interval_minutes") or 30)
+        except ValueError:
+            return rerender("Notification interval must be an integer.")
+        if interval < 1 or interval > 720:
+            return rerender("Notification interval must be 1–720 minutes.")
+
+        deck_id = deck_repo.create_trivia(
+            uid, clean, topic=context_prompt, interval_minutes=interval
+        )
+        # Fire the initial generation synchronously so the user lands
+        # on a populated deck. ~30-60s. If the agent is down we still
+        # have the deck row — the scheduler will try again on its
+        # next tick.
+        try:
+            from prep.decks.repo import QuestionRepo
+            from prep.trivia import service as _trivia_svc
+            from prep.trivia.repo import TriviaQueueRepo
+
+            _trivia_svc.generate_batch(
+                user_id=uid,
+                deck_id=deck_id,
+                topic=context_prompt,
+                questions_repo=QuestionRepo(),
+                trivia_repo=TriviaQueueRepo(),
+            )
+        except Exception:
+            # Already-created deck is fine; agent troubles surface in
+            # the scheduler logs. Don't 500 the user-facing route.
+            pass
+
+        return responses.redirect(request, f"/deck/{clean}")
+
     deck_id = service.create_deck(deck_repo, uid, clean, context_prompt or None)
 
     if action == "plan":

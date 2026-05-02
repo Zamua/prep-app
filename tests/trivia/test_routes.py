@@ -96,3 +96,63 @@ def test_generate_route_inserts_via_mocked_agent(
 def test_generate_route_404_for_unknown_deck(client: TestClient, initialized_db: str):
     r = client.post("/trivia/decks/99999/generate", follow_redirects=False)
     assert r.status_code == 404
+
+
+# ---- /decks/new with action=trivia -------------------------------------
+
+
+def test_decks_new_trivia_creates_deck_and_generates(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """POST /decks/new with action=trivia creates a deck_type='trivia'
+    deck, fires the initial batch (claude mocked), redirects to the
+    deck page."""
+    monkeypatch.setattr("prep.agent.is_available", lambda: True)
+    # Ensure the deck-routes import path's reference to is_available
+    # is also patched. The route does `if not _agent_mod.is_available:`
+    # and `_agent_mod` is the `prep.agent` module — so patch its
+    # attribute directly.
+    import prep.agent
+
+    prep.agent.is_available = True
+    monkeypatch.setattr(
+        "prep.trivia.service.run_prompt",
+        lambda _p: '[{"q": "Capital of Italy?", "a": "Rome"}]',
+    )
+    r = client.post(
+        "/decks/new",
+        data={
+            "name": "geo",
+            "context_prompt": "world capitals",
+            "action": "trivia",
+            "notification_interval_minutes": "15",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"].endswith("/deck/geo")
+    # Deck exists with deck_type='trivia' and the right interval.
+    rows = DeckRepo().list_trivia_decks()
+    geo = next(d for d in rows if d["name"] == "geo")
+    assert geo["notification_interval_minutes"] == 15
+    # And the initial batch is in the queue.
+    nxt = TriviaQueueRepo().pick_next_for_deck(geo["id"])
+    assert nxt.prompt == "Capital of Italy?"
+
+
+def test_decks_new_trivia_rejects_empty_topic(monkeypatch, client: TestClient, initialized_db: str):
+    import prep.agent
+
+    prep.agent.is_available = True
+    r = client.post(
+        "/decks/new",
+        data={
+            "name": "geo",
+            "context_prompt": "",
+            "action": "trivia",
+            "notification_interval_minutes": "30",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+    assert "topic" in r.text.lower() or "description" in r.text.lower()

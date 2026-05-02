@@ -38,17 +38,33 @@
               >{{ context_value }}</textarea>
     <span class="form-hint">
       Free-form. Claude reads this when generating cards. URLs are fine —
-      they'll be web-fetched if useful.
+      they'll be web-fetched if useful. For trivia decks, this is the
+      topic claude pulls questions from.
+    </span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">Notification interval (trivia only)</span>
+    <input type="number" name="notification_interval_minutes"
+           min="1" max="720" value="30">
+    <span class="form-hint">
+      Minutes between trivia notifications. Ignored for SRS decks.
+      Default 30. Range 1–720 (12 hours).
     </span>
   </label>
 
   <div class="study-actions deck-new-actions">
     {% if agent_available %}
-      {# Two submit buttons targeting the same /decks/new POST. Server
+      {# Three submit buttons targeting the same /decks/new POST. Server
          reads `action`: "plan" → kicks off PlanGenerateWorkflow, redirects
-         to /plan/<wid>; "empty" → just creates the deck row. #}
+         to /plan/<wid>; "trivia" → create trivia deck + generate first
+         batch synchronously + redirect to /deck/<name>; "empty" → just
+         create the deck row. #}
       <button type="submit" name="action" value="plan" class="btn btn-primary">
         Plan &amp; generate cards
+      </button>
+      <button type="submit" name="action" value="trivia" class="btn btn-primary">
+        Create trivia deck
       </button>
       <button type="submit" name="action" value="empty" class="btn btn-quiet">
         Create empty deck
