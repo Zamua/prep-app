@@ -1,6 +1,5 @@
-{# Step 1 of new-deck creation: pick which kind. Each card links to
-   its own type-specific form so the user only sees fields relevant
-   to the flow they chose. #}
+{# Step 1 of new-deck creation: pick which kind. Big two-button
+   layout — minimal copy, the headlines are the call to action. #}
 {% extends "base.html" %}
 {% block title %}new deck · prep{% endblock %}
 {% block page_class %}deck-new-chooser{% endblock %}
@@ -10,35 +9,19 @@
   <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
 </nav>
 
-<section class="prelude">
-  <p class="eyebrow">A new deck</p>
-  <h1 class="display">What&nbsp;<em>kind</em>?</h1>
-  <p class="lede">
-    SRS decks are the original prep flow — claude generates a deck
-    from your topic, you study on a spaced-repetition schedule.
-    Trivia decks are notification-driven — short questions land in a
-    push every N minutes, you tap to answer, the deck rotates through
-    forever.
-  </p>
-</section>
+<h1 class="deck-chooser-headline">New deck</h1>
 
 <div class="deck-type-options">
   <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/srs">
-    <div class="deck-type-card-icon">{{ icon('cards', class_='icon icon-lg') }}</div>
-    <h2 class="deck-type-card-title">SRS deck</h2>
-    <p class="deck-type-card-desc">
-      Spaced repetition. Plan-and-generate or create-empty-and-fill-by-hand.
-      Long-form study sessions on the desktop or on the phone.
-    </p>
+    {{ icon('cards', class_='deck-type-card-icon') }}
+    <span class="deck-type-card-title">SRS</span>
+    <span class="deck-type-card-sub">Spaced repetition</span>
   </a>
 
   <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/trivia">
-    <div class="deck-type-card-icon">{{ icon('lightning', class_='icon icon-lg') }}</div>
-    <h2 class="deck-type-card-title">Trivia deck</h2>
-    <p class="deck-type-card-desc">
-      Push notifications on a fixed interval. One short question per
-      ping. Tap to answer in seconds. Designed for on-the-go on phone.
-    </p>
+    {{ icon('lightning', class_='deck-type-card-icon') }}
+    <span class="deck-type-card-title">Trivia</span>
+    <span class="deck-type-card-sub">Push notifications</span>
   </a>
 </div>
 

@@ -2884,3 +2884,66 @@ body:has(dialog[open]) {
 /* Section divider between sessions and decks */
 .decks-section { margin-top: 1.6rem; }
 .decks-section .section-eyebrow { margin-bottom: 0.9rem; }
+
+/* ---- new-deck chooser (big-button picker) ----------------------- */
+
+.deck-chooser-headline {
+  font-size: 1.6rem;
+  margin: 1.2rem 0 1.4rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: -0.01em;
+}
+
+.deck-type-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  max-width: 720px;
+}
+@media (max-width: 540px) {
+  .deck-type-options { grid-template-columns: 1fr; }
+}
+
+.deck-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2.4rem 1.2rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.deck-type-card:hover,
+.deck-type-card:focus-visible {
+  border-color: var(--ink);
+  background: var(--tint, var(--paper));
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.deck-type-card-icon {
+  width: 2.4rem;
+  height: 2.4rem;
+  color: var(--ink);
+  margin-bottom: 0.4rem;
+}
+
+.deck-type-card-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.deck-type-card-sub {
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  letter-spacing: 0.01em;
+}
