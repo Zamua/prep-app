@@ -2929,10 +2929,22 @@ body:has(dialog[open]) {
 }
 
 .deck-type-card-icon {
+  /* SVG renders at its viewBox size (256x256) by default — without
+     an explicit display + width/height the icon balloons to fill its
+     parent. Force a fixed mobile-friendly size here. */
+  display: block;
   width: 2.4rem;
   height: 2.4rem;
+  flex-shrink: 0;
   color: var(--ink);
   margin-bottom: 0.4rem;
+}
+
+.deck-type-card-title,
+.deck-type-card-sub {
+  display: block;
+  text-align: center;
+  text-decoration: none;
 }
 
 .deck-type-card-title {
