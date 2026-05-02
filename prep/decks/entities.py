@@ -38,6 +38,15 @@ class QuestionType(str, Enum):
     MULTI = "multi"
     SHORT = "short"
 
+    # Default Enum.__str__ returns "QuestionType.CODE", which Jinja
+    # interpolates into hidden form fields and CSS class names. The
+    # route then receives "QuestionType.CODE" as the form's `type`
+    # value, fails the `qtype in ("code", "short")` dispatch, and
+    # falls into the synchronous grader — which raises. Returning
+    # the value here keeps `{{ q.type }}` in templates correct.
+    def __str__(self) -> str:
+        return self.value
+
 
 class DeckType(str, Enum):
     """How a deck is consumed.
@@ -56,6 +65,9 @@ class DeckType(str, Enum):
 
     SRS = "srs"
     TRIVIA = "trivia"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class Deck(BaseModel):

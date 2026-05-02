@@ -10,6 +10,7 @@ from prep.decks.entities import (
     Deck,
     DeckCard,
     DeckSummary,
+    DeckType,
     NewQuestion,
     Question,
     QuestionType,
@@ -83,9 +84,27 @@ def test_question_type_serializes_as_string():
     assert QuestionType.SHORT == "short"
 
 
+def test_question_type_str_returns_value():
+    """Jinja's `{{ q.type }}` calls __str__. Default Enum.__str__
+    returns "QuestionType.CODE" — that ends up in hidden form fields
+    + CSS class names and breaks the /session/<sid>/submit dispatch
+    (qtype check fails, falls through to sync grader, raises).
+    Pin the value-returning __str__ so the regression can't sneak
+    back in."""
+    assert str(QuestionType.MCQ) == "mcq"
+    assert str(QuestionType.CODE) == "code"
+    assert f"{QuestionType.SHORT}" == "short"
+
+
 def test_question_type_rejects_unknown_kind():
     with pytest.raises(ValueError):
         QuestionType("javascript")
+
+
+def test_deck_type_str_returns_value():
+    """Same Jinja-rendering trap as QuestionType — pin the fix."""
+    assert str(DeckType.SRS) == "srs"
+    assert str(DeckType.TRIVIA) == "trivia"
 
 
 # ---- Question ----------------------------------------------------------
