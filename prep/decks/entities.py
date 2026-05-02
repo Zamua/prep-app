@@ -39,6 +39,25 @@ class QuestionType(str, Enum):
     SHORT = "short"
 
 
+class DeckType(str, Enum):
+    """How a deck is consumed.
+
+    `srs` — the original flow: ladder-based spaced repetition,
+    user-driven study sessions, no notifications.
+
+    `trivia` — notification-driven: deck has a fixed interval
+    (`notification_interval_minutes`), every interval the scheduler
+    fires a web push carrying the next queued question, tapping
+    opens a minimal mobile card view, answer flow rotates the card
+    to the back of the queue regardless of correct/wrong. No SRS
+    state — trivia questions live in `trivia_queue` instead of
+    `cards`.
+    """
+
+    SRS = "srs"
+    TRIVIA = "trivia"
+
+
 class Deck(BaseModel):
     """A deck — named container for questions, scoped to a user."""
 
@@ -47,6 +66,12 @@ class Deck(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     created_at: str
     context_prompt: str | None = None
+    # Trivia-specific. NULL on srs decks. The `deck_type` column has a
+    # NOT NULL DEFAULT 'srs' so older rows surface here as DeckType.SRS
+    # without a backfill.
+    deck_type: DeckType = DeckType.SRS
+    notification_interval_minutes: int | None = None
+    last_notified_at: str | None = None
 
 
 class DeckSummary(BaseModel):
@@ -60,6 +85,7 @@ class DeckSummary(BaseModel):
     name: str
     total: int
     due: int
+    deck_type: DeckType = DeckType.SRS
 
 
 class Question(BaseModel):

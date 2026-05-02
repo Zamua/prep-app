@@ -63,10 +63,14 @@ def test_deck_summary_shape():
 
 def test_deck_summary_round_trips_dict():
     """Repos return summaries from sqlite; routes JSON-encode them.
-    Validate dict → entity → dict is identity (modulo defaults)."""
+    Validate dict → entity → dict is identity (modulo the DeckType
+    default which surfaces as a serialized field)."""
     raw = {"id": 1, "name": "go-systems", "total": 12, "due": 5}
     s = DeckSummary.model_validate(raw)
-    assert s.model_dump() == raw
+    expected = {**raw, "deck_type": "srs"}
+    # model_dump returns the enum object, not its value; mode='json'
+    # gives us the wire-shape we'd JSON-encode for the UI.
+    assert s.model_dump(mode="json") == expected
 
 
 # ---- QuestionType ------------------------------------------------------

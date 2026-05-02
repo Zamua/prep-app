@@ -294,3 +294,33 @@ def init() -> None:
         cols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
         if "editor_input_mode" not in cols:
             c.execute("ALTER TABLE users ADD COLUMN editor_input_mode TEXT")
+
+        # 8. Trivia decks: a notification-driven deck mode. `deck_type`
+        #    distinguishes the existing SRS flow ('srs', the default) from
+        #    the new trivia flow ('trivia'). Trivia decks fire a periodic
+        #    web push at `notification_interval_minutes` carrying the next
+        #    queued question; tapping the push opens the card. No SRS
+        #    `cards` row exists for trivia questions — their queue/answer
+        #    state lives in `trivia_queue` keyed by question_id, with the
+        #    rotation rule "answered → back of queue, regardless of
+        #    correct/wrong".
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
+        if "deck_type" not in cols:
+            c.execute("ALTER TABLE decks ADD COLUMN deck_type TEXT NOT NULL DEFAULT 'srs'")
+        if "notification_interval_minutes" not in cols:
+            c.execute("ALTER TABLE decks ADD COLUMN notification_interval_minutes INTEGER")
+        if "last_notified_at" not in cols:
+            # Tracks when the scheduler last fired a push for this trivia
+            # deck. NULL = never fired (next scheduler tick will pick it
+            # up immediately as long as the interval has passed since
+            # deck creation).
+            c.execute("ALTER TABLE decks ADD COLUMN last_notified_at TEXT")
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS trivia_queue (
+                question_id              INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,
+                queue_position           INTEGER NOT NULL,
+                last_answered_at         TEXT,
+                last_answered_correctly  INTEGER  -- 0/1, NULL = never answered
+            );
+            CREATE INDEX IF NOT EXISTS idx_trivia_queue_pos ON trivia_queue(queue_position);
+        """)
