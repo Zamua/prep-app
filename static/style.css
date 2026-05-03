@@ -3121,3 +3121,106 @@ body:has(dialog[open]) {
   border-color: var(--ink-soft);
 }
 .trivia-explore-option .icon { flex-shrink: 0; opacity: 0.7; }
+
+/* --- Trivia generation polling page ---
+   Drives the plan-then-expand UI: status row, progress bar, plan
+   review list, replan/accept/reject controls. */
+
+.trivia-gen { margin-top: 1rem; }
+
+.trivia-gen-status-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.trivia-gen-status-label {
+  font-size: 1.05rem;
+  color: var(--ink);
+  font-style: italic;
+}
+
+.trivia-gen-status-counts {
+  font-size: 0.9rem;
+  color: var(--ink-mute);
+  font-feature-settings: "lnum" on;
+}
+
+.trivia-gen-progress {
+  width: 100%;
+  height: 0.6rem;
+  border-radius: 999px;
+  border: none;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+}
+.trivia-gen-progress::-webkit-progress-bar {
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  border-radius: 999px;
+}
+.trivia-gen-progress::-webkit-progress-value {
+  background: var(--quill);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.trivia-gen-progress::-moz-progress-bar { background: var(--quill); }
+
+.trivia-gen-error {
+  color: var(--wrong);
+  font-size: 0.9rem;
+  margin: 0.5rem 0 0;
+}
+
+.trivia-plan-review {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+
+.trivia-plan-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.trivia-plan-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--paper) 50%, transparent);
+}
+
+.trivia-plan-item-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.trivia-plan-item-brief {
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+  line-height: 1.4;
+}
+
+.trivia-feedback-form { margin: 0; }
+
+.trivia-plan-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.trivia-plan-actions .btn { flex: 1 1 auto; min-width: 0; }
+.trivia-reject-btn {
+  flex: 0 0 auto !important;
+  color: var(--ink-mute);
+}

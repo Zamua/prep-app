@@ -51,6 +51,174 @@ Return ONLY valid JSON, no prose, no code fences. Format:
 ]
 `
 
+// _triviaPlanPromptTemplate — claude returns titles + briefs only,
+// no answers yet. Cheap call, used to seed the user's plan-review
+// step before the (much more expensive) parallel expansion fan-out.
+const _triviaPlanPromptTemplate = `You are planning a batch of short-answer trivia cards for a notification-driven flashcard app on the topic:
+
+%s
+
+Plan exactly %d cards. Don't generate full questions yet — just an outline. Each card gets:
+- "title": a short label (3-8 words). What the card will be about.
+- "brief": 1 sentence describing the angle / what the question will probe.
+
+Cover varied sub-areas of the topic; don't pile up around the same flavor. Diversity beats depth at this stage.
+
+Don't repeat any of these existing cards (already in the deck):
+
+%s
+
+Return ONLY a JSON array, no prose, no fences:
+
+[
+  {"title": "Soundtrack composer", "brief": "Identify the composer of the original soundtrack."},
+  ...
+]
+`
+
+const _triviaPlanReplanPromptTemplate = `You previously proposed this trivia plan for the topic "%s":
+
+%s
+
+The user gave this feedback:
+
+%s
+
+Revise the plan accordingly. Same shape as before — JSON array of {title, brief} objects, %d items. Only the JSON, no prose.
+`
+
+const _triviaExpandPromptTemplate = `Generate ONE short-answer trivia card for the topic "%s".
+
+The card was planned as:
+  title: %s
+  brief: %s
+
+Write the FULL card content. Output a single JSON object (no prose, no fences) with these fields:
+
+- "q": the question text. Fits in a phone notification body — <= 140 characters.
+- "a": the short answer. 1-5 words. Names, numbers, short phrases. Not sentences.
+- "e": a 2-4 sentence explanation. Surface the WHY — context, causation, common misconception, memorable hook. Treat the user as smart and curious. ~300 characters is a good target.
+
+Output ONLY the JSON object.
+`
+
+// PlanTriviaBatch asks claude for an outline (titles + briefs) of the
+// next batch. Cheap call (claude doesn't write answers), feeds the
+// awaiting_feedback step where the user can replan / accept / reject
+// before the expensive expansion fan-out fires.
+func (a *Activities) PlanTriviaBatch(ctx context.Context, in shared.PlanTriviaBatchInput) ([]shared.TriviaPlanItem, error) {
+	if a.Cfg.Agent == nil {
+		return nil, noAgentErr("PlanTriviaBatch")
+	}
+	existing, err := loadExistingTriviaPrompts(a.Cfg.DBPath, in.DeckID)
+	if err != nil {
+		return nil, fmt.Errorf("load existing prompts: %w", err)
+	}
+
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		t := time.NewTicker(10 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				activity.RecordHeartbeat(ctx, "planning trivia batch")
+			}
+		}
+	}()
+
+	batch := in.BatchSize
+	if batch <= 0 {
+		batch = 25
+	}
+
+	var prompt string
+	if len(in.PriorPlan) == 0 {
+		existingBlock := "(none yet — this is the first batch)"
+		if len(existing) > 0 {
+			var b strings.Builder
+			for i, p := range existing {
+				if i >= 200 {
+					break
+				}
+				b.WriteString("- ")
+				b.WriteString(p)
+				b.WriteString("\n")
+			}
+			existingBlock = b.String()
+		}
+		prompt = fmt.Sprintf(_triviaPlanPromptTemplate, strings.TrimSpace(in.Topic), batch, existingBlock)
+	} else {
+		// Replan: include the prior plan + user feedback. Existing
+		// prompts not re-passed; the prior plan already accounts for
+		// dedupe and the user's feedback supersedes it anyway.
+		var b strings.Builder
+		for _, item := range in.PriorPlan {
+			b.WriteString("- ")
+			b.WriteString(item.Title)
+			b.WriteString(": ")
+			b.WriteString(item.Brief)
+			b.WriteString("\n")
+		}
+		prompt = fmt.Sprintf(_triviaPlanReplanPromptTemplate,
+			strings.TrimSpace(in.Topic), b.String(), strings.TrimSpace(in.Feedback), batch)
+	}
+
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
+	if err != nil {
+		return nil, fmt.Errorf("agent trivia plan failed: %w", err)
+	}
+
+	plan, err := parseTriviaPlanJSON(out.Stdout)
+	if err != nil {
+		return nil, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("plan JSON parse failed: %v; head=%q", err, truncate(out.Stdout, 300)),
+			"BadTriviaPlanJSON", err)
+	}
+	return plan, nil
+}
+
+// GenerateTriviaCardFromBrief expands one plan item into a full
+// q/a/e via claude. Designed to run in parallel with siblings (each
+// call is independent — no shared session, no shared state).
+func (a *Activities) GenerateTriviaCardFromBrief(ctx context.Context, in shared.GenerateTriviaCardFromBriefInput) (shared.TriviaPair, error) {
+	if a.Cfg.Agent == nil {
+		return shared.TriviaPair{}, noAgentErr("GenerateTriviaCardFromBrief")
+	}
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		t := time.NewTicker(10 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				activity.RecordHeartbeat(ctx, fmt.Sprintf("expanding %d/%d", in.Index+1, in.Total))
+			}
+		}
+	}()
+
+	prompt := fmt.Sprintf(_triviaExpandPromptTemplate,
+		strings.TrimSpace(in.Topic), in.Item.Title, in.Item.Brief)
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
+	if err != nil {
+		return shared.TriviaPair{}, fmt.Errorf("agent trivia expand failed: %w", err)
+	}
+
+	pair, err := parseSingleTriviaPair(out.Stdout)
+	if err != nil {
+		return shared.TriviaPair{}, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("expand JSON parse failed: %v; head=%q", err, truncate(out.Stdout, 300)),
+			"BadTriviaCardJSON", err)
+	}
+	return pair, nil
+}
+
 // GenerateTriviaBatch asks the agent for the batch.
 func (a *Activities) GenerateTriviaBatch(ctx context.Context, in shared.GenerateTriviaInput) ([]shared.TriviaPair, error) {
 	if a.Cfg.Agent == nil {
@@ -241,4 +409,54 @@ func parseTriviaJSON(stdout string) ([]shared.TriviaPair, error) {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 	return pairs, nil
+}
+
+// parseTriviaPlanJSON: same fence-tolerant array extraction as
+// parseTriviaJSON, just decodes into PlanItems.
+func parseTriviaPlanJSON(stdout string) ([]shared.TriviaPlanItem, error) {
+	text := strings.TrimSpace(stdout)
+	text = _triviaCodeFenceHead.ReplaceAllString(text, "")
+	text = _triviaCodeFenceTail.ReplaceAllString(text, "")
+	start := strings.Index(text, "[")
+	end := strings.LastIndex(text, "]")
+	if start < 0 || end < 0 || end < start {
+		return nil, fmt.Errorf("no JSON array")
+	}
+	var plan []shared.TriviaPlanItem
+	if err := json.Unmarshal([]byte(text[start:end+1]), &plan); err != nil {
+		return nil, fmt.Errorf("unmarshal: %w", err)
+	}
+	// Drop entries missing required fields — dont error the whole plan
+	// over a single garbage row.
+	out := make([]shared.TriviaPlanItem, 0, len(plan))
+	for _, item := range plan {
+		if strings.TrimSpace(item.Title) == "" || strings.TrimSpace(item.Brief) == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no usable plan items in %d-element array", len(plan))
+	}
+	return out, nil
+}
+
+// parseSingleTriviaPair: one object, fence-tolerant.
+func parseSingleTriviaPair(stdout string) (shared.TriviaPair, error) {
+	text := strings.TrimSpace(stdout)
+	text = _triviaCodeFenceHead.ReplaceAllString(text, "")
+	text = _triviaCodeFenceTail.ReplaceAllString(text, "")
+	start := strings.Index(text, "{")
+	end := strings.LastIndex(text, "}")
+	if start < 0 || end < 0 || end < start {
+		return shared.TriviaPair{}, fmt.Errorf("no JSON object")
+	}
+	var pair shared.TriviaPair
+	if err := json.Unmarshal([]byte(text[start:end+1]), &pair); err != nil {
+		return shared.TriviaPair{}, fmt.Errorf("unmarshal: %w", err)
+	}
+	if strings.TrimSpace(pair.Q) == "" || strings.TrimSpace(pair.A) == "" {
+		return shared.TriviaPair{}, fmt.Errorf("missing q or a")
+	}
+	return pair, nil
 }

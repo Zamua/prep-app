@@ -257,3 +257,25 @@ async def get_trivia_progress(workflow_id: str) -> dict[str, Any] | None:
         return await handle.query("getTriviaProgress")
     except Exception:
         return None
+
+
+async def signal_trivia_feedback(workflow_id: str, feedback: str) -> None:
+    """Send the user's free-text feedback to the trivia workflow's
+    awaiting_feedback step — claude replans incorporating the redirect."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("triviaFeedback", feedback)
+
+
+async def signal_trivia_accept(workflow_id: str) -> None:
+    """Accept the current plan and move to expansion."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("triviaAccept")
+
+
+async def signal_trivia_reject(workflow_id: str) -> None:
+    """Bail on the workflow without writing anything to the deck."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    await handle.signal("triviaReject")

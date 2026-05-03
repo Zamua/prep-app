@@ -7,6 +7,7 @@ don't shell out to claude.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from prep.decks.entities import NewQuestion, QuestionType
@@ -165,6 +166,65 @@ def test_decks_new_trivia_form_renders(client: TestClient, initialized_db: str):
     assert "Topic" in r.text
     assert 'name="topic"' in r.text
     assert 'name="notification_interval_minutes"' in r.text
+
+
+def test_signal_routes_call_temporal_helpers(monkeypatch, client: TestClient, initialized_db: str):
+    """The plan-review UI hits /trivia/gen/<wid>/feedback, /accept,
+    /reject. Each route should validate ownership, then forward to
+    the matching temporal_client.signal_trivia_* helper."""
+    deck_id = DeckRepo().create_trivia(
+        initialized_db, "doom", topic="doom 1993", interval_minutes=30
+    )
+    assert deck_id  # smoke
+    wid = "trivia-doom-deadbeef01"
+    calls: list[tuple[str, tuple]] = []
+
+    async def fake_feedback(workflow_id, fb):
+        calls.append(("feedback", (workflow_id, fb)))
+
+    async def fake_accept(workflow_id):
+        calls.append(("accept", (workflow_id,)))
+
+    async def fake_reject(workflow_id):
+        calls.append(("reject", (workflow_id,)))
+
+    from prep import temporal_client as _tc
+
+    monkeypatch.setattr(_tc, "signal_trivia_feedback", fake_feedback)
+    monkeypatch.setattr(_tc, "signal_trivia_accept", fake_accept)
+    monkeypatch.setattr(_tc, "signal_trivia_reject", fake_reject)
+
+    # Feedback
+    r = client.post(f"/trivia/gen/{wid}/feedback", data={"feedback": "go deeper on multiplayer"})
+    assert r.status_code == 200
+    assert calls[-1] == ("feedback", (wid, "go deeper on multiplayer"))
+
+    # Accept
+    r = client.post(f"/trivia/gen/{wid}/accept")
+    assert r.status_code == 200
+    assert calls[-1] == ("accept", (wid,))
+
+    # Reject
+    r = client.post(f"/trivia/gen/{wid}/reject")
+    assert r.status_code == 200
+    assert calls[-1] == ("reject", (wid,))
+
+
+def test_signal_routes_404_for_unknown_deck(monkeypatch, client: TestClient, initialized_db: str):
+    """Workflow id parses as `trivia-<deck>-<rand>`; if the deck isn't
+    owned by the user (or doesn't exist) every signal route 404s
+    before touching temporal."""
+    from prep import temporal_client as _tc
+
+    monkeypatch.setattr(_tc, "signal_trivia_accept", lambda _: pytest.fail("should not call"))
+    r = client.post("/trivia/gen/trivia-nonexistent-deadbeef01/accept")
+    assert r.status_code == 404
+
+
+def test_feedback_route_400_on_empty(client: TestClient, initialized_db: str):
+    DeckRepo().create_trivia(initialized_db, "doom", topic="doom", interval_minutes=30)
+    r = client.post("/trivia/gen/trivia-doom-deadbeef01/feedback", data={"feedback": ""})
+    assert r.status_code == 400
 
 
 def test_decks_new_trivia_creates_deck_and_starts_workflow(

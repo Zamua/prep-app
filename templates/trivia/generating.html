@@ -1,7 +1,11 @@
 {# Polling page for TriviaGenerateWorkflow. JS hits
    /trivia/gen/<wid>/status every 1.5s, surfaces the workflow's
-   progress (status + inserted/total counts), and redirects to the
-   deck page when status flips to 'done'. #}
+   live state (status + plan + counts), and either:
+   - in awaiting_feedback: renders the plan with replan/accept/
+     reject controls
+   - in generating/applying: renders a real progress bar driven
+     by generated_count / total
+   - in done: redirects to the deck page #}
 {% extends "base.html" %}
 {% block title %}generating · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}trivia-generating{% endblock %}
@@ -13,21 +17,45 @@
 
 <section class="prelude">
   <p class="eyebrow">{{ deck_name }}</p>
-  <h1 class="display">Generating&nbsp;<em>your batch</em>.</h1>
+  <h1 class="display">Planning&nbsp;<em>your batch</em>.</h1>
   <p class="lede">
-    Claude is writing 25 short-answer questions on your topic. Usually
-    takes 10-30 seconds. The deck is already created — you can navigate
-    away and the workflow will keep running; it's safe to come back later.
+    Claude first sketches an outline (titles + briefs). You can replan
+    or accept; on accept, claude expands each item into a full card in
+    parallel. Safe to navigate away — the workflow keeps running.
   </p>
 </section>
 
-<div class="trivia-gen-status" data-wid="{{ wid }}" data-deck-name="{{ deck_name }}">
+<div class="trivia-gen" data-wid="{{ wid }}" data-deck-name="{{ deck_name }}">
   <div class="trivia-gen-status-row">
     <span class="trivia-gen-status-label" id="trivia-gen-label">Starting…</span>
     <span class="trivia-gen-status-counts" id="trivia-gen-counts"></span>
   </div>
   <progress class="trivia-gen-progress" id="trivia-gen-progress" value="0" max="100"></progress>
   <p class="trivia-gen-error" id="trivia-gen-error" hidden></p>
+
+  {# Plan-review block: renders during awaiting_feedback / replanning.
+     JS swaps content in #trivia-plan-list per status update. #}
+  <section class="trivia-plan-review" id="trivia-plan-review" hidden>
+    <p class="section-eyebrow"><span>Proposed batch</span><span class="rule"></span></p>
+    <ol class="trivia-plan-list" id="trivia-plan-list"></ol>
+
+    <form class="trivia-feedback-form" id="trivia-feedback-form">
+      <label class="freetext">
+        <span class="freetext-label">
+          {{ icon('sparkle', class_='icon icon-inline') }}
+          Replan? Tell claude what to change.
+        </span>
+        <textarea name="feedback" rows="3" maxlength="2000"
+                  placeholder="e.g. add 5 more from the multiplayer era · drop the cheat-code ones · go deeper on the engine internals"></textarea>
+      </label>
+      <div class="trivia-plan-actions">
+        <button type="submit" class="btn btn-quiet" id="trivia-replan-btn" disabled>Replan</button>
+        <button type="button" class="btn btn-primary" id="trivia-accept-btn">Looks good — generate cards</button>
+        <button type="button" class="btn btn-quiet trivia-reject-btn" id="trivia-reject-btn">Cancel</button>
+      </div>
+    </form>
+  </section>
+
   <p class="form-hint">
     <a id="trivia-gen-jump" class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">
       Skip the wait — open the deck page
@@ -37,7 +65,7 @@
 
 <script>
   (function () {
-    var root = document.querySelector('.trivia-gen-status');
+    var root = document.querySelector('.trivia-gen');
     if (!root) return;
     var wid = root.dataset.wid;
     var deck = root.dataset.deckName;
@@ -46,13 +74,83 @@
     var counts = document.getElementById('trivia-gen-counts');
     var bar = document.getElementById('trivia-gen-progress');
     var err = document.getElementById('trivia-gen-error');
+    var planSection = document.getElementById('trivia-plan-review');
+    var planList = document.getElementById('trivia-plan-list');
+    var feedbackForm = document.getElementById('trivia-feedback-form');
+    var feedbackBox = feedbackForm.querySelector('textarea[name="feedback"]');
+    var replanBtn = document.getElementById('trivia-replan-btn');
+    var acceptBtn = document.getElementById('trivia-accept-btn');
+    var rejectBtn = document.getElementById('trivia-reject-btn');
+
     var labels = {
-      'starting': 'Starting…',
-      'asking_claude': 'Asking claude for a batch…',
-      'inserting': 'Inserting questions…',
+      'planning': 'Planning the batch…',
+      'awaiting_feedback': 'Review the plan',
+      'replanning': 'Replanning…',
+      'generating': 'Generating cards…',
+      'applying': 'Saving cards…',
       'done': 'Done — redirecting…',
+      'rejected': 'Cancelled',
       'failed': 'Generation failed',
     };
+
+    feedbackBox.addEventListener('input', function () {
+      replanBtn.disabled = !feedbackBox.value.trim();
+    });
+
+    feedbackForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var fb = feedbackBox.value.trim();
+      if (!fb) return;
+      var fd = new FormData();
+      fd.append('feedback', fb);
+      replanBtn.disabled = true;
+      acceptBtn.disabled = true;
+      fetch(rootPath + '/trivia/gen/' + wid + '/feedback', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+      }).then(function () {
+        feedbackBox.value = '';
+      }).catch(function () {
+        replanBtn.disabled = false;
+        acceptBtn.disabled = false;
+      });
+    });
+
+    acceptBtn.addEventListener('click', function () {
+      acceptBtn.disabled = true;
+      replanBtn.disabled = true;
+      fetch(rootPath + '/trivia/gen/' + wid + '/accept', {
+        method: 'POST', credentials: 'same-origin',
+      }).catch(function () {
+        acceptBtn.disabled = false;
+      });
+    });
+
+    rejectBtn.addEventListener('click', function () {
+      if (!window.confirm('Cancel this generation? No cards will be added.')) return;
+      rejectBtn.disabled = true;
+      fetch(rootPath + '/trivia/gen/' + wid + '/reject', {
+        method: 'POST', credentials: 'same-origin',
+      });
+    });
+
+    function renderPlan(plan) {
+      // Diff naive — replace the whole list. Cheap; plan size is small.
+      planList.innerHTML = '';
+      (plan || []).forEach(function (item) {
+        var li = document.createElement('li');
+        li.className = 'trivia-plan-item';
+        var title = document.createElement('span');
+        title.className = 'trivia-plan-item-title';
+        title.textContent = item.title || '';
+        var brief = document.createElement('span');
+        brief.className = 'trivia-plan-item-brief';
+        brief.textContent = item.brief || '';
+        li.appendChild(title);
+        li.appendChild(brief);
+        planList.appendChild(li);
+      });
+    }
+
     function tick() {
       fetch(rootPath + '/trivia/gen/' + wid + '/status', {credentials: 'same-origin'})
         .then(function (r) { return r.json(); })
@@ -62,29 +160,56 @@
           if (p.error) {
             err.textContent = p.error;
             err.hidden = false;
+          } else {
+            err.hidden = true;
           }
-          var inserted = p.inserted || 0;
+
           var total = p.total || 0;
-          if (total > 0) {
-            bar.value = Math.round(100 * inserted / total);
+          if (status === 'awaiting_feedback' || status === 'replanning') {
+            // Plan visible. Progress bar shows the planning phase
+            // as "0% — waiting on you" rather than indeterminate, so
+            // the user knows we're not still chewing.
+            bar.value = 0;
             bar.max = 100;
-            counts.textContent = inserted + ' / ' + total;
-          } else if (status === 'asking_claude') {
-            bar.removeAttribute('value');  // indeterminate
+            counts.textContent = total ? (total + ' planned' + (p.round > 1 ? ' · round ' + p.round : '')) : '';
+            renderPlan(p.plan);
+            planSection.hidden = false;
+            // Disable replan during a replan-in-flight; re-enable when
+            // status flips back to awaiting_feedback.
+            replanBtn.disabled = (status === 'replanning') || !feedbackBox.value.trim();
+            acceptBtn.disabled = (status === 'replanning');
+          } else if (status === 'generating' || status === 'applying') {
+            planSection.hidden = true;
+            var generated = p.generated_count || 0;
+            var inserted = p.inserted || 0;
+            // During generating: progress reflects expansions landed.
+            // During applying: each landed expansion is being inserted;
+            // we hold the bar at "generated_count / total" since insert
+            // is fast.
+            var num = (status === 'applying') ? (inserted || generated) : generated;
+            if (total > 0) {
+              bar.value = Math.round(100 * num / total);
+              counts.textContent = num + ' / ' + total;
+            } else {
+              bar.removeAttribute('value');
+            }
+          } else if (status === 'planning') {
+            bar.removeAttribute('value');
+            counts.textContent = '';
           }
+
           if (status === 'done') {
             bar.value = 100;
-            counts.textContent = (inserted || 0) + ' inserted';
+            counts.textContent = (p.inserted || 0) + ' inserted';
             window.location.href = rootPath + '/deck/' + (p.deck_name || deck);
             return;
           }
-          if (status === 'failed') {
-            return;  // stop polling, show the error
+          if (status === 'rejected' || status === 'failed') {
+            return;  // stop polling
           }
           setTimeout(tick, 1500);
         })
         .catch(function () {
-          // Transient network blip — keep polling.
           setTimeout(tick, 3000);
         });
     }

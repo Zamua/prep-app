@@ -115,6 +115,57 @@ async def trivia_generating_status(wid: str, user: dict = Depends(current_user))
     return JSONResponse(progress)
 
 
+# ---- plan-review signals (replan / accept / reject) -------------------
+
+
+def _verify_trivia_wid_owned_by(user: dict, wid: str) -> str:
+    """Helper: parse the wid, IDOR-check that the user owns the deck.
+    Returns the deck_name. Raises HTTPException on either failure."""
+    deck_name = _parse_trivia_wid(wid)
+    if not deck_name:
+        raise HTTPException(400, "malformed workflow id")
+    if DeckRepo().find_id(user["tailscale_login"], deck_name) is None:
+        raise HTTPException(404, "deck not found")
+    return deck_name
+
+
+@router.post("/trivia/gen/{wid}/feedback")
+async def trivia_generating_feedback(
+    wid: str, request: Request, user: dict = Depends(current_user)
+):
+    """Send free-text feedback to the trivia workflow's awaiting_feedback
+    step. Workflow replans using the prior plan + this feedback."""
+    from prep import temporal_client
+
+    _verify_trivia_wid_owned_by(user, wid)
+    form = await request.form()
+    feedback = (form.get("feedback") or "").strip()
+    if not feedback:
+        raise HTTPException(400, "feedback required")
+    await temporal_client.signal_trivia_feedback(wid, feedback)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/trivia/gen/{wid}/accept")
+async def trivia_generating_accept(wid: str, user: dict = Depends(current_user)):
+    """Accept the current plan; workflow moves to parallel expansion."""
+    from prep import temporal_client
+
+    _verify_trivia_wid_owned_by(user, wid)
+    await temporal_client.signal_trivia_accept(wid)
+    return JSONResponse({"ok": True})
+
+
+@router.post("/trivia/gen/{wid}/reject")
+async def trivia_generating_reject(wid: str, user: dict = Depends(current_user)):
+    """Bail on the workflow without writing any cards."""
+    from prep import temporal_client
+
+    _verify_trivia_wid_owned_by(user, wid)
+    await temporal_client.signal_trivia_reject(wid)
+    return JSONResponse({"ok": True})
+
+
 # ---- mini-session (notification target) -------------------------------
 #
 # Notifications deep-link to /trivia/session/<deck_name>. The session
