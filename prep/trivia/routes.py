@@ -502,6 +502,30 @@ def trivia_toggle_notifications(
     return responses.redirect(request, f"/deck/{deck_name}")
 
 
+@router.post("/trivia/decks/{deck_id}/interval")
+def trivia_set_interval(
+    deck_id: int,
+    request: Request,
+    minutes: str = Form(...),
+    user: dict = Depends(current_user),
+):
+    """Update the deck's base notification interval. Form input is
+    plain-text minutes (1..720); rejects garbage with 400, IDOR-guards
+    via user-scoped repo. 303s back to the deck page so the rendered
+    pill picks up the new value."""
+    try:
+        m = int(minutes)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, "interval must be an integer (minutes)") from e
+    if m < 1 or m > 720:
+        raise HTTPException(400, "interval must be between 1 and 720 minutes")
+    decks = DeckRepo()
+    if not decks.set_notification_interval(user["tailscale_login"], deck_id, m):
+        raise HTTPException(404, "trivia deck not found")
+    deck_name = decks.find_name(user["tailscale_login"], deck_id) or ""
+    return responses.redirect(request, f"/deck/{deck_name}")
+
+
 @router.post("/trivia/decks/{deck_id}/generate", response_class=HTMLResponse)
 def trivia_generate(
     deck_id: int,

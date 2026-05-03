@@ -11,22 +11,82 @@
      metadata rather than competing for attention. #}
   <div class="deck-pill-row">
     <span class="tag tag-decktype tag-decktype-{{ deck_type }}">{{ deck_type }}</span>
-    <form method="post"
-          action="{% if deck_type == 'trivia' %}{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/notifications{% else %}{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/notifications{% endif %}"
-          class="notif-pill-form">
-      <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
-      <button class="notif-pill {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}"
-              type="submit"
-              title="{% if deck_meta.notifications_enabled %}Tap to pause notifications{% else %}Tap to resume notifications{% endif %}">
-        {% if deck_meta.notifications_enabled %}
-          {{ icon('pause', class_='icon icon-inline') }}
-          <span>{% if deck_type == 'trivia' %}every {{ deck_meta.interval_minutes }}m{% else %}notifications on{% endif %}</span>
-        {% else %}
-          {{ icon('play', class_='icon icon-inline') }}
-          <span>paused</span>
-        {% endif %}
-      </button>
-    </form>
+    {% if deck_type == 'trivia' %}
+      {# Trivia decks: <details> popover lets the user adjust the
+         interval AND pause/resume from one place. Closed state shows
+         "every Nm" or "paused" + a small caret hint; open state shows
+         preset chips, a custom-minutes input, and the pause toggle. #}
+      {%- set _interval = deck_meta.interval_minutes or 30 -%}
+      {%- set _presets = [15, 30, 60, 120, 240, 480] -%}
+      <details class="notif-edit">
+        <summary class="notif-pill notif-pill-summary {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}">
+          {% if deck_meta.notifications_enabled %}
+            <span>every {{ _interval }}m</span>
+          {% else %}
+            {{ icon('play', class_='icon icon-inline') }}
+            <span>paused</span>
+          {% endif %}
+          <span class="notif-pill-caret" aria-hidden="true">⌃</span>
+        </summary>
+        <div class="notif-popover" role="group" aria-label="Notification settings">
+          <p class="notif-popover-eyebrow">notification frequency</p>
+          <form method="post"
+                action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/interval"
+                class="notif-preset-row">
+            {% for m in _presets %}
+              <button type="submit" name="minutes" value="{{ m }}"
+                      class="notif-preset {% if m == _interval %}notif-preset-active{% endif %}">
+                {% if m < 60 %}{{ m }}m{% else %}{{ (m / 60) | int }}h{% endif %}
+              </button>
+            {% endfor %}
+          </form>
+          <form method="post"
+                action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/interval"
+                class="notif-custom">
+            <span class="notif-custom-label">custom (minutes)</span>
+            <input type="number" name="minutes" min="1" max="720"
+                   placeholder="e.g. 90" class="notif-custom-input"
+                   aria-label="Custom notification interval in minutes">
+            <button type="submit" class="notif-custom-save">Set</button>
+          </form>
+          <div class="notif-popover-footer">
+            <form method="post"
+                  action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/notifications"
+                  class="notif-pause-form">
+              <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
+              <button type="submit" class="notif-pause-toggle">
+                {% if deck_meta.notifications_enabled %}
+                  {{ icon('pause', class_='icon icon-inline') }}
+                  <span>pause</span>
+                {% else %}
+                  {{ icon('play', class_='icon icon-inline') }}
+                  <span>resume</span>
+                {% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </details>
+    {% else %}
+      {# SRS decks: keep the original single-tap toggle — no interval
+         to set, just on/off. #}
+      <form method="post"
+            action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/notifications"
+            class="notif-pill-form">
+        <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
+        <button class="notif-pill {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}"
+                type="submit"
+                title="{% if deck_meta.notifications_enabled %}Tap to pause notifications{% else %}Tap to resume notifications{% endif %}">
+          {% if deck_meta.notifications_enabled %}
+            {{ icon('pause', class_='icon icon-inline') }}
+            <span>notifications on</span>
+          {% else %}
+            {{ icon('play', class_='icon icon-inline') }}
+            <span>paused</span>
+          {% endif %}
+        </button>
+      </form>
+    {% endif %}
     {# Edit pill: toggles the add/transform panel below. The panel
        used to live inline on the deck page; tucking it behind the
        pencil keeps the deck view focused on the cards. #}

@@ -182,6 +182,28 @@ class DeckRepo:
                 (deck_id,),
             )
 
+    def set_notification_interval(self, user_id: str, deck_id: int, minutes: int) -> bool:
+        """Update a trivia deck's base notification interval. Resets the
+        ignored streak so the next push lands at the new base, not at
+        whatever backed-off cadence we'd accumulated. Bounds-checked to
+        match the create form (1..720). Returns True if a row was
+        updated (deck exists, owned by user_id, deck_type='trivia');
+        False otherwise — IDOR guard via the user_id + deck_type
+        filters."""
+        from prep.infrastructure.db import cursor
+
+        if minutes < 1 or minutes > 720:
+            raise ValueError(f"interval out of range: {minutes}")
+        with cursor() as c:
+            cur = c.execute(
+                """UPDATE decks
+                   SET notification_interval_minutes = ?,
+                       notification_ignored_streak = 0
+                   WHERE id = ? AND user_id = ? AND deck_type = 'trivia'""",
+                (minutes, deck_id, user_id),
+            )
+            return cur.rowcount > 0
+
     def set_notifications_enabled(self, user_id: str, deck_id: int, enabled: bool) -> bool:
         """Flip the per-deck notification toggle. Works for both srs
         and trivia decks: srs decks honor it via the digest count

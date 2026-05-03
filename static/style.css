@@ -559,6 +559,118 @@ a { color: inherit; }
   background: color-mix(in srgb, var(--wrong) 14%, transparent);
 }
 
+/* --- Trivia interval edit popover ---------------------------------
+   Tapping the trivia "every Nm" pill expands a <details> popover
+   with preset chips + a custom-minutes input + the pause/resume
+   toggle. Browsers' default <summary> chrome (focus rings on
+   keyboard nav, marker arrow on the left) gets stripped — the pill
+   itself is the visual control. Caret on the right rotates 180°
+   when open as the only visual cue that there's expanded state. */
+.notif-edit { position: relative; }
+.notif-edit > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+}
+.notif-edit > summary::-webkit-details-marker { display: none; }
+.notif-edit > summary::marker { content: ""; }
+.notif-pill-summary { /* uses .notif-pill chrome — nothing to override */ }
+.notif-pill-caret {
+  font-size: 0.6rem; opacity: 0.6; margin-left: 0.1rem;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+.notif-edit[open] .notif-pill-caret { transform: rotate(180deg); }
+
+.notif-popover {
+  margin-top: 0.5rem;
+  padding: 0.85rem 0.95rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 80%, transparent);
+  display: flex; flex-direction: column; gap: 0.7rem;
+  max-width: 24rem;
+  /* Above the deck-mastery bar that sits below it. */
+  position: relative; z-index: 5;
+}
+.notif-popover-eyebrow {
+  font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-mute); font-style: italic;
+  margin: 0;
+}
+.notif-preset-row {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin: 0; padding: 0; border: 0;
+}
+.notif-preset {
+  flex: 1 1 auto;
+  min-width: 3rem;
+  font-family: inherit; font-style: italic;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent; color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.notif-preset:hover {
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.notif-preset-active {
+  background: color-mix(in srgb, var(--quill) 14%, transparent);
+  border-color: var(--quill);
+  color: var(--ink);
+  font-weight: 500;
+}
+.notif-custom {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem; color: var(--ink-mute); font-style: italic;
+  margin: 0;
+}
+.notif-custom-label {
+  flex: 0 0 auto;
+}
+.notif-custom-input {
+  flex: 1; min-width: 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--rule); border-radius: 8px;
+  font-family: inherit; font-size: 0.9rem;
+  background: var(--bg); color: var(--ink);
+}
+.notif-custom-save {
+  flex: 0 0 auto;
+  font-family: inherit; font-style: italic;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent; color: var(--ink-soft);
+  cursor: pointer;
+}
+.notif-custom-save:hover {
+  background: color-mix(in srgb, var(--quill) 12%, transparent);
+  border-color: var(--quill);
+  color: var(--ink);
+}
+.notif-popover-footer {
+  display: flex; justify-content: flex-end;
+  margin-top: 0.1rem; padding-top: 0.55rem;
+  border-top: 1px dashed color-mix(in srgb, var(--ink-mute) 22%, transparent);
+}
+.notif-pause-form { margin: 0; }
+.notif-pause-toggle {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: transparent; border: none;
+  color: var(--ink-mute); font-style: italic;
+  font-family: inherit; font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+.notif-pause-toggle:hover { color: var(--wrong); }
+.notif-pause-toggle .icon { width: 0.85rem; height: 0.85rem; }
+
 /* Edit pill: same chrome family as notif-pill, lives in the same row.
    When the panel is open the pill picks up an "active" treatment so
    the user knows what state things are in. */

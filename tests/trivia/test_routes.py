@@ -422,6 +422,74 @@ def test_session_404_for_unknown_deck(client: TestClient, initialized_db: str):
     assert r.status_code == 404
 
 
+# ---- /trivia/decks/<id>/interval -------------------------------------
+
+
+def test_set_interval_updates_deck(client: TestClient, initialized_db: str):
+    """POSTing valid minutes flips notification_interval_minutes and
+    303s back to the deck page."""
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.post(
+        f"/trivia/decks/{deck_id}/interval",
+        data={"minutes": "60"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "/deck/geo" in r.headers["location"]
+    rows = DeckRepo().list_trivia_decks()
+    row = next(r for r in rows if r["id"] == deck_id)
+    assert row["notification_interval_minutes"] == 60
+
+
+def test_set_interval_resets_ignored_streak(client: TestClient, initialized_db: str):
+    """Changing the interval clears any accumulated backoff streak —
+    the user explicitly tuned the cadence, no reason to keep waiting
+    out the prior backoff window."""
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        c.execute("UPDATE decks SET notification_ignored_streak = 4 WHERE id = ?", (deck_id,))
+    client.post(f"/trivia/decks/{deck_id}/interval", data={"minutes": "60"})
+    rows = DeckRepo().list_trivia_decks()
+    row = next(r for r in rows if r["id"] == deck_id)
+    assert row["notification_ignored_streak"] == 0
+
+
+def test_set_interval_rejects_out_of_range(client: TestClient, initialized_db: str):
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    for bad in ("0", "721", "-5"):
+        r = client.post(f"/trivia/decks/{deck_id}/interval", data={"minutes": bad})
+        assert r.status_code == 400, f"expected 400 for minutes={bad!r}"
+
+
+def test_set_interval_rejects_garbage(client: TestClient, initialized_db: str):
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.post(f"/trivia/decks/{deck_id}/interval", data={"minutes": "soonish"})
+    assert r.status_code == 400
+
+
+def test_set_interval_404_for_other_users_deck(client: TestClient, initialized_db: str):
+    """IDOR check: the route's user-scoped UPDATE leaves another user's
+    deck alone, and the route 404s instead of leaking existence."""
+    from prep import db as _db
+
+    _db.upsert_user("bob@example.com")
+    bob_deck_id = DeckRepo().create_trivia(
+        "bob@example.com", "bobs-deck", topic="bob", interval_minutes=30
+    )
+    r = client.post(f"/trivia/decks/{bob_deck_id}/interval", data={"minutes": "60"})
+    assert r.status_code == 404
+    # Bob's deck still at the original interval.
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        row = c.execute(
+            "SELECT notification_interval_minutes FROM decks WHERE id = ?", (bob_deck_id,)
+        ).fetchone()
+    assert row["notification_interval_minutes"] == 30
+
+
 def test_decks_new_trivia_rejects_empty_topic(monkeypatch, client: TestClient, initialized_db: str):
     import prep.agent
 
