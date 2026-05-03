@@ -76,6 +76,41 @@ def tick(now_utc: datetime) -> None:
     questions = QuestionRepo()
     trivia = TriviaQueueRepo()
 
+    # Per-user prefs lookup; cached for this tick so we don't re-read
+    # for every deck owned by the same user. Quiet hours apply to
+    # trivia notifications now too (decoupled from SRS when-ready).
+    from prep import db as _legacy_db
+
+    prefs_cache: dict[str, dict] = {}
+
+    def _user_in_quiet_hours(user_id: str) -> bool:
+        prefs = prefs_cache.get(user_id)
+        if prefs is None:
+            try:
+                prefs = _legacy_db.get_notification_prefs(user_id)
+            except Exception:
+                prefs = {}
+            prefs_cache[user_id] = prefs
+        if not prefs.get("quiet_hours_enabled"):
+            return False
+        try:
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo(prefs.get("tz") or "America/New_York")
+        except Exception:
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo("America/New_York")
+        local_hour = now_utc.astimezone(tz).hour
+        start = int(prefs.get("quiet_start_hour", 22))
+        end = int(prefs.get("quiet_end_hour", 8))
+        if start == end:
+            return False
+        if start < end:
+            return start <= local_hour < end
+        # Wraps midnight (22..8).
+        return local_hour >= start or local_hour < end
+
     for row in decks.list_trivia_decks():
         try:
             deck_id = row["id"]
@@ -85,6 +120,11 @@ def tick(now_utc: datetime) -> None:
                 continue
             interval = row.get("notification_interval_minutes") or _DEFAULT_INTERVAL_MINUTES
             if not _is_due(now_utc, row.get("last_notified_at"), interval):
+                continue
+            # Quiet hours apply across SRS when-ready + trivia. Skip
+            # without touching last_notified_at so the deck fires as
+            # soon as the window reopens.
+            if _user_in_quiet_hours(row["user_id"]):
                 continue
 
             # Refill gate: if the user is running low on cards that

@@ -67,7 +67,10 @@
     </label>
   </div>
 
-  <div class="notify-extras" id="extras-quiet" {% if prefs.mode != 'when-ready' %}hidden{% endif %}>
+  {# Quiet hours used to be tied to when-ready; now applies to BOTH
+     SRS when-ready notifications AND trivia notifications. Daily
+     digest still ignores it — the digest hour IS the schedule. #}
+  <div class="notify-extras" id="extras-quiet">
     <p class="section-eyebrow"><span>Quiet hours</span><span class="rule"></span></p>
     <label class="toggle-check">
       <input type="checkbox" name="quiet_hours_enabled" id="quiet-toggle"
@@ -87,7 +90,7 @@
       </label>
     </div>
     <p class="quiet-help">
-      No "when ready" pings will fire during these hours. Daily digest ignores quiet hours — it always fires at the time you picked.
+      Suppresses SRS "when ready" pings AND trivia notifications during these hours. Daily digest is exempt — it always fires at the time you picked.
       <br>
       <span class="quiet-tz">Times shown in <em id="tz-display">{{ prefs.tz }}</em> (auto-detected).</span>
     </p>
@@ -170,12 +173,14 @@
     status.dataset.kind = kind || "";
   }
 
-  // Quiet hours only apply to when-ready; the other modes hide it.
+  // Mode-specific extras hide based on the selected SRS mode.
+  // Quiet hours block is always visible — it now applies to BOTH
+  // SRS when-ready AND trivia notifications, so it should be
+  // configurable regardless of which SRS mode is picked.
   function syncExtras() {
     const mode = (form.querySelector('input[name="mode"]:checked') || {}).value;
     document.getElementById("extras-digest").hidden     = mode !== "digest";
     document.getElementById("extras-when-ready").hidden = mode !== "when-ready";
-    document.getElementById("extras-quiet").hidden      = mode !== "when-ready";
     form.querySelectorAll(".notify-mode-option").forEach((opt) => {
       opt.classList.toggle("is-selected", opt.querySelector("input").checked);
     });

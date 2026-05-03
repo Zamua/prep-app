@@ -52,6 +52,11 @@
       How often you want a question pushed to you. Default 30 min.
       Range 1–720 (12 hours).
     </span>
+    <span class="form-hint">
+      Trivia notifications respect your <a href="{{ request.scope.get('root_path','') }}/notify">quiet hours</a>
+      — set them once on the notifications settings page and they
+      apply across SRS + trivia.
+    </span>
   </label>
 
   <p class="form-hint deck-new-trivia-hint">

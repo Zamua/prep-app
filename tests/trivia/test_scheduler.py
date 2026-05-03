@@ -198,6 +198,80 @@ def test_tick_holds_refill_while_user_has_wrong_cards(monkeypatch, fixtures):
     assert gen_calls == []
 
 
+def test_tick_skips_when_user_in_quiet_hours(monkeypatch, fixtures):
+    """Quiet hours used to be SRS-only; now applies to trivia too.
+    A trivia deck owned by a user in quiet hours should NOT fire,
+    and last_notified_at should NOT advance (so it fires the moment
+    the window reopens)."""
+    from datetime import datetime as _dt
+    from datetime import time as _time
+    from datetime import timezone as _tz
+    from zoneinfo import ZoneInfo
+
+    deck_id, _ = _make_trivia_deck(fixtures, name="muted-by-quiet")
+
+    # Set the user's prefs to quiet 22-8 in America/New_York. Pin
+    # "now" to 03:00 NY (07:00 UTC) so we're squarely inside quiet.
+    from prep import db as _db
+
+    _db.set_notification_prefs(
+        fixtures["user"],
+        {
+            "mode": "off",
+            "tz": "America/New_York",
+            "quiet_hours_enabled": True,
+            "quiet_start_hour": 22,
+            "quiet_end_hour": 8,
+        },
+    )
+    quiet_now_local = _dt.combine(_dt.now(_tz.utc).date(), _time(3, 0)).replace(
+        tzinfo=ZoneInfo("America/New_York")
+    )
+    quiet_now_utc = quiet_now_local.astimezone(_tz.utc)
+
+    sent = []
+    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: sent.append(kw))
+    sched.tick(quiet_now_utc)
+    assert sent == []
+    rows = fixtures["decks"].list_trivia_decks()
+    row = next(r for r in rows if r["id"] == deck_id)
+    assert row["last_notified_at"] is None  # didn't advance
+
+
+def test_tick_fires_outside_quiet_hours(monkeypatch, fixtures):
+    """Same prefs, but local hour is 14:00 → outside quiet → should fire."""
+    from datetime import datetime as _dt
+    from datetime import time as _time
+    from datetime import timezone as _tz
+    from zoneinfo import ZoneInfo
+
+    deck_id, _ = _make_trivia_deck(fixtures, name="active-window")
+    from prep import db as _db
+
+    _db.set_notification_prefs(
+        fixtures["user"],
+        {
+            "mode": "off",
+            "tz": "America/New_York",
+            "quiet_hours_enabled": True,
+            "quiet_start_hour": 22,
+            "quiet_end_hour": 8,
+        },
+    )
+    active_now_local = _dt.combine(_dt.now(_tz.utc).date(), _time(14, 0)).replace(
+        tzinfo=ZoneInfo("America/New_York")
+    )
+    active_now_utc = active_now_local.astimezone(_tz.utc)
+
+    sent = []
+    monkeypatch.setattr(
+        "prep.notify._legacy_module.send_to_user",
+        lambda **kw: sent.append(kw) or {"ok": True},
+    )
+    sched.tick(active_now_utc)
+    assert len(sent) == 1
+
+
 def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
     """The per-deck pause toggle should silence the scheduler without
     touching last_notified_at (so resuming doesn't immediately fire)."""
