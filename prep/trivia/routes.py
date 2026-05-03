@@ -25,6 +25,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from prep import chat_handoff
 from prep.auth import current_user
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.trivia import service as trivia_service
@@ -32,6 +33,26 @@ from prep.trivia.agent_client import AgentUnavailable
 from prep.trivia.repo import TriviaQueueRepo
 from prep.web import responses
 from prep.web.templates import templates
+
+
+def _explore_ctx(*, deck_name: str, q, user_answer: str, correct: bool, expected: str) -> dict:
+    """Build the "Explore further" template context for a trivia
+    card's post-answer state: AI-chat handoff URLs (Claude/ChatGPT)
+    plus a Google search link (target=_blank → native browser on
+    iOS PWA, escapes the in-app webview)."""
+    msg = chat_handoff.build_message(
+        deck_name=deck_name,
+        q={"type": "short", "prompt": q.prompt, "answer": q.answer},
+        user_answer=user_answer,
+        verdict={"result": "right" if correct else "wrong"},
+    )
+    return {
+        "handoff_urls": chat_handoff.provider_urls(msg),
+        "handoff_providers": chat_handoff.CHAT_PROVIDERS,
+        "handoff_default_provider": chat_handoff.DEFAULT_PROVIDER,
+        "google_search_url": chat_handoff.google_search_url(q.prompt),
+    }
+
 
 router = APIRouter()
 
@@ -226,6 +247,13 @@ def trivia_session_answer(
             "session_position": 1,
             "session_total": len(queue),
             "session_remaining": remaining,
+            **_explore_ctx(
+                deck_name=deck_name,
+                q=q,
+                user_answer=answer,
+                correct=correct,
+                expected=q.answer,
+            ),
         },
     )
 
@@ -287,6 +315,13 @@ def trivia_answer(
                 "given": answer,
                 "expected": q.answer,
             },
+            **_explore_ctx(
+                deck_name=deck_name or "",
+                q=q,
+                user_answer=answer,
+                correct=correct,
+                expected=q.answer,
+            ),
         },
     )
 

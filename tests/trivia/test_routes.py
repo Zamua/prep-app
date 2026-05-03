@@ -90,6 +90,24 @@ def test_answer_omits_deep_dive_when_no_explanation(client: TestClient, initiali
     assert "trivia-deep-dive" not in r.text
 
 
+def test_answer_renders_explore_further_with_chat_and_google(
+    client: TestClient, initialized_db: str
+):
+    """After submitting, trivia cards should expose 'Explore further':
+    Claude/ChatGPT prefilled chat URLs PLUS a Google search link.
+    All three open in new tabs (target=_blank → native browser on iOS PWA)."""
+    _, qid = _seed_trivia_question(initialized_db)
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "paris"})
+    assert r.status_code == 200
+    assert "Explore further" in r.text
+    assert "trivia-explore-option" in r.text
+    assert "Discuss with Claude" in r.text
+    assert "Search on Google" in r.text
+    assert "https://www.google.com/search?q=" in r.text
+    # All three trivia explore links must open in a fresh browser context.
+    assert r.text.count('target="_blank"') >= 3
+
+
 def test_answer_wrong_shows_correct_answer(client: TestClient, initialized_db: str):
     _, qid = _seed_trivia_question(initialized_db)
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "london"})

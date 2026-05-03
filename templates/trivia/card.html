@@ -67,6 +67,35 @@
           <p class="trivia-explanation">{{ q.explanation }}</p>
         </details>
       {% endif %}
+
+      {% if handoff_urls %}
+        {# "Explore further": AI chat handoff (Claude / ChatGPT) PLUS
+           a Google search link. The Google link uses target="_blank"
+           explicitly so iOS PWAs escape the in-app webview and open
+           the user's actual browser — that's how trivia rabbit-holing
+           is supposed to feel. #}
+        <details class="trivia-explore">
+          <summary>{{ icon('arrow-up-right', class_='icon icon-inline') }} Explore further</summary>
+          <div class="trivia-explore-options">
+            {% for key in ['claude', 'chatgpt'] %}
+              {% if key in handoff_urls %}
+                <a class="trivia-explore-option"
+                   href="{{ handoff_urls[key] }}"
+                   target="_blank" rel="noopener noreferrer">
+                  <span>Discuss with {{ handoff_providers[key].label }}</span>
+                  {{ icon('arrow-up-right', class_='icon icon-inline') }}
+                </a>
+              {% endif %}
+            {% endfor %}
+            <a class="trivia-explore-option"
+               href="{{ google_search_url }}"
+               target="_blank" rel="noopener noreferrer">
+              <span>Search on Google</span>
+              {{ icon('arrow-up-right', class_='icon icon-inline') }}
+            </a>
+          </div>
+        </details>
+      {% endif %}
       {% if session_total %}
         <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}?cards={{ session_remaining }}"
            class="btn btn-primary trivia-dismiss">

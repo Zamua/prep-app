@@ -3041,3 +3041,53 @@ body:has(dialog[open]) {
   line-height: 1.55;
   color: var(--ink-soft);
 }
+
+/* --- Trivia "Explore further" disclosure ---
+   Same chrome family as .trivia-deep-dive, slightly different
+   layout because the body is a list of links rather than a
+   single paragraph. */
+.trivia-explore {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+}
+.trivia-explore > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  padding: 0.2rem 0;
+}
+.trivia-explore > summary::-webkit-details-marker { display: none; }
+.trivia-explore > summary::marker { content: ""; }
+.trivia-explore > summary:hover { color: var(--ink); }
+.trivia-explore[open] > summary { color: var(--ink); margin-bottom: 0.5rem; }
+
+.trivia-explore-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.trivia-explore-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 0.95rem;
+  background: transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.trivia-explore-option:hover {
+  background: color-mix(in srgb, var(--ink-soft) 5%, transparent);
+  border-color: var(--ink-soft);
+}
+.trivia-explore-option .icon { flex-shrink: 0; opacity: 0.7; }

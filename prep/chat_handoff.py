@@ -105,3 +105,10 @@ def provider_urls(message: str) -> dict[str, str]:
     """Return {provider_key: prefilled_url} for every known provider."""
     encoded = urllib.parse.quote(message, safe="")
     return {key: cfg["url"].format(q=encoded) for key, cfg in CHAT_PROVIDERS.items()}
+
+
+def google_search_url(query: str) -> str:
+    """Native-browser Google search for the query. Used by trivia cards
+    so the user can quickly look up unfamiliar topics. The trivia card's
+    explanation answers the WHY; this lets them go wider when curious."""
+    return f"https://www.google.com/search?q={urllib.parse.quote(query, safe='')}"
