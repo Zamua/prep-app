@@ -90,6 +90,22 @@ async def get_grade_result(workflow_id: str) -> dict[str, Any] | None:
         return None
 
 
+async def describe_workflow(workflow_id: str) -> dict[str, Any]:
+    """Pull the workflow's execution status from Temporal. Polling pages
+    use this to detect terminal states (COMPLETED/FAILED/CANCELED) once
+    the in-memory query handler is gone — `get_*_progress` returns None
+    after a workflow closes, so we need a second source of truth."""
+    client = await _get_client()
+    handle = client.get_workflow_handle(workflow_id)
+    desc = await handle.describe()
+    return {
+        "status": desc.status.name if desc.status else "UNKNOWN",
+        "started_at": desc.start_time.isoformat() if desc.start_time else None,
+        "closed_at": desc.close_time.isoformat() if desc.close_time else None,
+        "task_queue": desc.task_queue,
+    }
+
+
 # ---- Transform workflow helpers ----
 
 
