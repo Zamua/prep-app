@@ -155,6 +155,15 @@ promote:
 	@if [ -z "$(v)" ]; then echo "usage: make promote v=v0.X.Y"; exit 1; fi
 	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
 	  echo "tag $(v) doesn't exist — create it first: \`git tag -a $(v) && git push --tags\`"; exit 1; fi
+	@# Run the pre-commit checks BEFORE mutating .prod-version. The pre-commit
+	@# hook re-runs them at commit time anyway; running them here means a
+	@# format/lint/test failure exits cleanly (no half-bumped .prod-version,
+	@# no orphaned tag pointing at the wrong commit). Hit twice on 2026-05-03
+	@# (v0.17.0, v0.17.3 stranded). Don't regress.
+	@echo "→ pre-flight: lint + tests"
+	$(MAKE) lint
+	$(MAKE) test
+	@echo "→ promoting $(v) to prod"
 	@echo "$(v)" > .prod-version
 	git add .prod-version
 	git commit -m "promote $(v) to prod"
