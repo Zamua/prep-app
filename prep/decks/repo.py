@@ -159,15 +159,16 @@ class DeckRepo:
             )
 
     def set_notifications_enabled(self, user_id: str, deck_id: int, enabled: bool) -> bool:
-        """Flip the trivia-notification toggle for `deck_id`. Returns
-        True if a row was updated (i.e. the deck exists and belongs to
-        `user_id`), False otherwise. user_id scoping is the IDOR guard."""
+        """Flip the per-deck notification toggle. Works for both srs
+        and trivia decks: srs decks honor it via the digest count
+        filter, trivia decks via the per-deck scheduler skip. Returns
+        True if a row was updated (deck exists, belongs to `user_id`),
+        False otherwise. user_id scoping is the IDOR guard."""
         from prep.infrastructure.db import cursor
 
         with cursor() as c:
             cur = c.execute(
-                "UPDATE decks SET notifications_enabled = ? "
-                "WHERE id = ? AND user_id = ? AND deck_type = 'trivia'",
+                "UPDATE decks SET notifications_enabled = ? WHERE id = ? AND user_id = ?",
                 (1 if enabled else 0, deck_id, user_id),
             )
             return cur.rowcount > 0

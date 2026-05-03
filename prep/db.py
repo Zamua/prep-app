@@ -214,15 +214,20 @@ def list_users_with_push_subs() -> list[str]:
 
 
 def count_due_for_user(user_id: str) -> int:
-    """Total cards due-now across all of this user's decks. The scheduler
-    uses this to decide whether to send a digest / threshold ping."""
+    """Total cards due-now across the user's decks that have
+    notifications enabled. Paused decks are excluded — if 90 cards
+    are due overall but 30 are in paused decks, this returns 60.
+    The scheduler uses this to decide whether to send a digest /
+    threshold ping."""
     with cursor() as c:
         row = c.execute(
             """SELECT COUNT(*) AS n
                  FROM cards
                  JOIN questions ON questions.id = cards.question_id
+                 JOIN decks     ON decks.id     = questions.deck_id
                 WHERE questions.user_id = ?
                   AND COALESCE(questions.suspended, 0) = 0
+                  AND COALESCE(decks.notifications_enabled, 1) = 1
                   AND cards.next_due <= ?""",
             (user_id, now()),
         ).fetchone()
@@ -230,7 +235,9 @@ def count_due_for_user(user_id: str) -> int:
 
 
 def deck_due_breakdown(user_id: str) -> list[tuple[str, int]]:
-    """[(deck_name, due_count), ...] for digest body composition."""
+    """[(deck_name, due_count), ...] for digest body composition.
+    Paused decks are excluded — they shouldn't contribute to the
+    digest body any more than they contribute to the trigger count."""
     with cursor() as c:
         rows = c.execute(
             """SELECT d.name, COUNT(c.question_id) AS n
@@ -240,6 +247,7 @@ def deck_due_breakdown(user_id: str) -> list[tuple[str, int]]:
                                   AND c.next_due <= ?
                                   AND COALESCE(q.suspended, 0) = 0
                 WHERE d.user_id = ?
+                  AND COALESCE(d.notifications_enabled, 1) = 1
                 GROUP BY d.id
                HAVING n > 0
                 ORDER BY n DESC""",

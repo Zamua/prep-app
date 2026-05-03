@@ -54,6 +54,27 @@
       <span>Nothing due right now</span>
     </span>
   {% endif %}
+
+  {% if deck_type != 'trivia' %}
+    {# Per-deck notification mute. SRS decks honor this via the
+       digest count filter — paused decks subtract from due_total
+       and drop out of the digest body. #}
+    <form method="post"
+          action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/notifications"
+          class="deck-notif-toggle">
+      <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
+      <button class="btn btn-quiet" type="submit" style="width:100%">
+        {% if deck_meta.notifications_enabled %}
+          {{ icon('pause', class_='icon icon-inline') }}
+          <span>Pause notifications for this deck</span>
+        {% else %}
+          {{ icon('play', class_='icon icon-inline') }}
+          <span>Resume notifications</span>
+          <span class="btn-aside">paused</span>
+        {% endif %}
+      </button>
+    </form>
+  {% endif %}
 </section>
 
 {# Add-cards panel. Manual is always available — one button, no

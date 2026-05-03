@@ -200,13 +200,62 @@ def test_trivia_notifications_toggle_404_for_unknown_deck(client: TestClient, in
     assert r.status_code == 404
 
 
-def test_trivia_notifications_toggle_404_for_srs_deck(client: TestClient, initialized_db: str):
-    """Refuse to flip the flag on srs decks — they don't honor it
-    anyway and silently accepting would mislead."""
+def test_deck_notifications_toggle_works_for_srs_deck(client: TestClient, initialized_db: str):
+    """SRS decks now also expose the per-deck notification toggle.
+    Pausing redirects back to the deck page, label flips."""
+    DeckRepo().create(initialized_db, "regular-srs")
+    r = client.post(
+        "/deck/regular-srs/notifications",
+        data={"enabled": "off"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    page = client.get("/deck/regular-srs").text
+    assert "Resume notifications" in page
+
+
+def test_deck_notifications_toggle_404_for_unknown(client: TestClient, initialized_db: str):
+    r = client.post(
+        "/deck/nonexistent/notifications",
+        data={"enabled": "off"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 404
+
+
+def test_paused_srs_deck_excluded_from_due_count(client: TestClient, initialized_db: str):
+    """A paused deck's due cards must not contribute to the digest
+    trigger or body."""
+    user = initialized_db
+    repo = DeckRepo()
+    qrepo = QuestionRepo()
+    # Two decks, one card each. Both are due-now (fresh insert).
+    deck_a = repo.create(user, "active")
+    deck_p = repo.create(user, "paused")
+    qrepo.add(user, deck_a, NewQuestion(type=QuestionType.MCQ, prompt="Qa", answer="A"))
+    qrepo.add(user, deck_p, NewQuestion(type=QuestionType.MCQ, prompt="Qp", answer="A"))
+    # Pause `paused`.
+    client.post("/deck/paused/notifications", data={"enabled": "off"}, follow_redirects=False)
+    # The digest-counter should now report 1, not 2.
+    from prep import db as _legacy_db
+
+    assert _legacy_db.count_due_for_user(user) == 1
+    # And the breakdown should only include `active`.
+    bd = _legacy_db.deck_due_breakdown(user)
+    assert [name for name, _ in bd] == ["active"]
+
+
+def test_trivia_notifications_toggle_now_works_for_srs_via_unified_setter(
+    client: TestClient, initialized_db: str
+):
+    """The repo setter no longer enforces deck_type='trivia' so the
+    /trivia/decks/<id>/notifications route accepts any deck. (Kept
+    for api compat with the trivia deck UI; new SRS UI uses
+    /deck/<name>/notifications.)"""
     deck_id = DeckRepo().create(initialized_db, "regular-srs")
     r = client.post(
         f"/trivia/decks/{deck_id}/notifications",
         data={"enabled": "off"},
         follow_redirects=False,
     )
-    assert r.status_code == 404
+    assert r.status_code == 200

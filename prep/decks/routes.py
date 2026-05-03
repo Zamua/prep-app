@@ -456,24 +456,25 @@ def deck_view(
     cards = q_repo.list_in_deck(uid, deck_id)
     now_ts = db.now()
     deck_type = deck_repo.get_type(uid, deck_id)
-    # Trivia-only state; only consulted by the template when
-    # deck_type == 'trivia'. Cheap row read.
-    trivia_state: dict[str, Any] = {}
-    if deck_type is not None and deck_type.value == "trivia":
-        from prep.infrastructure.db import cursor
+    # Cheap row read for the per-deck notification toggle state.
+    # Both srs and trivia decks expose the toggle now — srs honors
+    # it via the digest count filter; trivia honors it via the
+    # per-deck scheduler skip.
+    from prep.infrastructure.db import cursor
 
-        with cursor() as c:
-            row = c.execute(
-                "SELECT notifications_enabled, notification_interval_minutes "
-                "FROM decks WHERE id=? AND user_id=?",
-                (deck_id, uid),
-            ).fetchone()
-        if row:
-            trivia_state = {
-                "deck_id": deck_id,
-                "notifications_enabled": bool(row["notifications_enabled"]),
-                "interval_minutes": row["notification_interval_minutes"],
-            }
+    deck_meta: dict[str, Any] = {"deck_id": deck_id, "notifications_enabled": True}
+    with cursor() as c:
+        row = c.execute(
+            "SELECT notifications_enabled, notification_interval_minutes "
+            "FROM decks WHERE id=? AND user_id=?",
+            (deck_id, uid),
+        ).fetchone()
+    if row:
+        deck_meta = {
+            "deck_id": deck_id,
+            "notifications_enabled": bool(row["notifications_enabled"]),
+            "interval_minutes": row["notification_interval_minutes"],
+        }
     return templates.TemplateResponse(
         "deck.html",
         {
@@ -482,7 +483,8 @@ def deck_view(
             "deck_name": name,
             "questions": cards,
             "deck_type": deck_type.value if deck_type else "srs",
-            "trivia": trivia_state,
+            "trivia": deck_meta,  # template still uses `trivia` for the trivia path
+            "deck_meta": deck_meta,
             "due_count": sum(
                 1 for c in cards if not c.suspended and c.next_due and c.next_due <= now_ts
             ),
@@ -509,6 +511,27 @@ def deck_delete(
         raise HTTPException(404, "deck not found")
     service.delete_deck(repo, uid, name)
     return responses.redirect(request, "/")
+
+
+@router.post("/deck/{name}/notifications")
+def deck_toggle_notifications(
+    request: Request,
+    name: str,
+    enabled: str = Form(...),
+    user: dict = Depends(current_user),
+    repo: DeckRepo = Depends(_deck_repo),
+):
+    """Per-deck notification toggle. SRS decks honor it via the
+    digest count (paused decks subtract from the user's due_total
+    + drop out of the digest body). Trivia decks honor it via the
+    per-deck scheduler skip. 404 if the deck doesn't belong to the
+    user."""
+    uid = user["tailscale_login"]
+    deck_id = repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    repo.set_notifications_enabled(uid, deck_id, enabled == "on")
+    return responses.redirect(request, f"/deck/{name}")
 
 
 # ---- Question-level routes ----------------------------------------------
