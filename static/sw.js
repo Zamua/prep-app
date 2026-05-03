@@ -15,6 +15,18 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// SCOPE is the SW's mount path — e.g. "/prep/" on prod, "/prep-staging/"
+// on staging. registration.scope is an absolute URL like
+// "https://host/prep/", so we slice off the host part to get the path
+// prefix the rest of the SW uses for icons + fallback URLs.
+const SCOPE = (function () {
+  try {
+    return new URL(self.registration.scope).pathname;
+  } catch (e) {
+    return "/";
+  }
+})();
+
 self.addEventListener("push", (event) => {
   let data = { title: "prep", body: "" };
   if (event.data) {
@@ -27,9 +39,11 @@ self.addEventListener("push", (event) => {
   const title = data.title || "prep";
   const options = {
     body: data.body || "",
-    icon: data.icon || "/prep-staging/static/pwa/icon-192.png",
-    badge: data.badge || "/prep-staging/static/pwa/icon-192.png",
-    data: { url: data.url || "/prep-staging/" },
+    icon: data.icon || SCOPE + "static/pwa/icon-192.png",
+    badge: data.badge || SCOPE + "static/pwa/icon-192.png",
+    // Server now sends URLs already prefixed with ROOT_PATH; if a
+    // legacy push arrives without the prefix, fall back to scope.
+    data: { url: data.url || SCOPE },
     tag: data.tag || "prep-default",
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -37,7 +51,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || "/prep-staging/";
+  const target = (event.notification.data && event.notification.data.url) || SCOPE;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
       // Reuse an existing tab if it's already on our origin.

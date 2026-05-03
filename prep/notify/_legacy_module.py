@@ -129,8 +129,21 @@ def _send_one(sub_row: dict, payload: dict) -> str:
 def send_to_user(user_id: str, title: str, body: str, url: str | None = None) -> dict:
     """Send a push to every device the user has subscribed. Prunes any
     subscriptions the push service rejects with 404/410. Returns counts.
-    Tap-target URL defaults to the app root."""
-    payload = {"title": title, "body": body, "url": url or "/"}
+    Tap-target URL defaults to the app root.
+
+    Callers pass an *app-relative* URL (`/trivia/session/foo`, `/`).
+    The deploy's ROOT_PATH (e.g. `/prep` or `/prep-staging`) gets
+    prepended here so the SW's notificationclick handler — which
+    treats the URL as origin-absolute — actually lands inside the
+    PWA scope. Without the prefix, iOS sends the user to the
+    site root and (since that's outside scope) the PWA bounces
+    them to its start_url instead of the intended page.
+    """
+    root = (_os.environ.get("ROOT_PATH") or "").rstrip("/")
+    raw = url or "/"
+    if raw.startswith("/") and not raw.startswith(root + "/") and raw != root:
+        raw = root + raw if root else raw
+    payload = {"title": title, "body": body, "url": raw}
     subs = db.list_push_subscriptions(user_id)
     sent = failed = pruned = 0
     for s in subs:
