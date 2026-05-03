@@ -53,12 +53,30 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = (event.notification.data && event.notification.data.url) || SCOPE;
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
-      // Reuse an existing tab if it's already on our origin.
+    (async () => {
+      const wins = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      // Best case: there's already a tab on the target URL — focus it.
       for (const c of wins) {
         if (c.url.includes(target) && "focus" in c) return c.focus();
       }
+      // Otherwise: focus the most recent PWA tab and navigate it to
+      // the target. iOS standalone PWAs treat clients.openWindow() as
+      // "focus start_url" (not "open this URL"), so without this step
+      // tapping a notification dropped the user on whatever tab was
+      // open — typically the notification log — instead of the card
+      // the push pointed at. Navigating an already-focused client is
+      // the workaround that lands on the right URL.
+      for (const c of wins) {
+        if ("navigate" in c && "focus" in c) {
+          await c.focus();
+          return c.navigate(target);
+        }
+      }
+      // Last resort: no PWA tab is open at all — open a fresh window.
       if (self.clients.openWindow) return self.clients.openWindow(target);
-    })
+    })()
   );
 });

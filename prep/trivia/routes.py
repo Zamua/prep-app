@@ -62,16 +62,29 @@ def _grade(q, user_answer: str) -> dict:
     return {"correct": False, "feedback": None}
 
 
-def _explore_ctx(*, deck_name: str, q, user_answer: str, correct: bool, expected: str) -> dict:
+def _explore_ctx(
+    *,
+    deck_name: str,
+    q,
+    user_answer: str,
+    correct: bool,
+    expected: str,
+    idk: bool = False,
+) -> dict:
     """Build the "Explore further" template context for a trivia
     card's post-answer state: AI-chat handoff URLs (Claude/ChatGPT)
     plus a Google search link (target=_blank → native browser on
-    iOS PWA, escapes the in-app webview)."""
+    iOS PWA, escapes the in-app webview).
+
+    `idk=True` flags the prefilled chat message so the AI knows the
+    user skipped (vs. an empty user_answer that came from a real
+    answer like "")."""
     msg = chat_handoff.build_message(
         deck_name=deck_name,
         q={"type": "short", "prompt": q.prompt, "answer": q.answer},
         user_answer=user_answer,
         verdict={"result": "right" if correct else "wrong"},
+        idk=idk,
     )
     return {
         "handoff_urls": chat_handoff.provider_urls(msg),
@@ -409,6 +422,7 @@ def trivia_session_answer(
                 user_answer=given,
                 correct=correct,
                 expected=q.answer,
+                idk=is_idk,
             ),
         },
     )

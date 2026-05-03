@@ -349,6 +349,24 @@ def test_session_answer_pops_head_and_appends_to_done(client: TestClient, initia
     assert f"done={qids[0]}r" in r.text
 
 
+def test_session_idk_explore_links_carry_idk_flag(client: TestClient, initialized_db: str):
+    """When the user submits IDK, the prefilled "Discuss with claude /
+    chatgpt" links must say so — otherwise the AI sees an empty
+    `My answer:` and can't tell whether the user typed nothing or
+    explicitly skipped. The chat_handoff message includes
+    "(I don't know — skipped)" when idk=True."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.post(
+        "/trivia/session/geo/answer",
+        data={"cards": str(qids[0]), "done": "", "answer": "", "idk": "1"},
+    )
+    assert r.status_code == 200
+    # The IDK marker is URL-encoded inside the prefilled chat URLs.
+    # Lowercase letters + spaces survive as `%20` / `skipped`; the
+    # presence of the literal "skipped" is the simplest invariant.
+    assert "skipped" in r.text
+
+
 def test_session_idk_records_wrong_without_grading(client: TestClient, initialized_db: str):
     """`idk=1` form submit skips grading entirely and persists wrong.
     The result panel labels the answer as IDK rather than empty."""
