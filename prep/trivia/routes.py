@@ -206,16 +206,14 @@ def trivia_session(
         raise HTTPException(404, "deck not found")
 
     if cards is None:
-        # Fresh session — pick + redirect with cards encoded so the
-        # remaining queue survives back-button + refresh.
+        # Fresh session — pick + 303 to the URL with cards encoded so
+        # the remaining queue survives back-button + refresh. 303
+        # (not meta-refresh) so the browser doesn't paint a blank
+        # interstitial — that was the white-flash on tap from the
+        # notification log.
         session = trivia.pick_session_for_deck(deck_id)
         ids = ",".join(str(c.question_id) for c in session)
-        root = request.scope.get("root_path", "") or ""
-        return HTMLResponse(
-            f'<!doctype html><meta charset="utf-8">'
-            f'<meta http-equiv="refresh" content="0; url={root}/trivia/session/{deck_name}?cards={ids}">',
-            status_code=200,
-        )
+        return responses.redirect(request, f"/trivia/session/{deck_name}?cards={ids}")
 
     queue = _parse_card_ids(cards)
     if not queue:
@@ -231,12 +229,7 @@ def trivia_session(
         # Skip cards the user can't access (stale URL after a deck
         # delete, or someone trying to inject foreign question_ids).
         remaining = ",".join(str(i) for i in queue[1:])
-        root = request.scope.get("root_path", "") or ""
-        return HTMLResponse(
-            f'<!doctype html><meta charset="utf-8">'
-            f'<meta http-equiv="refresh" content="0; url={root}/trivia/session/{deck_name}?cards={remaining}">',
-            status_code=200,
-        )
+        return responses.redirect(request, f"/trivia/session/{deck_name}?cards={remaining}")
     return templates.TemplateResponse(
         request,
         "trivia/card.html",

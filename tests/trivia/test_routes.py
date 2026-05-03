@@ -282,14 +282,14 @@ def _seed_n_trivia_questions(initialized_db: str, deck_name: str, n: int) -> tup
 
 def test_session_no_cards_param_picks_and_redirects(client: TestClient, initialized_db: str):
     """First hit on /trivia/session/<deck>: server picks 3, encodes
-    the queue into the URL, redirects there via meta-refresh."""
+    the queue into the URL, returns a 303 to the new URL."""
     _, qids = _seed_n_trivia_questions(initialized_db, "geo", 5)
     r = client.get("/trivia/session/geo", follow_redirects=False)
-    assert r.status_code == 200
-    # All 3 picked ids appear in the meta refresh URL.
+    assert r.status_code == 303
+    loc = r.headers["location"]
+    assert "/trivia/session/geo?cards=" in loc
     for qid in qids[:3]:
-        assert str(qid) in r.text
-    assert "/trivia/session/geo?cards=" in r.text
+        assert str(qid) in loc
 
 
 def test_session_renders_head_card_with_progress(client: TestClient, initialized_db: str):
@@ -335,9 +335,9 @@ def test_session_skips_foreign_card_id(client: TestClient, initialized_db: str):
     # 99999 isn't a real question.
     csv = f"99999,{qids[0]}"
     r = client.get(f"/trivia/session/geo?cards={csv}", follow_redirects=False)
-    assert r.status_code == 200
-    # Meta-refresh redirect drops the bogus head and continues with qids[0].
-    assert f"cards={qids[0]}" in r.text
+    assert r.status_code == 303
+    # 303 redirect drops the bogus head and continues with qids[0].
+    assert f"cards={qids[0]}" in r.headers["location"]
 
 
 def test_session_404_for_unknown_deck(client: TestClient, initialized_db: str):
