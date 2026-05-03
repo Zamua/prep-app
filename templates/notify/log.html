@@ -32,7 +32,14 @@
         </div>
         <p class="notif-log-body">{{ e.body }}</p>
         <p class="notif-log-meta">
-          <time datetime="{{ e.sent_at }}">{{ e.sent_at[:19].replace('T', ' ') }}Z</time>
+          {# Relative ("30 min ago") leads, with the absolute UTC
+             timestamp as the muted secondary so you can hover for
+             precision when the relative is too lossy. #}
+          <span class="notif-log-relative">{{ e.sent_at | relative_time }}</span>
+          <span class="notif-log-divider" aria-hidden="true">·</span>
+          <time class="notif-log-absolute" datetime="{{ e.sent_at }}">
+            {{ e.sent_at[:19].replace('T', ' ') }}Z
+          </time>
         </p>
       </a>
     </li>

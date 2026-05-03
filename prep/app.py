@@ -76,7 +76,47 @@ def _markdown(text: str | None) -> Markup:
     return Markup(_md(text))
 
 
+def _relative_time(iso_ts: str | None) -> str:
+    """Jinja filter: render an ISO-8601 UTC timestamp as a coarse
+    relative time ("just now", "30 min ago", "2 days ago", "3 mo ago").
+
+    Designed for the notification log where timestamps are mostly
+    < 30 days. Falls back to the raw input on parse failure so
+    something visible always renders."""
+    if not iso_ts:
+        return ""
+    from datetime import datetime, timezone
+
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+    except (TypeError, ValueError):
+        return iso_ts
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    secs = int((now - dt).total_seconds())
+    if secs < 0:
+        return "in the future"
+    if secs < 45:
+        return "just now"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins} min ago"
+    hours = mins // 60
+    if hours < 24:
+        return f"{hours} hr ago" if hours == 1 else f"{hours} hrs ago"
+    days = hours // 24
+    if days < 30:
+        return f"{days} day ago" if days == 1 else f"{days} days ago"
+    months = days // 30
+    if months < 12:
+        return f"{months} mo ago"
+    years = days // 365
+    return f"{years} yr ago" if years == 1 else f"{years} yrs ago"
+
+
 templates.env.filters["markdown"] = _markdown
+templates.env.filters["relative_time"] = _relative_time
 templates.env.globals["icon"] = icons.icon
 
 # ---- App + mounts ---------------------------------------------------------

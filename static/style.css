@@ -3427,7 +3427,14 @@ body:has(dialog[open]) {
   font-size: 0.78rem;
   color: var(--ink-mute);
   font-feature-settings: "lnum" on, "tnum" on;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  flex-wrap: wrap;
 }
+.notif-log-relative { font-style: italic; color: var(--ink-soft); }
+.notif-log-absolute { color: var(--ink-mute); font-size: 0.72rem; }
+.notif-log-divider { color: var(--rule); }
 
 .empty-state {
   margin-top: 1.5rem;

@@ -105,6 +105,33 @@ def test_notification_log_empty_state(client: TestClient, initialized_db: str):
     assert "No notifications yet" in r.text
 
 
+def test_log_renders_relative_time(client: TestClient, initialized_db: str):
+    """Each row should show a relative timestamp (e.g. '30 min ago')
+    in addition to the absolute UTC time."""
+    from datetime import datetime, timedelta, timezone
+
+    # Manually insert a row with a controlled `sent_at` so the
+    # relative-time rendering is predictable across test runs.
+    sent_at = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(timespec="seconds")
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        c.execute(
+            """INSERT INTO notifications_log
+                   (user_id, sent_at, title, body, url, source)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (initialized_db, sent_at, "Trivia · doom", "Q?", "/prep/", "trivia"),
+        )
+
+    r = client.get("/notify/log")
+    assert r.status_code == 200
+    # Relative label appears (matches "30 min ago" within rounding).
+    assert "min ago" in r.text
+    # Absolute UTC timestamp also present.
+    assert "Z" in r.text
+    assert sent_at[:19].replace("T", " ") in r.text
+
+
 def test_other_users_entries_not_visible(client: TestClient, initialized_db: str):
     """IDOR check — alice's log shouldn't include bob's entries."""
     from prep import db as _db
