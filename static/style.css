@@ -1446,6 +1446,33 @@ textarea:focus-visible {
   border-color: var(--quill);
 }
 
+/* Trivia free-response input. Single-line analogue of `textarea` —
+   shares the same chrome (border, padding, serif type, focus ring)
+   so the trivia card visually matches the SRS short-answer card.
+   Lives outside the generic `textarea` rule because trivia answers
+   are 1-5 words; a 7rem-tall box would feel oversized. */
+.trivia-answer-input {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.trivia-answer-input::placeholder {
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.trivia-answer-input:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+
 .study-actions {
   display: flex;
   /* Explicit row-gap so the wrapped state on mobile gets adequate vertical

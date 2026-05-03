@@ -32,14 +32,22 @@
       {% if session_total %}
         <input type="hidden" name="cards" value="{{ session_remaining }}">
       {% endif %}
-      <input
-        type="text"
-        name="answer"
-        class="trivia-answer-input"
-        placeholder="Your answer"
-        autofocus
-        required>
-      <button type="submit" class="btn btn-primary">Submit</button>
+      {# Match the SRS short-answer chrome: .freetext wrapper, italic
+         eyebrow label, input gets the same border/padding as the
+         textarea via the .trivia-answer-input rule. #}
+      <label class="freetext">
+        <span class="freetext-label">Your answer</span>
+        <input
+          type="text"
+          name="answer"
+          class="trivia-answer-input"
+          placeholder="A word or two."
+          autofocus
+          required>
+      </label>
+      <div class="study-actions">
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </div>
     </form>
   {% else %}
     <div class="trivia-result trivia-result-{{ 'right' if result.correct else 'wrong' }}">
