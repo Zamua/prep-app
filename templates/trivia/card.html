@@ -58,6 +58,15 @@
         <dt>Answer</dt>
         <dd>{{ result.expected }}</dd>
       </dl>
+      {% if q.explanation %}
+        {# "Deep dive": collapsed by default, opens to reveal claude's
+           ~300-char explanation. <details> handles the open/close
+           natively — no JS, no state, persists nothing. #}
+        <details class="trivia-deep-dive">
+          <summary>{{ icon('sparkle', class_='icon icon-inline') }} Deep dive</summary>
+          <p class="trivia-explanation">{{ q.explanation }}</p>
+        </details>
+      {% endif %}
       {% if session_total %}
         <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}?cards={{ session_remaining }}"
            class="btn btn-primary trivia-dismiss">

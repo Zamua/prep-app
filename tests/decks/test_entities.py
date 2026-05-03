@@ -166,6 +166,7 @@ def test_question_round_trips_dict_for_repo():
         "suspended": False,
         "skeleton": None,
         "language": None,
+        "explanation": None,
     }
     q = Question.model_validate(raw)
     out = q.model_dump()

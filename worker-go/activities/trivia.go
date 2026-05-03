@@ -28,15 +28,16 @@ import (
 	"prep-worker/shared"
 )
 
-const _triviaBatchPromptTemplate = `You are generating short-answer trivia questions for a notification-driven flashcard app. The user gets one question at a time on their phone and types a brief free-form answer.
+const _triviaBatchPromptTemplate = `You are generating short-answer trivia questions for a notification-driven flashcard app. Each card has a Q (the prompt), an A (the short answer), and an E (a deeper explanation revealed when the user taps "Deep dive").
 
 Generate exactly %d questions on the topic:
 
 %s
 
 Constraints:
-- Each question fits in a phone notification body — <= 140 characters.
-- Each answer is 1-5 words. Names, numbers, short phrases. Not sentences.
+- Each question (q) fits in a phone notification body — <= 140 characters.
+- Each answer (a) is 1-5 words. Names, numbers, short phrases. Not sentences.
+- Each explanation (e) is 2-4 sentences. Surface the WHY: context, causation, why this matters, common misconception, or a memorable hook. Treat the user as smart and curious — go beyond restating the answer. ~300 characters is a good target.
 - Cover varied sub-areas of the topic; don't all be the same flavor.
 - Don't repeat any of these existing questions:
 
@@ -45,7 +46,7 @@ Constraints:
 Return ONLY valid JSON, no prose, no code fences. Format:
 
 [
-  {"q": "Question text?", "a": "Short answer"},
+  {"q": "Question text?", "a": "Short answer", "e": "2-4 sentence explanation."},
   ...
 ]
 `
@@ -118,11 +119,12 @@ func (a *Activities) GenerateTriviaBatch(ctx context.Context, in shared.Generate
 func (a *Activities) InsertTriviaCard(ctx context.Context, in shared.InsertTriviaCardInput) (shared.InsertTriviaCardResult, error) {
 	prompt := strings.TrimSpace(in.Prompt)
 	answer := strings.TrimSpace(in.Answer)
+	explanation := strings.TrimSpace(in.Explanation)
 	if prompt == "" || answer == "" {
 		return shared.InsertTriviaCardResult{}, temporal.NewNonRetryableApplicationError(
 			"prompt + answer required", "BadInput", nil)
 	}
-	return insertTriviaCard(a.Cfg.DBPath, in.UserID, in.DeckID, in.Topic, prompt, answer)
+	return insertTriviaCard(a.Cfg.DBPath, in.UserID, in.DeckID, in.Topic, prompt, answer, explanation)
 }
 
 // ---- helpers ----------------------------------------------------------
@@ -152,7 +154,7 @@ func loadExistingTriviaPrompts(dbPath string, deckID int) ([]string, error) {
 	return out, rows.Err()
 }
 
-func insertTriviaCard(dbPath, userID string, deckID int, topic, prompt, answer string) (shared.InsertTriviaCardResult, error) {
+func insertTriviaCard(dbPath, userID string, deckID int, topic, prompt, answer, explanation string) (shared.InsertTriviaCardResult, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return shared.InsertTriviaCardResult{}, fmt.Errorf("open db: %w", err)
@@ -188,9 +190,9 @@ func insertTriviaCard(dbPath, userID string, deckID int, topic, prompt, answer s
 
 	now := nowISO()
 	res, err := tx.Exec(`
-		INSERT INTO questions (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
-		VALUES (?, ?, 'short', ?, ?, NULL, ?, NULL, ?, NULL, NULL)`,
-		userID, deckID, nullable(topic), prompt, answer, now)
+		INSERT INTO questions (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language, explanation)
+		VALUES (?, ?, 'short', ?, ?, NULL, ?, NULL, ?, NULL, NULL, ?)`,
+		userID, deckID, nullable(topic), prompt, answer, now, nullable(explanation))
 	if err != nil {
 		return shared.InsertTriviaCardResult{}, fmt.Errorf("insert questions: %w", err)
 	}

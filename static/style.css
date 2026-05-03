@@ -3009,3 +3009,35 @@ body:has(dialog[open]) {
   color: var(--ink-mute);
   letter-spacing: 0.01em;
 }
+
+/* --- Trivia card "Deep dive" disclosure ---
+   Sits inside the post-answer result block. Native <details>/<summary>
+   so it works without JS; styled to match the existing trivia
+   result-detail typography. */
+.trivia-deep-dive {
+  margin-top: 1rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.8rem;
+}
+.trivia-deep-dive > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  padding: 0.2rem 0;
+}
+.trivia-deep-dive > summary::-webkit-details-marker { display: none; }
+.trivia-deep-dive > summary::marker { content: ""; }
+.trivia-deep-dive > summary:hover { color: var(--ink); }
+.trivia-deep-dive[open] > summary { color: var(--ink); margin-bottom: 0.5rem; }
+.trivia-explanation {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}

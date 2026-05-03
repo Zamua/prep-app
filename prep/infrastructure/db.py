@@ -323,6 +323,16 @@ def init() -> None:
             c.execute(
                 "ALTER TABLE decks ADD COLUMN notifications_enabled INTEGER NOT NULL DEFAULT 1"
             )
+
+        # 9. Trivia card explanations: a short paragraph claude generates
+        #    alongside the Q+A. Surfaced in the trivia card view as a
+        #    "Deep dive" disclosure so the user can learn the why behind
+        #    the answer, not just memorize it. NULL for older trivia
+        #    cards generated before this column existed; UI hides the
+        #    section when null.
+        qcols = {r["name"] for r in c.execute("PRAGMA table_info(questions)").fetchall()}
+        if "explanation" not in qcols:
+            c.execute("ALTER TABLE questions ADD COLUMN explanation TEXT")
         c.executescript("""
             CREATE TABLE IF NOT EXISTS trivia_queue (
                 question_id              INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,

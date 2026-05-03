@@ -367,6 +367,7 @@ def add_question(
     rubric=None,
     skeleton: str | None = None,
     language: str | None = None,
+    explanation: str | None = None,
 ) -> int:
     if qtype not in QUESTION_TYPES:
         raise ValueError(f"unknown type: {qtype}")
@@ -381,8 +382,8 @@ def add_question(
         cur = c.execute(
             """
             INSERT INTO questions
-                (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language, explanation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -396,6 +397,7 @@ def add_question(
                 ts,
                 skeleton if (skeleton and qtype == "code") else None,
                 language if qtype == "code" else None,
+                explanation,
             ),
         )
         qid = cur.lastrowid

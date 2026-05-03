@@ -58,6 +58,38 @@ def test_answer_correct_renders_result_block(client: TestClient, initialized_db:
     assert TriviaQueueRepo().count_unanswered(deck_id=1) == 0
 
 
+def test_answer_renders_deep_dive_when_explanation_present(client: TestClient, initialized_db: str):
+    """If the question carries an explanation, the result block opens
+    a Deep dive disclosure with the text. Hidden when explanation is
+    null (legacy cards)."""
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "history")
+    qid = QuestionRepo().add(
+        user,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            topic="history",
+            prompt="Who painted the Mona Lisa?",
+            answer="Leonardo da Vinci",
+            explanation="Painted around 1503-1519, the Mona Lisa is a portrait of Lisa Gherardini.",
+        ),
+    )
+    TriviaQueueRepo().append_card(qid, deck_id)
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "leonardo"})
+    assert r.status_code == 200
+    assert "trivia-deep-dive" in r.text
+    assert "Deep dive" in r.text
+    assert "Painted around 1503-1519" in r.text
+
+
+def test_answer_omits_deep_dive_when_no_explanation(client: TestClient, initialized_db: str):
+    _, qid = _seed_trivia_question(initialized_db)
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "paris"})
+    assert r.status_code == 200
+    assert "trivia-deep-dive" not in r.text
+
+
 def test_answer_wrong_shows_correct_answer(client: TestClient, initialized_db: str):
     _, qid = _seed_trivia_question(initialized_db)
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "london"})

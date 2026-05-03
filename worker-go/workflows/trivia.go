@@ -113,11 +113,12 @@ func TriviaGenerate(ctx workflow.Context, in shared.TriviaGenerateInput) (shared
 		}
 		var res shared.InsertTriviaCardResult
 		err := workflow.ExecuteActivity(insertCtx, a.InsertTriviaCard, shared.InsertTriviaCardInput{
-			UserID: in.UserID,
-			DeckID: in.DeckID,
-			Topic:  in.Topic,
-			Prompt: pair.Q,
-			Answer: pair.A,
+			UserID:      in.UserID,
+			DeckID:      in.DeckID,
+			Topic:       in.Topic,
+			Prompt:      pair.Q,
+			Answer:      pair.A,
+			Explanation: pair.E,
 		}).Get(ctx, &res)
 		if err != nil {
 			// Single-card failures are surfaced in progress but don't

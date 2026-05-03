@@ -203,6 +203,7 @@ class QuestionRepo:
             rubric=new.rubric,
             skeleton=new.skeleton,
             language=new.language,
+            explanation=new.explanation,
         )
 
     def update(self, user_id: str, qid: int, new: NewQuestion) -> None:
@@ -272,6 +273,7 @@ def _row_to_question(row: dict) -> Question:
         suspended=bool(row.get("suspended", 0)),
         skeleton=row.get("skeleton"),
         language=row.get("language"),
+        explanation=row.get("explanation"),
     )
 
 

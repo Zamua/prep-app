@@ -44,16 +44,21 @@ class GenerateOutcome:
 
 _GEN_PROMPT_TEMPLATE = """\
 You are generating short-answer trivia questions for a notification-driven
-flashcard app. The user gets one question at a time on their phone and
-types a brief free-form answer.
+flashcard app. Each card has a Q (the prompt), an A (the short answer),
+and an E (a deeper explanation that gets revealed when the user taps to
+expand "Deep dive").
 
 Generate exactly %(batch_size)d questions on the topic:
 
 %(topic)s
 
 Constraints:
-- Each question fits in a phone notification body — <= 140 characters.
-- Each answer is 1-5 words. Names, numbers, short phrases. Not sentences.
+- Each question (q) fits in a phone notification body — <= 140 characters.
+- Each answer (a) is 1-5 words. Names, numbers, short phrases. Not sentences.
+- Each explanation (e) is 2-4 sentences. Surface the WHY: context,
+  causation, why this matters, common misconception, or a memorable
+  hook. Treat the user as smart and curious — go beyond restating the
+  answer. ~300 characters is a good target.
 - Cover varied sub-areas of the topic; don't all be the same flavor.
 - Don't repeat any of these existing questions:
 
@@ -62,7 +67,7 @@ Constraints:
 Return ONLY valid JSON, no prose, no code fences. Format:
 
 [
-  {"q": "Question text?", "a": "Short answer"},
+  {"q": "Question text?", "a": "Short answer", "e": "2-4 sentence explanation."},
   ...
 ]
 """
@@ -138,6 +143,9 @@ def generate_batch(
             continue
         q = (raw.get("q") or "").strip()
         a = (raw.get("a") or "").strip()
+        # Explanation is optional — if claude omits it the card still
+        # works, the Deep dive section just stays hidden.
+        e = (raw.get("e") or "").strip() or None
         if not q or not a:
             skipped_invalid += 1
             continue
@@ -153,6 +161,7 @@ def generate_batch(
                 topic=topic,
                 prompt=q,
                 answer=a,
+                explanation=e,
             ),
         )
         trivia_repo.append_card(qid, deck_id)

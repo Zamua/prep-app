@@ -128,6 +128,11 @@ class Question(BaseModel):
     # this at write time.
     skeleton: str | None = None
     language: str | None = None
+    # Trivia-specific: short paragraph claude generates with the
+    # answer, surfaced as the "Deep dive" disclosure on the trivia
+    # card view. NULL for srs questions and for trivia rows created
+    # before the explanation column was added.
+    explanation: str | None = None
 
 
 class DeckCard(BaseModel):
@@ -181,3 +186,4 @@ class NewQuestion(BaseModel):
     rubric: str | None = None
     skeleton: str | None = None
     language: str | None = None
+    explanation: str | None = None

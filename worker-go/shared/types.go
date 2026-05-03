@@ -58,9 +58,12 @@ type TriviaGenerateResult struct {
 }
 
 // TriviaPair is one Q/A from claude. Mirrors the JSON the agent returns.
+// `E` is the deeper explanation revealed in the card view's "Deep dive"
+// disclosure — optional so legacy claude responses without it still parse.
 type TriviaPair struct {
 	Q string `json:"q"`
 	A string `json:"a"`
+	E string `json:"e,omitempty"`
 }
 
 // GenerateTriviaInput drives the agent-call activity.
@@ -74,11 +77,12 @@ type GenerateTriviaInput struct {
 
 // InsertTriviaCardInput drives the per-card insert activity.
 type InsertTriviaCardInput struct {
-	UserID string `json:"user_id"`
-	DeckID int    `json:"deck_id"`
-	Topic  string `json:"topic"`
-	Prompt string `json:"prompt"`
-	Answer string `json:"answer"`
+	UserID      string `json:"user_id"`
+	DeckID      int    `json:"deck_id"`
+	Topic       string `json:"topic"`
+	Prompt      string `json:"prompt"`
+	Answer      string `json:"answer"`
+	Explanation string `json:"explanation,omitempty"`
 }
 
 type InsertTriviaCardResult struct {
