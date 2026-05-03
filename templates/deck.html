@@ -5,10 +5,10 @@
 <section class="deck-header">
   <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
   <h1 class="display deck-title">{{ deck_name }}</h1>
-  {# Pill row sits BELOW the title — type tag + notif toggle share
-     a single row, both subtle italic pills. Below-vs-beside keeps
-     the title visually dominant and the pills feel like metadata
-     rather than competing for attention. #}
+  {# Pill row sits BELOW the title — type tag + notif toggle + edit
+     trigger share a single row, all subtle italic pills. Below-vs-
+     beside keeps the title visually dominant and the pills feel like
+     metadata rather than competing for attention. #}
   <div class="deck-pill-row">
     <span class="tag tag-decktype tag-decktype-{{ deck_type }}">{{ deck_type }}</span>
     <form method="post"
@@ -27,6 +27,15 @@
         {% endif %}
       </button>
     </form>
+    {# Edit pill: toggles the add/transform panel below. The panel
+       used to live inline on the deck page; tucking it behind the
+       pencil keeps the deck view focused on the cards. #}
+    <button type="button" class="edit-pill" data-edit-toggle
+            aria-controls="deck-edit-panel" aria-expanded="false"
+            title="Edit deck — add cards or AI prompt">
+      {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+      <span>edit</span>
+    </button>
   </div>
   <p class="deck-meta">
     <span class="meta-figure {% if due_count > 0 %}is-active{% endif %}">
@@ -65,12 +74,11 @@
 </section>
 {% endif %}
 
-{# Add-cards panel. Manual is always available — one button, no
-   ceremony. When an agent is configured, an "— or —" divider precedes
-   the AI prompt section: a labeled, self-contained form whose Apply
-   button kicks off a Transform workflow. No mode toggle; you pick the
-   surface. #}
-<section class="add-section">
+{# Add-cards panel — hidden by default. Toggled by the pencil pill
+   in the header (data-edit-toggle / aria-controls=deck-edit-panel).
+   Keeps the deck view focused on the cards listing; editing
+   surfaces are still one tap away when you need them. #}
+<section id="deck-edit-panel" class="add-section" hidden>
   <p class="section-eyebrow"><span>Add to this deck</span><span class="rule"></span></p>
   <div class="add-cta-row">
     <a class="btn btn-primary add-cta" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new">
@@ -308,6 +316,30 @@
 </dialog>
 
 <script>
+(function () {
+  // Pencil-pill toggle: reveals/hides the deck-edit-panel that
+  // contains the add-card / AI-prompt forms. Tiny progressive
+  // enhancement — without JS the panel stays hidden, but the
+  // /deck/<name>/question/new + /deck/<name>/transform endpoints
+  // remain reachable directly.
+  const editToggle = document.querySelector('[data-edit-toggle]');
+  const editPanel = editToggle && document.getElementById(editToggle.getAttribute('aria-controls'));
+  if (editToggle && editPanel) {
+    editToggle.addEventListener('click', () => {
+      const wasOpen = editToggle.getAttribute('aria-expanded') === 'true';
+      editToggle.setAttribute('aria-expanded', String(!wasOpen));
+      editToggle.classList.toggle('edit-pill-open', !wasOpen);
+      if (wasOpen) {
+        editPanel.setAttribute('hidden', '');
+      } else {
+        editPanel.removeAttribute('hidden');
+        // Bring it into view; the panel sits above the cards listing
+        // and on a long deck page might be off-screen on tap.
+        editPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      }
+    });
+  }
+})();
 (function () {
   const dlg = document.getElementById('card-preview');
   const body = document.getElementById('card-preview-body');

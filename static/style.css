@@ -559,6 +559,36 @@ a { color: inherit; }
   background: color-mix(in srgb, var(--wrong) 14%, transparent);
 }
 
+/* Edit pill: same chrome family as notif-pill, lives in the same row.
+   When the panel is open the pill picks up an "active" treatment so
+   the user knows what state things are in. */
+.edit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  font-style: italic;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.edit-pill:hover {
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.edit-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+.edit-pill-open {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink-soft) 10%, transparent);
+}
+
 .deck-meta {
   display: inline-flex;
   align-items: baseline;

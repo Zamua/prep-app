@@ -155,6 +155,25 @@ def test_deck_view_shows_decktype_tag_for_srs(client: TestClient, initialized_db
     assert "tag-decktype-srs" in r.text
 
 
+def test_deck_view_renders_edit_pill_and_hidden_panel(client: TestClient, initialized_db: str):
+    """The pencil-pill in the header controls a hidden #deck-edit-panel
+    via aria-controls. The add/transform forms live inside that panel,
+    not laid out on the page."""
+    DeckRepo().create(initialized_db, "go-systems")
+    r = client.get("/deck/go-systems")
+    assert r.status_code == 200
+    # Pencil pill is in the header pill row.
+    assert "edit-pill" in r.text
+    assert "data-edit-toggle" in r.text
+    assert 'aria-controls="deck-edit-panel"' in r.text
+    # Panel exists, holds the Add-by-hand button, ships hidden.
+    assert 'id="deck-edit-panel"' in r.text
+    assert "Add a card by hand" in r.text  # still in DOM, just hidden
+    # `hidden` attribute appears on the panel section.
+    panel_idx = r.text.find('id="deck-edit-panel"')
+    assert "hidden" in r.text[panel_idx : panel_idx + 200]
+
+
 def test_index_decks_carry_decktype(client: TestClient, initialized_db: str):
     """The index list also shows the type tag — same slot, same chrome,
     consistent across views."""
