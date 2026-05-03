@@ -4,15 +4,13 @@
 {% block main %}
 <section class="deck-header">
   <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
-  <div class="deck-title-row">
-    <h1 class="display deck-title">{{ deck_name }}</h1>
-    {# Deck-type tag: subtle italic pill matching the question-card
-       .tag-type chrome. Stays in a consistent slot so the user
-       always knows which kind of deck they're looking at. #}
+  <h1 class="display deck-title">{{ deck_name }}</h1>
+  {# Pill row sits BELOW the title — type tag + notif toggle share
+     a single row, both subtle italic pills. Below-vs-beside keeps
+     the title visually dominant and the pills feel like metadata
+     rather than competing for attention. #}
+  <div class="deck-pill-row">
     <span class="tag tag-decktype tag-decktype-{{ deck_type }}">{{ deck_type }}</span>
-    {# Pill toggle for the per-deck notification cycle. Trivia decks
-       POST to the trivia route (alias); srs decks POST to the deck
-       route. Same handler underneath. #}
     <form method="post"
           action="{% if deck_type == 'trivia' %}{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/notifications{% else %}{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/notifications{% endif %}"
           class="notif-pill-form">

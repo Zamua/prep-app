@@ -196,7 +196,7 @@ def test_trivia_notifications_toggle_off_then_on(client: TestClient, initialized
         data={"enabled": "off"},
         follow_redirects=False,
     )
-    assert r.status_code == 200
+    assert r.status_code == 303
     page = client.get("/deck/geo").text
     assert "notif-pill-paused" in page
     assert ">paused<" in page
@@ -206,7 +206,7 @@ def test_trivia_notifications_toggle_off_then_on(client: TestClient, initialized
         data={"enabled": "on"},
         follow_redirects=False,
     )
-    assert r.status_code == 200
+    assert r.status_code == 303
     page = client.get("/deck/geo").text
     assert "notif-pill-paused" not in page
     assert "every 30m" in page
@@ -280,4 +280,4 @@ def test_trivia_notifications_toggle_now_works_for_srs_via_unified_setter(
         data={"enabled": "off"},
         follow_redirects=False,
     )
-    assert r.status_code == 200
+    assert r.status_code == 303

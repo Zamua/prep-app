@@ -519,13 +519,13 @@ a { color: inherit; }
   margin-top: 0.4rem;
 }
 
-.deck-title-row {
+.deck-pill-row {
   display: flex;
-  align-items: baseline;
-  gap: 0.9rem;
+  align-items: center;
+  gap: 0.5rem;
   flex-wrap: wrap;
+  margin: 0.5rem 0 0.7rem;
 }
-.deck-title-row .deck-title { margin: 0.4rem 0 0; flex: 0 1 auto; }
 
 .notif-pill-form { margin: 0; }
 .notif-pill {
