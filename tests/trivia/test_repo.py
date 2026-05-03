@@ -167,6 +167,52 @@ def test_mark_answered_records_verdict(repos):
     assert trivia.count_unanswered(deck_id) == 0
 
 
+# ---- pick_session_for_deck ---------------------------------------------
+
+
+def test_pick_session_default_mix(repos):
+    """Brand-new deck of 5: defaults pick 3 = (2 review + 1 fresh).
+    Review slots are empty → should backfill to 3 fresh, ordered by
+    queue position."""
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=5)
+    session = repos["trivia"].pick_session_for_deck(deck_id)
+    assert [c.question_id for c in session] == [qids[0], qids[1], qids[2]]
+    assert all(c.is_fresh for c in session)
+
+
+def test_pick_session_review_first_then_fresh(repos):
+    """Once cards are in the answered pool, the session puts review
+    cards before fresh ones — clear debt before reward."""
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=5)
+    trivia = repos["trivia"]
+    trivia.mark_answered(qids[0], correct=False)  # wrong, in review pool
+    trivia.mark_answered(qids[1], correct=True)  # correct, in review pool
+    # qids[2..4] are still fresh.
+    session = trivia.pick_session_for_deck(deck_id, target_size=3, fresh_target=1)
+    # Review slot pulls 2 from answered pool (wrong-first ordering),
+    # then 1 fresh card. Expect: [qids[0]=wrong, qids[1]=correct, qids[2]=fresh].
+    ids = [c.question_id for c in session]
+    assert ids == [qids[0], qids[1], qids[2]]
+
+
+def test_pick_session_caps_at_target_size(repos):
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=10)
+    session = repos["trivia"].pick_session_for_deck(deck_id, target_size=3)
+    assert len(session) == 3
+
+
+def test_pick_session_handles_short_deck(repos):
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=2)
+    session = repos["trivia"].pick_session_for_deck(deck_id, target_size=3)
+    assert len(session) == 2  # can't conjure cards we don't have
+
+
+def test_pick_session_returns_empty_for_empty_deck(repos):
+    user = repos["user"]
+    deck_id = repos["decks"].create(user, "empty")
+    assert repos["trivia"].pick_session_for_deck(deck_id) == []
+
+
 # ---- count_unanswered + existing_prompts -------------------------------
 
 

@@ -152,6 +152,89 @@ def test_decks_new_trivia_creates_deck_and_starts_workflow(
     assert TriviaQueueRepo().pick_next_for_deck(geo["id"]) is None
 
 
+# ---- /trivia/session/<deck_name> --------------------------------------
+
+
+def _seed_n_trivia_questions(initialized_db: str, deck_name: str, n: int) -> tuple[int, list[int]]:
+    user = initialized_db
+    deck_id = DeckRepo().create_trivia(user, deck_name, topic=deck_name, interval_minutes=30)
+    qids: list[int] = []
+    for i in range(n):
+        qid = QuestionRepo().add(
+            user,
+            deck_id,
+            NewQuestion(type=QuestionType.SHORT, topic=deck_name, prompt=f"Q{i}?", answer=f"A{i}"),
+        )
+        TriviaQueueRepo().append_card(qid, deck_id)
+        qids.append(qid)
+    return deck_id, qids
+
+
+def test_session_no_cards_param_picks_and_redirects(client: TestClient, initialized_db: str):
+    """First hit on /trivia/session/<deck>: server picks 3, encodes
+    the queue into the URL, redirects there via meta-refresh."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 5)
+    r = client.get("/trivia/session/geo", follow_redirects=False)
+    assert r.status_code == 200
+    # All 3 picked ids appear in the meta refresh URL.
+    for qid in qids[:3]:
+        assert str(qid) in r.text
+    assert "/trivia/session/geo?cards=" in r.text
+
+
+def test_session_renders_head_card_with_progress(client: TestClient, initialized_db: str):
+    """With ?cards=A,B,C the route renders A as the first of 3."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    csv = ",".join(str(q) for q in qids)
+    r = client.get(f"/trivia/session/geo?cards={csv}")
+    assert r.status_code == 200
+    assert "Q0?" in r.text
+    assert "1 of 3" in r.text
+    # Hidden cards field carries the FULL queue forward to the answer endpoint.
+    assert f'value="{csv}"' in r.text
+
+
+def test_session_answer_pops_head_and_continues(client: TestClient, initialized_db: str):
+    """POST /trivia/session/<deck>/answer with the queue:
+    grades + marks_answered + the redirect/render carries the popped queue."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    csv = ",".join(str(q) for q in qids)
+    r = client.post(
+        "/trivia/session/geo/answer",
+        data={"cards": csv, "answer": "A0"},
+    )
+    assert r.status_code == 200
+    # Verdict block rendered with correct=true.
+    assert "trivia-result-right" in r.text
+    # Next link carries the popped queue.
+    expected_remaining = ",".join(str(q) for q in qids[1:])
+    assert f"?cards={expected_remaining}" in r.text
+
+
+def test_session_empty_cards_renders_done(client: TestClient, initialized_db: str):
+    _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.get("/trivia/session/geo?cards=")
+    assert r.status_code == 200
+    assert "Session complete" in r.text
+
+
+def test_session_skips_foreign_card_id(client: TestClient, initialized_db: str):
+    """A bogus question_id in the URL (someone else's, or stale)
+    pops without rendering — no IDOR leak, session continues."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 2)
+    # 99999 isn't a real question.
+    csv = f"99999,{qids[0]}"
+    r = client.get(f"/trivia/session/geo?cards={csv}", follow_redirects=False)
+    assert r.status_code == 200
+    # Meta-refresh redirect drops the bogus head and continues with qids[0].
+    assert f"cards={qids[0]}" in r.text
+
+
+def test_session_404_for_unknown_deck(client: TestClient, initialized_db: str):
+    r = client.get("/trivia/session/nonexistent")
+    assert r.status_code == 404
+
+
 def test_decks_new_trivia_rejects_empty_topic(monkeypatch, client: TestClient, initialized_db: str):
     import prep.agent
 

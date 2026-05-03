@@ -1,14 +1,24 @@
-{# Single-card trivia view. Designed for arrival-from-push: one
-   question, free-text input, submit. No "next card" UI; user
-   dismisses to leave. When `result` is set (post-submit), the
-   verdict block reveals with the correct answer + dismiss CTA. #}
+{# Single-card trivia view. Two modes:
+
+   - Standalone (no `session_total` in context): used by the legacy
+     `/trivia/<question_id>` deep-link route. Form posts to the
+     single-card answer endpoint; "Dismiss" goes home.
+   - Session (set `session_total` + `session_remaining`): part of a
+     mini-session driven by /trivia/session/<deck>. Form posts to
+     the session endpoint with the queue carried in a hidden field;
+     "Next" advances to the head-popped queue. Progress indicator
+     ("1 of 3") rendered when in session mode. #}
 {% extends "base.html" %}
 {% block title %}{{ deck_name or 'trivia' }} · prep{% endblock %}
 {% block page_class %}trivia-card{% endblock %}
 {% block main %}
 <nav class="study-nav">
   <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name or 'home' }}</a>
-  <span class="card-id">№ {{ q.id }}</span>
+  {% if session_total %}
+    <span class="card-id">{{ session_position }} of {{ session_total }}</span>
+  {% else %}
+    <span class="card-id">№ {{ q.id }}</span>
+  {% endif %}
 </nav>
 
 <article class="trivia-card-body">
@@ -16,9 +26,12 @@
 
   {% if result is none %}
     <form method="post"
-          action="{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/answer"
+          action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/answer{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/answer{% endif %}"
           class="trivia-answer-form"
           autocomplete="off">
+      {% if session_total %}
+        <input type="hidden" name="cards" value="{{ session_remaining }}">
+      {% endif %}
       <input
         type="text"
         name="answer"
@@ -45,7 +58,14 @@
         <dt>Answer</dt>
         <dd>{{ result.expected }}</dd>
       </dl>
-      <a href="{{ request.scope.get('root_path','') }}/" class="btn btn-secondary trivia-dismiss">Dismiss</a>
+      {% if session_total %}
+        <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}?cards={{ session_remaining }}"
+           class="btn btn-primary trivia-dismiss">
+          {% if session_remaining %}Next{% else %}Finish{% endif %}
+        </a>
+      {% else %}
+        <a href="{{ request.scope.get('root_path','') }}/" class="btn btn-secondary trivia-dismiss">Dismiss</a>
+      {% endif %}
     </div>
   {% endif %}
 </article>

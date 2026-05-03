@@ -177,6 +177,94 @@ class TriviaQueueRepo:
             ).fetchone()
         return int(row["n"] or 0)
 
+    def pick_session_for_deck(
+        self, deck_id: int, *, target_size: int = 3, fresh_target: int = 1
+    ) -> list[NextCard]:
+        """Pick up to `target_size` cards for a notification mini-session.
+
+        Aims for a mix: `fresh_target` never-shown cards (default 1)
+        plus `target_size - fresh_target` review cards (default 2).
+        Within the review slot, wrong-answered cards outrank
+        correctly-answered ones (matches the single-card weighted
+        precedence). Order returned: review first, fresh last — the
+        idea is to clear accumulated debt before being rewarded with
+        fresh content.
+
+        Backfill: if either pool comes up short, the other fills the
+        gap. A brand-new deck (no review yet) becomes 3 fresh; a deck
+        with no fresh left becomes 3 review. Never returns more than
+        `target_size`; may return zero if the deck is empty.
+        """
+        review_slots = target_size - fresh_target
+        with cursor() as c:
+            review_rows = (
+                c.execute(
+                    """
+                    SELECT q.id AS question_id, q.deck_id, q.prompt, 0 AS is_fresh
+                    FROM questions q
+                    JOIN trivia_queue tq ON tq.question_id = q.id
+                    WHERE q.deck_id = ? AND tq.last_answered_at IS NOT NULL
+                    ORDER BY
+                      CASE WHEN tq.last_answered_correctly = 0 THEN 0 ELSE 1 END,
+                      tq.queue_position
+                    LIMIT ?
+                    """,
+                    (deck_id, review_slots),
+                ).fetchall()
+                if review_slots > 0
+                else []
+            )
+            fresh_rows = (
+                c.execute(
+                    """
+                    SELECT q.id AS question_id, q.deck_id, q.prompt, 1 AS is_fresh
+                    FROM questions q
+                    JOIN trivia_queue tq ON tq.question_id = q.id
+                    WHERE q.deck_id = ? AND tq.last_answered_at IS NULL
+                    ORDER BY tq.queue_position
+                    LIMIT ?
+                    """,
+                    (deck_id, fresh_target),
+                ).fetchall()
+                if fresh_target > 0
+                else []
+            )
+            picked_ids = {r["question_id"] for r in review_rows} | {
+                r["question_id"] for r in fresh_rows
+            }
+            short = target_size - len(picked_ids)
+            backfill_rows = []
+            if short > 0:
+                placeholders = ",".join("?" * len(picked_ids)) if picked_ids else "NULL"
+                backfill_rows = c.execute(
+                    f"""
+                    SELECT q.id AS question_id, q.deck_id, q.prompt,
+                           (tq.last_answered_at IS NULL) AS is_fresh
+                    FROM questions q
+                    JOIN trivia_queue tq ON tq.question_id = q.id
+                    WHERE q.deck_id = ? AND q.id NOT IN ({placeholders})
+                    ORDER BY
+                      CASE
+                        WHEN tq.last_answered_correctly = 0 THEN 0
+                        WHEN tq.last_answered_at IS NULL    THEN 1
+                        ELSE 2
+                      END,
+                      tq.queue_position
+                    LIMIT ?
+                    """,
+                    (deck_id, *picked_ids, short),
+                ).fetchall()
+        ordered = list(review_rows) + list(fresh_rows) + list(backfill_rows)
+        return [
+            NextCard(
+                question_id=r["question_id"],
+                deck_id=r["deck_id"],
+                prompt=r["prompt"],
+                is_fresh=bool(r["is_fresh"]),
+            )
+            for r in ordered[:target_size]
+        ]
+
     def existing_prompts(self, deck_id: int) -> list[str]:
         """All current question prompts for `deck_id`. Passed to the
         generator so the next batch doesn't repeat anything we've

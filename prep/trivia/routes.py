@@ -30,6 +30,7 @@ from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.trivia import service as trivia_service
 from prep.trivia.agent_client import AgentUnavailable
 from prep.trivia.repo import TriviaQueueRepo
+from prep.web import responses
 from prep.web.templates import templates
 
 router = APIRouter()
@@ -91,6 +92,142 @@ async def trivia_generating_status(wid: str, user: dict = Depends(current_user))
         progress = {"status": "done"}
     progress["deck_name"] = deck_name
     return JSONResponse(progress)
+
+
+# ---- mini-session (notification target) -------------------------------
+#
+# Notifications deep-link to /trivia/session/<deck_name>. The session
+# is stateless: a comma-separated `cards` query param holds the
+# remaining queue. Each answer pops the head and redirects to the
+# next, so refresh / back-button behavior stays sensible. When the
+# list empties, the summary view renders.
+
+
+def _parse_card_ids(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    out: list[int] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if chunk.isdigit():
+            out.append(int(chunk))
+    return out
+
+
+@router.get("/trivia/session/{deck_name}", response_class=HTMLResponse)
+def trivia_session(
+    deck_name: str,
+    request: Request,
+    cards: str | None = None,
+    user: dict = Depends(current_user),
+):
+    """Notification deep-link target: a 3-card mini-session. With no
+    `cards` param, server picks a fresh session and redirects with the
+    queue encoded. With an empty `cards`, renders the summary. Otherwise
+    renders the head card; submit pops the head and redirects."""
+    uid = user["tailscale_login"]
+    decks = DeckRepo()
+    questions = QuestionRepo()
+    trivia = TriviaQueueRepo()
+    deck_id = decks.find_id(uid, deck_name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+
+    if cards is None:
+        # Fresh session — pick + redirect with cards encoded so the
+        # remaining queue survives back-button + refresh.
+        session = trivia.pick_session_for_deck(deck_id)
+        ids = ",".join(str(c.question_id) for c in session)
+        root = request.scope.get("root_path", "") or ""
+        return HTMLResponse(
+            f'<!doctype html><meta charset="utf-8">'
+            f'<meta http-equiv="refresh" content="0; url={root}/trivia/session/{deck_name}?cards={ids}">',
+            status_code=200,
+        )
+
+    queue = _parse_card_ids(cards)
+    if not queue:
+        return templates.TemplateResponse(
+            request,
+            "trivia/session_done.html",
+            {"deck_name": deck_name},
+        )
+
+    head = queue[0]
+    q = questions.get(uid, head)
+    if q is None or q.deck_id != deck_id:
+        # Skip cards the user can't access (stale URL after a deck
+        # delete, or someone trying to inject foreign question_ids).
+        remaining = ",".join(str(i) for i in queue[1:])
+        root = request.scope.get("root_path", "") or ""
+        return HTMLResponse(
+            f'<!doctype html><meta charset="utf-8">'
+            f'<meta http-equiv="refresh" content="0; url={root}/trivia/session/{deck_name}?cards={remaining}">',
+            status_code=200,
+        )
+    return templates.TemplateResponse(
+        request,
+        "trivia/card.html",
+        {
+            "q": q,
+            "deck_name": deck_name,
+            "result": None,
+            "session_position": 1,
+            "session_total": len(queue),
+            "session_remaining": cards,
+        },
+    )
+
+
+@router.post("/trivia/session/{deck_name}/answer", response_class=HTMLResponse)
+def trivia_session_answer(
+    deck_name: str,
+    request: Request,
+    cards: str = Form(""),
+    answer: str = Form(""),
+    user: dict = Depends(current_user),
+):
+    """Grade the head card, mark_answered, redirect to GET with the
+    head popped. If the head card was the last one, the redirect lands
+    on the summary view."""
+    uid = user["tailscale_login"]
+    decks = DeckRepo()
+    questions = QuestionRepo()
+    trivia = TriviaQueueRepo()
+    deck_id = decks.find_id(uid, deck_name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+
+    queue = _parse_card_ids(cards)
+    if not queue:
+        return responses.redirect(request, f"/trivia/session/{deck_name}?cards=")
+
+    head = queue[0]
+    q = questions.get(uid, head)
+    if q is None or q.deck_id != deck_id:
+        # Stale / foreign card — pop and continue.
+        remaining = ",".join(str(i) for i in queue[1:])
+        return responses.redirect(request, f"/trivia/session/{deck_name}?cards={remaining}")
+
+    correct = trivia_service.grade_answer(expected=q.answer, given=answer)
+    trivia.mark_answered(head, correct=correct)
+    remaining = ",".join(str(i) for i in queue[1:])
+    return templates.TemplateResponse(
+        request,
+        "trivia/card.html",
+        {
+            "q": q,
+            "deck_name": deck_name,
+            "result": {
+                "correct": correct,
+                "given": answer,
+                "expected": q.answer,
+            },
+            "session_position": 1,
+            "session_total": len(queue),
+            "session_remaining": remaining,
+        },
+    )
 
 
 @router.get("/trivia/{question_id}", response_class=HTMLResponse)

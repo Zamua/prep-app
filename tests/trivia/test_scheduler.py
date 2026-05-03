@@ -88,7 +88,9 @@ def test_tick_sends_push_for_due_deck(monkeypatch, fixtures):
     sched.tick(datetime.now(timezone.utc))
     assert len(sent) == 1
     assert sent[0]["body"] == "Q0?"  # first card in queue
-    assert sent[0]["url"] == f"/trivia/{qids[0]}"
+    # Deep link → session route, not single-card route — tapping the
+    # push opens a 3-card mini-session.
+    assert sent[0]["url"] == "/trivia/session/capitals"
     assert sent[0]["title"] == "capitals"
 
 

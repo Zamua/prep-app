@@ -1,0 +1,18 @@
+{# Mini-session summary. Reached when the queue is empty — either the
+   user completed all 3 cards or arrived here via a stale link. #}
+{% extends "base.html" %}
+{% block title %}{{ deck_name }} · trivia · prep{% endblock %}
+{% block page_class %}trivia-card{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} home</a>
+  <span class="card-id">done</span>
+</nav>
+
+<article class="trivia-card-body">
+  <p class="section-eyebrow"><span>Session complete</span><span class="rule"></span></p>
+  <p class="trivia-prompt">Nice. Next push in a bit.</p>
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}"
+     class="btn btn-secondary trivia-dismiss">Open deck</a>
+</article>
+{% endblock %}

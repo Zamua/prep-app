@@ -119,14 +119,20 @@ def tick(now_utc: datetime) -> None:
             # Fire the push. Body = question text (trimmed for native
             # platform limits — most platforms cap around 120 chars
             # and gracefully truncate, but we be polite).
+            #
+            # The deep link points at the session route, NOT the
+            # single-card view, so tapping the push opens a 3-card
+            # mini-session (1 fresh + 2 review by default; backfilled
+            # from whichever pool has room).
             body = nxt.prompt
             if len(body) > 240:
                 body = body[:237] + "..."
+            deck_name = row.get("name") or ""
             send_to_user(
                 user_id=row["user_id"],
-                title=row.get("name") or "Trivia",
+                title=deck_name or "Trivia",
                 body=body,
-                url=f"/trivia/{nxt.question_id}",
+                url=f"/trivia/session/{deck_name}",
             )
 
             decks.set_last_notified_at(deck_id, now_utc.isoformat(timespec="seconds"))
