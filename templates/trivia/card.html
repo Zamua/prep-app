@@ -14,6 +14,14 @@
 {% block main %}
 <nav class="study-nav">
   <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name or 'home' }}</a>
+  {# Post-answer: verdict pill sits in the nav row next to the back
+     link, leaves the card body free for the answer compare + actions. #}
+  {% if result is not none %}
+    <span class="trivia-verdict-pill {{ 'tvp-right' if result.correct else 'tvp-wrong' }}">
+      {% if result.correct %}{{ icon('check', class_='icon icon-inline') }} correct
+      {% else %}{{ icon('x', class_='icon icon-inline') }} not quite{% endif %}
+    </span>
+  {% endif %}
   {% if session_total %}
     <span class="card-id">{{ session_position }} of {{ session_total }}</span>
   {% else %}
@@ -51,66 +59,71 @@
     </form>
   {% else %}
     <div class="trivia-result trivia-result-{{ 'right' if result.correct else 'wrong' }}">
-      <div class="trivia-result-mark">
-        {% if result.correct %}
-          {{ icon('check', class_='icon icon-lg') }}
-          <span class="trivia-result-label">Correct</span>
-        {% else %}
-          {{ icon('x', class_='icon icon-lg') }}
-          <span class="trivia-result-label">Not quite</span>
-        {% endif %}
-      </div>
-      <dl class="trivia-result-detail">
-        <dt>You said</dt>
-        <dd>{{ result.given or '(empty)' }}</dd>
-        <dt>Answer</dt>
-        <dd>{{ result.expected }}</dd>
-      </dl>
-      {% if q.explanation %}
-        {# "Deep dive": collapsed by default, opens to reveal claude's
-           ~300-char explanation. <details> handles the open/close
-           natively — no JS, no state, persists nothing. #}
-        <details class="trivia-deep-dive">
-          <summary>{{ icon('sparkle', class_='icon icon-inline') }} Deep dive</summary>
-          <p class="trivia-explanation">{{ q.explanation }}</p>
-        </details>
-      {% endif %}
+      {# Side-by-side answer compare. Correct-answer card tints --right
+         on a right verdict, --wrong on a wrong one — visual diff at
+         a glance. #}
+      <section class="trivia-answers">
+        <div class="trivia-answer-block">
+          <p class="trivia-answer-eyebrow">your answer</p>
+          <p class="trivia-answer-text">{{ result.given or '(empty)' }}</p>
+        </div>
+        <div class="trivia-answer-block trivia-answer-correct">
+          <p class="trivia-answer-eyebrow">correct answer</p>
+          <p class="trivia-answer-text">{{ result.expected }}</p>
+        </div>
+      </section>
 
-      {% if handoff_urls %}
-        {# "Explore further": AI chat handoff (Claude / ChatGPT) PLUS
-           a Google search link. The Google link uses target="_blank"
-           explicitly so iOS PWAs escape the in-app webview and open
-           the user's actual browser — that's how trivia rabbit-holing
-           is supposed to feel. #}
-        <details class="trivia-explore">
-          <summary>{{ icon('arrow-up-right', class_='icon icon-inline') }} Explore further</summary>
-          <div class="trivia-explore-options">
-            {% for key in ['claude', 'chatgpt'] %}
-              {% if key in handoff_urls %}
+      {# Two outlined disclosure pills sit side-by-side; tapping one
+         reveals its content in a panel below the row. Both are
+         optional — the row's grid collapses gracefully if only one
+         disclosure is present. #}
+      {% if q.explanation or handoff_urls %}
+        <div class="trivia-disc-row">
+          {% if q.explanation %}
+            <details class="trivia-disc">
+              <summary>
+                {{ icon('sparkle', class_='icon icon-inline') }}
+                <span>Explain</span>
+              </summary>
+              <p class="trivia-disc-body">{{ q.explanation }}</p>
+            </details>
+          {% endif %}
+          {% if handoff_urls %}
+            <details class="trivia-disc">
+              <summary>
+                {{ icon('arrow-up-right', class_='icon icon-inline') }}
+                <span>Explore further</span>
+              </summary>
+              <div class="trivia-disc-body trivia-explore-options">
+                {% for key in ['claude', 'chatgpt'] %}
+                  {% if key in handoff_urls %}
+                    <a class="trivia-explore-option"
+                       href="{{ handoff_urls[key] }}"
+                       target="_blank" rel="noopener noreferrer">
+                      <span>Discuss with {{ handoff_providers[key].label }}</span>
+                      {{ icon('arrow-up-right', class_='icon icon-inline') }}
+                    </a>
+                  {% endif %}
+                {% endfor %}
                 <a class="trivia-explore-option"
-                   href="{{ handoff_urls[key] }}"
+                   href="{{ google_search_url }}"
                    target="_blank" rel="noopener noreferrer">
-                  <span>Discuss with {{ handoff_providers[key].label }}</span>
+                  <span>Search on Google</span>
                   {{ icon('arrow-up-right', class_='icon icon-inline') }}
                 </a>
-              {% endif %}
-            {% endfor %}
-            <a class="trivia-explore-option"
-               href="{{ google_search_url }}"
-               target="_blank" rel="noopener noreferrer">
-              <span>Search on Google</span>
-              {{ icon('arrow-up-right', class_='icon icon-inline') }}
-            </a>
-          </div>
-        </details>
+              </div>
+            </details>
+          {% endif %}
+        </div>
       {% endif %}
+
       {% if session_total %}
         <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}?cards={{ session_remaining }}"
-           class="btn btn-primary trivia-dismiss">
-          {% if session_remaining %}Next{% else %}Finish{% endif %}
+           class="btn btn-primary trivia-next-cta">
+          {% if session_remaining %}Next card{% else %}Finish session{% endif %}
         </a>
       {% else %}
-        <a href="{{ request.scope.get('root_path','') }}/" class="btn btn-secondary trivia-dismiss">Dismiss</a>
+        <a href="{{ request.scope.get('root_path','') }}/" class="btn btn-secondary trivia-next-cta">Dismiss</a>
       {% endif %}
     </div>
   {% endif %}

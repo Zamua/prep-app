@@ -3119,68 +3119,101 @@ body:has(dialog[open]) {
   letter-spacing: 0.01em;
 }
 
-/* --- Trivia card "Deep dive" disclosure ---
-   Sits inside the post-answer result block. Native <details>/<summary>
-   so it works without JS; styled to match the existing trivia
-   result-detail typography. */
-.trivia-deep-dive {
-  margin-top: 1rem;
-  border-top: 1px solid var(--rule);
-  padding-top: 0.8rem;
+/* --- Trivia card post-answer chrome (B1 layout) ---
+   Verdict pill in the nav row + side-by-side answer compare +
+   pill-row of disclosures + big primary Next CTA. */
+
+.trivia-verdict-pill {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.2rem 0.7rem; border-radius: 999px;
+  font-size: 0.78rem; letter-spacing: 0.06em; font-style: italic;
+  text-transform: lowercase;
 }
-.trivia-deep-dive > summary {
-  cursor: pointer;
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  padding: 0.2rem 0;
+.trivia-verdict-pill .icon { width: 0.8rem; height: 0.8rem; }
+.tvp-right {
+  background: color-mix(in srgb, var(--right) 14%, transparent);
+  color: var(--right);
+  border: 1px solid color-mix(in srgb, var(--right) 50%, transparent);
 }
-.trivia-deep-dive > summary::-webkit-details-marker { display: none; }
-.trivia-deep-dive > summary::marker { content: ""; }
-.trivia-deep-dive > summary:hover { color: var(--ink); }
-.trivia-deep-dive[open] > summary { color: var(--ink); margin-bottom: 0.5rem; }
-.trivia-explanation {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.55;
-  color: var(--ink-soft);
+.tvp-wrong {
+  background: color-mix(in srgb, var(--wrong) 12%, transparent);
+  color: var(--wrong);
+  border: 1px solid color-mix(in srgb, var(--wrong) 50%, transparent);
 }
 
-/* --- Trivia "Explore further" disclosure ---
-   Same chrome family as .trivia-deep-dive, slightly different
-   layout because the body is a list of links rather than a
-   single paragraph. */
-.trivia-explore {
-  margin-top: 0.6rem;
-  padding-top: 0.6rem;
+.trivia-answers {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
+  margin: 1rem 0 1.4rem;
 }
-.trivia-explore > summary {
-  cursor: pointer;
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  padding: 0.2rem 0;
+.trivia-answer-block {
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px; border: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
 }
-.trivia-explore > summary::-webkit-details-marker { display: none; }
-.trivia-explore > summary::marker { content: ""; }
-.trivia-explore > summary:hover { color: var(--ink); }
-.trivia-explore[open] > summary { color: var(--ink); margin-bottom: 0.5rem; }
+/* Correct-answer card tints with the verdict color so a wrong
+   answer reads red and a right answer reads green (subtle). */
+.trivia-result-right .trivia-answer-correct {
+  background: color-mix(in srgb, var(--right) 6%, transparent);
+  border-color: color-mix(in srgb, var(--right) 30%, transparent);
+}
+.trivia-result-wrong .trivia-answer-correct {
+  background: color-mix(in srgb, var(--wrong) 6%, transparent);
+  border-color: color-mix(in srgb, var(--wrong) 30%, transparent);
+}
+.trivia-answer-eyebrow {
+  margin: 0 0 0.3rem; font-size: 0.72rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-mute); font-style: italic;
+}
+.trivia-answer-text {
+  margin: 0; font-size: 1rem; color: var(--ink); font-weight: 500;
+  word-break: break-word;
+}
 
-.trivia-explore-options {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+.trivia-disc-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+  margin: 0 0 0.9rem;
 }
+.trivia-disc { min-width: 0; }
+.trivia-disc > summary {
+  list-style: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+  padding: 0.65rem 0.5rem;
+  font-size: 0.85rem; color: var(--ink-soft); font-style: italic;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  border: 1px solid var(--rule); border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 50%, transparent);
+}
+.trivia-disc > summary::-webkit-details-marker { display: none; }
+.trivia-disc > summary::marker { content: ""; }
+.trivia-disc > summary .icon { color: var(--quill); flex-shrink: 0; }
+.trivia-disc[open] > summary {
+  border-color: var(--ink-soft); color: var(--ink);
+  background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
+}
+.trivia-disc-body {
+  /* Span both columns of the disc-row grid so the panel sits below
+     the two pills cleanly, regardless of which one was tapped. */
+  grid-column: 1 / -1;
+  padding: 0.8rem 0.9rem; margin: 0.4rem 0 0;
+  font-size: 0.95rem; line-height: 1.55; color: var(--ink-soft);
+  border: 1px solid var(--rule); border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) 30%, transparent);
+}
+.trivia-disc-body.trivia-explore-options {
+  display: flex; flex-direction: column; gap: 0.3rem;
+}
+
+.trivia-next-cta {
+  width: 100%;
+  padding: 0.95rem 1.2rem;
+  font-size: 1.05rem;
+  margin-top: 0.4rem;
+}
+
+/* The explore-options links live INSIDE the .trivia-disc-body now —
+   no standalone .trivia-explore wrapper. Per-link chrome is shared
+   with the SRS path so the visual language stays consistent. */
 .trivia-explore-option {
   display: flex;
   align-items: center;

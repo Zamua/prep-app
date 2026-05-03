@@ -54,15 +54,19 @@ def test_answer_correct_renders_result_block(client: TestClient, initialized_db:
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "paris"})
     assert r.status_code == 200
     assert "trivia-result-right" in r.text
-    assert "Correct" in r.text
+    # Verdict pill in the nav row carries the verdict label.
+    assert "tvp-right" in r.text
+    assert "correct" in r.text
     # Card was rotated — count_unanswered should now be 0.
     assert TriviaQueueRepo().count_unanswered(deck_id=1) == 0
 
 
-def test_answer_renders_deep_dive_when_explanation_present(client: TestClient, initialized_db: str):
-    """If the question carries an explanation, the result block opens
-    a Deep dive disclosure with the text. Hidden when explanation is
-    null (legacy cards)."""
+def test_answer_renders_explain_disclosure_when_explanation_present(
+    client: TestClient, initialized_db: str
+):
+    """If the question carries an explanation, the disc-row exposes
+    the Explain pill with the explanation text behind it. Hidden when
+    explanation is null (legacy cards)."""
     user = initialized_db
     deck_id = DeckRepo().create(user, "history")
     qid = QuestionRepo().add(
@@ -79,16 +83,22 @@ def test_answer_renders_deep_dive_when_explanation_present(client: TestClient, i
     TriviaQueueRepo().append_card(qid, deck_id)
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "leonardo"})
     assert r.status_code == 200
-    assert "trivia-deep-dive" in r.text
-    assert "Deep dive" in r.text
+    assert "trivia-disc-row" in r.text
+    # New label: "Explain" (renamed from "Deep dive").
+    assert ">Explain<" in r.text
     assert "Painted around 1503-1519" in r.text
 
 
-def test_answer_omits_deep_dive_when_no_explanation(client: TestClient, initialized_db: str):
+def test_answer_omits_explain_when_no_explanation_and_no_handoff(
+    client: TestClient, initialized_db: str
+):
+    """When neither explain nor explore content is available the
+    whole disc-row is omitted."""
     _, qid = _seed_trivia_question(initialized_db)
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "paris"})
     assert r.status_code == 200
-    assert "trivia-deep-dive" not in r.text
+    # The Explain pill should not appear (no explanation).
+    assert ">Explain<" not in r.text
 
 
 def test_answer_renders_explore_further_with_chat_and_google(
