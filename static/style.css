@@ -904,11 +904,22 @@ a { color: inherit; }
 }
 .tag-topic {
   /* Topics can be long ("system design, api-design, distributed
-     systems, napkin math") — single-line ellipsis. The full text
-     surfaces in the card-preview dialog (tap the card body). */
+     systems, napkin math") — single-line ellipsis on the deck index
+     to keep cards compact. The full text wraps in the card-preview
+     dialog override below. */
   min-width: 0;
   flex: 0 1 auto;
   max-width: 100%;
+}
+/* Inside the card-preview dialog the topic chip should wrap so the
+   full text is readable. We only override the inherited `.tag` rules
+   that prevent wrapping; everything else (border, color, padding)
+   stays the same. */
+.card-preview-body .tag-topic {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
 }
 .tag-suspended {
   color: var(--wrong);
