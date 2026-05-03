@@ -50,6 +50,7 @@
               <li><a href="{{ root }}/settings/agent">AI agent {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               <li><a href="{{ root }}/settings/editor">Editor {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               <li><a href="{{ root }}/notify">Notifications {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+              <li><a href="{{ root }}/notify/log">Notification log{% if notif_unseen_count %} <span class="notif-unseen-badge">{{ notif_unseen_count }}</span>{% endif %} {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
             </ul>
           </div>
         </details>

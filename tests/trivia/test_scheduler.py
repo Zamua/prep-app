@@ -80,8 +80,10 @@ def test_tick_sends_push_for_due_deck(monkeypatch, fixtures):
     deck_id, qids = _make_trivia_deck(fixtures, n_questions=2)
     sent = []
 
-    def fake_send(*, user_id, title, body, url=None):
-        sent.append({"user_id": user_id, "title": title, "body": body, "url": url})
+    def fake_send(*, user_id, title, body, url=None, source="manual"):
+        sent.append(
+            {"user_id": user_id, "title": title, "body": body, "url": url, "source": source}
+        )
         return {"ok": True}
 
     monkeypatch.setattr("prep.notify._legacy_module.send_to_user", fake_send)

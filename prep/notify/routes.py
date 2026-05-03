@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from prep import notify as _notify_pkg
 from prep.auth import current_user
 from prep.notify.entities import NotificationPrefs
-from prep.notify.repo import NotifyPrefsRepo, PushSubsRepo
+from prep.notify.repo import NotificationLogRepo, NotifyPrefsRepo, PushSubsRepo
 from prep.web.templates import templates
 
 router = APIRouter()
@@ -29,6 +29,29 @@ def _prefs_repo() -> NotifyPrefsRepo:
 
 def _subs_repo() -> PushSubsRepo:
     return PushSubsRepo()
+
+
+def _log_repo() -> NotificationLogRepo:
+    return NotificationLogRepo()
+
+
+@router.get("/notify/log", response_class=HTMLResponse)
+def notification_log(
+    request: Request,
+    user: dict = Depends(current_user),
+    log_repo: NotificationLogRepo = Depends(_log_repo),
+):
+    """Render the recent notification history. Marks all currently
+    unseen entries as seen on render — opening the page IS the
+    "I saw these" gesture."""
+    uid = user["tailscale_login"]
+    entries = log_repo.list_recent(uid, limit=50)
+    log_repo.mark_all_seen(uid)
+    return templates.TemplateResponse(
+        request,
+        "notify/log.html",
+        {"entries": entries},
+    )
 
 
 @router.get("/notify", response_class=HTMLResponse)

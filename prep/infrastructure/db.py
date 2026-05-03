@@ -333,6 +333,25 @@ def init() -> None:
         qcols = {r["name"] for r in c.execute("PRAGMA table_info(questions)").fetchall()}
         if "explanation" not in qcols:
             c.execute("ALTER TABLE questions ADD COLUMN explanation TEXT")
+
+        # 10. Notification log: persist every push we send so the user
+        #     can find missed/dismissed pushes after the fact.
+        #     `seen_at` is set when the user opens /notify/log so the
+        #     index can show an unread badge.
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS notifications_log (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id   TEXT    NOT NULL,
+                sent_at   TEXT    NOT NULL,
+                title     TEXT    NOT NULL,
+                body      TEXT    NOT NULL,
+                url       TEXT    NOT NULL,
+                source    TEXT    NOT NULL,
+                seen_at   TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_notifications_log_user_sent
+                ON notifications_log(user_id, sent_at DESC);
+        """)
         c.executescript("""
             CREATE TABLE IF NOT EXISTS trivia_queue (
                 question_id              INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,

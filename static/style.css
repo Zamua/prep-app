@@ -3224,3 +3224,86 @@ body:has(dialog[open]) {
   flex: 0 0 auto !important;
   color: var(--ink-mute);
 }
+
+/* --- Notification log + masthead unseen badge --- */
+
+.notif-unseen-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--quill);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-feature-settings: "lnum" on;
+  margin-left: 0.25rem;
+}
+
+.notif-log {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.notif-log-item {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.notif-log-link {
+  display: block;
+  padding: 0.8rem 1rem;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.notif-log-link:hover { background: color-mix(in srgb, var(--ink-soft) 5%, transparent); }
+
+.notif-log-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.3rem;
+}
+
+.notif-log-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.tag-notif-source {
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.notif-log-body {
+  margin: 0 0 0.3rem;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+.notif-log-meta {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+  font-feature-settings: "lnum" on, "tnum" on;
+}
+
+.empty-state {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--ink-mute);
+  font-style: italic;
+}

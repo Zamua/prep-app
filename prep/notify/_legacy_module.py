@@ -126,7 +126,14 @@ def _send_one(sub_row: dict, payload: dict) -> str:
         return "fail"
 
 
-def send_to_user(user_id: str, title: str, body: str, url: str | None = None) -> dict:
+def send_to_user(
+    user_id: str,
+    title: str,
+    body: str,
+    url: str | None = None,
+    *,
+    source: str = "manual",
+) -> dict:
     """Send a push to every device the user has subscribed. Prunes any
     subscriptions the push service rejects with 404/410. Returns counts.
     Tap-target URL defaults to the app root.
@@ -138,12 +145,27 @@ def send_to_user(user_id: str, title: str, body: str, url: str | None = None) ->
     PWA scope. Without the prefix, iOS sends the user to the
     site root and (since that's outside scope) the PWA bounces
     them to its start_url instead of the intended page.
+
+    `source` ("trivia" | "srs-digest" | "srs-when-ready" | "manual")
+    is recorded in the notification log so the user can filter; defaults
+    to "manual" for ad-hoc test pushes.
     """
     root = (_os.environ.get("ROOT_PATH") or "").rstrip("/")
     raw = url or "/"
     if raw.startswith("/") and not raw.startswith(root + "/") and raw != root:
         raw = root + raw if root else raw
     payload = {"title": title, "body": body, "url": raw}
+    # Append to the log BEFORE delivery so a subsequent failure still
+    # leaves the user with a record of what was attempted.
+    try:
+        from prep.notify.repo import NotificationLogRepo
+
+        NotificationLogRepo().append(
+            user_id=user_id, title=title, body=body, url=raw, source=source
+        )
+    except Exception as e:
+        # Never let a logging failure block delivery.
+        _log.warning("notification log append failed: %s", e)
     subs = db.list_push_subscriptions(user_id)
     sent = failed = pruned = 0
     for s in subs:
@@ -267,7 +289,11 @@ async def _tick() -> None:
                 if _should_send_digest(prefs, local):
                     breakdown = db.deck_due_breakdown(uid)
                     send_to_user(
-                        uid, "Prep — daily digest", _digest_body(breakdown, due_total), url="/"
+                        uid,
+                        "Prep — daily digest",
+                        _digest_body(breakdown, due_total),
+                        url="/",
+                        source="srs-digest",
                     )
                     prefs["last_digest_date"] = local.date().isoformat()
                     db.set_notification_prefs(uid, prefs)
@@ -287,6 +313,7 @@ async def _tick() -> None:
                         "Prep — cards ready",
                         f"{due_total} card{'s' if due_total != 1 else ''} due to study.",
                         url="/",
+                        source="srs-when-ready",
                     )
                     prefs["last_when_ready_at"] = now_utc.isoformat()
                     db.set_notification_prefs(uid, prefs)

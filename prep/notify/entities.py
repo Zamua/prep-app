@@ -47,3 +47,18 @@ class PushSubscription(BaseModel):
     auth: str
     created_at: str
     last_seen_at: str
+
+
+class NotificationLogEntry(BaseModel):
+    """A single past notification, persisted so the user can find it
+    later if it was dismissed/missed/glitched. Mirrors the push payload
+    plus a `seen_at` timestamp for unread-badging."""
+
+    id: int
+    user_id: str
+    sent_at: str
+    title: str
+    body: str
+    url: str
+    source: str  # "trivia" | "srs-digest" | "srs-when-ready" | "manual"
+    seen_at: str | None = None

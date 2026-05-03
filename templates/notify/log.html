@@ -1,0 +1,45 @@
+{# Notification history. Every push send_to_user fires lands here so
+   the user can find a notification they missed, dismissed, or that
+   silently glitched on the device. Tapping an entry opens the same
+   URL the push would have. #}
+{% extends "base.html" %}
+{% block title %}notifications · log · prep{% endblock %}
+{% block page_class %}notify-log{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} home</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">Notifications</p>
+  <h1 class="display">Recent&nbsp;<em>nudges</em>.</h1>
+  <p class="lede">
+    Every push prep has sent you, most recent first. Tap to open the
+    same target the notification would have. Useful if a push got
+    dismissed accidentally or never surfaced on your device.
+  </p>
+</section>
+
+{% if entries %}
+<ol class="notif-log" role="list">
+  {% for e in entries %}
+    <li class="notif-log-item notif-log-source-{{ e.source }}">
+      <a class="notif-log-link" href="{{ e.url }}">
+        <div class="notif-log-head">
+          <span class="notif-log-title">{{ e.title }}</span>
+          <span class="tag tag-notif-source">{{ e.source }}</span>
+        </div>
+        <p class="notif-log-body">{{ e.body }}</p>
+        <p class="notif-log-meta">
+          <time datetime="{{ e.sent_at }}">{{ e.sent_at[:19].replace('T', ' ') }}Z</time>
+        </p>
+      </a>
+    </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="empty-state">No notifications yet. Once prep starts pushing, they'll show up here.</p>
+{% endif %}
+
+{% endblock %}

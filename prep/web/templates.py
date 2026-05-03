@@ -54,7 +54,28 @@ def _assets_context(request: Request) -> dict:
     return {"static_css_mtime": _STATIC_CSS_MTIME}
 
 
+def _notif_unseen_context(request: Request) -> dict:
+    """Drives the masthead's "Notification log" badge — count of
+    notifications the user hasn't viewed since they last opened the
+    log page. Cheap COUNT() on every render; fine for a single-user
+    install at this scale."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return {"notif_unseen_count": 0}
+    try:
+        from prep.notify.repo import NotificationLogRepo
+
+        return {"notif_unseen_count": NotificationLogRepo().count_unseen(user["tailscale_login"])}
+    except Exception:
+        return {"notif_unseen_count": 0}
+
+
 templates = Jinja2Templates(
     directory=str(_REPO_ROOT / "templates"),
-    context_processors=[_user_context, _agent_context, _assets_context],
+    context_processors=[
+        _user_context,
+        _agent_context,
+        _assets_context,
+        _notif_unseen_context,
+    ],
 )

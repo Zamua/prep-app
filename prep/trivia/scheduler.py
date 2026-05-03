@@ -133,6 +133,7 @@ def tick(now_utc: datetime) -> None:
                 title=deck_name or "Trivia",
                 body=body,
                 url=f"/trivia/session/{deck_name}",
+                source="trivia",
             )
 
             decks.set_last_notified_at(deck_id, now_utc.isoformat(timespec="seconds"))
