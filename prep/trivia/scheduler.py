@@ -33,12 +33,12 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_INTERVAL_MINUTES = 30
 
-# When the count of "still needs work" cards (never-shown + wrong)
-# drops below this, the scheduler proactively asks claude for a
-# fresh batch on its next tick. Above the threshold, no generation
-# fires — the deck doesn't bloat while the user still has material
-# to grind through.
-_REFILL_BELOW_PENDING_REVIEW = 5
+# Strict gate: only refill the deck once the user has answered EVERY
+# existing card correctly at least once. This stops the scheduler
+# from blowing the deck up to hundreds of cards when the user has
+# stopped engaging — if there's a single wrong/never-shown card
+# left, no new generation fires.
+_REFILL_BELOW_PENDING_REVIEW = 1
 
 
 def _parse_iso(ts: str) -> Optional[datetime]:
