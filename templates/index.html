@@ -101,17 +101,37 @@
                ones" at a glance. #}
             <span class="tag tag-decktype tag-decktype-{{ d.deck_type }}">{{ d.deck_type }}</span>
           </span>
-          <span class="deck-stats">
-            <span class="stat-due {% if (d.due or 0) > 0 %}is-active{% endif %}">
-              <span class="stat-value">{{ d.due or 0 }}</span>
-              <span class="stat-label">due now</span>
+          {% if d.deck_type == 'trivia' and d.trivia_stats %}
+            {# Mini mastery bar — visual ratio + count. Replaces the
+               "n due now · m total" line which is meaningless for
+               trivia (no SRS schedule). #}
+            {% set _t = d.trivia_stats.total or 1 %}
+            {% set _mp = (100 * d.trivia_stats.mastered / _t) %}
+            {% set _wp = (100 * d.trivia_stats.wrong / _t) %}
+            <span class="deck-mastery-mini">
+              <span class="deck-mastery-mini-bar" role="progressbar"
+                    aria-valuenow="{{ _mp | round | int }}" aria-valuemin="0" aria-valuemax="100">
+                <span class="deck-mastery-mini-fill deck-mastery-mini-fill-right" style="width: {{ _mp | round(2) }}%"></span>
+                <span class="deck-mastery-mini-fill deck-mastery-mini-fill-wrong"
+                      style="left: {{ _mp | round(2) }}%; width: {{ _wp | round(2) }}%"></span>
+              </span>
+              <span class="deck-mastery-mini-label">
+                <span class="stat-value">{{ d.trivia_stats.mastered }}</span><span class="stat-label">/{{ d.trivia_stats.total }} mastered</span>
+              </span>
             </span>
-            <span class="stat-divider" aria-hidden="true">·</span>
-            <span class="stat-total">
-              <span class="stat-value">{{ d.total or 0 }}</span>
-              <span class="stat-label">in deck</span>
+          {% else %}
+            <span class="deck-stats">
+              <span class="stat-due {% if (d.due or 0) > 0 %}is-active{% endif %}">
+                <span class="stat-value">{{ d.due or 0 }}</span>
+                <span class="stat-label">due now</span>
+              </span>
+              <span class="stat-divider" aria-hidden="true">·</span>
+              <span class="stat-total">
+                <span class="stat-value">{{ d.total or 0 }}</span>
+                <span class="stat-label">in deck</span>
+              </span>
             </span>
-          </span>
+          {% endif %}
         </span>
         <span class="deck-arrow">{{ icon('arrow-right') }}</span>
       </a>

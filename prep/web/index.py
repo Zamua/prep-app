@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from prep.auth import current_user
 from prep.decks.repo import DeckRepo
 from prep.study.repo import SessionRepo
+from prep.trivia.repo import TriviaQueueRepo
 from prep.web.templates import templates
 
 router = APIRouter()
@@ -30,15 +31,23 @@ def index(
     uid = user["tailscale_login"]
     decks = sorted(deck_repo.list_summaries(uid), key=lambda d: d.name)
     recents = session_repo.list_recent(uid, limit=5)
+    # Trivia decks need extra stats for the mini mastery bar — total /
+    # mastered / wrong / unanswered. SRS decks use the existing due/total
+    # rendering and don't need this. One query per trivia deck is fine
+    # at this scale (a single user has tens of decks at most).
+    trivia_repo = TriviaQueueRepo()
+    deck_dicts = []
+    for d in decks:
+        item = d.model_dump()
+        if d.deck_type == d.deck_type.TRIVIA:
+            item["trivia_stats"] = trivia_repo.deck_stats(d.id)
+        deck_dicts.append(item)
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "user": user,
-            # Templates iterate raw dicts; expose the entity fields
-            # directly via .model_dump() to keep the template free of
-            # pydantic-specific access patterns.
-            "decks": [d.model_dump() for d in decks],
+            "decks": deck_dicts,
             "recent_sessions": [r.model_dump() for r in recents],
         },
     )

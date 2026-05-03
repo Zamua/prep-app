@@ -132,7 +132,16 @@
          reveals its content in a panel below the row. Both are
          optional — the row's grid collapses gracefully if only one
          disclosure is present. #}
-      {% if q.explanation or handoff_urls %}
+      {# Disc row: tertiary actions on the result panel. Three pills
+         share the same chrome (outlined, italic uppercase, sparkle/
+         arrow icon): Explain (expands inline) / Explore further
+         (expands inline) / Re-grade (POSTs to the regrade route).
+         Each is optional — the row's grid auto-fits 1..3 children
+         so missing pills don't leave dead space. The Re-grade pill
+         is shown only on wrong verdicts where the user typed an
+         answer (IDK submissions are confessions, not disputes). #}
+      {% set _show_regrade = (not result.correct) and (not result.idk) and result.given %}
+      {% if q.explanation or handoff_urls or _show_regrade %}
         <div class="trivia-disc-row">
           {% if q.explanation %}
             <details class="trivia-disc">
@@ -169,7 +178,40 @@
               </div>
             </details>
           {% endif %}
+          {% if _show_regrade %}
+            <form method="post"
+                  action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/regrade{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/regrade{% endif %}"
+                  class="trivia-regrade-form">
+              <input type="hidden" name="answer" value="{{ result.given }}">
+              {% if session_total %}
+                <input type="hidden" name="question_id" value="{{ q.id }}">
+                <input type="hidden" name="cards" value="{{ session_remaining }}">
+                <input type="hidden" name="done" value="{{ session_done or '' }}">
+              {% endif %}
+              <button type="submit" class="trivia-regrade-btn"
+                      data-pending-label="Re-grading…">
+                {{ icon('sparkle', class_='icon icon-inline') }}
+                <span>Re-grade</span>
+              </button>
+            </form>
+          {% endif %}
         </div>
+        {% if _show_regrade %}
+          <script>
+            (function () {
+              var btn = document.querySelector('.trivia-regrade-btn');
+              if (!btn) return;
+              btn.form.addEventListener('submit', function () {
+                btn.disabled = true;
+                btn.querySelector('span').textContent = btn.dataset.pendingLabel || 'Working…';
+              });
+            })();
+          </script>
+        {% endif %}
+      {% endif %}
+
+      {% if result.regraded %}
+        <p class="trivia-regrade-note"><em>re-graded by claude</em></p>
       {% endif %}
 
       {% if session_total %}

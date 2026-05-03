@@ -219,6 +219,50 @@ def test_index_decks_carry_decktype(client: TestClient, initialized_db: str):
     assert "tag-decktype-trivia" in r.text
 
 
+def test_index_trivia_deck_shows_mastery_mini_bar(client: TestClient, initialized_db: str):
+    """Trivia decks render the mini mastery bar instead of the SRS
+    "n due now · m total" line, since trivia has no SRS schedule.
+    Bar reflects mastered + wrong + unanswered counts."""
+    from prep.decks.entities import NewQuestion, QuestionType
+    from prep.decks.repo import QuestionRepo
+    from prep.trivia.repo import TriviaQueueRepo
+
+    deck_id = DeckRepo().create_trivia(
+        initialized_db, "design-interview", topic="x", interval_minutes=30
+    )
+    qrepo = QuestionRepo()
+    trepo = TriviaQueueRepo()
+    qids = []
+    for i in range(4):
+        qid = qrepo.add(
+            initialized_db,
+            deck_id,
+            NewQuestion(type=QuestionType.SHORT, prompt=f"Q{i}?", answer=f"A{i}", topic="x"),
+        )
+        trepo.append_card(qid, deck_id)
+        qids.append(qid)
+    trepo.mark_answered(qids[0], correct=True)
+    trepo.mark_answered(qids[1], correct=False)
+    # qids[2], qids[3] stay unanswered.
+
+    r = client.get("/")
+    assert r.status_code == 200
+    # Mini bar renders for the trivia deck.
+    assert "deck-mastery-mini" in r.text
+    # Caption shows mastered / total — 1 right, 4 total.
+    assert ">1<" in r.text and "/4 mastered" in r.text
+
+
+def test_index_srs_deck_keeps_due_total_line(client: TestClient, initialized_db: str):
+    """SRS decks keep the original 'n due now · m total' line — no
+    mastery bar, since SRS has no equivalent grouping."""
+    DeckRepo().create(initialized_db, "concurrency")
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "due now" in r.text
+    assert "in deck" in r.text
+
+
 def test_study_begin_400_for_trivia_deck(client: TestClient, initialized_db: str):
     """A stale bookmark shouldn't be able to start an SRS session
     against a trivia deck."""

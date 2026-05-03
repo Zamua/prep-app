@@ -469,6 +469,108 @@ def test_set_interval_rejects_garbage(client: TestClient, initialized_db: str):
     assert r.status_code == 400
 
 
+# ---- /trivia/<id>/regrade + /trivia/session/<deck>/regrade -----------
+
+
+def test_regrade_flips_wrong_to_right_on_claude_disagree(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Standalone regrade: the user typed an answer that the
+    deterministic grader rejected. Re-grade hits claude (mocked here),
+    claude says "right", queue verdict flips to correct, the rendered
+    panel shows the correct verdict + a "re-graded" note."""
+    _, qid = _seed_trivia_question(initialized_db, prompt="ACID property?", answer="durability")
+    # First mark it as wrong via the queue helper (bypassing the answer
+    # route — we just want a starting state where the verdict is wrong).
+    TriviaQueueRepo().mark_answered(qid, correct=False)
+    # Stub claude to return "right" with feedback.
+    monkeypatch.setattr(
+        svc,
+        "claude_grade",
+        lambda **_: {"correct": True, "feedback": "Yes, that's the canonical term."},
+    )
+    r = client.post(
+        f"/trivia/{qid}/regrade",
+        data={"answer": "durability"},
+    )
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    assert "re-graded by claude" in r.text
+    # Queue verdict flipped to right.
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        row = c.execute(
+            "SELECT last_answered_correctly FROM trivia_queue WHERE question_id = ?",
+            (qid,),
+        ).fetchone()
+    assert row["last_answered_correctly"] == 1
+
+
+def test_regrade_keeps_wrong_when_claude_agrees(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """If claude also says wrong on re-grade, the verdict stays wrong
+    but the page still shows the new claude feedback."""
+    _, qid = _seed_trivia_question(initialized_db, prompt="ACID property?", answer="durability")
+    TriviaQueueRepo().mark_answered(qid, correct=False)
+    monkeypatch.setattr(
+        svc, "claude_grade", lambda **_: {"correct": False, "feedback": "Not the same concept."}
+    )
+    r = client.post(f"/trivia/{qid}/regrade", data={"answer": "throughput"})
+    assert r.status_code == 200
+    assert "trivia-result-wrong" in r.text
+    assert "Not the same concept." in r.text
+
+
+def test_regrade_does_not_re_rotate_card(monkeypatch, client: TestClient, initialized_db: str):
+    """A re-grade must NOT bump queue_position — the card already
+    rotated when the user first answered it."""
+    _, qid = _seed_trivia_question(initialized_db)
+    TriviaQueueRepo().mark_answered(qid, correct=False)
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        before = c.execute(
+            "SELECT queue_position FROM trivia_queue WHERE question_id = ?", (qid,)
+        ).fetchone()["queue_position"]
+    monkeypatch.setattr(svc, "claude_grade", lambda **_: {"correct": True, "feedback": ""})
+    client.post(f"/trivia/{qid}/regrade", data={"answer": "paris"})
+    with cursor() as c:
+        after = c.execute(
+            "SELECT queue_position FROM trivia_queue WHERE question_id = ?", (qid,)
+        ).fetchone()["queue_position"]
+    assert after == before
+
+
+def test_session_regrade_flips_done_chain_verdict(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Session regrade mutates the `done` chain so the next-card link
+    (and the eventual summary) sees the corrected verdict for the
+    question being re-graded."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    # Pretend user answered Q0 wrong, is on the result panel for Q0.
+    TriviaQueueRepo().mark_answered(qids[0], correct=False)
+    monkeypatch.setattr(svc, "claude_grade", lambda **_: {"correct": True, "feedback": ""})
+    cards_remaining = ",".join(str(q) for q in qids[1:])
+    done_before = f"{qids[0]}w"
+    r = client.post(
+        "/trivia/session/geo/regrade",
+        data={
+            "question_id": str(qids[0]),
+            "cards": cards_remaining,
+            "done": done_before,
+            "answer": "A0",
+        },
+    )
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    # Next-card link now carries the FLIPPED verdict for qids[0].
+    assert f"done={qids[0]}r" in r.text
+    assert "re-graded by claude" in r.text
+
+
 def test_set_interval_404_for_other_users_deck(client: TestClient, initialized_db: str):
     """IDOR check: the route's user-scoped UPDATE leaves another user's
     deck alone, and the route 404s instead of leaking existence."""

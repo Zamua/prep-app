@@ -491,6 +491,49 @@ a { color: inherit; }
 .stat-label { font-style: italic; }
 .stat-divider { color: var(--rule); }
 
+/* --- Trivia deck card on the index page ---
+   For trivia decks the "due / total" stat row is meaningless (no SRS
+   schedule). Replace with a mini mastery bar: thin colored track
+   showing mastered (green) + wrong (red) + the unanswered remainder
+   as the unfilled tail, plus a "N / M mastered" caption. Mirrors the
+   deck-page mastery bar but compact enough for a list row. */
+.deck-mastery-mini {
+  display: flex; flex-direction: column;
+  gap: 0.4rem;
+  color: var(--ink-mute);
+  font-size: 0.92rem;
+}
+.deck-mastery-mini-bar {
+  position: relative;
+  display: block;
+  height: 6px;
+  background: color-mix(in srgb, var(--ink-soft) 16%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.deck-mastery-mini-fill {
+  position: absolute; top: 0; bottom: 0;
+  display: block;
+}
+.deck-mastery-mini-fill-right {
+  left: 0;
+  background: color-mix(in srgb, var(--right) 80%, transparent);
+}
+.deck-mastery-mini-fill-wrong {
+  /* `left:` set inline so it stacks immediately after the right fill. */
+  background: color-mix(in srgb, var(--wrong) 75%, transparent);
+}
+.deck-mastery-mini-label {
+  display: inline-flex; align-items: baseline; gap: 0.2em;
+}
+.deck-mastery-mini-label .stat-value {
+  font-weight: 600; color: var(--ink-soft);
+  font-feature-settings: "onum" on, "kern" on;
+}
+.deck-mastery-mini-label .stat-label {
+  font-style: italic;
+}
+
 .deck-arrow {
   font-family: var(--serif);
   font-size: 1.4rem;
@@ -3295,7 +3338,13 @@ body:has(dialog[open]) {
 }
 
 .trivia-disc-row {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+  /* auto-fit lets the row hold 1, 2, or 3 pills (Explain, Explore,
+     Re-grade) without leaving dead space when one is omitted. The
+     8rem floor keeps each pill wide enough that an inline-flex
+     summary doesn't wrap mid-label on a 430px viewport. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.5rem;
   margin: 0 0 0.9rem;
 }
 .trivia-disc { min-width: 0; }
@@ -3333,6 +3382,47 @@ body:has(dialog[open]) {
   padding: 0.95rem 1.2rem;
   font-size: 1.05rem;
   margin-top: 0.4rem;
+}
+
+/* --- Re-grade pill (sibling of Explain / Explore in the disc row)
+   ----
+   Shown on wrong-verdict result panels when the user typed an
+   answer. Same chrome as .trivia-disc summary so all three pills
+   (Explain / Explore further / Re-grade) read as one visual group.
+   The whole form behaves like a button — its rendering width is
+   driven by the grid column it lives in. */
+.trivia-regrade-form { margin: 0; min-width: 0; }
+.trivia-regrade-btn {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  cursor: pointer;
+  font-family: inherit; font-style: italic;
+  font-size: 0.85rem; color: var(--ink-soft);
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 0.65rem 0.5rem;
+  border: 1px solid var(--rule); border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 50%, transparent);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.trivia-regrade-btn:hover {
+  border-color: var(--ink-soft); color: var(--ink);
+  background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
+}
+.trivia-regrade-btn:disabled {
+  opacity: 0.6; cursor: progress;
+}
+.trivia-regrade-btn .icon {
+  width: 0.95rem; height: 0.95rem; color: var(--quill);
+  flex-shrink: 0;
+}
+
+.trivia-regrade-note {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.78rem; letter-spacing: 0.06em;
+  text-align: center;
+  color: var(--ink-mute); font-style: italic;
+  text-transform: lowercase;
 }
 
 /* Claude-graded feedback line — only rendered when result.feedback

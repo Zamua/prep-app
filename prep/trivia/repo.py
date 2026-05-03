@@ -149,6 +149,27 @@ class TriviaQueueRepo:
                 (deck_id,),
             )
 
+    def set_last_correctness(self, question_id: int, correct: bool) -> None:
+        """Flip the recorded verdict for a card without rotating it
+        again. Used by the re-grade path: the card already moved when
+        the user first answered, and re-grading shouldn't bump it to
+        the back of the queue a second time. Also clears the deck's
+        ignored-streak since a re-grade still counts as engagement."""
+        with cursor() as c:
+            row = c.execute("SELECT deck_id FROM questions WHERE id = ?", (question_id,)).fetchone()
+            if row is None:
+                return
+            c.execute(
+                """UPDATE trivia_queue
+                   SET last_answered_correctly = ?
+                   WHERE question_id = ?""",
+                (1 if correct else 0, question_id),
+            )
+            c.execute(
+                "UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?",
+                (row["deck_id"],),
+            )
+
     def count_unanswered(self, deck_id: int) -> int:
         """Number of cards in `deck_id` whose `last_answered_at IS NULL`.
         Strict "never seen" count — used by tests pinning queue

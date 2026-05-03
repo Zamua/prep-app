@@ -484,6 +484,130 @@ def trivia_answer(
     )
 
 
+def _flip_done_verdict(done_items: list[tuple[int, str]], qid: int, correct: bool) -> str:
+    """Mutate the carry-forward done chain so the regraded card's
+    verdict reflects the new outcome. Called from the session regrade
+    route so the next-card link + summary view see the corrected
+    verdict."""
+    new_verdict = "r" if correct else "w"
+    out = [(q, new_verdict if q == qid else v) for q, v in done_items]
+    return _format_done(out)
+
+
+@router.post("/trivia/{question_id}/regrade", response_class=HTMLResponse)
+def trivia_regrade(
+    question_id: int,
+    request: Request,
+    answer: str = Form(""),
+    user: dict = Depends(current_user),
+):
+    """Force the claude grader to re-evaluate the user's answer for a
+    standalone (non-session) trivia card. Updates the recorded verdict
+    if it flips and re-renders the result panel. The card isn't
+    re-rotated — `set_last_correctness` only touches the verdict
+    column."""
+    questions = QuestionRepo()
+    decks = DeckRepo()
+    trivia = TriviaQueueRepo()
+
+    q = questions.get(user["tailscale_login"], question_id)
+    if q is None:
+        raise HTTPException(404, "question not found")
+
+    verdict = trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=answer)
+    correct = verdict["correct"]
+    trivia.set_last_correctness(question_id, correct=correct)
+
+    deck_name = decks.find_name(user["tailscale_login"], q.deck_id)
+    return templates.TemplateResponse(
+        request,
+        "trivia/card.html",
+        {
+            "q": q,
+            "deck_name": deck_name,
+            "result": {
+                "correct": correct,
+                "given": answer,
+                "expected": q.answer,
+                "feedback": verdict.get("feedback"),
+                "regraded": True,
+            },
+            **_explore_ctx(
+                deck_name=deck_name or "",
+                q=q,
+                user_answer=answer,
+                correct=correct,
+                expected=q.answer,
+            ),
+        },
+    )
+
+
+@router.post("/trivia/session/{deck_name}/regrade", response_class=HTMLResponse)
+def trivia_session_regrade(
+    deck_name: str,
+    request: Request,
+    question_id: int = Form(...),
+    cards: str = Form(""),
+    done: str = Form(""),
+    answer: str = Form(""),
+    user: dict = Depends(current_user),
+):
+    """Session variant of the regrade route. In addition to flipping
+    the recorded verdict, mutates the `done` chain so the next-card
+    link (and the summary view at the end) reflects the new verdict
+    for this question."""
+    uid = user["tailscale_login"]
+    decks = DeckRepo()
+    questions = QuestionRepo()
+    trivia = TriviaQueueRepo()
+    deck_id = decks.find_id(uid, deck_name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+
+    q = questions.get(uid, question_id)
+    if q is None or q.deck_id != deck_id:
+        raise HTTPException(404, "question not found in this deck")
+
+    verdict = trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=answer)
+    correct = verdict["correct"]
+    trivia.set_last_correctness(question_id, correct=correct)
+
+    done_items = _parse_done(done)
+    new_done_str = _flip_done_verdict(done_items, question_id, correct)
+    # Position counter on the result view stays on the just-graded card.
+    queue = _parse_card_ids(cards)
+    position = max(1, len(done_items))
+    total = len(done_items) + len(queue)
+
+    return templates.TemplateResponse(
+        request,
+        "trivia/card.html",
+        {
+            "q": q,
+            "deck_name": deck_name,
+            "result": {
+                "correct": correct,
+                "given": answer,
+                "expected": q.answer,
+                "feedback": verdict.get("feedback"),
+                "regraded": True,
+            },
+            "session_position": position,
+            "session_total": total,
+            "session_remaining": cards,
+            "session_done": new_done_str,
+            **_explore_ctx(
+                deck_name=deck_name,
+                q=q,
+                user_answer=answer,
+                correct=correct,
+                expected=q.answer,
+            ),
+        },
+    )
+
+
 @router.post("/trivia/decks/{deck_id}/notifications")
 def trivia_toggle_notifications(
     deck_id: int,
