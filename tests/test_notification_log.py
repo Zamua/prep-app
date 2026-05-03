@@ -17,10 +17,10 @@ def test_send_to_user_appends_log_entry(monkeypatch, env):
     monkeypatch.setenv("ROOT_PATH", "/prep")
     import importlib
 
-    from prep.notify import _legacy_module
+    from prep.notify import push as _push_mod
     from prep.notify.repo import NotificationLogRepo
 
-    importlib.reload(_legacy_module)
+    importlib.reload(_push_mod)
 
     # Initialize schema + the test user against the per-test sqlite.
     from prep.infrastructure import db as _infra_db
@@ -32,12 +32,10 @@ def test_send_to_user_appends_log_entry(monkeypatch, env):
     importlib.reload(_db)
     _db.upsert_user("testuser@example.com")
 
-    monkeypatch.setattr(_legacy_module, "_send_one", lambda _s, _p: "ok")
-    monkeypatch.setattr(
-        _legacy_module.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}]
-    )
+    monkeypatch.setattr(_push_mod, "_send_one", lambda _s, _p: "ok")
+    monkeypatch.setattr(_push_mod.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}])
 
-    _legacy_module.send_to_user(
+    _push_mod.send_to_user(
         "testuser@example.com",
         "Trivia · doom",
         "Who composed the soundtrack?",

@@ -69,8 +69,10 @@ prep/
 ├── temporal_client.py       Python helpers: start_grading, start_transform,
 │                            start_plan_generate, signals/queries
 ├── notify/                  bounded context: web push + scheduler
-│   ├── _legacy_module.py    VAPID + send + asyncio scheduler (will split to
-│   │                        push.py + scheduler.py in a future pass)
+│   ├── push.py              VAPID bootstrap + _send_one + send_to_user fanout
+│   │                        + subscribe (the I/O side; no scheduling)
+│   ├── scheduler.py         periodic tick loop: per-user digest / when-ready
+│   │                        evaluation, quiet-hours, dispatch into trivia.tick
 │   ├── entities.py          NotificationPrefs, PushSubscription
 │   ├── repo.py              NotifyPrefsRepo, PushSubsRepo
 │   └── routes.py            /notify/* HTTP surface

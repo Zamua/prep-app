@@ -8,18 +8,12 @@ Public surface (used by app.py + routes):
 - start_scheduler() → launch the background digest/when-ready loop
 - VAPID_SUB → IANA "sub" claim sent on every push
 
-The implementation lives in `_legacy_module.py` for now — phase 7
-landed the bounded-context skeleton (entities/repo/routes) and a
-later refactor splits the implementation into push.py + scheduler.py.
+Implementation is split between `push.py` (VAPID + fanout, the I/O
+side) and `scheduler.py` (the periodic policy loop).
 """
 
-from prep.notify._legacy_module import (
-    VAPID_SUB,
-    public_key_b64,
-    send_to_user,
-    start_scheduler,
-    subscribe,
-)
+from prep.notify.push import VAPID_SUB, public_key_b64, send_to_user, subscribe
+from prep.notify.scheduler import start_scheduler
 
 __all__ = [
     "VAPID_SUB",

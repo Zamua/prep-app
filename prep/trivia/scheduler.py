@@ -1,15 +1,15 @@
 """Scheduler dispatch for trivia decks.
 
-Called once per scheduler tick from `prep.notify._legacy_module._tick`.
+Called once per scheduler tick from `prep.notify.scheduler._tick`.
 Walks all trivia decks, picks the ones whose interval has elapsed,
 fires one web push per ready deck, and (if the deck's queue is empty
 or has run out of unanswered cards) generates a fresh batch via
 `prep.trivia.service.generate_batch` first.
 
 The dispatch logic lives here (in the trivia context) rather than
-inside notify/_legacy_module so that the per-deck rules — interval
+inside notify/scheduler so that the per-deck rules — interval
 arithmetic, queue inspection, batch regen on empty — stay close to
-the trivia bounded context that owns them. notify/_legacy_module just
+the trivia bounded context that owns them. notify/scheduler just
 calls `tick()` once per its own loop iteration.
 
 Failure mode: anything that raises inside this module is logged and
@@ -92,8 +92,8 @@ def tick(now_utc: datetime) -> None:
     """One scheduler iteration's worth of trivia work. Idempotent;
     safe to call from the existing `_tick` loop. Send_to_user is
     pulled in via late import so this module doesn't grow a cycle
-    against notify/_legacy_module (which imports us)."""
-    from prep.notify._legacy_module import send_to_user
+    against prep.notify.scheduler (which imports us)."""
+    from prep.notify.push import send_to_user
 
     decks = DeckRepo()
     questions = QuestionRepo()

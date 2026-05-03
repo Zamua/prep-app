@@ -93,7 +93,7 @@ def test_tick_sends_push_for_due_deck(monkeypatch, fixtures):
         )
         return {"ok": True}
 
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", fake_send)
+    monkeypatch.setattr("prep.notify.push.send_to_user", fake_send)
     sched.tick(datetime.now(timezone.utc))
     assert len(sent) == 1
     assert sent[0]["body"] == "Q0?"  # first card in queue
@@ -113,7 +113,7 @@ def test_tick_skips_deck_within_interval(monkeypatch, fixtures):
     )
     sent = []
     monkeypatch.setattr(
-        "prep.notify._legacy_module.send_to_user",
+        "prep.notify.push.send_to_user",
         lambda **kw: sent.append(kw),
     )
     sched.tick(datetime.now(timezone.utc))
@@ -135,7 +135,7 @@ def test_tick_skips_when_queue_empty_and_agent_down(monkeypatch, fixtures):
     monkeypatch.setattr("prep.trivia.service.generate_batch", boom)
     sent = []
     monkeypatch.setattr(
-        "prep.notify._legacy_module.send_to_user",
+        "prep.notify.push.send_to_user",
         lambda **kw: sent.append(kw),
     )
     sched.tick(datetime.now(timezone.utc))
@@ -145,7 +145,7 @@ def test_tick_skips_when_queue_empty_and_agent_down(monkeypatch, fixtures):
 def test_tick_updates_last_notified_at(monkeypatch, fixtures):
     deck_id, _ = _make_trivia_deck(fixtures)
     monkeypatch.setattr(
-        "prep.notify._legacy_module.send_to_user",
+        "prep.notify.push.send_to_user",
         lambda **kw: {"ok": True},
     )
     sched.tick(datetime.now(timezone.utc))
@@ -165,7 +165,7 @@ def test_tick_does_not_refill_when_pending_pool_full(monkeypatch, fixtures):
         return type("Outcome", (), {"inserted": 0, "skipped_duplicates": 0, "skipped_invalid": 0})()
 
     monkeypatch.setattr("prep.trivia.service.generate_batch", fake_gen)
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     assert gen_calls == []
 
@@ -184,7 +184,7 @@ def test_tick_refills_when_pending_pool_drained(monkeypatch, fixtures):
         return type("Outcome", (), {"inserted": 0, "skipped_duplicates": 0, "skipped_invalid": 0})()
 
     monkeypatch.setattr("prep.trivia.service.generate_batch", fake_gen)
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     assert len(gen_calls) == 1
     assert gen_calls[0]["deck_id"] == deck_id
@@ -202,7 +202,7 @@ def test_tick_holds_refill_while_user_has_wrong_cards(monkeypatch, fixtures):
         "prep.trivia.service.generate_batch",
         lambda **kw: gen_calls.append(kw) or type("O", (), {"inserted": 0})(),
     )
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     assert gen_calls == []
 
@@ -239,7 +239,7 @@ def test_tick_skips_when_user_in_quiet_hours(monkeypatch, fixtures):
     quiet_now_utc = quiet_now_local.astimezone(_tz.utc)
 
     sent = []
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: sent.append(kw))
+    monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: sent.append(kw))
     sched.tick(quiet_now_utc)
     assert sent == []
     rows = fixtures["decks"].list_trivia_decks()
@@ -274,7 +274,7 @@ def test_tick_fires_outside_quiet_hours(monkeypatch, fixtures):
 
     sent = []
     monkeypatch.setattr(
-        "prep.notify._legacy_module.send_to_user",
+        "prep.notify.push.send_to_user",
         lambda **kw: sent.append(kw) or {"ok": True},
     )
     sched.tick(active_now_utc)
@@ -314,7 +314,7 @@ def test_tick_increments_streak_when_no_engagement(monkeypatch, fixtures):
     fixtures["decks"].record_notification_fire(
         deck_id, (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat(), 0
     )
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     rows = fixtures["decks"].list_trivia_decks()
     row = next(r for r in rows if r["id"] == deck_id)
@@ -344,7 +344,7 @@ def test_tick_resets_streak_when_user_engaged(monkeypatch, fixtures):
             "UPDATE trivia_queue SET last_answered_at = ?, last_answered_correctly = 1 WHERE question_id = ?",
             (five_ago, qids[0]),
         )
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     rows = fixtures["decks"].list_trivia_decks()
     row = next(r for r in rows if r["id"] == deck_id)
@@ -359,7 +359,7 @@ def test_tick_holds_off_while_within_backed_off_interval(monkeypatch, fixtures):
         deck_id, (datetime.now(timezone.utc) - timedelta(minutes=45)).isoformat(), 2
     )
     sent = []
-    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: sent.append(kw))
+    monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: sent.append(kw))
     sched.tick(datetime.now(timezone.utc))
     assert sent == []
 
@@ -387,7 +387,7 @@ def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
     fixtures["decks"].set_notifications_enabled(fixtures["user"], deck_id, False)
     sent = []
     monkeypatch.setattr(
-        "prep.notify._legacy_module.send_to_user",
+        "prep.notify.push.send_to_user",
         lambda **kw: sent.append(kw),
     )
     sched.tick(datetime.now(timezone.utc))

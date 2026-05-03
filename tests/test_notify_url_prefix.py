@@ -18,9 +18,9 @@ def patched_send(monkeypatch, env):
     monkeypatch.setenv("ROOT_PATH", "/prep")
     import importlib
 
-    from prep.notify import _legacy_module
+    from prep.notify import push as _push_mod
 
-    importlib.reload(_legacy_module)
+    importlib.reload(_push_mod)
 
     captured: list[dict] = []
 
@@ -28,11 +28,9 @@ def patched_send(monkeypatch, env):
         captured.append(payload)
         return "ok"
 
-    monkeypatch.setattr(_legacy_module, "_send_one", fake_send_one)
-    monkeypatch.setattr(
-        _legacy_module.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}]
-    )
-    return _legacy_module, captured
+    monkeypatch.setattr(_push_mod, "_send_one", fake_send_one)
+    monkeypatch.setattr(_push_mod.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}])
+    return _push_mod, captured
 
 
 def test_send_to_user_prepends_root_path_for_app_relative_url(patched_send):
@@ -53,15 +51,13 @@ def test_send_to_user_no_root_path_passthrough(monkeypatch, env):
     monkeypatch.setenv("ROOT_PATH", "")
     import importlib
 
-    from prep.notify import _legacy_module
+    from prep.notify import push as _push_mod
 
-    importlib.reload(_legacy_module)
+    importlib.reload(_push_mod)
     captured: list[dict] = []
-    monkeypatch.setattr(_legacy_module, "_send_one", lambda _s, p: captured.append(p) or "ok")
-    monkeypatch.setattr(
-        _legacy_module.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}]
-    )
-    _legacy_module.send_to_user("u", "t", "b", url="/trivia/foo")
+    monkeypatch.setattr(_push_mod, "_send_one", lambda _s, p: captured.append(p) or "ok")
+    monkeypatch.setattr(_push_mod.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}])
+    _push_mod.send_to_user("u", "t", "b", url="/trivia/foo")
     assert captured[0]["url"] == "/trivia/foo"
 
 
