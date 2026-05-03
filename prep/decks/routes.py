@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -455,6 +456,24 @@ def deck_view(
     cards = q_repo.list_in_deck(uid, deck_id)
     now_ts = db.now()
     deck_type = deck_repo.get_type(uid, deck_id)
+    # Trivia-only state; only consulted by the template when
+    # deck_type == 'trivia'. Cheap row read.
+    trivia_state: dict[str, Any] = {}
+    if deck_type is not None and deck_type.value == "trivia":
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            row = c.execute(
+                "SELECT notifications_enabled, notification_interval_minutes "
+                "FROM decks WHERE id=? AND user_id=?",
+                (deck_id, uid),
+            ).fetchone()
+        if row:
+            trivia_state = {
+                "deck_id": deck_id,
+                "notifications_enabled": bool(row["notifications_enabled"]),
+                "interval_minutes": row["notification_interval_minutes"],
+            }
     return templates.TemplateResponse(
         "deck.html",
         {
@@ -463,6 +482,7 @@ def deck_view(
             "deck_name": name,
             "questions": cards,
             "deck_type": deck_type.value if deck_type else "srs",
+            "trivia": trivia_state,
             "due_count": sum(
                 1 for c in cards if not c.suspended and c.next_due and c.next_due <= now_ts
             ),

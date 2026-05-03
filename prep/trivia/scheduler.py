@@ -72,6 +72,10 @@ def tick(now_utc: datetime) -> None:
     for row in decks.list_trivia_decks():
         try:
             deck_id = row["id"]
+            # Per-deck mute switch. Skip silently — toggling notifications
+            # off should be cheap and not leave half-notified state behind.
+            if not row.get("notifications_enabled", 1):
+                continue
             interval = row.get("notification_interval_minutes") or _DEFAULT_INTERVAL_MINUTES
             if not _is_due(now_utc, row.get("last_notified_at"), interval):
                 continue

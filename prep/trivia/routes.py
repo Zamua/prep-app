@@ -154,6 +154,31 @@ def trivia_answer(
     )
 
 
+@router.post("/trivia/decks/{deck_id}/notifications")
+def trivia_toggle_notifications(
+    deck_id: int,
+    request: Request,
+    enabled: str = Form(...),
+    user: dict = Depends(current_user),
+):
+    """Flip the per-deck notification cycle on or off. Form posts
+    `enabled=on` / `enabled=off`. 404 for non-trivia decks (the
+    repo's `deck_type='trivia'` filter rejects them) so srs decks
+    can't accidentally pick up a flag they don't honor."""
+    decks = DeckRepo()
+    if not decks.set_notifications_enabled(user["tailscale_login"], deck_id, enabled == "on"):
+        raise HTTPException(404, "trivia deck not found")
+    deck_name = decks.find_name(user["tailscale_login"], deck_id) or ""
+    root = request.scope.get("root_path", "") or ""
+    return HTMLResponse(
+        f'<!doctype html><meta charset="utf-8">'
+        f'<meta http-equiv="refresh" content="0; url={root}/deck/{deck_name}">'
+        f"<p>Notifications {'enabled' if enabled == 'on' else 'disabled'}. "
+        f'<a href="{root}/deck/{deck_name}">Back to deck</a>.</p>',
+        status_code=200,
+    )
+
+
 @router.post("/trivia/decks/{deck_id}/generate", response_class=HTMLResponse)
 def trivia_generate(
     deck_id: int,

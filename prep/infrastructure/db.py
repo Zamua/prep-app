@@ -315,6 +315,14 @@ def init() -> None:
             # up immediately as long as the interval has passed since
             # deck creation).
             c.execute("ALTER TABLE decks ADD COLUMN last_notified_at TEXT")
+        if "notifications_enabled" not in cols:
+            # Per-deck on/off for the trivia notification cycle. Default
+            # ON (1) so existing trivia decks keep firing through the
+            # migration; users toggle OFF when they want a deck to go
+            # quiet without deleting it.
+            c.execute(
+                "ALTER TABLE decks ADD COLUMN notifications_enabled INTEGER NOT NULL DEFAULT 1"
+            )
         c.executescript("""
             CREATE TABLE IF NOT EXISTS trivia_queue (
                 question_id              INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,

@@ -23,6 +23,22 @@
     <span class="btn btn-disabled" aria-disabled="true">
       <span>Trivia deck — answered via notifications</span>
     </span>
+    <form method="post"
+          action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ trivia.deck_id }}/notifications"
+          class="trivia-notif-toggle">
+      <input type="hidden" name="enabled" value="{{ 'off' if trivia.notifications_enabled else 'on' }}">
+      <button class="btn btn-quiet" type="submit" style="width:100%">
+        {% if trivia.notifications_enabled %}
+          {{ icon('pause', class_='icon icon-inline') }}
+          <span>Pause notifications</span>
+          <span class="btn-aside">every {{ trivia.interval_minutes }} min</span>
+        {% else %}
+          {{ icon('play', class_='icon icon-inline') }}
+          <span>Resume notifications</span>
+          <span class="btn-aside">paused</span>
+        {% endif %}
+      </button>
+    </form>
   {% elif due_count > 0 %}
     {# /begin auto-resumes any active session on this deck, otherwise creates
        a fresh one. Add ?fresh=1 to force-start a new one. POST to keep the

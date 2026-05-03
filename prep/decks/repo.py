@@ -128,10 +128,10 @@ class DeckRepo:
 
     def list_trivia_decks(self) -> list[dict]:
         """All trivia decks across all users. Returned as raw dicts
-        because the scheduler needs each row's user_id, interval, and
-        last_notified_at — fields not all on the Deck entity. Returns
-        list of {id, user_id, name, context_prompt,
-        notification_interval_minutes, last_notified_at}.
+        because the scheduler needs each row's user_id, interval,
+        last_notified_at, and notifications_enabled — fields not all
+        on the Deck entity. Includes decks with notifications disabled;
+        the scheduler does its own filtering.
         """
         from prep.infrastructure.db import cursor
 
@@ -139,7 +139,8 @@ class DeckRepo:
             rows = c.execute(
                 """
                 SELECT id, user_id, name, context_prompt,
-                       notification_interval_minutes, last_notified_at
+                       notification_interval_minutes, last_notified_at,
+                       notifications_enabled
                 FROM decks
                 WHERE deck_type = 'trivia'
                 """
@@ -156,6 +157,20 @@ class DeckRepo:
                 "UPDATE decks SET last_notified_at = ? WHERE id = ?",
                 (ts, deck_id),
             )
+
+    def set_notifications_enabled(self, user_id: str, deck_id: int, enabled: bool) -> bool:
+        """Flip the trivia-notification toggle for `deck_id`. Returns
+        True if a row was updated (i.e. the deck exists and belongs to
+        `user_id`), False otherwise. user_id scoping is the IDOR guard."""
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE decks SET notifications_enabled = ? "
+                "WHERE id = ? AND user_id = ? AND deck_type = 'trivia'",
+                (1 if enabled else 0, deck_id, user_id),
+            )
+            return cur.rowcount > 0
 
 
 class QuestionRepo:

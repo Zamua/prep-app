@@ -154,3 +154,59 @@ def test_study_begin_400_for_trivia_deck(client: TestClient, initialized_db: str
     r = client.post("/study/geo/begin", follow_redirects=False)
     assert r.status_code == 400
     assert "trivia" in r.text.lower()
+
+
+def test_deck_view_shows_notifications_toggle_for_trivia(client: TestClient, initialized_db: str):
+    """Trivia deck page should expose the pause/resume control with
+    its current state surfaced in the button label."""
+    DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=15)
+    r = client.get("/deck/geo")
+    assert r.status_code == 200
+    # default = enabled → button reads "Pause notifications"
+    assert "Pause notifications" in r.text
+    assert "every 15 min" in r.text
+
+
+def test_trivia_notifications_toggle_off_then_on(client: TestClient, initialized_db: str):
+    """Posting enabled=off persists to the column; posting on flips
+    back. The deck page label tracks the state."""
+    deck_id = DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=30)
+    # Off
+    r = client.post(
+        f"/trivia/decks/{deck_id}/notifications",
+        data={"enabled": "off"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    page = client.get("/deck/geo").text
+    assert "Resume notifications" in page
+    assert "paused" in page
+    # On
+    r = client.post(
+        f"/trivia/decks/{deck_id}/notifications",
+        data={"enabled": "on"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "Pause notifications" in client.get("/deck/geo").text
+
+
+def test_trivia_notifications_toggle_404_for_unknown_deck(client: TestClient, initialized_db: str):
+    r = client.post(
+        "/trivia/decks/99999/notifications",
+        data={"enabled": "off"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 404
+
+
+def test_trivia_notifications_toggle_404_for_srs_deck(client: TestClient, initialized_db: str):
+    """Refuse to flip the flag on srs decks — they don't honor it
+    anyway and silently accepting would mislead."""
+    deck_id = DeckRepo().create(initialized_db, "regular-srs")
+    r = client.post(
+        f"/trivia/decks/{deck_id}/notifications",
+        data={"enabled": "off"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 404

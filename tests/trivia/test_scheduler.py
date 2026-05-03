@@ -139,3 +139,20 @@ def test_tick_updates_last_notified_at(monkeypatch, fixtures):
     rows = fixtures["decks"].list_trivia_decks()
     row = next(r for r in rows if r["id"] == deck_id)
     assert row["last_notified_at"] is not None
+
+
+def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
+    """The per-deck pause toggle should silence the scheduler without
+    touching last_notified_at (so resuming doesn't immediately fire)."""
+    deck_id, _ = _make_trivia_deck(fixtures, name="muted")
+    fixtures["decks"].set_notifications_enabled(fixtures["user"], deck_id, False)
+    sent = []
+    monkeypatch.setattr(
+        "prep.notify._legacy_module.send_to_user",
+        lambda **kw: sent.append(kw),
+    )
+    sched.tick(datetime.now(timezone.utc))
+    assert sent == []
+    rows = fixtures["decks"].list_trivia_decks()
+    row = next(r for r in rows if r["id"] == deck_id)
+    assert row["last_notified_at"] is None

@@ -84,6 +84,9 @@ class Deck(BaseModel):
     deck_type: DeckType = DeckType.SRS
     notification_interval_minutes: int | None = None
     last_notified_at: str | None = None
+    # Trivia-deck on/off switch for the notification cycle. Defaults
+    # ON; only meaningful when deck_type=='trivia'.
+    notifications_enabled: bool = True
 
 
 class DeckSummary(BaseModel):
