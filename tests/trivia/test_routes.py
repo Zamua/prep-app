@@ -104,13 +104,13 @@ def test_answer_omits_explain_when_no_explanation_and_no_handoff(
 def test_answer_renders_explore_further_with_chat_and_google(
     client: TestClient, initialized_db: str
 ):
-    """After submitting, trivia cards should expose 'Explore further':
+    """After submitting, trivia cards should expose the explore pill:
     Claude/ChatGPT prefilled chat URLs PLUS a Google search link.
     All three open in new tabs (target=_blank → native browser on iOS PWA)."""
     _, qid = _seed_trivia_question(initialized_db)
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "paris"})
     assert r.status_code == 200
-    assert "Explore further" in r.text
+    assert ">Explore<" in r.text
     assert "trivia-explore-option" in r.text
     assert "Discuss with Claude" in r.text
     assert "Search on Google" in r.text
