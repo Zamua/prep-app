@@ -567,15 +567,16 @@ a { color: inherit; }
    itself is the visual control. Caret on the right rotates 180°
    when open as the only visual cue that there's expanded state. */
 .notif-edit { position: relative; }
+/* Strip the default <summary> marker so the pill chrome is the
+   only visible affordance. DON'T zero padding/margin here — that
+   would override `.notif-pill`'s padding and the closed-state pill
+   collapses to text-only. */
 .notif-edit > summary {
   list-style: none;
   cursor: pointer;
-  padding: 0;
-  margin: 0;
 }
 .notif-edit > summary::-webkit-details-marker { display: none; }
 .notif-edit > summary::marker { content: ""; }
-.notif-pill-summary { /* uses .notif-pill chrome — nothing to override */ }
 .notif-pill-caret {
   font-size: 0.6rem; opacity: 0.6; margin-left: 0.1rem;
   transition: transform 0.15s ease;
@@ -583,16 +584,27 @@ a { color: inherit; }
 }
 .notif-edit[open] .notif-pill-caret { transform: rotate(180deg); }
 
+/* Overlay the popover instead of pushing the mastery bar / chips
+   below it. Anchored to .notif-edit (position:relative) so the
+   popover sits just under the pill regardless of how the pill row
+   wraps. Solid paper background + shadow so it reads as floating
+   above the content it covers. */
 .notif-popover {
-  margin-top: 0.5rem;
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 30;
+  /* Definite width so the preset row wraps inside the popover
+     instead of overflowing the viewport on a 430px screen. The
+     calc keeps a 1rem gutter on each side regardless of where
+     the pill is anchored within the deck-pill-row. */
+  width: min(22rem, calc(100vw - 2rem));
   padding: 0.85rem 0.95rem 0.7rem;
   border: 1px solid var(--rule);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--paper) 80%, transparent);
+  background: var(--paper);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
   display: flex; flex-direction: column; gap: 0.7rem;
-  max-width: 24rem;
-  /* Above the deck-mastery bar that sits below it. */
-  position: relative; z-index: 5;
 }
 .notif-popover-eyebrow {
   font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
