@@ -27,6 +27,7 @@ from prep.decks.entities import (
     Deck,
     DeckCard,
     DeckSummary,
+    DeckType,
     NewQuestion,
     Question,
     QuestionType,
@@ -55,6 +56,20 @@ class DeckRepo:
                 (deck_id, user_id),
             ).fetchone()
         return row["name"] if row else None
+
+    def get_type(self, user_id: str, deck_id: int) -> DeckType | None:
+        """Look up a deck's type without paying for the full Deck
+        entity. Returns None for unknown / wrong-user deck_ids."""
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            row = c.execute(
+                "SELECT deck_type FROM decks WHERE id=? AND user_id=?",
+                (deck_id, user_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return DeckType(row["deck_type"])
 
     def create(self, user_id: str, name: str, context_prompt: str | None = None) -> int:
         return _legacy_db.create_deck(user_id, name, context_prompt)

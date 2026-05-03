@@ -19,7 +19,11 @@
 </section>
 
 <section class="primary-action">
-  {% if due_count > 0 %}
+  {% if deck_type == 'trivia' %}
+    <span class="btn btn-disabled" aria-disabled="true">
+      <span>Trivia deck — answered via notifications</span>
+    </span>
+  {% elif due_count > 0 %}
     {# /begin auto-resumes any active session on this deck, otherwise creates
        a fresh one. Add ?fresh=1 to force-start a new one. POST to keep the
        URL path clean — but we also accept GET for direct linking. #}

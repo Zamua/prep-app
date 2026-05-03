@@ -135,3 +135,22 @@ def test_deck_view_lazy_materializes_empty_deck(client: TestClient, initialized_
     r = client.get("/deck/fresh-deck")
     assert r.status_code == 200
     assert DeckRepo().find_id(user, "fresh-deck") is not None
+
+
+def test_deck_view_hides_study_button_for_trivia(client: TestClient, initialized_db: str):
+    """Trivia decks are notification-driven — the deck page should
+    surface that fact instead of the Begin study session button."""
+    DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=30)
+    r = client.get("/deck/geo")
+    assert r.status_code == 200
+    assert "Begin study session" not in r.text
+    assert "answered via notifications" in r.text
+
+
+def test_study_begin_400_for_trivia_deck(client: TestClient, initialized_db: str):
+    """A stale bookmark shouldn't be able to start an SRS session
+    against a trivia deck."""
+    DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=30)
+    r = client.post("/study/geo/begin", follow_redirects=False)
+    assert r.status_code == 400
+    assert "trivia" in r.text.lower()

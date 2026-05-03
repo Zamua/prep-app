@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from prep import chat_handoff
 from prep import db as _legacy_db
 from prep.auth import current_user
+from prep.decks.entities import DeckType
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.domain import grading
 from prep.study import service
@@ -109,6 +110,12 @@ def session_begin(
     Pass ?fresh=1 to abandon any existing active session and start over."""
     uid = user["tailscale_login"]
     deck_id = deck_repo.get_or_create(uid, name)
+    # Trivia decks are notification-driven — they have no SRS state
+    # and the per-card answer flow lives in /trivia/*. Refuse the
+    # study path so a stale bookmark doesn't create an empty SRS
+    # session against a deck that has no `cards` rows.
+    if deck_repo.get_type(uid, deck_id) is DeckType.TRIVIA:
+        raise HTTPException(400, "trivia decks are notification-driven; no study sessions")
     if not fresh:
         existing = service.find_active_session(session_repo, uid, deck_id)
         if existing:

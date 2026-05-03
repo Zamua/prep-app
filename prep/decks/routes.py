@@ -454,6 +454,7 @@ def deck_view(
     deck_id = deck_repo.get_or_create(uid, name)
     cards = q_repo.list_in_deck(uid, deck_id)
     now_ts = db.now()
+    deck_type = deck_repo.get_type(uid, deck_id)
     return templates.TemplateResponse(
         "deck.html",
         {
@@ -461,6 +462,7 @@ def deck_view(
             "user": user,
             "deck_name": name,
             "questions": cards,
+            "deck_type": deck_type.value if deck_type else "srs",
             "due_count": sum(
                 1 for c in cards if not c.suspended and c.next_due and c.next_due <= now_ts
             ),
