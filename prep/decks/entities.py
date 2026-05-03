@@ -152,9 +152,10 @@ class DeckCard(BaseModel):
     suspended: bool = False
     skeleton: str | None = None
     language: str | None = None
-    # SRS state.
+    # SRS state. next_due is nullable because trivia-deck questions
+    # have no `cards` row — the LEFT JOIN comes back NULL for them.
     step: int = 0
-    next_due: str
+    next_due: str | None = None
     last_review: str | None = None
     rights: int = 0
     attempts: int = 0
