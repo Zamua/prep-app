@@ -157,19 +157,19 @@ def test_study_begin_400_for_trivia_deck(client: TestClient, initialized_db: str
 
 
 def test_deck_view_shows_notifications_toggle_for_trivia(client: TestClient, initialized_db: str):
-    """Trivia deck page should expose the pause/resume control with
-    its current state surfaced in the button label."""
+    """Trivia deck page should expose the pause/resume pill with
+    interval info when active."""
     DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=15)
     r = client.get("/deck/geo")
     assert r.status_code == 200
-    # default = enabled → button reads "Pause notifications"
-    assert "Pause notifications" in r.text
-    assert "every 15 min" in r.text
+    assert "notif-pill" in r.text
+    assert "every 15m" in r.text
+    assert "notif-pill-paused" not in r.text
 
 
 def test_trivia_notifications_toggle_off_then_on(client: TestClient, initialized_db: str):
     """Posting enabled=off persists to the column; posting on flips
-    back. The deck page label tracks the state."""
+    back. The pill state on the deck page tracks it."""
     deck_id = DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=30)
     # Off
     r = client.post(
@@ -179,8 +179,8 @@ def test_trivia_notifications_toggle_off_then_on(client: TestClient, initialized
     )
     assert r.status_code == 200
     page = client.get("/deck/geo").text
-    assert "Resume notifications" in page
-    assert "paused" in page
+    assert "notif-pill-paused" in page
+    assert ">paused<" in page
     # On
     r = client.post(
         f"/trivia/decks/{deck_id}/notifications",
@@ -188,7 +188,9 @@ def test_trivia_notifications_toggle_off_then_on(client: TestClient, initialized
         follow_redirects=False,
     )
     assert r.status_code == 200
-    assert "Pause notifications" in client.get("/deck/geo").text
+    page = client.get("/deck/geo").text
+    assert "notif-pill-paused" not in page
+    assert "every 30m" in page
 
 
 def test_trivia_notifications_toggle_404_for_unknown_deck(client: TestClient, initialized_db: str):
@@ -202,7 +204,7 @@ def test_trivia_notifications_toggle_404_for_unknown_deck(client: TestClient, in
 
 def test_deck_notifications_toggle_works_for_srs_deck(client: TestClient, initialized_db: str):
     """SRS decks now also expose the per-deck notification toggle.
-    Pausing redirects back to the deck page, label flips."""
+    Pausing redirects back to the deck page, pill flips to paused state."""
     DeckRepo().create(initialized_db, "regular-srs")
     r = client.post(
         "/deck/regular-srs/notifications",
@@ -211,7 +213,8 @@ def test_deck_notifications_toggle_works_for_srs_deck(client: TestClient, initia
     )
     assert r.status_code == 303
     page = client.get("/deck/regular-srs").text
-    assert "Resume notifications" in page
+    assert "notif-pill-paused" in page
+    assert ">paused<" in page
 
 
 def test_deck_notifications_toggle_404_for_unknown(client: TestClient, initialized_db: str):

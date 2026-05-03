@@ -519,6 +519,46 @@ a { color: inherit; }
   margin-top: 0.4rem;
 }
 
+.deck-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+.deck-title-row .deck-title { margin: 0.4rem 0 0; flex: 0 1 auto; }
+
+.notif-pill-form { margin: 0; }
+.notif-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  font-style: italic;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.notif-pill:hover {
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.notif-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+
+.notif-pill-paused {
+  color: var(--wrong);
+  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+}
+.notif-pill-paused:hover {
+  background: color-mix(in srgb, var(--wrong) 14%, transparent);
+}
+
 .deck-meta {
   display: inline-flex;
   align-items: baseline;
