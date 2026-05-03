@@ -339,7 +339,7 @@ def list_decks(user_id: str) -> list[dict]:
     with cursor() as c:
         rows = c.execute(
             """
-            SELECT d.id, d.name,
+            SELECT d.id, d.name, d.deck_type,
                    COUNT(q.id) AS total,
                    SUM(CASE WHEN cards.next_due <= ? AND COALESCE(q.suspended,0)=0
                             THEN 1 ELSE 0 END) AS due

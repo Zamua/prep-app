@@ -139,12 +139,31 @@ def test_deck_view_lazy_materializes_empty_deck(client: TestClient, initialized_
 
 def test_deck_view_hides_study_button_for_trivia(client: TestClient, initialized_db: str):
     """Trivia decks are notification-driven — the deck page should
-    surface that fact instead of the Begin study session button."""
+    omit the Begin button entirely. The deck-type tag in the header
+    communicates the type."""
     DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=30)
     r = client.get("/deck/geo")
     assert r.status_code == 200
     assert "Begin study session" not in r.text
-    assert "answered via notifications" in r.text
+    assert "tag-decktype-trivia" in r.text
+
+
+def test_deck_view_shows_decktype_tag_for_srs(client: TestClient, initialized_db: str):
+    DeckRepo().create(initialized_db, "regular-srs")
+    r = client.get("/deck/regular-srs")
+    assert r.status_code == 200
+    assert "tag-decktype-srs" in r.text
+
+
+def test_index_decks_carry_decktype(client: TestClient, initialized_db: str):
+    """The index list also shows the type tag — same slot, same chrome,
+    consistent across views."""
+    DeckRepo().create(initialized_db, "an-srs-deck")
+    DeckRepo().create_trivia(initialized_db, "a-trivia-deck", topic="x", interval_minutes=30)
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "tag-decktype-srs" in r.text
+    assert "tag-decktype-trivia" in r.text
 
 
 def test_study_begin_400_for_trivia_deck(client: TestClient, initialized_db: str):

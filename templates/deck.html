@@ -6,10 +6,13 @@
   <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
   <div class="deck-title-row">
     <h1 class="display deck-title">{{ deck_name }}</h1>
+    {# Deck-type tag: subtle italic pill matching the question-card
+       .tag-type chrome. Stays in a consistent slot so the user
+       always knows which kind of deck they're looking at. #}
+    <span class="tag tag-decktype tag-decktype-{{ deck_type }}">{{ deck_type }}</span>
     {# Pill toggle for the per-deck notification cycle. Trivia decks
        POST to the trivia route (alias); srs decks POST to the deck
-       route. Same handler underneath. Pill state mirrors the
-       deck.notifications_enabled column. #}
+       route. Same handler underneath. #}
     <form method="post"
           action="{% if deck_type == 'trivia' %}{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/notifications{% else %}{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/notifications{% endif %}"
           class="notif-pill-form">
@@ -40,12 +43,13 @@
   </p>
 </section>
 
+{# Trivia decks have no primary action — the deck-type tag in the
+   header already communicates "notification-driven", and the notif
+   pill exposes the on/off state. Show the SRS Begin button only
+   for SRS decks. #}
+{% if deck_type != 'trivia' %}
 <section class="primary-action">
-  {% if deck_type == 'trivia' %}
-    <span class="btn btn-disabled" aria-disabled="true">
-      <span>Trivia deck — answered via notifications</span>
-    </span>
-  {% elif due_count > 0 %}
+  {% if due_count > 0 %}
     {# /begin auto-resumes any active session on this deck, otherwise creates
        a fresh one. Add ?fresh=1 to force-start a new one. POST to keep the
        URL path clean — but we also accept GET for direct linking. #}
@@ -61,6 +65,7 @@
     </span>
   {% endif %}
 </section>
+{% endif %}
 
 {# Add-cards panel. Manual is always available — one button, no
    ceremony. When an agent is configured, an "— or —" divider precedes

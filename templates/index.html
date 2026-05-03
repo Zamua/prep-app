@@ -93,7 +93,14 @@
       <a href="{{ request.scope.get('root_path','') }}/deck/{{ d.name }}" class="deck-link">
         <span class="deck-numeral" aria-hidden="true">{{ roman }}</span>
         <span class="deck-body">
-          <span class="deck-name">{{ d.name }}</span>
+          <span class="deck-name">
+            {{ d.name }}
+            {# Same deck-type tag as the deck page header — consistent
+               slot, subtle italic. Trivia tag stands out so the deck
+               list communicates "these are the notification-driven
+               ones" at a glance. #}
+            <span class="tag tag-decktype tag-decktype-{{ d.deck_type }}">{{ d.deck_type }}</span>
+          </span>
           <span class="deck-stats">
             <span class="stat-due {% if (d.due or 0) > 0 %}is-active{% endif %}">
               <span class="stat-value">{{ d.due or 0 }}</span>

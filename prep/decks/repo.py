@@ -90,7 +90,13 @@ class DeckRepo:
         the index page."""
         rows = _legacy_db.list_decks(user_id)
         return [
-            DeckSummary(id=r["id"], name=r["name"], total=r["total"] or 0, due=r["due"] or 0)
+            DeckSummary(
+                id=r["id"],
+                name=r["name"],
+                total=r["total"] or 0,
+                due=r["due"] or 0,
+                deck_type=DeckType(r["deck_type"] or "srs"),
+            )
             for r in rows
         ]
 

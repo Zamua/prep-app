@@ -883,6 +883,16 @@ a { color: inherit; }
 .tag-multi { color: var(--right); border-color: color-mix(in srgb, var(--right) 50%, transparent); }
 .tag-short { color: var(--ink-soft); }
 
+/* Deck-type tag — used in the deck header + the index list. Subtle
+   for SRS (the default flow), more prominent quill tint for trivia
+   so the notification-driven decks stand out. */
+.tag-decktype {
+  background: transparent;
+  flex-shrink: 0;
+}
+.tag-decktype-srs    { color: var(--ink-mute); border-color: var(--hairline); }
+.tag-decktype-trivia { color: var(--quill); border-color: color-mix(in srgb, var(--quill) 50%, transparent); }
+
 .qcard-prompt {
   margin: 0;
   font-size: 1.02rem;
