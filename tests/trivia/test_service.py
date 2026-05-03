@@ -242,3 +242,30 @@ def test_claude_grade_falls_back_on_bad_json(monkeypatch):
     # No JSON → fall back to deterministic match (empty token-set tests, returns False here).
     assert isinstance(out["correct"], bool)
     assert "malformed JSON" in out["feedback"]
+
+
+# ---- looks_like_paraphrase --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "expected,given,is_paraphrase",
+    [
+        # User wrote a long explanation instead of the short answer.
+        (
+            "Key redistribution",
+            "it prevents a cascade of work being reshuffled between servers",
+            True,
+        ),
+        # Same length → not a paraphrase signal.
+        ("Paris", "London", False),
+        # Empty → not a paraphrase, just a non-attempt.
+        ("Paris", "", False),
+        ("Paris", "   ", False),
+        # 1 extra token isn't enough to escalate.
+        ("Newton", "Isaac Newton", False),
+        # 2 extra tokens IS enough (the threshold).
+        ("Newton", "Isaac the great Newton", True),
+    ],
+)
+def test_looks_like_paraphrase(expected, given, is_paraphrase):
+    assert svc.looks_like_paraphrase(expected=expected, given=given) is is_paraphrase

@@ -197,6 +197,27 @@ def _normalize_for_grading(s: str) -> str:
     return s
 
 
+def looks_like_paraphrase(*, expected: str, given: str) -> bool:
+    """True if the user's answer looks substantive enough that
+    deterministic-said-wrong might be a false negative. Used by the
+    routes layer as a tie-breaker to escalate to claude.
+
+    Signals (any one is enough):
+      - given has 2+ more tokens than expected (user wrote a longer
+        explanation rather than the canonical short answer)
+      - given is empty/whitespace → NO (clearly didn't try)
+
+    Cheap; doesn't compare semantic content — that's claude's job.
+    """
+    g = given.strip()
+    if not g:
+        return False
+    e = expected.strip()
+    e_tokens = len(e.split())
+    g_tokens = len(g.split())
+    return g_tokens >= e_tokens + 2
+
+
 def classify_grading(expected: str) -> str:
     """Decide whether a trivia answer can be reliably graded by
     string similarity, or needs claude.

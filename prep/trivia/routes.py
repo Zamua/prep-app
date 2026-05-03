@@ -38,16 +38,28 @@ from prep.web.templates import templates
 def _grade(q, user_answer: str) -> dict:
     """Dispatch to deterministic vs claude grading per the heuristic
     in trivia.service.classify_grading. Returns
-    `{"correct": bool, "feedback": str | None}`. Single chokepoint
-    so both /trivia/<id>/answer and /trivia/session/.../answer share
-    the same logic."""
+    `{"correct": bool, "feedback": str | None}`.
+
+    Tie-breaker: when the heuristic picks deterministic AND the
+    deterministic grader says WRONG, but the user wrote a substantive
+    answer (longer or otherwise different from the expected), escalate
+    to claude. Catches paraphrase-correct answers — e.g. expected
+    "Key redistribution" + user "it prevents a cascade of reshuffling
+    work between servers" — where token-subset matching falsely
+    rejects but the meaning is right.
+    """
     mode = trivia_service.classify_grading(q.answer)
-    if mode == "deterministic":
-        return {
-            "correct": trivia_service.grade_answer(expected=q.answer, given=user_answer),
-            "feedback": None,
-        }
-    return trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
+    if mode == "claude":
+        return trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
+
+    det_correct = trivia_service.grade_answer(expected=q.answer, given=user_answer)
+    if det_correct:
+        return {"correct": True, "feedback": None}
+    # Deterministic said wrong — give claude a second look if it
+    # looks like a paraphrase rather than a clearly-wrong stab.
+    if trivia_service.looks_like_paraphrase(expected=q.answer, given=user_answer):
+        return trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
+    return {"correct": False, "feedback": None}
 
 
 def _explore_ctx(*, deck_name: str, q, user_answer: str, correct: bool, expected: str) -> dict:
