@@ -64,14 +64,18 @@ class TriviaQueueRepo:
     def pick_next_for_deck(self, deck_id: int) -> Optional[NextCard]:
         """Pick the next card to notify on for `deck_id`.
 
-        Preference order:
-          1. never-answered cards, oldest queue_position first
-          2. rotated cards, oldest queue_position first
-          3. None — the deck has no cards (caller should generate)
+        Weighted precedence (srs-lite for trivia):
+          1. wrong-answered cards (`last_answered_correctly=0`),
+             longest-since-shown first — these come back fast so the
+             user gets a second chance while it still feels fresh
+          2. never-answered cards (`last_answered_at IS NULL`),
+             longest queued first — fresh content
+          3. right-answered cards (`last_answered_correctly=1`),
+             longest-since-shown first — review the well-known stuff
+             after we've drained the more important categories
 
-        The `is_fresh` flag tells the scheduler whether this is a
-        first-show (so the trigger can decide whether to async-generate
-        the next batch as the deck runs out of fresh cards).
+        The `is_fresh` flag preserves "never been shown" for the
+        scheduler's gen-on-empty heuristic.
         """
         with cursor() as c:
             row = c.execute(
@@ -81,8 +85,13 @@ class TriviaQueueRepo:
                 FROM questions q
                 JOIN trivia_queue tq ON tq.question_id = q.id
                 WHERE q.deck_id = ?
-                ORDER BY (tq.last_answered_at IS NULL) DESC,
-                         tq.queue_position ASC
+                ORDER BY
+                  CASE
+                    WHEN tq.last_answered_correctly = 0 THEN 0
+                    WHEN tq.last_answered_at IS NULL    THEN 1
+                    ELSE 2
+                  END ASC,
+                  tq.queue_position ASC
                 LIMIT 1
                 """,
                 (deck_id,),

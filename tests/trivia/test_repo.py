@@ -89,6 +89,44 @@ def test_pick_next_prefers_unanswered_over_answered(repos):
     assert nxt.is_fresh is True
 
 
+def test_pick_next_prefers_wrong_over_fresh(repos):
+    """A wrong-answered card outranks a never-shown one — we want
+    the user to see the miss again before getting more new content."""
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=4)
+    trivia = repos["trivia"]
+    # Take one card off the front, mark it wrong. qids[1..3] are still fresh.
+    trivia.mark_answered(qids[0], correct=False)
+    nxt = trivia.pick_next_for_deck(deck_id)
+    assert nxt.question_id == qids[0]
+    assert nxt.is_fresh is False
+
+
+def test_pick_next_correct_card_outranked_by_fresh(repos):
+    """A correctly-answered card should NOT shadow fresh content —
+    correctness drops a card to the bottom of the precedence list."""
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=4)
+    trivia = repos["trivia"]
+    trivia.mark_answered(qids[0], correct=True)
+    nxt = trivia.pick_next_for_deck(deck_id)
+    # qids[1..3] all rank "fresh"; qids[1] has the lowest queue_position.
+    assert nxt.question_id == qids[1]
+    assert nxt.is_fresh is True
+
+
+def test_pick_next_wrong_outranks_correct(repos):
+    """When everything's been answered, wrong cards come back ahead
+    of right cards regardless of queue_position order."""
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=3)
+    trivia = repos["trivia"]
+    # Mark right first, then wrong → wrong has the higher queue_position
+    # but should still surface first because of the rank ordering.
+    trivia.mark_answered(qids[0], correct=True)
+    trivia.mark_answered(qids[1], correct=False)
+    trivia.mark_answered(qids[2], correct=True)
+    nxt = trivia.pick_next_for_deck(deck_id)
+    assert nxt.question_id == qids[1]
+
+
 def test_pick_next_falls_back_to_rotated_when_no_unanswered(repos):
     """Once every card's been answered at least once, the picker
     returns the longest-ago-answered card (smallest queue_position)."""
