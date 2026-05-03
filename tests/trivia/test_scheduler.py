@@ -80,9 +80,16 @@ def test_tick_sends_push_for_due_deck(monkeypatch, fixtures):
     deck_id, qids = _make_trivia_deck(fixtures, n_questions=2)
     sent = []
 
-    def fake_send(*, user_id, title, body, url=None, source="manual"):
+    def fake_send(*, user_id, title, body, url=None, source="manual", tag=None):
         sent.append(
-            {"user_id": user_id, "title": title, "body": body, "url": url, "source": source}
+            {
+                "user_id": user_id,
+                "title": title,
+                "body": body,
+                "url": url,
+                "source": source,
+                "tag": tag,
+            }
         )
         return {"ok": True}
 
@@ -94,13 +101,15 @@ def test_tick_sends_push_for_due_deck(monkeypatch, fixtures):
     # push opens a 3-card mini-session.
     assert sent[0]["url"] == "/trivia/session/capitals"
     assert sent[0]["title"] == "capitals"
+    # Per-deck tag so iOS coalesces stacked pushes for this deck.
+    assert sent[0]["tag"] == "trivia-capitals"
 
 
 def test_tick_skips_deck_within_interval(monkeypatch, fixtures):
     deck_id, _ = _make_trivia_deck(fixtures, interval=60)
     # Stamp last_notified_at to "5 minutes ago" — well within the 60min interval.
-    fixtures["decks"].set_last_notified_at(
-        deck_id, (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    fixtures["decks"].record_notification_fire(
+        deck_id, (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(), 0
     )
     sent = []
     monkeypatch.setattr(
@@ -270,6 +279,105 @@ def test_tick_fires_outside_quiet_hours(monkeypatch, fixtures):
     )
     sched.tick(active_now_utc)
     assert len(sent) == 1
+
+
+# ---- exponential backoff -------------------------------------------------
+
+
+def test_effective_interval_doubles_with_streak():
+    f = sched._effective_interval_minutes
+    assert f(30, 0) == 30
+    assert f(30, 1) == 60
+    assert f(30, 2) == 120
+    assert f(30, 3) == 240
+    # Capped at MAX_BACKOFF_DOUBLINGS (5 doublings = 32x).
+    assert f(30, 5) == 30 * 32
+    assert f(30, 9) == 30 * 32  # past cap stays at cap
+
+
+def test_is_due_respects_backoff():
+    """A deck whose previous fire was 45 minutes ago at base=30 IS
+    due — but if the streak is 1 (effective=60min), it's NOT yet."""
+    now = datetime.now(timezone.utc)
+    last = (now - timedelta(minutes=45)).isoformat()
+    assert sched._is_due(now, last, 30, ignored_streak=0) is True
+    assert sched._is_due(now, last, 30, ignored_streak=1) is False  # need 60min
+    assert sched._is_due(now, last, 30, ignored_streak=2) is False  # need 120min
+
+
+def test_tick_increments_streak_when_no_engagement(monkeypatch, fixtures):
+    """Two consecutive fires with no answer in between → streak goes
+    from 0 → 1 after the first ignored fire."""
+    deck_id, _ = _make_trivia_deck(fixtures, name="ignored", interval=30)
+    # Pin "last fire" to 60 min ago so the deck is due even if the
+    # streak bumps to 1 (which would require 60min wait next time).
+    fixtures["decks"].record_notification_fire(
+        deck_id, (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat(), 0
+    )
+    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    sched.tick(datetime.now(timezone.utc))
+    rows = fixtures["decks"].list_trivia_decks()
+    row = next(r for r in rows if r["id"] == deck_id)
+    # No answer happened between the simulated prior fire and this tick →
+    # the prior fire counts as ignored → streak bumps to 1.
+    assert row["notification_ignored_streak"] == 1
+
+
+def test_tick_resets_streak_when_user_engaged(monkeypatch, fixtures):
+    """If any card in the deck was answered after the previous fire,
+    the next tick that lands on a due moment resets the streak to 0.
+    Prior fire is far enough back that the backed-off interval has
+    elapsed — otherwise the tick skips the deck entirely (cooldown)
+    and never gets to the engagement check."""
+    deck_id, qids = _make_trivia_deck(fixtures, name="re-engaged", interval=30)
+    # Streak=1 → effective=60min. Prior fire 70 min ago → due NOW.
+    prior = (datetime.now(timezone.utc) - timedelta(minutes=70)).isoformat()
+    fixtures["decks"].record_notification_fire(deck_id, prior, 1)
+    # User answered one card 5 min ago — engagement happened AFTER prior fire.
+    # Direct UPDATE so we don't trigger mark_answered's own streak-reset
+    # (we want to prove the SCHEDULER's engagement check works).
+    from prep.infrastructure.db import cursor
+
+    five_ago = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    with cursor() as c:
+        c.execute(
+            "UPDATE trivia_queue SET last_answered_at = ?, last_answered_correctly = 1 WHERE question_id = ?",
+            (five_ago, qids[0]),
+        )
+    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    sched.tick(datetime.now(timezone.utc))
+    rows = fixtures["decks"].list_trivia_decks()
+    row = next(r for r in rows if r["id"] == deck_id)
+    assert row["notification_ignored_streak"] == 0
+
+
+def test_tick_holds_off_while_within_backed_off_interval(monkeypatch, fixtures):
+    """Streak=2 (effective=120min on a 30min deck), last fire 45min ago
+    → not yet due, no fire."""
+    deck_id, _ = _make_trivia_deck(fixtures, name="cooldown", interval=30)
+    fixtures["decks"].record_notification_fire(
+        deck_id, (datetime.now(timezone.utc) - timedelta(minutes=45)).isoformat(), 2
+    )
+    sent = []
+    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: sent.append(kw))
+    sched.tick(datetime.now(timezone.utc))
+    assert sent == []
+
+
+def test_mark_answered_immediately_resets_deck_streak(fixtures):
+    """The answer-recording path resets the streak directly (not just
+    on the next scheduler tick) so the next fire goes back to base
+    interval the moment the user re-engages."""
+    deck_id, qids = _make_trivia_deck(fixtures, name="bounceback", interval=30)
+    # Manually set streak to a non-zero value.
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        c.execute("UPDATE decks SET notification_ignored_streak = 4 WHERE id = ?", (deck_id,))
+    fixtures["trivia"].mark_answered(qids[0], correct=True)
+    rows = fixtures["decks"].list_trivia_decks()
+    row = next(r for r in rows if r["id"] == deck_id)
+    assert row["notification_ignored_streak"] == 0
 
 
 def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):

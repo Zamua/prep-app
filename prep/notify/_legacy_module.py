@@ -133,6 +133,7 @@ def send_to_user(
     url: str | None = None,
     *,
     source: str = "manual",
+    tag: str | None = None,
 ) -> dict:
     """Send a push to every device the user has subscribed. Prunes any
     subscriptions the push service rejects with 404/410. Returns counts.
@@ -149,12 +150,20 @@ def send_to_user(
     `source` ("trivia" | "srs-digest" | "srs-when-ready" | "manual")
     is recorded in the notification log so the user can filter; defaults
     to "manual" for ad-hoc test pushes.
+
+    `tag` populates the SW's `showNotification({tag})` slot. iOS uses
+    it to coalesce stacked notifications: a new push with an existing
+    tag replaces the prior one instead of stacking under the app icon.
+    Pass per-deck (`trivia-<name>`) for trivia, leave `None` for
+    one-offs (the SW falls back to "prep-default").
     """
     root = (_os.environ.get("ROOT_PATH") or "").rstrip("/")
     raw = url or "/"
     if raw.startswith("/") and not raw.startswith(root + "/") and raw != root:
         raw = root + raw if root else raw
-    payload = {"title": title, "body": body, "url": raw}
+    payload: dict = {"title": title, "body": body, "url": raw}
+    if tag:
+        payload["tag"] = tag
     # Append to the log BEFORE delivery so a subsequent failure still
     # leaves the user with a record of what was attempted.
     try:

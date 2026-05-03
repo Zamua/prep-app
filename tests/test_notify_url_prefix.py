@@ -70,3 +70,16 @@ def test_send_to_user_default_url_root(patched_send):
     mod, captured = patched_send
     mod.send_to_user("u", "t", "b")
     assert captured[0]["url"] == "/prep/"
+
+
+def test_send_to_user_forwards_tag_to_payload(patched_send):
+    """`tag` flows into the SW payload so iOS can coalesce stacked
+    notifications. Default (no tag) leaves the key out → SW falls
+    back to "prep-default"."""
+    mod, captured = patched_send
+    mod.send_to_user("u", "t", "b", tag="trivia-design-interview")
+    assert captured[0]["tag"] == "trivia-design-interview"
+
+    captured.clear()
+    mod.send_to_user("u", "t", "b")  # no tag passed
+    assert "tag" not in captured[0]

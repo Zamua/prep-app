@@ -323,6 +323,17 @@ def init() -> None:
             c.execute(
                 "ALTER TABLE decks ADD COLUMN notifications_enabled INTEGER NOT NULL DEFAULT 1"
             )
+        if "notification_ignored_streak" not in cols:
+            # Exponential backoff for unattended trivia decks. The
+            # scheduler bumps this every time a push fires without
+            # the user answering anything in the deck, then waits
+            # `base × 2 ** streak` (capped at MAX_DOUBLINGS) before
+            # the next fire. Resets to 0 on any answer in the deck.
+            # Default 0 = the deck fires at its base interval.
+            c.execute(
+                "ALTER TABLE decks ADD COLUMN notification_ignored_streak "
+                "INTEGER NOT NULL DEFAULT 0"
+            )
 
         # 9. Trivia card explanations: a short paragraph claude generates
         #    alongside the Q+A. Surfaced in the trivia card view as a

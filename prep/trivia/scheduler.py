@@ -40,6 +40,14 @@ _DEFAULT_INTERVAL_MINUTES = 30
 # left, no new generation fires.
 _REFILL_BELOW_PENDING_REVIEW = 1
 
+# Exponential backoff cap. Effective interval is
+# `base × 2 ** min(streak, _MAX_BACKOFF_DOUBLINGS)`, so 5 doublings =
+# 32× cap. With a 30-minute deck that's 16 hours between pushes once
+# the user has fully checked out — quiet enough to stop being
+# annoying but still occasionally surfaces the deck so a returning
+# user gets re-engaged automatically.
+_MAX_BACKOFF_DOUBLINGS = 5
+
 
 def _parse_iso(ts: str) -> Optional[datetime]:
     """Tolerant ISO-8601 parse for the deck's last_notified_at column.
@@ -54,15 +62,30 @@ def _parse_iso(ts: str) -> Optional[datetime]:
     return dt
 
 
-def _is_due(now_utc: datetime, last_notified_at: Optional[str], interval_minutes: int) -> bool:
+def _effective_interval_minutes(base_minutes: int, ignored_streak: int) -> int:
+    """Apply exponential backoff: `base × 2 ** min(streak, MAX)`. A
+    streak of 0 (never ignored, or just engaged) returns base; each
+    consecutive ignored fire doubles, capped at MAX doublings."""
+    capped = max(0, min(ignored_streak, _MAX_BACKOFF_DOUBLINGS))
+    return base_minutes * (2**capped)
+
+
+def _is_due(
+    now_utc: datetime,
+    last_notified_at: Optional[str],
+    interval_minutes: int,
+    ignored_streak: int = 0,
+) -> bool:
     """A trivia deck is due if it's never been notified, OR if at
-    least `interval_minutes` have passed since `last_notified_at`."""
+    least the (backed-off) effective interval has passed since
+    `last_notified_at`."""
     if not last_notified_at:
         return True
     last_dt = _parse_iso(last_notified_at)
     if last_dt is None:
         return True
-    return (now_utc - last_dt).total_seconds() >= interval_minutes * 60
+    effective = _effective_interval_minutes(interval_minutes, ignored_streak)
+    return (now_utc - last_dt).total_seconds() >= effective * 60
 
 
 def tick(now_utc: datetime) -> None:
@@ -119,7 +142,8 @@ def tick(now_utc: datetime) -> None:
             if not row.get("notifications_enabled", 1):
                 continue
             interval = row.get("notification_interval_minutes") or _DEFAULT_INTERVAL_MINUTES
-            if not _is_due(now_utc, row.get("last_notified_at"), interval):
+            streak = int(row.get("notification_ignored_streak") or 0)
+            if not _is_due(now_utc, row.get("last_notified_at"), interval, streak):
                 continue
             # Quiet hours apply across SRS when-ready + trivia. Skip
             # without touching last_notified_at so the deck fires as
@@ -168,15 +192,33 @@ def tick(now_utc: datetime) -> None:
             if len(body) > 240:
                 body = body[:237] + "..."
             deck_name = row.get("name") or ""
+            # Engagement check before fire: if the user has answered
+            # any card in this deck since the last push went out, the
+            # prior fire counts as engaged-with → reset the streak.
+            # Otherwise the prior fire was ignored → bump the streak
+            # (capped at MAX). We update streak BEFORE firing so the
+            # newly-recorded value reflects "this push is the one that
+            # went out at the backed-off cadence".
+            engaged = trivia.has_answer_since(deck_id, row.get("last_notified_at"))
+            new_streak = 0 if engaged else min(streak + 1, _MAX_BACKOFF_DOUBLINGS)
+
+            # Per-deck tag so iOS coalesces stacked notifications —
+            # a new push for the same deck replaces the prior one
+            # rather than piling up under the app icon. Without this
+            # the tag falls back to "prep-default" (set in sw.js),
+            # which is shared across decks/sources and doesn't dedupe.
             send_to_user(
                 user_id=row["user_id"],
                 title=deck_name or "Trivia",
                 body=body,
                 url=f"/trivia/session/{deck_name}",
                 source="trivia",
+                tag=f"trivia-{deck_name}" if deck_name else "trivia",
             )
 
-            decks.set_last_notified_at(deck_id, now_utc.isoformat(timespec="seconds"))
+            decks.record_notification_fire(
+                deck_id, now_utc.isoformat(timespec="seconds"), new_streak
+            )
 
         except Exception as e:
             # Per-deck try block: a malformed row shouldn't tank the

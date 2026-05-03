@@ -146,22 +146,40 @@ class DeckRepo:
                 """
                 SELECT id, user_id, name, context_prompt,
                        notification_interval_minutes, last_notified_at,
-                       notifications_enabled
+                       notifications_enabled, notification_ignored_streak
                 FROM decks
                 WHERE deck_type = 'trivia'
                 """
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def set_last_notified_at(self, deck_id: int, ts: str) -> None:
-        """Stamp `decks.last_notified_at` after the scheduler fires a
-        push for this trivia deck. Used as the interval debounce key."""
+    def record_notification_fire(self, deck_id: int, ts: str, ignored_streak: int) -> None:
+        """Stamp last_notified_at + persist the new ignored-streak count
+        in a single UPDATE. Called by the scheduler after each fire so
+        the next tick reads the updated streak when computing the
+        backed-off interval."""
         from prep.infrastructure.db import cursor
 
         with cursor() as c:
             c.execute(
-                "UPDATE decks SET last_notified_at = ? WHERE id = ?",
-                (ts, deck_id),
+                """UPDATE decks
+                   SET last_notified_at = ?,
+                       notification_ignored_streak = ?
+                   WHERE id = ?""",
+                (ts, ignored_streak, deck_id),
+            )
+
+    def reset_ignored_streak_for_deck(self, deck_id: int) -> None:
+        """Zero the per-deck backoff counter. Called from the answer
+        path the moment a user records a verdict — gives instant
+        feedback rather than waiting for the next scheduler tick to
+        notice the engagement."""
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            c.execute(
+                "UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?",
+                (deck_id,),
             )
 
     def set_notifications_enabled(self, user_id: str, deck_id: int, enabled: bool) -> bool:

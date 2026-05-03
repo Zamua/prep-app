@@ -141,6 +141,13 @@ class TriviaQueueRepo:
                 """,
                 (now_iso, 1 if correct else 0, new_pos, question_id),
             )
+            # Reset the deck's notification backoff streak — any answer
+            # is engagement, so the next scheduler tick should fire at
+            # the deck's base interval rather than the backed-off one.
+            c.execute(
+                "UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?",
+                (deck_id,),
+            )
 
     def count_unanswered(self, deck_id: int) -> int:
         """Number of cards in `deck_id` whose `last_answered_at IS NULL`.
@@ -182,6 +189,31 @@ class TriviaQueueRepo:
             "wrong": int(row["wrong"] or 0),
             "mastered": int(row["mastered"] or 0),
         }
+
+    def has_answer_since(self, deck_id: int, ts: str | None) -> bool:
+        """True if any card in `deck_id` has been answered after `ts`.
+        Drives the scheduler's exponential-backoff engagement check —
+        if the user has touched any card in the deck since the last
+        push fired, we treat the prior push as engaged-with and reset
+        the ignored streak. None ts is treated as "no prior fire" → no
+        engagement to credit yet (scheduler treats this case separately
+        anyway)."""
+        if ts is None:
+            return False
+        with cursor() as c:
+            row = c.execute(
+                """
+                SELECT 1
+                FROM trivia_queue tq
+                JOIN questions q ON q.id = tq.question_id
+                WHERE q.deck_id = ?
+                  AND tq.last_answered_at IS NOT NULL
+                  AND tq.last_answered_at > ?
+                LIMIT 1
+                """,
+                (deck_id, ts),
+            ).fetchone()
+        return row is not None
 
     def count_pending_review(self, deck_id: int) -> int:
         """Cards that still need work — never-shown OR previously
