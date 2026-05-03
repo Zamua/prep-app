@@ -125,15 +125,10 @@
             <span class="qcard-num">№ {{ q.id }}</span>
             <span class="qcard-tags">
               <span class="tag tag-type tag-{{ q.type }}">{{ q.type }}</span>
-              {% if q.topic %}
-                {# Topic can be long; chip truncates with ellipsis +
-                   tap opens the topic-preview dialog showing the
-                   full wrapped text. Type=button so it doesn't submit
-                   any ancestor form; data-topic carries the payload
-                   to the JS handler. #}
-                <button type="button" class="tag tag-topic" data-topic="{{ q.topic }}"
-                        title="{{ q.topic }}" aria-label="Show full topic">{{ q.topic }}</button>
-              {% endif %}
+              {# Topic can be long; chip truncates with ellipsis (CSS).
+                 Tapping the card opens the full preview dialog where
+                 the topic shows in full — no extra popover needed. #}
+              {% if q.topic %}<span class="tag tag-topic" title="{{ q.topic }}">{{ q.topic }}</span>{% endif %}
               {# Always rendered, CSS hides on non-suspended cards.
                  Lets the JS suspend/unsuspend toggle update the chip
                  inline by just flipping the qcard's .is-suspended. #}
@@ -295,20 +290,6 @@
   <div id="card-preview-body" class="card-preview-body"></div>
 </dialog>
 
-{# Topic-preview dialog. Tapping a truncated topic chip opens this
-   with the full wrapped topic text — way smaller than the full
-   card-preview dialog. JS clones the chip's data-topic attribute
-   into the body. #}
-<dialog id="topic-preview" class="topic-preview" aria-label="Full topic">
-  <form method="dialog" class="card-preview-close-form">
-    <button type="submit" class="card-preview-close" aria-label="Close">
-      {{ icon('x', class_='icon') }}
-    </button>
-  </form>
-  <p class="section-eyebrow"><span>Topic</span><span class="rule"></span></p>
-  <p id="topic-preview-body" class="topic-preview-body"></p>
-</dialog>
-
 {# Delete-deck confirmation dialog. Type-the-name-to-confirm pattern —
    prevents accidental clicks in a way "Are you sure?" doesn't. #}
 <dialog id="delete-deck-dialog" class="delete-dialog" aria-label="Delete deck confirmation">
@@ -396,27 +377,6 @@
 
   // Backdrop click to close. Native <dialog> doesn't do this by default —
   // a click on the dialog's padding area registers as target=dlg.
-  dlg.addEventListener('click', (e) => {
-    if (e.target === dlg) dlg.close();
-  });
-})();
-
-// Topic-pill click → small popup with the full wrapped topic text.
-// The pill itself truncates with ellipsis (CSS); this is the
-// reveal-the-rest gesture.
-(function () {
-  const dlg = document.getElementById('topic-preview');
-  const body = document.getElementById('topic-preview-body');
-  if (!dlg || !body) return;
-
-  document.querySelectorAll('.tag-topic').forEach((pill) => {
-    pill.addEventListener('click', (e) => {
-      e.stopPropagation();  // don't bubble to the qcard click handler
-      body.textContent = pill.dataset.topic || pill.textContent;
-      dlg.showModal();
-    });
-  });
-
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg) dlg.close();
   });

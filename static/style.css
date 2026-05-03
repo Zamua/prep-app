@@ -904,18 +904,12 @@ a { color: inherit; }
 }
 .tag-topic {
   /* Topics can be long ("system design, api-design, distributed
-     systems, napkin math") — single-line ellipsis. Tap reveals the
-     full wrapped text via the topic-preview dialog. As a <button>,
-     reset the default UA chrome so it reads identically to a span. */
+     systems, napkin math") — single-line ellipsis. The full text
+     surfaces in the card-preview dialog (tap the card body). */
   min-width: 0;
   flex: 0 1 auto;
-  cursor: pointer;
-  font-family: inherit;
-  /* Carrying max-width through from .tag (.tag has it as `max-width:
-     100%`) — restated here in case a future tweak loosens .tag. */
   max-width: 100%;
 }
-.tag-topic:hover { border-color: var(--ink-soft); color: var(--ink); }
 .tag-suspended {
   color: var(--wrong);
   border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
@@ -3382,39 +3376,3 @@ body:has(dialog[open]) {
   font-style: italic;
 }
 
-/* --- Topic-preview dialog ---
-   Smaller cousin of .card-preview; opens when the user taps a
-   truncated topic chip on the deck index. Reuses the same backdrop
-   + close button styling but caps width so the dialog reads as a
-   tight popover rather than the full card sheet. */
-.topic-preview {
-  max-width: min(28rem, calc(100vw - 1.6rem));
-  max-height: calc(100dvh - 1.6rem);
-  width: min(28rem, 100%);
-  padding: 0;
-  margin: auto;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  color: var(--ink);
-  overflow: hidden;
-  overscroll-behavior: contain;
-}
-.topic-preview[open] {
-  display: flex;
-  flex-direction: column;
-}
-.topic-preview::backdrop {
-  background: rgba(20, 17, 13, 0.55);
-  backdrop-filter: blur(2px);
-}
-.topic-preview > .section-eyebrow { padding: 0 1.2rem; margin-top: 0; }
-.topic-preview-body {
-  padding: 0.4rem 1.2rem 1.4rem;
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.5;
-  color: var(--ink);
-  word-wrap: break-word;
-}
