@@ -213,17 +213,42 @@ def _parse_card_ids(raw: str | None) -> list[int]:
     return out
 
 
+def _parse_done(raw: str | None) -> list[tuple[int, str]]:
+    """`done` query param format: `<qid><r|w>,<qid><r|w>,...` e.g.
+    `42r,17w,99r`. Carries per-card verdicts forward through the URL
+    chain so the end-of-session summary can render the user's run
+    without server-side session state. Malformed chunks are dropped
+    (defensive against hand-edited URLs)."""
+    if not raw:
+        return []
+    out: list[tuple[int, str]] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if len(chunk) >= 2 and chunk[-1] in ("r", "w") and chunk[:-1].isdigit():
+            out.append((int(chunk[:-1]), chunk[-1]))
+    return out
+
+
+def _format_done(items: list[tuple[int, str]]) -> str:
+    return ",".join(f"{qid}{verdict}" for qid, verdict in items)
+
+
 @router.get("/trivia/session/{deck_name}", response_class=HTMLResponse)
 def trivia_session(
     deck_name: str,
     request: Request,
     cards: str | None = None,
+    done: str | None = None,
     user: dict = Depends(current_user),
 ):
     """Notification deep-link target: a 3-card mini-session. With no
     `cards` param, server picks a fresh session and redirects with the
     queue encoded. With an empty `cards`, renders the summary. Otherwise
-    renders the head card; submit pops the head and redirects."""
+    renders the head card; submit pops the head and redirects.
+
+    The `done` param accumulates per-card verdicts as the user
+    progresses (`<qid><r|w>,...`) so the summary view at the end can
+    render the run without server-side session state."""
     uid = user["tailscale_login"]
     decks = DeckRepo()
     questions = QuestionRepo()
@@ -243,11 +268,35 @@ def trivia_session(
         return responses.redirect(request, f"/trivia/session/{deck_name}?cards={ids}")
 
     queue = _parse_card_ids(cards)
+    done_items = _parse_done(done)
     if not queue:
+        # Render summary: hydrate each done entry with its question
+        # text + correct answer + explanation for the tap-to-expand
+        # detail panels.
+        results = []
+        for qid, verdict in done_items:
+            q = questions.get(uid, qid)
+            if q is None:
+                continue
+            results.append(
+                {
+                    "id": q.id,
+                    "prompt": q.prompt,
+                    "answer": q.answer,
+                    "explanation": q.explanation,
+                    "verdict": verdict,
+                }
+            )
+        right_count = sum(1 for r in results if r["verdict"] == "r")
         return templates.TemplateResponse(
             request,
             "trivia/session_done.html",
-            {"deck_name": deck_name},
+            {
+                "deck_name": deck_name,
+                "results": results,
+                "right_count": right_count,
+                "total": len(results),
+            },
         )
 
     head = queue[0]
@@ -256,7 +305,12 @@ def trivia_session(
         # Skip cards the user can't access (stale URL after a deck
         # delete, or someone trying to inject foreign question_ids).
         remaining = ",".join(str(i) for i in queue[1:])
-        return responses.redirect(request, f"/trivia/session/{deck_name}?cards={remaining}")
+        done_qs = f"&done={done}" if done else ""
+        return responses.redirect(
+            request, f"/trivia/session/{deck_name}?cards={remaining}{done_qs}"
+        )
+    total = len(done_items) + len(queue)
+    position = len(done_items) + 1
     return templates.TemplateResponse(
         request,
         "trivia/card.html",
@@ -264,9 +318,10 @@ def trivia_session(
             "q": q,
             "deck_name": deck_name,
             "result": None,
-            "session_position": 1,
-            "session_total": len(queue),
+            "session_position": position,
+            "session_total": total,
             "session_remaining": cards,
+            "session_done": done or "",
         },
     )
 
@@ -276,12 +331,18 @@ def trivia_session_answer(
     deck_name: str,
     request: Request,
     cards: str = Form(""),
+    done: str = Form(""),
     answer: str = Form(""),
+    idk: str = Form(""),
     user: dict = Depends(current_user),
 ):
-    """Grade the head card, mark_answered, redirect to GET with the
-    head popped. If the head card was the last one, the redirect lands
-    on the summary view."""
+    """Grade the head card, mark_answered, render the result panel.
+    Appends `<head><r|w>` to the `done` chain so the next-card link
+    (and eventually the summary view) carries the verdict forward.
+
+    `idk=1` is the "I don't know" submit — skip grading entirely and
+    record as wrong. `formnovalidate` on the button bypasses the
+    answer field's `required`, so an empty input still POSTs."""
     uid = user["tailscale_login"]
     decks = DeckRepo()
     questions = QuestionRepo()
@@ -291,20 +352,40 @@ def trivia_session_answer(
         raise HTTPException(404, "deck not found")
 
     queue = _parse_card_ids(cards)
+    done_items = _parse_done(done)
     if not queue:
-        return responses.redirect(request, f"/trivia/session/{deck_name}?cards=")
+        done_qs = f"&done={done}" if done else ""
+        return responses.redirect(request, f"/trivia/session/{deck_name}?cards={done_qs}")
 
     head = queue[0]
     q = questions.get(uid, head)
     if q is None or q.deck_id != deck_id:
         # Stale / foreign card — pop and continue.
         remaining = ",".join(str(i) for i in queue[1:])
-        return responses.redirect(request, f"/trivia/session/{deck_name}?cards={remaining}")
+        done_qs = f"&done={done}" if done else ""
+        return responses.redirect(
+            request, f"/trivia/session/{deck_name}?cards={remaining}{done_qs}"
+        )
 
-    verdict = _grade(q, answer)
-    correct = verdict["correct"]
+    is_idk = bool(idk)
+    if is_idk:
+        correct = False
+        verdict: dict = {"correct": False, "feedback": None}
+        given = ""
+    else:
+        verdict = _grade(q, answer)
+        correct = verdict["correct"]
+        given = answer
+
     trivia.mark_answered(head, correct=correct)
+
+    new_done_str = _format_done(done_items + [(head, "r" if correct else "w")])
     remaining = ",".join(str(i) for i in queue[1:])
+    # Position counter on the result view stays on the card the user
+    # just answered — counter rolls UP across the session
+    # (1/3 → 2/3 → 3/3) instead of down.
+    position = len(done_items) + 1
+    total = len(done_items) + len(queue)
     return templates.TemplateResponse(
         request,
         "trivia/card.html",
@@ -313,17 +394,19 @@ def trivia_session_answer(
             "deck_name": deck_name,
             "result": {
                 "correct": correct,
-                "given": answer,
+                "given": given,
                 "expected": q.answer,
                 "feedback": verdict.get("feedback"),
+                "idk": is_idk,
             },
-            "session_position": 1,
-            "session_total": len(queue),
+            "session_position": position,
+            "session_total": total,
             "session_remaining": remaining,
+            "session_done": new_done_str,
             **_explore_ctx(
                 deck_name=deck_name,
                 q=q,
-                user_answer=answer,
+                user_answer=given,
                 correct=correct,
                 expected=q.answer,
             ),

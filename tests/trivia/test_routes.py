@@ -314,24 +314,91 @@ def test_session_renders_head_card_with_progress(client: TestClient, initialized
     assert f'value="{csv}"' in r.text
 
 
-def test_session_answer_pops_head_and_continues(client: TestClient, initialized_db: str):
+def test_session_position_counts_up_with_done_chain(client: TestClient, initialized_db: str):
+    """The N/3 counter rolls UP across the session — done param drives
+    the position so the user sees 1/3 → 2/3 → 3/3."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    # Pretend we've already answered the first card (right) and we're
+    # back at the GET for card 2.
+    remaining = ",".join(str(q) for q in qids[1:])
+    r = client.get(f"/trivia/session/geo?cards={remaining}&done={qids[0]}r")
+    assert r.status_code == 200
+    assert "2 of 3" in r.text
+    # And the third card.
+    r = client.get(f"/trivia/session/geo?cards={qids[2]}&done={qids[0]}r,{qids[1]}w")
+    assert r.status_code == 200
+    assert "3 of 3" in r.text
+
+
+def test_session_answer_pops_head_and_appends_to_done(client: TestClient, initialized_db: str):
     """POST /trivia/session/<deck>/answer with the queue:
-    grades + marks_answered + the redirect/render carries the popped queue."""
+    grades + marks_answered + the next-card link carries the popped
+    queue PLUS the verdict appended to `done`."""
     _, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
     csv = ",".join(str(q) for q in qids)
     r = client.post(
         "/trivia/session/geo/answer",
-        data={"cards": csv, "answer": "A0"},
+        data={"cards": csv, "done": "", "answer": "A0"},
     )
     assert r.status_code == 200
     # Verdict block rendered with correct=true.
     assert "trivia-result-right" in r.text
-    # Next link carries the popped queue.
+    # Next link carries the popped queue + the new done entry.
     expected_remaining = ",".join(str(q) for q in qids[1:])
     assert f"?cards={expected_remaining}" in r.text
+    assert f"done={qids[0]}r" in r.text
 
 
-def test_session_empty_cards_renders_done(client: TestClient, initialized_db: str):
+def test_session_idk_records_wrong_without_grading(client: TestClient, initialized_db: str):
+    """`idk=1` form submit skips grading entirely and persists wrong.
+    The result panel labels the answer as IDK rather than empty."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    csv = str(qids[0])
+    r = client.post(
+        "/trivia/session/geo/answer",
+        data={"cards": csv, "done": "", "answer": "", "idk": "1"},
+    )
+    assert r.status_code == 200
+    assert "trivia-result-wrong" in r.text
+    assert "I don't know" in r.text
+    # Done chain encodes the wrong verdict.
+    assert f"done={qids[0]}w" in r.text
+    # Persisted in the queue as wrong.
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        row = c.execute(
+            "SELECT last_answered_correctly FROM trivia_queue WHERE question_id = ?",
+            (qids[0],),
+        ).fetchone()
+    assert row["last_answered_correctly"] == 0
+
+
+def test_session_empty_cards_with_done_renders_summary(client: TestClient, initialized_db: str):
+    """End-of-session summary lists every card with right/wrong tinting,
+    each tappable via <details> to reveal the correct answer."""
+    _, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    done = f"{qids[0]}r,{qids[1]}w,{qids[2]}r"
+    r = client.get(f"/trivia/session/geo?cards=&done={done}")
+    assert r.status_code == 200
+    assert "2 of 3" in r.text
+    assert "right" in r.text.lower()
+    # All three prompts render (truncated by line-clamp in css, but
+    # present in markup).
+    assert "Q0?" in r.text
+    assert "Q1?" in r.text
+    assert "Q2?" in r.text
+    # Tinting classes per verdict.
+    assert "ts-card-right" in r.text
+    assert "ts-card-wrong" in r.text
+    # Open deck + Done CTAs.
+    assert "Open deck" in r.text
+    assert "Done" in r.text
+
+
+def test_session_empty_cards_without_done_falls_back(client: TestClient, initialized_db: str):
+    """A stale URL (cards=, no done chain) shouldn't crash — render
+    the legacy "Session complete" empty state."""
     _seed_n_trivia_questions(initialized_db, "geo", 1)
     r = client.get("/trivia/session/geo?cards=")
     assert r.status_code == 200

@@ -39,6 +39,7 @@
           autocomplete="off">
       {% if session_total %}
         <input type="hidden" name="cards" value="{{ session_remaining }}">
+        <input type="hidden" name="done" value="{{ session_done or '' }}">
       {% endif %}
       {# Match the SRS short-answer chrome: .freetext wrapper, italic
          eyebrow label, input gets the same border/padding as the
@@ -53,12 +54,28 @@
           autofocus
           required>
       </label>
-      <div class="study-actions">
-        <button type="submit" class="btn btn-primary" id="trivia-submit-btn"
-                data-pending-label="Grading…">
-          Submit
-        </button>
-      </div>
+      {# Side-by-side Submit + IDK in session mode (the IDK button
+         lets the user record a wrong without typing or guessing).
+         Standalone deep-link keeps the original single-button row. #}
+      {% if session_total %}
+        <div class="trivia-actions">
+          <button type="submit" class="btn btn-primary" id="trivia-submit-btn"
+                  data-pending-label="Grading…">
+            Submit
+          </button>
+          <button type="submit" name="idk" value="1" class="btn btn-quiet"
+                  formnovalidate>
+            I don't know
+          </button>
+        </div>
+      {% else %}
+        <div class="study-actions">
+          <button type="submit" class="btn btn-primary" id="trivia-submit-btn"
+                  data-pending-label="Grading…">
+            Submit
+          </button>
+        </div>
+      {% endif %}
     </form>
     <script>
       // The claude-graded path on the server can take ~5-10s. Disable
@@ -90,7 +107,12 @@
       <section class="trivia-answers">
         <div class="trivia-answer-block">
           <p class="trivia-answer-eyebrow">your answer</p>
-          <p class="trivia-answer-text">{{ result.given or '(empty)' }}</p>
+          <p class="trivia-answer-text">
+            {%- if result.idk -%}<em>I don't know</em>
+            {%- elif result.given -%}{{ result.given }}
+            {%- else -%}<em>(empty)</em>
+            {%- endif -%}
+          </p>
         </div>
         <div class="trivia-answer-block trivia-answer-correct">
           <p class="trivia-answer-eyebrow">correct answer</p>
@@ -151,7 +173,7 @@
       {% endif %}
 
       {% if session_total %}
-        <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}?cards={{ session_remaining }}"
+        <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}?cards={{ session_remaining }}{% if session_done %}&amp;done={{ session_done }}{% endif %}"
            class="btn btn-primary trivia-next-cta">
           {% if session_remaining %}Next card{% else %}Finish session{% endif %}
         </a>

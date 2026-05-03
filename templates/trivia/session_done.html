@@ -1,5 +1,9 @@
-{# Mini-session summary. Reached when the queue is empty — either the
-   user completed all 3 cards or arrived here via a stale link. #}
+{# Mini-session summary. Reached when the queue is empty. With
+   `results` populated (the normal path: user completed all cards), we
+   render the right/wrong scoreboard with each card tappable to expand
+   into a card-preview-style detail panel. With no results (e.g. someone
+   landed here via a stale `?cards=` URL with no `done` chain), fall
+   back to the simple "session complete" state. #}
 {% extends "base.html" %}
 {% block title %}{{ deck_name }} · trivia · prep{% endblock %}
 {% block page_class %}trivia-card{% endblock %}
@@ -10,9 +14,52 @@
 </nav>
 
 <article class="trivia-card-body">
-  <p class="section-eyebrow"><span>Session complete</span><span class="rule"></span></p>
-  <p class="trivia-prompt">Nice. Next push in a bit.</p>
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}"
-     class="btn btn-secondary trivia-dismiss">Open deck</a>
+  {% if results %}
+    <section class="ts-summary-head">
+      <p class="ts-eyebrow">session complete</p>
+      <h1 class="display ts-h1">{{ right_count }} of {{ total }} <em>right</em>.</h1>
+      <p class="ts-lede">Tap any card to review the question, the correct answer, and the explanation.</p>
+    </section>
+
+    <ol class="ts-card-list" role="list">
+      {% for r in results %}
+        <li class="ts-card ts-card-{{ 'right' if r.verdict == 'r' else 'wrong' }}">
+          <details class="ts-card-details">
+            <summary class="ts-card-summary">
+              <div class="ts-card-row">
+                <span class="ts-card-mark">
+                  {% if r.verdict == 'r' %}{{ icon('check', class_='icon icon-inline') }}{% else %}{{ icon('x', class_='icon icon-inline') }}{% endif %}
+                </span>
+                <span class="ts-card-q">{{ r.prompt }}</span>
+                <span class="ts-card-arrow" aria-hidden="true">›</span>
+              </div>
+            </summary>
+            <div class="ts-card-expand">
+              <div class="ts-card-block">
+                <p class="ts-card-eyebrow">correct answer</p>
+                <p class="ts-card-correct-full">{{ r.answer }}</p>
+              </div>
+              {% if r.explanation %}
+                <div class="ts-card-block">
+                  <p class="ts-card-eyebrow">explain</p>
+                  <p class="ts-card-explanation">{{ r.explanation }}</p>
+                </div>
+              {% endif %}
+            </div>
+          </details>
+        </li>
+      {% endfor %}
+    </ol>
+
+    <div class="ts-actions">
+      <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="btn btn-quiet">Open deck</a>
+      <a href="{{ request.scope.get('root_path','') }}/" class="btn btn-primary">Done</a>
+    </div>
+  {% else %}
+    <p class="section-eyebrow"><span>Session complete</span><span class="rule"></span></p>
+    <p class="trivia-prompt">Nice. Next push in a bit.</p>
+    <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}"
+       class="btn btn-secondary trivia-dismiss">Open deck</a>
+  {% endif %}
 </article>
 {% endblock %}

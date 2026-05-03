@@ -3250,6 +3250,126 @@ body:has(dialog[open]) {
 }
 .trivia-explore-option .icon { flex-shrink: 0; opacity: 0.7; }
 
+/* --- Trivia card actions: Submit + "I don't know" -----------------
+   Used in session mode so the two buttons sit side-by-side on
+   mobile. The shared .study-actions class forces 100% width below
+   480px (matches the SRS card pattern), which would stack these.
+   Trivia gets its own row so the IDK escape hatch reads as a
+   secondary action next to Submit, not as a stacked block. */
+.trivia-actions {
+  display: flex;
+  gap: 0.7rem;
+  margin-top: 1.1rem;
+  align-items: stretch;
+}
+.trivia-actions > .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  padding-left: 0.6rem;
+  padding-right: 0.6rem;
+}
+.trivia-actions > .btn.btn-primary { flex: 1.4 1 0; }
+
+/* --- Session summary -----------------------------------------------
+   End-of-mini-session view: "N of 3 right" header + tappable card
+   list. Each card is a <details>/<summary> so the expand-to-review
+   panel works without JS. Right cards tint --right, wrong cards tint
+   --wrong, mirroring the post-answer trivia-result tinting. */
+.ts-summary-head { margin: 0.5rem 0 1.4rem; }
+.ts-eyebrow {
+  font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-mute); font-style: italic;
+  margin: 0 0 0.4rem;
+}
+.ts-h1 {
+  font-size: 2.2rem; line-height: 1.05; margin: 0 0 0.6rem;
+  font-variation-settings: "opsz" 144, "SOFT" 60;
+}
+.ts-h1 em { font-style: italic; color: var(--right); }
+.ts-lede {
+  color: var(--ink-mute); font-size: 0.95rem; margin: 0;
+  max-width: 36ch;
+}
+
+.ts-card-list {
+  list-style: none; padding: 0;
+  margin: 1.2rem 0 1.4rem;
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+.ts-card {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  overflow: hidden;
+}
+.ts-card-right {
+  background: color-mix(in srgb, var(--right) 6%, transparent);
+  border-color: color-mix(in srgb, var(--right) 30%, transparent);
+}
+.ts-card-wrong {
+  background: color-mix(in srgb, var(--wrong) 6%, transparent);
+  border-color: color-mix(in srgb, var(--wrong) 30%, transparent);
+}
+
+.ts-card-summary {
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+.ts-card-summary::-webkit-details-marker { display: none; }
+.ts-card-summary::marker { content: ""; }
+
+.ts-card-row {
+  display: grid; grid-template-columns: 1.2rem 1fr auto;
+  gap: 0.6rem; align-items: center;
+}
+.ts-card-mark {
+  font-size: 1.05rem; font-weight: 700;
+  color: var(--ink-mute);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ts-card-right .ts-card-mark { color: var(--right); }
+.ts-card-wrong .ts-card-mark { color: var(--wrong); }
+.ts-card-q {
+  font-size: 0.96rem; color: var(--ink); font-weight: 500;
+  line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.ts-card-arrow {
+  color: var(--ink-mute); font-size: 1.3rem; line-height: 1;
+  transition: transform 0.15s ease;
+}
+.ts-card-details[open] .ts-card-arrow { transform: rotate(90deg); }
+
+.ts-card-expand {
+  padding: 0 1rem 1rem;
+  border-top: 1px dashed color-mix(in srgb, var(--ink-mute) 25%, transparent);
+  margin-top: 0.4rem;
+}
+.ts-card-block { margin-top: 0.85rem; }
+.ts-card-block:first-child { margin-top: 0.85rem; }
+.ts-card-eyebrow {
+  font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-mute); font-style: italic;
+  margin: 0 0 0.25rem;
+}
+.ts-card-correct-full {
+  margin: 0; font-size: 1rem; color: var(--ink); line-height: 1.4;
+  font-weight: 500;
+}
+.ts-card-explanation {
+  margin: 0; font-size: 0.94rem; color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.ts-actions {
+  display: flex; gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+.ts-actions > .btn { flex: 1; }
+
 /* --- Trivia generation polling page ---
    Drives the plan-then-expand UI: status row, progress bar, plan
    review list, replan/accept/reject controls. */
