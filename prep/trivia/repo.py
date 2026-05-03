@@ -144,9 +144,8 @@ class TriviaQueueRepo:
 
     def count_unanswered(self, deck_id: int) -> int:
         """Number of cards in `deck_id` whose `last_answered_at IS NULL`.
-        When this hits zero AND the deck still has questions, the
-        scheduler should fire a fresh-batch generation before its next
-        tick (or ride out the rotation, depending on policy)."""
+        Strict "never seen" count — used by tests pinning queue
+        rotation behavior."""
         with cursor() as c:
             row = c.execute(
                 """
@@ -154,6 +153,25 @@ class TriviaQueueRepo:
                 FROM trivia_queue tq
                 JOIN questions q ON q.id = tq.question_id
                 WHERE q.deck_id = ? AND tq.last_answered_at IS NULL
+                """,
+                (deck_id,),
+            ).fetchone()
+        return int(row["n"] or 0)
+
+    def count_pending_review(self, deck_id: int) -> int:
+        """Cards that still need work — never-shown OR previously
+        wrong. Drives the scheduler's "should I generate more?"
+        decision: don't bloat the deck with fresh content while the
+        user still has unanswered/wrong cards to grind through."""
+        with cursor() as c:
+            row = c.execute(
+                """
+                SELECT COUNT(*) AS n
+                FROM trivia_queue tq
+                JOIN questions q ON q.id = tq.question_id
+                WHERE q.deck_id = ?
+                  AND (tq.last_answered_at IS NULL
+                       OR tq.last_answered_correctly = 0)
                 """,
                 (deck_id,),
             ).fetchone()

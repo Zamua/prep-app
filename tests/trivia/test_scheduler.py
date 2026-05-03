@@ -141,6 +141,59 @@ def test_tick_updates_last_notified_at(monkeypatch, fixtures):
     assert row["last_notified_at"] is not None
 
 
+def test_tick_does_not_refill_when_pending_pool_full(monkeypatch, fixtures):
+    """Fresh deck of 25 has pending_review=25 → no refill should fire,
+    even though the scheduler is processing this deck on a tick."""
+    deck_id, _ = _make_trivia_deck(fixtures, n_questions=25)
+    gen_calls = []
+
+    def fake_gen(**kwargs):
+        gen_calls.append(kwargs)
+        return type("Outcome", (), {"inserted": 0, "skipped_duplicates": 0, "skipped_invalid": 0})()
+
+    monkeypatch.setattr("prep.trivia.service.generate_batch", fake_gen)
+    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    sched.tick(datetime.now(timezone.utc))
+    assert gen_calls == []
+
+
+def test_tick_refills_when_pending_pool_drained(monkeypatch, fixtures):
+    """Once the user has worked through the pool (no never-shown, no
+    wrong cards), the scheduler proactively refills."""
+    deck_id, qids = _make_trivia_deck(fixtures, n_questions=4)
+    # Mark all 4 right → pending_review=0 → below threshold.
+    for qid in qids:
+        fixtures["trivia"].mark_answered(qid, correct=True)
+    gen_calls = []
+
+    def fake_gen(**kwargs):
+        gen_calls.append(kwargs)
+        return type("Outcome", (), {"inserted": 0, "skipped_duplicates": 0, "skipped_invalid": 0})()
+
+    monkeypatch.setattr("prep.trivia.service.generate_batch", fake_gen)
+    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    sched.tick(datetime.now(timezone.utc))
+    assert len(gen_calls) == 1
+    assert gen_calls[0]["deck_id"] == deck_id
+
+
+def test_tick_holds_refill_while_user_has_wrong_cards(monkeypatch, fixtures):
+    """Wrong-answered cards count as 'pending'. If the user has 5+
+    wrong-or-fresh, no refill — they need to clear what they have."""
+    deck_id, qids = _make_trivia_deck(fixtures, n_questions=8)
+    # Six wrong + 2 fresh → pending=8 → above threshold → no refill.
+    for qid in qids[:6]:
+        fixtures["trivia"].mark_answered(qid, correct=False)
+    gen_calls = []
+    monkeypatch.setattr(
+        "prep.trivia.service.generate_batch",
+        lambda **kw: gen_calls.append(kw) or type("O", (), {"inserted": 0})(),
+    )
+    monkeypatch.setattr("prep.notify._legacy_module.send_to_user", lambda **kw: {"ok": True})
+    sched.tick(datetime.now(timezone.utc))
+    assert gen_calls == []
+
+
 def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
     """The per-deck pause toggle should silence the scheduler without
     touching last_notified_at (so resuming doesn't immediately fire)."""

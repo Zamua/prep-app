@@ -33,6 +33,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_INTERVAL_MINUTES = 30
 
+# When the count of "still needs work" cards (never-shown + wrong)
+# drops below this, the scheduler proactively asks claude for a
+# fresh batch on its next tick. Above the threshold, no generation
+# fires — the deck doesn't bloat while the user still has material
+# to grind through.
+_REFILL_BELOW_PENDING_REVIEW = 5
+
 
 def _parse_iso(ts: str) -> Optional[datetime]:
     """Tolerant ISO-8601 parse for the deck's last_notified_at column.
@@ -80,39 +87,34 @@ def tick(now_utc: datetime) -> None:
             if not _is_due(now_utc, row.get("last_notified_at"), interval):
                 continue
 
+            # Refill gate: if the user is running low on cards that
+            # still need work (never-shown + wrong-answered), ask
+            # claude for a fresh batch BEFORE picking. Synchronous —
+            # the scheduler tick happily blocks ~30-60s; next tick
+            # is _TICK_SECONDS away regardless. Failures are logged
+            # and swallowed: an unavailable agent shouldn't stop us
+            # from cycling existing cards (the weighted picker can
+            # still surface review material).
+            if trivia.count_pending_review(deck_id) < _REFILL_BELOW_PENDING_REVIEW:
+                topic = (row.get("context_prompt") or row.get("name") or "").strip()
+                if topic:
+                    try:
+                        trivia_service.generate_batch(
+                            user_id=row["user_id"],
+                            deck_id=deck_id,
+                            topic=topic,
+                            questions_repo=questions,
+                            trivia_repo=trivia,
+                        )
+                    except AgentUnavailable as e:
+                        logger.warning("trivia tick: refill failed for deck %s: %s", deck_id, e)
+
             nxt = trivia.pick_next_for_deck(deck_id)
             if nxt is None:
-                # Queue is empty — try to generate a fresh batch
-                # synchronously. Single claude call, ~30-60s; the
-                # scheduler tick is happy to block for it since
-                # we're already in the per-deck try block.
-                topic = (row.get("context_prompt") or row.get("name") or "").strip()
-                if not topic:
-                    logger.warning("trivia deck %s has no topic; skipping", deck_id)
-                    continue
-                try:
-                    trivia_service.generate_batch(
-                        user_id=row["user_id"],
-                        deck_id=deck_id,
-                        topic=topic,
-                        questions_repo=questions,
-                        trivia_repo=trivia,
-                    )
-                except AgentUnavailable as e:
-                    logger.warning(
-                        "trivia tick: gen failed for deck %s, skipping until next tick: %s",
-                        deck_id,
-                        e,
-                    )
-                    continue
-                nxt = trivia.pick_next_for_deck(deck_id)
-                if nxt is None:
-                    # Generation produced nothing usable; bail this round.
-                    logger.warning(
-                        "trivia tick: deck %s still empty after generate; skipping",
-                        deck_id,
-                    )
-                    continue
+                # Deck has zero cards — refill must have failed and
+                # there's nothing left to recycle. Bail this round.
+                logger.warning("trivia tick: deck %s has no cards; skipping", deck_id)
+                continue
 
             # Fire the push. Body = question text (trimmed for native
             # platform limits — most platforms cap around 120 chars
