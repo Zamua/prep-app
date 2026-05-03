@@ -54,9 +54,34 @@
           required>
       </label>
       <div class="study-actions">
-        <button type="submit" class="btn btn-primary">Submit</button>
+        <button type="submit" class="btn btn-primary" id="trivia-submit-btn"
+                data-pending-label="Grading…">
+          Submit
+        </button>
       </div>
     </form>
+    <script>
+      // The claude-graded path on the server can take ~5-10s. Disable
+      // the button + swap the label on submit so the user knows
+      // something's happening. Re-enables on bfcache restore so a
+      // back-button-then-resubmit works.
+      (function () {
+        var btn = document.getElementById('trivia-submit-btn');
+        if (!btn) return;
+        var orig = btn.textContent.trim();
+        var pending = btn.dataset.pendingLabel || 'Working…';
+        btn.form.addEventListener('submit', function () {
+          btn.disabled = true;
+          btn.textContent = pending;
+          btn.classList.add('is-loading');
+        });
+        window.addEventListener('pageshow', function () {
+          btn.disabled = false;
+          btn.textContent = orig;
+          btn.classList.remove('is-loading');
+        });
+      })();
+    </script>
   {% else %}
     <div class="trivia-result trivia-result-{{ 'right' if result.correct else 'wrong' }}">
       {# Side-by-side answer compare. Correct-answer card tints --right
@@ -72,6 +97,14 @@
           <p class="trivia-answer-text">{{ result.expected }}</p>
         </div>
       </section>
+
+      {# Claude's feedback (only present when the question hit the
+         claude-graded path; deterministic-graded answers don't need
+         narration since the visual diff between the two answer
+         blocks already tells the story). #}
+      {% if result.feedback %}
+        <p class="trivia-feedback">{{ result.feedback }}</p>
+      {% endif %}
 
       {# Two outlined disclosure pills sit side-by-side; tapping one
          reveals its content in a panel below the row. Both are

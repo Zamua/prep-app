@@ -197,6 +197,101 @@ def _normalize_for_grading(s: str) -> str:
     return s
 
 
+def classify_grading(expected: str) -> str:
+    """Decide whether a trivia answer can be reliably graded by
+    string similarity, or needs claude.
+
+    Returns "deterministic" or "claude". Conservative: when in doubt,
+    use claude. False-deterministic-positives ("you got it wrong"
+    when you actually got it right) feel terrible; a false claude
+    call costs ~5-10s, which is fine.
+
+    Rules (checked top-down on the EXPECTED answer):
+      - empty / whitespace → deterministic (nothing useful to grade)
+      - pure numeric (digits + . , - %) → deterministic
+      - <= 3 tokens AND no sentence punctuation → deterministic
+        (handles "Bobby Prince", "id Software", "Leonardo da Vinci",
+        etc.; the existing token-subset matcher in grade_answer
+        accepts "Newton" for "Isaac Newton")
+      - everything else → claude
+    """
+    s = expected.strip()
+    if not s:
+        return "deterministic"
+    if re.fullmatch(r"[\d.,%\-+]+", s):
+        return "deterministic"
+    tokens = s.split()
+    if len(tokens) <= 3 and not re.search(r"[.!?,;:]", s):
+        return "deterministic"
+    return "claude"
+
+
+_CLAUDE_GRADE_PROMPT = """\
+You are grading a single short-answer trivia question.
+
+Question:
+%(prompt)s
+
+Expected answer (what we're looking for):
+%(expected)s
+
+User's answer:
+%(given)s
+
+Decide whether the user got it right. A correct answer must convey
+the same fact as the expected answer. Minor variations in phrasing,
+casing, or word order are fine. Mark wrong if the user's answer:
+- contradicts the expected answer
+- is too vague or omits the key fact
+- is unrelated
+
+Respond with ONLY a JSON object, no prose, no fences:
+
+{"verdict": "right"|"wrong", "feedback": "1-2 sentences explaining why"}
+"""
+
+
+def claude_grade(*, prompt: str, expected: str, given: str) -> dict:
+    """Synchronous claude-graded verdict. Returns
+    `{"correct": bool, "feedback": str}`. Falls back to a deterministic
+    grade on any agent error so the user is never blocked by a flaky
+    claude call.
+    """
+    if not given.strip():
+        return {"correct": False, "feedback": "No answer given."}
+    prompt_text = _CLAUDE_GRADE_PROMPT % {
+        "prompt": prompt.strip(),
+        "expected": expected.strip(),
+        "given": given.strip(),
+    }
+    try:
+        out = run_prompt(prompt_text, timeout_s=30.0)
+    except AgentUnavailable as e:
+        logger.warning("claude_grade: agent unavailable, falling back to string match: %s", e)
+        return {
+            "correct": grade_answer(expected=expected, given=given),
+            "feedback": "(graded by string similarity — claude was unreachable)",
+        }
+    try:
+        text = out.strip()
+        # Tolerant of code fences / leading prose, like the batch parser.
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```\s*$", "", text)
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end < 0 or end < start:
+            raise ValueError("no JSON object")
+        parsed = json.loads(text[start : end + 1])
+        verdict = (parsed.get("verdict") or "").strip().lower()
+        feedback = (parsed.get("feedback") or "").strip()
+        return {"correct": verdict == "right", "feedback": feedback}
+    except (ValueError, json.JSONDecodeError, KeyError) as e:
+        logger.warning("claude_grade: bad JSON, falling back to string match: %s", e)
+        return {
+            "correct": grade_answer(expected=expected, given=given),
+            "feedback": "(graded by string similarity — claude returned malformed JSON)",
+        }
+
+
 def grade_answer(*, expected: str, given: str) -> bool:
     """True iff `given` matches `expected` after normalization. Liberal
     enough to handle "us" / "U.S." / "United States" the user proposed

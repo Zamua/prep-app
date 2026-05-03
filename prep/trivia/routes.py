@@ -35,6 +35,21 @@ from prep.web import responses
 from prep.web.templates import templates
 
 
+def _grade(q, user_answer: str) -> dict:
+    """Dispatch to deterministic vs claude grading per the heuristic
+    in trivia.service.classify_grading. Returns
+    `{"correct": bool, "feedback": str | None}`. Single chokepoint
+    so both /trivia/<id>/answer and /trivia/session/.../answer share
+    the same logic."""
+    mode = trivia_service.classify_grading(q.answer)
+    if mode == "deterministic":
+        return {
+            "correct": trivia_service.grade_answer(expected=q.answer, given=user_answer),
+            "feedback": None,
+        }
+    return trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
+
+
 def _explore_ctx(*, deck_name: str, q, user_answer: str, correct: bool, expected: str) -> dict:
     """Build the "Explore further" template context for a trivia
     card's post-answer state: AI-chat handoff URLs (Claude/ChatGPT)
@@ -274,7 +289,8 @@ def trivia_session_answer(
         remaining = ",".join(str(i) for i in queue[1:])
         return responses.redirect(request, f"/trivia/session/{deck_name}?cards={remaining}")
 
-    correct = trivia_service.grade_answer(expected=q.answer, given=answer)
+    verdict = _grade(q, answer)
+    correct = verdict["correct"]
     trivia.mark_answered(head, correct=correct)
     remaining = ",".join(str(i) for i in queue[1:])
     return templates.TemplateResponse(
@@ -287,6 +303,7 @@ def trivia_session_answer(
                 "correct": correct,
                 "given": answer,
                 "expected": q.answer,
+                "feedback": verdict.get("feedback"),
             },
             "session_position": 1,
             "session_total": len(queue),
@@ -345,7 +362,8 @@ def trivia_answer(
     if q is None:
         raise HTTPException(404, "question not found")
 
-    correct = trivia_service.grade_answer(expected=q.answer, given=answer)
+    verdict = _grade(q, answer)
+    correct = verdict["correct"]
     trivia.mark_answered(question_id, correct=correct)
     deck_name = decks.find_name(user["tailscale_login"], q.deck_id)
     return templates.TemplateResponse(
@@ -358,6 +376,7 @@ def trivia_answer(
                 "correct": correct,
                 "given": answer,
                 "expected": q.answer,
+                "feedback": verdict.get("feedback"),
             },
             **_explore_ctx(
                 deck_name=deck_name or "",

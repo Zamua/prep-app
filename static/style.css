@@ -3211,6 +3211,22 @@ body:has(dialog[open]) {
   margin-top: 0.4rem;
 }
 
+/* Claude-graded feedback line — only rendered when result.feedback
+   is set (which happens for the claude-graded path; deterministic
+   answers don't need narration). Sits right under the answer compare
+   so the explanation reads as a verdict caption. */
+.trivia-feedback {
+  margin: -0.6rem 0 1.4rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  font-style: italic;
+  border-left: 2px solid var(--quill);
+  background: color-mix(in srgb, var(--quill) 4%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
 /* The explore-options links live INSIDE the .trivia-disc-body now —
    no standalone .trivia-explore wrapper. Per-link chrome is shared
    with the SRS path so the visual language stays consistent. */

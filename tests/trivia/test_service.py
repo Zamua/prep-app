@@ -159,3 +159,86 @@ def test_grade_answer_accepts_equivalents(expected, given):
 )
 def test_grade_answer_rejects_wrong(expected, given):
     assert svc.grade_answer(expected=expected, given=given) is False
+
+
+# ---- classify_grading -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        "Paris",
+        "id Software",
+        "Bobby Prince",
+        "Leonardo da Vinci",
+        "1944",
+        "3.14",
+        "50%",
+        "USA",
+        "",  # empty falls through to deterministic safely
+    ],
+)
+def test_classify_grading_picks_deterministic_for_short_answers(expected):
+    assert svc.classify_grading(expected) == "deterministic"
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        "Both Lennon and McCartney",  # 4 tokens
+        "About thirty-one and a half million",  # sentence-shaped
+        "Anywhere from 50 to 100 milliseconds",  # 6 tokens
+        "Fast, cheap, and good — pick two.",  # punctuation
+        "It depends on the consistency model.",  # sentence
+    ],
+)
+def test_classify_grading_picks_claude_for_long_or_complex(expected):
+    assert svc.classify_grading(expected) == "claude"
+
+
+# ---- claude_grade -----------------------------------------------------
+
+
+def test_claude_grade_parses_right_verdict(monkeypatch):
+    monkeypatch.setattr(
+        svc,
+        "run_prompt",
+        lambda _p, **_k: '{"verdict": "right", "feedback": "Same fact, different phrasing."}',
+    )
+    out = svc.claude_grade(prompt="Q?", expected="A long answer", given="A different phrasing")
+    assert out == {"correct": True, "feedback": "Same fact, different phrasing."}
+
+
+def test_claude_grade_parses_wrong_verdict(monkeypatch):
+    monkeypatch.setattr(
+        svc,
+        "run_prompt",
+        lambda _p, **_k: '```json\n{"verdict": "wrong", "feedback": "Missed the key fact."}\n```',
+    )
+    out = svc.claude_grade(prompt="Q?", expected="something specific", given="something else")
+    assert out == {"correct": False, "feedback": "Missed the key fact."}
+
+
+def test_claude_grade_blank_answer_short_circuits(monkeypatch):
+    monkeypatch.setattr(svc, "run_prompt", lambda *_a, **_k: pytest.fail("should not call agent"))
+    out = svc.claude_grade(prompt="Q?", expected="A long answer here", given="   ")
+    assert out["correct"] is False
+
+
+def test_claude_grade_falls_back_on_agent_unavailable(monkeypatch):
+    def boom(*_a, **_k):
+        raise AgentUnavailable("agent down")
+
+    monkeypatch.setattr(svc, "run_prompt", boom)
+    # Agent down → fall back to deterministic; "London" != "Paris" → wrong.
+    out = svc.claude_grade(prompt="Capital of France?", expected="Paris", given="London")
+    assert out["correct"] is False
+    assert "claude was unreachable" in out["feedback"]
+
+
+def test_claude_grade_falls_back_on_bad_json(monkeypatch):
+    monkeypatch.setattr(svc, "run_prompt", lambda *_a, **_k: "not even json")
+    out = svc.claude_grade(prompt="Q?", expected="anything", given="something")
+    # No JSON → fall back to deterministic match (empty token-set tests, returns False here).
+    assert isinstance(out["correct"], bool)
+    assert "malformed JSON" in out["feedback"]
