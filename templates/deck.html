@@ -37,17 +37,43 @@
       <span>edit</span>
     </button>
   </div>
-  <p class="deck-meta">
-    <span class="meta-figure {% if due_count > 0 %}is-active{% endif %}">
-      <span class="figure">{{ due_count }}</span>
-      <span class="figure-label">due now</span>
-    </span>
-    <span class="meta-divider" aria-hidden="true">·</span>
-    <span class="meta-figure">
-      <span class="figure">{{ questions|length }}</span>
-      <span class="figure-label">total cards</span>
-    </span>
-  </p>
+  {% if deck_type == 'trivia' and trivia_stats %}
+    {# Trivia mastery bar: how done am I with this deck? Bar fills
+       --right for mastered cards and --wrong for cards last answered
+       wrong; the unfilled remainder is the unanswered pool. Two
+       chips below give the breakdown. Replaces the SRS-style
+       "n due now · m total" line which doesn't apply here. #}
+    {% set _t = trivia_stats.total or 1 %}
+    {% set _pct = (100 * trivia_stats.mastered / _t) | round | int %}
+    <div class="deck-mastery">
+      <div class="deck-mastery-row">
+        <span class="deck-mastery-label">{{ trivia_stats.mastered }} of {{ trivia_stats.total }} mastered</span>
+        <span class="deck-mastery-pct">{{ _pct }}%</span>
+      </div>
+      <div class="deck-mastery-bar" role="progressbar" aria-valuenow="{{ _pct }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="deck-mastery-fill deck-mastery-fill-right" style="width: {{ (100 * trivia_stats.mastered / _t) | round(2) }}%"></div>
+        <div class="deck-mastery-fill deck-mastery-fill-wrong" style="width: {{ (100 * trivia_stats.wrong / _t) | round(2) }}%"></div>
+      </div>
+      <div class="deck-mastery-chips">
+        <span class="deck-mastery-chip deck-mastery-chip-unans">{{ trivia_stats.unanswered }} unanswered</span>
+        {% if trivia_stats.wrong %}
+          <span class="deck-mastery-chip deck-mastery-chip-wrong">{{ trivia_stats.wrong }} wrong</span>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <p class="deck-meta">
+      <span class="meta-figure {% if due_count > 0 %}is-active{% endif %}">
+        <span class="figure">{{ due_count }}</span>
+        <span class="figure-label">due now</span>
+      </span>
+      <span class="meta-divider" aria-hidden="true">·</span>
+      <span class="meta-figure">
+        <span class="figure">{{ questions|length }}</span>
+        <span class="figure-label">total cards</span>
+      </span>
+    </p>
+  {% endif %}
 </section>
 
 {# Trivia decks have no primary action — the deck-type tag in the

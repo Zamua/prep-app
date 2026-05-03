@@ -475,6 +475,15 @@ def deck_view(
             "notifications_enabled": bool(row["notifications_enabled"]),
             "interval_minutes": row["notification_interval_minutes"],
         }
+
+    # Trivia-only stats for the mastery-bar header. Cheap one-query
+    # group-by; only computed when the deck is actually trivia.
+    trivia_stats: dict[str, int] | None = None
+    if deck_type is not None and deck_type.value == "trivia":
+        from prep.trivia.repo import TriviaQueueRepo
+
+        trivia_stats = TriviaQueueRepo().deck_stats(deck_id)
+
     return templates.TemplateResponse(
         "deck.html",
         {
@@ -485,6 +494,7 @@ def deck_view(
             "deck_type": deck_type.value if deck_type else "srs",
             "trivia": deck_meta,  # template still uses `trivia` for the trivia path
             "deck_meta": deck_meta,
+            "trivia_stats": trivia_stats,
             # next_due is None for trivia-deck questions (no `cards`
             # row); the truthiness check handles that path implicitly.
             "due_count": sum(

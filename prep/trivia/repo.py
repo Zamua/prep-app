@@ -158,6 +158,31 @@ class TriviaQueueRepo:
             ).fetchone()
         return int(row["n"] or 0)
 
+    def deck_stats(self, deck_id: int) -> dict:
+        """Aggregate counts for the deck-page mastery bar:
+        {total, unanswered, wrong, mastered}. One query, group by
+        the three queue states."""
+        with cursor() as c:
+            row = c.execute(
+                """
+                SELECT
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN tq.last_answered_at IS NULL THEN 1 ELSE 0 END) AS unanswered,
+                  SUM(CASE WHEN tq.last_answered_correctly = 0 THEN 1 ELSE 0 END) AS wrong,
+                  SUM(CASE WHEN tq.last_answered_correctly = 1 THEN 1 ELSE 0 END) AS mastered
+                FROM trivia_queue tq
+                JOIN questions q ON q.id = tq.question_id
+                WHERE q.deck_id = ?
+                """,
+                (deck_id,),
+            ).fetchone()
+        return {
+            "total": int(row["total"] or 0),
+            "unanswered": int(row["unanswered"] or 0),
+            "wrong": int(row["wrong"] or 0),
+            "mastered": int(row["mastered"] or 0),
+        }
+
     def count_pending_review(self, deck_id: int) -> int:
         """Cards that still need work — never-shown OR previously
         wrong. Drives the scheduler's "should I generate more?"

@@ -155,6 +155,40 @@ def test_deck_view_shows_decktype_tag_for_srs(client: TestClient, initialized_db
     assert "tag-decktype-srs" in r.text
 
 
+def test_trivia_deck_renders_mastery_bar_with_breakdown(client: TestClient, initialized_db: str):
+    """Trivia decks swap the 'n due now' meta line for the mastery bar
+    + breakdown chips. Seed 4 cards in mixed states to verify the
+    aggregates."""
+    from prep.decks.entities import NewQuestion, QuestionType
+    from prep.trivia.repo import TriviaQueueRepo
+
+    user = initialized_db
+    deck_id = DeckRepo().create_trivia(user, "geo", topic="capitals", interval_minutes=30)
+    qrepo = QuestionRepo()
+    trivia = TriviaQueueRepo()
+    qids = []
+    for i in range(4):
+        qid = qrepo.add(
+            user, deck_id, NewQuestion(type=QuestionType.SHORT, prompt=f"Q{i}?", answer=f"A{i}")
+        )
+        trivia.append_card(qid, deck_id)
+        qids.append(qid)
+    # 1 mastered, 1 wrong, 2 unanswered.
+    trivia.mark_answered(qids[0], correct=True)
+    trivia.mark_answered(qids[1], correct=False)
+
+    r = client.get("/deck/geo")
+    assert r.status_code == 200
+    # SRS-style "due now" line is omitted for trivia decks.
+    assert "due now" not in r.text
+    # Mastery bar markup present, with computed counts in the labels.
+    assert "deck-mastery-bar" in r.text
+    assert "1 of 4 mastered" in r.text
+    assert "25%" in r.text  # 1/4 → 25%
+    assert "2 unanswered" in r.text
+    assert "1 wrong" in r.text
+
+
 def test_deck_view_renders_edit_pill_and_hidden_panel(client: TestClient, initialized_db: str):
     """The pencil-pill in the header controls a hidden #deck-edit-panel
     via aria-controls. The add/transform forms live inside that panel,

@@ -3436,3 +3436,63 @@ body:has(dialog[open]) {
   font-style: italic;
 }
 
+
+/* --- Trivia deck mastery bar (deck-page header) ---
+   Replaces the SRS "n due now · m total" line for trivia decks.
+   Bar fills --right for mastered, --wrong for last-answered-wrong;
+   unfilled remainder is the unanswered pool. */
+.deck-mastery {
+  margin: 0.7rem 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.deck-mastery-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.deck-mastery-label {
+  font-style: italic;
+  color: var(--ink);
+  font-size: 1rem;
+}
+.deck-mastery-pct {
+  font-feature-settings: "lnum" on, "tnum" on;
+  font-size: 1.4rem;
+  color: var(--right);
+  font-weight: 500;
+  font-variation-settings: "opsz" 144, "SOFT" 50;
+}
+.deck-mastery-bar {
+  display: flex;
+  height: 0.6rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+}
+.deck-mastery-fill { height: 100%; }
+.deck-mastery-fill-right { background: var(--right); }
+.deck-mastery-fill-wrong { background: var(--wrong); opacity: 0.7; }
+.deck-mastery-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.deck-mastery-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-style: italic;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--hairline);
+  font-feature-settings: "lnum" on, "tnum" on;
+}
+.deck-mastery-chip-unans { color: var(--ink-mute); }
+.deck-mastery-chip-wrong {
+  color: var(--wrong);
+  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+}
