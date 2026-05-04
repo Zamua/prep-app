@@ -92,6 +92,10 @@ class Deck(BaseModel):
     # waits base × 2**streak before the next fire. Reset to 0 on any
     # answer in the deck. Only meaningful when deck_type=='trivia'.
     notification_ignored_streak: int = 0
+    # Per-deck cards-per-mini-session — when the user taps a trivia push,
+    # the route opens a session of this many cards. Default 3. Only
+    # meaningful when deck_type=='trivia'.
+    trivia_session_size: int = 3
 
 
 class DeckSummary(BaseModel):

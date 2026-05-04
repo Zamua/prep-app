@@ -191,7 +191,8 @@ def trivia_session(
         # (not meta-refresh) so the browser doesn't paint a blank
         # interstitial — that was the white-flash on tap from the
         # notification log.
-        session = trivia.pick_session_for_deck(deck_id)
+        target_size = decks.get_trivia_session_size(uid, deck_id)
+        session = trivia.pick_session_for_deck(deck_id, target_size=target_size)
         ids = ",".join(str(c.question_id) for c in session)
         return responses.redirect(request, f"/trivia/session/{deck_name}?cards={ids}")
 
@@ -564,6 +565,30 @@ def trivia_set_interval(
         raise HTTPException(400, "interval must be between 1 and 720 minutes")
     decks = DeckRepo()
     if not decks.set_notification_interval(user["tailscale_login"], deck_id, m):
+        raise HTTPException(404, "trivia deck not found")
+    deck_name = decks.find_name(user["tailscale_login"], deck_id) or ""
+    return responses.redirect(request, f"/deck/{deck_name}")
+
+
+@router.post("/trivia/decks/{deck_id}/session_size")
+def trivia_set_session_size(
+    deck_id: int,
+    request: Request,
+    size: str = Form(...),
+    user: dict = Depends(current_user),
+):
+    """Update the deck's mini-session card count (1..20). Form input is
+    plain text; rejects garbage with 400, IDOR-guards via user-scoped
+    repo. 303s back to the deck page so the popover re-renders with the
+    new active preset."""
+    try:
+        n = int(size)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, "session size must be an integer") from e
+    if n < 1 or n > 20:
+        raise HTTPException(400, "session size must be between 1 and 20 cards")
+    decks = DeckRepo()
+    if not decks.set_trivia_session_size(user["tailscale_login"], deck_id, n):
         raise HTTPException(404, "trivia deck not found")
     deck_name = decks.find_name(user["tailscale_login"], deck_id) or ""
     return responses.redirect(request, f"/deck/{deck_name}")

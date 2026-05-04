@@ -654,6 +654,18 @@ a { color: inherit; }
   color: var(--ink-mute); font-style: italic;
   margin: 0;
 }
+/* Eyebrow used to start a second section inside the popover (e.g.
+   "session size" below "notification frequency"). Dashed rule above
+   visually separates the two groups without needing a heavy hr. */
+.notif-popover-eyebrow-divider {
+  margin-top: 0.4rem;
+  padding-top: 0.7rem;
+  border-top: 1px dashed color-mix(in srgb, var(--ink-mute) 22%, transparent);
+}
+.notif-popover-help {
+  font-size: 0.8rem; color: var(--ink-mute); font-style: italic;
+  margin: -0.4rem 0 0;
+}
 .notif-preset-row {
   display: flex; flex-wrap: wrap; gap: 0.4rem;
   margin: 0; padding: 0; border: 0;

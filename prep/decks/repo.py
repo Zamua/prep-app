@@ -211,26 +211,29 @@ class DeckRepo:
                 """
                 SELECT id, user_id, name, created_at, context_prompt,
                        deck_type, notification_interval_minutes, last_notified_at,
-                       notifications_enabled, notification_ignored_streak
+                       notifications_enabled, notification_ignored_streak,
+                       trivia_session_size
                 FROM decks
                 WHERE deck_type = 'trivia'
                 """
             ).fetchall()
-        return [
-            Deck(
-                id=r["id"],
-                user_id=r["user_id"],
-                name=r["name"],
-                created_at=r["created_at"],
-                context_prompt=r["context_prompt"],
-                deck_type=DeckType(r["deck_type"] or "srs"),
-                notification_interval_minutes=r["notification_interval_minutes"],
-                last_notified_at=r["last_notified_at"],
-                notifications_enabled=bool(r["notifications_enabled"]),
-                notification_ignored_streak=int(r["notification_ignored_streak"] or 0),
-            )
-            for r in rows
-        ]
+        return [self._row_to_deck(r) for r in rows]
+
+    @staticmethod
+    def _row_to_deck(r) -> Deck:
+        return Deck(
+            id=r["id"],
+            user_id=r["user_id"],
+            name=r["name"],
+            created_at=r["created_at"],
+            context_prompt=r["context_prompt"],
+            deck_type=DeckType(r["deck_type"] or "srs"),
+            notification_interval_minutes=r["notification_interval_minutes"],
+            last_notified_at=r["last_notified_at"],
+            notifications_enabled=bool(r["notifications_enabled"]),
+            notification_ignored_streak=int(r["notification_ignored_streak"] or 0),
+            trivia_session_size=int(r["trivia_session_size"] or 3),
+        )
 
     def record_notification_fire(self, deck_id: int, ts: str, ignored_streak: int) -> None:
         """Stamp last_notified_at + persist the new ignored-streak count
@@ -274,6 +277,34 @@ class DeckRepo:
                        notification_ignored_streak = 0
                    WHERE id = ? AND user_id = ? AND deck_type = 'trivia'""",
                 (minutes, deck_id, user_id),
+            )
+            return cur.rowcount > 0
+
+    def get_trivia_session_size(self, user_id: str, deck_id: int) -> int:
+        """Read the per-deck mini-session size for trivia. Returns the
+        default (3) if the deck doesn't exist or isn't a trivia deck —
+        callers don't differentiate, the route hands it straight to
+        pick_session_for_deck."""
+        with cursor() as c:
+            row = c.execute(
+                """SELECT trivia_session_size FROM decks
+                   WHERE id = ? AND user_id = ? AND deck_type = 'trivia'""",
+                (deck_id, user_id),
+            ).fetchone()
+        return int(row["trivia_session_size"] or 3) if row else 3
+
+    def set_trivia_session_size(self, user_id: str, deck_id: int, size: int) -> bool:
+        """Update the per-deck mini-session size. Bounds-checked 1..20.
+        Returns True if a row was updated (deck exists, belongs to user,
+        is trivia); False otherwise. user_id + deck_type are the IDOR
+        guards."""
+        if size < 1 or size > 20:
+            raise ValueError(f"session size out of range: {size}")
+        with cursor() as c:
+            cur = c.execute(
+                """UPDATE decks SET trivia_session_size = ?
+                   WHERE id = ? AND user_id = ? AND deck_type = 'trivia'""",
+                (size, deck_id, user_id),
             )
             return cur.rowcount > 0
 

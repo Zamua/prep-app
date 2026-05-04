@@ -49,6 +49,22 @@
                    aria-label="Custom notification interval in minutes">
             <button type="submit" class="notif-custom-save">Set</button>
           </form>
+
+          {%- set _session_size = deck_meta.session_size or 3 -%}
+          {%- set _size_presets = [1, 2, 3, 5, 10] -%}
+          <p class="notif-popover-eyebrow notif-popover-eyebrow-divider">session size</p>
+          <p class="notif-popover-help">cards per mini-session when you tap a notification</p>
+          <form method="post"
+                action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/session_size"
+                class="notif-preset-row">
+            {% for n in _size_presets %}
+              <button type="submit" name="size" value="{{ n }}"
+                      class="notif-preset {% if n == _session_size %}notif-preset-active{% endif %}">
+                {{ n }}
+              </button>
+            {% endfor %}
+          </form>
+
           <div class="notif-popover-footer">
             <form method="post"
                   action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/notifications"

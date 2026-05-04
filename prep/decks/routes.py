@@ -465,7 +465,8 @@ def deck_view(
     deck_meta: dict[str, Any] = {"deck_id": deck_id, "notifications_enabled": True}
     with cursor() as c:
         row = c.execute(
-            "SELECT notifications_enabled, notification_interval_minutes "
+            "SELECT notifications_enabled, notification_interval_minutes, "
+            "trivia_session_size "
             "FROM decks WHERE id=? AND user_id=?",
             (deck_id, uid),
         ).fetchone()
@@ -474,6 +475,7 @@ def deck_view(
             "deck_id": deck_id,
             "notifications_enabled": bool(row["notifications_enabled"]),
             "interval_minutes": row["notification_interval_minutes"],
+            "session_size": int(row["trivia_session_size"] or 3),
         }
 
     # Trivia-only stats for the mastery-bar header. Cheap one-query

@@ -334,6 +334,14 @@ def init() -> None:
                 "ALTER TABLE decks ADD COLUMN notification_ignored_streak "
                 "INTEGER NOT NULL DEFAULT 0"
             )
+        if "trivia_session_size" not in cols:
+            # Per-deck mini-session size: when the user taps a trivia
+            # notification, the route picks N cards (1 fresh + the rest
+            # review, backfilled). Default 3 matches the prior hardcoded
+            # behavior. Range 1..20 enforced at the setter.
+            c.execute(
+                "ALTER TABLE decks ADD COLUMN trivia_session_size " "INTEGER NOT NULL DEFAULT 3"
+            )
 
         # 9. Trivia card explanations: a short paragraph claude generates
         #    alongside the Q+A. Surfaced in the trivia card view as a

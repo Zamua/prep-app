@@ -487,6 +487,51 @@ def test_set_interval_rejects_garbage(client: TestClient, initialized_db: str):
     assert r.status_code == 400
 
 
+# ---- /trivia/decks/<id>/session_size ---------------------------------
+
+
+def test_set_session_size_updates_deck(client: TestClient, initialized_db: str):
+    """POSTing a valid size persists trivia_session_size and 303s back
+    to the deck page so the popover re-renders with the new active
+    preset highlighted."""
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.post(
+        f"/trivia/decks/{deck_id}/session_size",
+        data={"size": "5"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "/deck/geo" in r.headers["location"]
+    assert DeckRepo().get_trivia_session_size(initialized_db, deck_id) == 5
+
+
+def test_set_session_size_rejects_out_of_range(client: TestClient, initialized_db: str):
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    for bad in ("0", "21", "-1"):
+        r = client.post(f"/trivia/decks/{deck_id}/session_size", data={"size": bad})
+        assert r.status_code == 400, f"expected 400 for size={bad!r}"
+
+
+def test_set_session_size_rejects_garbage(client: TestClient, initialized_db: str):
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.post(f"/trivia/decks/{deck_id}/session_size", data={"size": "lots"})
+    assert r.status_code == 400
+
+
+def test_session_route_honors_configured_size(monkeypatch, client: TestClient, initialized_db: str):
+    """Tapping a notification opens a session of size N, where N is the
+    deck's trivia_session_size — not the prior hardcoded 3."""
+    deck_id, qids = _seed_n_trivia_questions(initialized_db, "geo", 6)
+    DeckRepo().set_trivia_session_size(initialized_db, deck_id, 5)
+    r = client.get("/trivia/session/geo", follow_redirects=False)
+    assert r.status_code == 303
+    # Redirect URL has cards=<5 ids>
+    loc = r.headers["location"]
+    assert "?cards=" in loc
+    encoded = loc.split("?cards=", 1)[1].split("&")[0]
+    assert len(encoded.split(",")) == 5
+
+
 # ---- /trivia/<id>/regrade + /trivia/session/<deck>/regrade -----------
 
 
