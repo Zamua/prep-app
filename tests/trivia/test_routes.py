@@ -266,10 +266,10 @@ def test_decks_new_trivia_creates_deck_and_starts_workflow(
     assert r.headers["location"].endswith("/trivia/gen/trivia-geo-deadbeef01")
     # Deck row landed sync with deck_type='trivia' and the right interval.
     rows = DeckRepo().list_trivia_decks()
-    geo = next(d for d in rows if d["name"] == "geo")
-    assert geo["notification_interval_minutes"] == 15
+    geo = next(d for d in rows if d.name == "geo")
+    assert geo.notification_interval_minutes == 15
     # Queue starts empty (workflow does the inserts; we faked it).
-    assert TriviaQueueRepo().pick_next_for_deck(geo["id"]) is None
+    assert TriviaQueueRepo().pick_next_for_deck(geo.id) is None
 
 
 # ---- /trivia/session/<deck_name> --------------------------------------
@@ -455,8 +455,8 @@ def test_set_interval_updates_deck(client: TestClient, initialized_db: str):
     assert r.status_code == 303
     assert "/deck/geo" in r.headers["location"]
     rows = DeckRepo().list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
-    assert row["notification_interval_minutes"] == 60
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.notification_interval_minutes == 60
 
 
 def test_set_interval_resets_ignored_streak(client: TestClient, initialized_db: str):
@@ -470,8 +470,8 @@ def test_set_interval_resets_ignored_streak(client: TestClient, initialized_db: 
         c.execute("UPDATE decks SET notification_ignored_streak = 4 WHERE id = ?", (deck_id,))
     client.post(f"/trivia/decks/{deck_id}/interval", data={"minutes": "60"})
     rows = DeckRepo().list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
-    assert row["notification_ignored_streak"] == 0
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.notification_ignored_streak == 0
 
 
 def test_set_interval_rejects_out_of_range(client: TestClient, initialized_db: str):

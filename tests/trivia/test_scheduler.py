@@ -150,8 +150,8 @@ def test_tick_updates_last_notified_at(monkeypatch, fixtures):
     )
     sched.tick(datetime.now(timezone.utc))
     rows = fixtures["decks"].list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
-    assert row["last_notified_at"] is not None
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.last_notified_at is not None
 
 
 def test_tick_does_not_refill_when_pending_pool_full(monkeypatch, fixtures):
@@ -243,8 +243,8 @@ def test_tick_skips_when_user_in_quiet_hours(monkeypatch, fixtures):
     sched.tick(quiet_now_utc)
     assert sent == []
     rows = fixtures["decks"].list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
-    assert row["last_notified_at"] is None  # didn't advance
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.last_notified_at is None  # didn't advance
 
 
 def test_tick_fires_outside_quiet_hours(monkeypatch, fixtures):
@@ -317,10 +317,10 @@ def test_tick_increments_streak_when_no_engagement(monkeypatch, fixtures):
     monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     rows = fixtures["decks"].list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
+    row = next(r for r in rows if r.id == deck_id)
     # No answer happened between the simulated prior fire and this tick →
     # the prior fire counts as ignored → streak bumps to 1.
-    assert row["notification_ignored_streak"] == 1
+    assert row.notification_ignored_streak == 1
 
 
 def test_tick_resets_streak_when_user_engaged(monkeypatch, fixtures):
@@ -347,8 +347,8 @@ def test_tick_resets_streak_when_user_engaged(monkeypatch, fixtures):
     monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     rows = fixtures["decks"].list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
-    assert row["notification_ignored_streak"] == 0
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.notification_ignored_streak == 0
 
 
 def test_tick_holds_off_while_within_backed_off_interval(monkeypatch, fixtures):
@@ -376,8 +376,8 @@ def test_mark_answered_immediately_resets_deck_streak(fixtures):
         c.execute("UPDATE decks SET notification_ignored_streak = 4 WHERE id = ?", (deck_id,))
     fixtures["trivia"].mark_answered(qids[0], correct=True)
     rows = fixtures["decks"].list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
-    assert row["notification_ignored_streak"] == 0
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.notification_ignored_streak == 0
 
 
 def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
@@ -393,5 +393,5 @@ def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
     sched.tick(datetime.now(timezone.utc))
     assert sent == []
     rows = fixtures["decks"].list_trivia_decks()
-    row = next(r for r in rows if r["id"] == deck_id)
-    assert row["last_notified_at"] is None
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.last_notified_at is None

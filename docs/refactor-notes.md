@@ -45,15 +45,17 @@ Each entry: where, what, why-it-matters, suggested-fix. Keep it terse.
   details-popover-close-on-outside-click (already global), form-submit
   with disabled-while-loading.
 
-### Repo direct dict returns (DDD smell)
-- **Where:** `DeckRepo.list_trivia_decks() -> list[dict]`,
-  `DeckRepo.due_breakdown() -> list[tuple[str, int]]`,
-  `_legacy_db.list_decks() -> list[dict]`, etc.
-- **What:** Repos handing dicts to callers leaks SQL row shape.
-  CLAUDE.md DDD invariant says "Repos return entities, not dicts."
-- **Suggested fix:** Extend the entity (Deck or DeckSummary) to carry
-  the missing fields, OR add a dedicated read-model entity for
-  scheduler-shape data.
+### ✅ Repo direct dict returns (DDD smell) — partially DONE (#183)
+- **Where:** `DeckRepo.list_trivia_decks()` was `list[dict]`.
+  `DeckRepo.due_breakdown()` is `list[tuple[str, int]]`.
+- **Fix shipped:** `list_trivia_decks` now returns `list[Deck]`.
+  `Deck` entity gained `notification_ignored_streak` (the only
+  scheduler-required field that wasn't already on the entity).
+  Scheduler tick + 9 test callsites migrated to attribute access.
+- **Still TODO (low priority):** `due_breakdown` returns
+  `list[tuple[str, int]]`, which is typed but not entity-shaped. A
+  `DueDigestEntry(name, count)` value object would make intent
+  clearer; deferred since callers are tiny.
 
 ### Test fixtures use `importlib.reload(_legacy_module)`
 - **Where:** tests/test_notification_log.py and adjacent.

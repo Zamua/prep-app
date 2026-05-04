@@ -199,24 +199,38 @@ class DeckRepo:
             )
             return cur.lastrowid
 
-    def list_trivia_decks(self) -> list[dict]:
-        """All trivia decks across all users. Returned as raw dicts
-        because the scheduler needs each row's user_id, interval,
-        last_notified_at, and notifications_enabled — fields not all
-        on the Deck entity. Includes decks with notifications disabled;
-        the scheduler does its own filtering.
+    def list_trivia_decks(self) -> list[Deck]:
+        """All trivia decks across all users, as Deck entities. Used by
+        the scheduler tick (which needs user_id, interval, last_notified_at,
+        notifications_enabled, ignored_streak — all fields on the
+        entity now). Includes decks with notifications disabled; the
+        scheduler does its own filtering.
         """
         with cursor() as c:
             rows = c.execute(
                 """
-                SELECT id, user_id, name, context_prompt,
-                       notification_interval_minutes, last_notified_at,
+                SELECT id, user_id, name, created_at, context_prompt,
+                       deck_type, notification_interval_minutes, last_notified_at,
                        notifications_enabled, notification_ignored_streak
                 FROM decks
                 WHERE deck_type = 'trivia'
                 """
             ).fetchall()
-        return [dict(r) for r in rows]
+        return [
+            Deck(
+                id=r["id"],
+                user_id=r["user_id"],
+                name=r["name"],
+                created_at=r["created_at"],
+                context_prompt=r["context_prompt"],
+                deck_type=DeckType(r["deck_type"] or "srs"),
+                notification_interval_minutes=r["notification_interval_minutes"],
+                last_notified_at=r["last_notified_at"],
+                notifications_enabled=bool(r["notifications_enabled"]),
+                notification_ignored_streak=int(r["notification_ignored_streak"] or 0),
+            )
+            for r in rows
+        ]
 
     def record_notification_fire(self, deck_id: int, ts: str, ignored_streak: int) -> None:
         """Stamp last_notified_at + persist the new ignored-streak count

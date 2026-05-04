@@ -135,21 +135,20 @@ def tick(now_utc: datetime) -> None:
         # Wraps midnight (22..8).
         return local_hour >= start or local_hour < end
 
-    for row in decks.list_trivia_decks():
+    for deck in decks.list_trivia_decks():
         try:
-            deck_id = row["id"]
             # Per-deck mute switch. Skip silently — toggling notifications
             # off should be cheap and not leave half-notified state behind.
-            if not row.get("notifications_enabled", 1):
+            if not deck.notifications_enabled:
                 continue
-            interval = row.get("notification_interval_minutes") or _DEFAULT_INTERVAL_MINUTES
-            streak = int(row.get("notification_ignored_streak") or 0)
-            if not _is_due(now_utc, row.get("last_notified_at"), interval, streak):
+            interval = deck.notification_interval_minutes or _DEFAULT_INTERVAL_MINUTES
+            streak = deck.notification_ignored_streak
+            if not _is_due(now_utc, deck.last_notified_at, interval, streak):
                 continue
             # Quiet hours apply across SRS when-ready + trivia. Skip
             # without touching last_notified_at so the deck fires as
             # soon as the window reopens.
-            if _user_in_quiet_hours(row["user_id"]):
+            if _user_in_quiet_hours(deck.user_id):
                 continue
 
             # Refill gate: if the user is running low on cards that
@@ -160,25 +159,25 @@ def tick(now_utc: datetime) -> None:
             # and swallowed: an unavailable agent shouldn't stop us
             # from cycling existing cards (the weighted picker can
             # still surface review material).
-            if trivia.count_pending_review(deck_id) < _REFILL_BELOW_PENDING_REVIEW:
-                topic = (row.get("context_prompt") or row.get("name") or "").strip()
+            if trivia.count_pending_review(deck.id) < _REFILL_BELOW_PENDING_REVIEW:
+                topic = (deck.context_prompt or deck.name or "").strip()
                 if topic:
                     try:
                         trivia_service.generate_batch(
-                            user_id=row["user_id"],
-                            deck_id=deck_id,
+                            user_id=deck.user_id,
+                            deck_id=deck.id,
                             topic=topic,
                             questions_repo=questions,
                             trivia_repo=trivia,
                         )
                     except AgentUnavailable as e:
-                        logger.warning("trivia tick: refill failed for deck %s: %s", deck_id, e)
+                        logger.warning("trivia tick: refill failed for deck %s: %s", deck.id, e)
 
-            nxt = trivia.pick_next_for_deck(deck_id)
+            nxt = trivia.pick_next_for_deck(deck.id)
             if nxt is None:
                 # Deck has zero cards — refill must have failed and
                 # there's nothing left to recycle. Bail this round.
-                logger.warning("trivia tick: deck %s has no cards; skipping", deck_id)
+                logger.warning("trivia tick: deck %s has no cards; skipping", deck.id)
                 continue
 
             # Fire the push. Body = question text (trimmed for native
@@ -192,7 +191,6 @@ def tick(now_utc: datetime) -> None:
             body = nxt.prompt
             if len(body) > 240:
                 body = body[:237] + "..."
-            deck_name = row.get("name") or ""
             # Engagement check before fire: if the user has answered
             # any card in this deck since the last push went out, the
             # prior fire counts as engaged-with → reset the streak.
@@ -200,7 +198,7 @@ def tick(now_utc: datetime) -> None:
             # (capped at MAX). We update streak BEFORE firing so the
             # newly-recorded value reflects "this push is the one that
             # went out at the backed-off cadence".
-            engaged = trivia.has_answer_since(deck_id, row.get("last_notified_at"))
+            engaged = trivia.has_answer_since(deck.id, deck.last_notified_at)
             new_streak = 0 if engaged else min(streak + 1, _MAX_BACKOFF_DOUBLINGS)
 
             # Per-deck tag so iOS coalesces stacked notifications —
@@ -209,19 +207,19 @@ def tick(now_utc: datetime) -> None:
             # the tag falls back to "prep-default" (set in sw.js),
             # which is shared across decks/sources and doesn't dedupe.
             send_to_user(
-                user_id=row["user_id"],
-                title=deck_name or "Trivia",
+                user_id=deck.user_id,
+                title=deck.name or "Trivia",
                 body=body,
-                url=f"/trivia/session/{deck_name}",
+                url=f"/trivia/session/{deck.name}",
                 source="trivia",
-                tag=f"trivia-{deck_name}" if deck_name else "trivia",
+                tag=f"trivia-{deck.name}" if deck.name else "trivia",
             )
 
             decks.record_notification_fire(
-                deck_id, now_utc.isoformat(timespec="seconds"), new_streak
+                deck.id, now_utc.isoformat(timespec="seconds"), new_streak
             )
 
         except Exception as e:
             # Per-deck try block: a malformed row shouldn't tank the
             # whole scheduler tick. Log loudly and move on.
-            logger.exception("trivia tick failed for deck %s: %s", row.get("id"), e)
+            logger.exception("trivia tick failed for deck %s: %s", deck.id, e)

@@ -87,6 +87,11 @@ class Deck(BaseModel):
     # Trivia-deck on/off switch for the notification cycle. Defaults
     # ON; only meaningful when deck_type=='trivia'.
     notifications_enabled: bool = True
+    # Trivia-deck exponential-backoff counter for unattended decks. The
+    # scheduler bumps this every fire that doesn't get answered, then
+    # waits base × 2**streak before the next fire. Reset to 0 on any
+    # answer in the deck. Only meaningful when deck_type=='trivia'.
+    notification_ignored_streak: int = 0
 
 
 class DeckSummary(BaseModel):
