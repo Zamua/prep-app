@@ -453,11 +453,12 @@ class ReviewRepo:
         return CardState(step=new_step, next_due=next_due, interval_minutes=interval)
 
     def count_due_for_user(self, user_id: str) -> int:
-        """Total cards due-now across the user's decks that have
-        notifications enabled. Paused decks are excluded — if 90 cards
-        are due overall but 30 are in paused decks, this returns 60.
-        The notify scheduler uses this to decide whether to send a
-        digest / threshold ping."""
+        """Total SRS cards due-now across the user's decks that have
+        notifications enabled. Paused decks excluded; trivia decks
+        excluded (their cards have a `cards` row by accident of the
+        schema, but they're not studied via the SRS flow + already
+        have their own per-deck notifications). Used by the SRS
+        notify scheduler — digest / when-ready triggers."""
         with cursor() as c:
             row = c.execute(
                 """SELECT COUNT(*) AS n
@@ -467,6 +468,7 @@ class ReviewRepo:
                     WHERE questions.user_id = ?
                       AND COALESCE(questions.suspended, 0) = 0
                       AND COALESCE(decks.notifications_enabled, 1) = 1
+                      AND COALESCE(decks.deck_type, 'srs') = 'srs'
                       AND cards.next_due <= ?""",
                 (user_id, now()),
             ).fetchone()

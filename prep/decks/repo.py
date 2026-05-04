@@ -154,9 +154,9 @@ class DeckRepo:
 
     def due_breakdown(self, user_id: str) -> list[tuple[str, int]]:
         """[(deck_name, due_count), ...] for digest body composition.
-        Paused decks are excluded — they shouldn't contribute to the
-        digest body any more than they contribute to the trigger count.
-        Used by the notify scheduler."""
+        Paused decks excluded; trivia decks excluded (they're not
+        studied via the SRS flow + have their own per-deck
+        notifications). Used by the SRS notify scheduler digest body."""
         with cursor() as c:
             rows = c.execute(
                 """SELECT d.name, COUNT(c.question_id) AS n
@@ -167,6 +167,7 @@ class DeckRepo:
                                       AND COALESCE(q.suspended, 0) = 0
                     WHERE d.user_id = ?
                       AND COALESCE(d.notifications_enabled, 1) = 1
+                      AND COALESCE(d.deck_type, 'srs') = 'srs'
                     GROUP BY d.id
                    HAVING n > 0
                     ORDER BY n DESC""",

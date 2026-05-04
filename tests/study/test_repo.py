@@ -174,6 +174,46 @@ def test_count_due_for_user_starts_at_one(review_repo: ReviewRepo, seeded_deck):
     assert review_repo.count_due_for_user(user) >= 1
 
 
+def test_count_due_for_user_excludes_trivia_decks(review_repo: ReviewRepo, initialized_db: str):
+    """Trivia-deck cards have a `cards` row by accident of the schema
+    (every question gets one), but they're not studied via the SRS
+    flow. count_due_for_user must skip them so the SRS digest /
+    when-ready path doesn't trigger 'N cards due to study' for
+    trivia notifications."""
+    from prep.decks.entities import NewQuestion, QuestionType
+    from prep.decks.repo import DeckRepo, QuestionRepo
+
+    user = initialized_db
+    trivia_id = DeckRepo().create_trivia(user, "trivia-deck", topic="x", interval_minutes=30)
+    QuestionRepo().add(
+        user,
+        trivia_id,
+        NewQuestion(type=QuestionType.SHORT, prompt="?", answer="A"),
+    )
+    # Trivia deck has notifications_enabled=1 by default but is type='trivia';
+    # the gated count must still be zero.
+    assert review_repo.count_due_for_user(user) == 0
+
+
+def test_due_breakdown_excludes_trivia_decks(initialized_db: str):
+    """Same gate as count_due_for_user — trivia decks must not appear
+    in the SRS digest body breakdown."""
+    from prep.decks.entities import NewQuestion, QuestionType
+    from prep.decks.repo import DeckRepo, QuestionRepo
+
+    user = initialized_db
+    srs_id = DeckRepo().create(user, "srs-deck")
+    QuestionRepo().add(user, srs_id, NewQuestion(type=QuestionType.MCQ, prompt="?", answer="A"))
+    trivia_id = DeckRepo().create_trivia(user, "trivia-deck", topic="x", interval_minutes=30)
+    QuestionRepo().add(
+        user, trivia_id, NewQuestion(type=QuestionType.SHORT, prompt="?", answer="A")
+    )
+    breakdown = DeckRepo().due_breakdown(user)
+    names = [b[0] for b in breakdown]
+    assert "srs-deck" in names
+    assert "trivia-deck" not in names
+
+
 def test_find_active_decodes_cached_verdict_and_state(session_repo: SessionRepo, seeded_deck):
     """Regression for the v0.14.0 bug Sean hit on /study/<deck>/begin:
     the underlying sqlite query for find_active_session_for_deck does
