@@ -532,6 +532,25 @@ def test_session_route_honors_configured_size(monkeypatch, client: TestClient, i
     assert len(encoded.split(",")) == 5
 
 
+def test_session_route_splits_half_fresh_half_review(client: TestClient, initialized_db: str):
+    """For a 10-card session, half should be fresh (never-answered) and
+    half review. With 6 fresh + 6 review available, picks 5 of each.
+    Fixes the bug where the prior fresh_target=1 default served only
+    1 fresh out of 10."""
+    deck_id, qids = _seed_n_trivia_questions(initialized_db, "geo", 12)
+    # Mark the first 6 as answered → review pool
+    for qid in qids[:6]:
+        TriviaQueueRepo().mark_answered(qid, correct=True)
+    DeckRepo().set_trivia_session_size(initialized_db, deck_id, 10)
+    r = client.get("/trivia/session/geo", follow_redirects=False)
+    assert r.status_code == 303
+    encoded = r.headers["location"].split("?cards=", 1)[1].split("&")[0]
+    picked = [int(x) for x in encoded.split(",")]
+    assert len(picked) == 10
+    fresh_in_picked = sum(1 for q in picked if q in qids[6:])
+    assert fresh_in_picked == 5, f"expected 5 fresh, got {fresh_in_picked}"
+
+
 # ---- /trivia/<id>/regrade + /trivia/session/<deck>/regrade -----------
 
 

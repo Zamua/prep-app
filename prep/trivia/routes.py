@@ -22,6 +22,8 @@ Two surfaces:
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -40,6 +42,7 @@ from prep.trivia.session_state import (
 from prep.web import responses
 from prep.web.templates import templates
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -192,7 +195,33 @@ def trivia_session(
         # interstitial — that was the white-flash on tap from the
         # notification log.
         target_size = decks.get_trivia_session_size(uid, deck_id)
-        session = trivia.pick_session_for_deck(deck_id, target_size=target_size)
+        # Half fresh, half review (rounded down, min 1). For
+        # target_size=10 that's 5/5; for 3 it's 1/2. Generate first
+        # if the truly-fresh pool can't satisfy the half. Synchronous
+        # by design — the user just tapped a notification and is
+        # waiting to study; better to delay the session ~10s for fresh
+        # content than to serve a session that's mostly review.
+        fresh_target = max(1, target_size // 2)
+        if trivia.count_unanswered(deck_id) < fresh_target:
+            topic = (decks.get_context_prompt(uid, deck_name) or deck_name).strip()
+            if topic:
+                try:
+                    trivia_service.generate_batch(
+                        user_id=uid,
+                        deck_id=deck_id,
+                        topic=topic,
+                        questions_repo=questions,
+                        trivia_repo=trivia,
+                    )
+                except AgentUnavailable as e:
+                    logger.warning(
+                        "session refill failed for deck %s: %s — proceeding with what's there",
+                        deck_id,
+                        e,
+                    )
+        session = trivia.pick_session_for_deck(
+            deck_id, target_size=target_size, fresh_target=fresh_target
+        )
         ids = ",".join(str(c.question_id) for c in session)
         return responses.redirect(request, f"/trivia/session/{deck_name}?cards={ids}")
 
