@@ -20,13 +20,12 @@
       {%- set _presets = [15, 30, 60, 120, 240, 480] -%}
       <details class="notif-edit">
         <summary class="notif-pill notif-pill-summary {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}">
+          {{ icon('bell', class_='icon icon-inline notif-pill-bell') }}
           {% if deck_meta.notifications_enabled %}
             <span>every {{ _interval }}m</span>
           {% else %}
-            {{ icon('play', class_='icon icon-inline') }}
             <span>paused</span>
           {% endif %}
-          {{ icon('caret-down', class_='icon icon-inline notif-pill-caret') }}
         </summary>
         <div class="notif-popover" role="group" aria-label="Notification settings">
           <p class="notif-popover-eyebrow">notification frequency</p>

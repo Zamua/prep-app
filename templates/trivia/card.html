@@ -148,6 +148,7 @@
               <summary>
                 {{ icon('sparkle', class_='icon icon-inline') }}
                 <span>Explain</span>
+                {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
               </summary>
               <p class="trivia-disc-body">{{ q.explanation }}</p>
             </details>
@@ -157,6 +158,7 @@
               <summary>
                 {{ icon('arrow-up-right', class_='icon icon-inline') }}
                 <span>Explore</span>
+                {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
               </summary>
               <div class="trivia-disc-body trivia-explore-options">
                 {% for key in ['claude', 'chatgpt'] %}

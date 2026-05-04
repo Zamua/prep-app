@@ -629,17 +629,14 @@ a { color: inherit; }
 }
 .notif-edit > summary::-webkit-details-marker { display: none; }
 .notif-edit > summary::marker { content: ""; }
-/* Caret on the trivia notif pill — Phosphor caret-down rotated to
-   point RIGHT when closed (collapsed disclosure convention) and
-   DOWN when open (expanded). Matches the iOS / macOS file-browser
-   pattern. */
-.notif-pill-caret {
-  width: 0.85rem; height: 0.85rem;
-  opacity: 0.7; margin-left: 0.1rem;
-  transform: rotate(-90deg);
-  transition: transform 0.15s ease;
+/* Bell icon on the trivia notif pill — labels the pill as a
+   notification control without an extra "tap to expand" caret. The
+   pill itself looks tappable from its outline chrome; affordance is
+   carried by the click target, not a glyph. */
+.notif-pill-bell {
+  width: 0.95rem; height: 0.95rem;
+  opacity: 0.75; flex-shrink: 0;
 }
-.notif-edit[open] .notif-pill-caret { transform: rotate(0); }
 
 /* Overlay the popover instead of pushing the mastery bar / chips
    below it. Anchored to .notif-edit (position:relative) so the
@@ -3431,6 +3428,20 @@ body:has(dialog[open]) {
 .trivia-disc > summary::marker { content: ""; }
 .trivia-disc > summary .icon,
 .trivia-regrade-btn .icon { color: var(--quill); flex-shrink: 0; }
+/* Affordance caret on disclosure pills — points RIGHT when collapsed,
+   rotates to DOWN when open. Same convention as macOS Finder / iOS
+   Files. Distinct from the leading icon (sparkle / arrow-up-right)
+   which labels the pill TYPE; this trailing caret labels the
+   disclosure STATE. Sits inline with the label rather than pushed
+   to the right edge — the pill is too narrow (one grid column) for
+   right-justified spacing to look balanced. */
+.trivia-disc-caret {
+  width: 0.7rem; height: 0.7rem;
+  opacity: 0.55;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+.trivia-disc[open] > summary .trivia-disc-caret { transform: rotate(0); }
 .trivia-disc[open] > summary,
 .trivia-regrade-btn:hover {
   border-color: var(--ink-soft); color: var(--ink);
