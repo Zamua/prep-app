@@ -42,3 +42,49 @@ class NextCard(BaseModel):
     prompt: str
     # True iff this is a never-answered card (preferred over rotated).
     is_fresh: bool
+
+
+class TriviaSession(BaseModel):
+    """Persistent record of a trivia mini-session in progress.
+
+    The URL-encoded `?cards=…&done=…` form is the canonical
+    interactive state during a session — refresh / back-button work
+    because the URL holds everything. This row is the RECOVERY
+    cache: it lets the user resume a session after closing the tab,
+    crashing, or switching devices, and powers the "Continue" strip
+    on the index page + the resume-aware notification body.
+
+    Invariant (enforced by the repo): at most ONE row per
+    (user_id, deck_id) with status='active'. Completed / abandoned
+    rows for the same pair are fine.
+    """
+
+    id: str
+    user_id: str
+    deck_id: int
+    started_at: str
+    last_active: str
+    status: str  # active | completed | abandoned
+    queue: list[int]
+    done: list[tuple[int, str]]
+
+
+class ActiveTriviaSession(BaseModel):
+    """Index-page CTA shape: an active session joined with the
+    deck's name so the rendering template doesn't need a second
+    query per row. Returned by `TriviaSessionsRepo.list_active`.
+    """
+
+    deck_name: str
+    deck_id: int
+    last_active: str
+    queue: list[int]
+    done: list[tuple[int, str]]
+
+    @property
+    def remaining(self) -> int:
+        return len(self.queue)
+
+    @property
+    def total(self) -> int:
+        return len(self.queue) + len(self.done)

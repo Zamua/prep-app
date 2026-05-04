@@ -363,6 +363,32 @@ def init() -> None:
             # the existing deterministic+claude path.
             c.execute("ALTER TABLE questions ADD COLUMN answer_regex TEXT")
 
+        # 11. Trivia session persistence: server-side state for the
+        #     URL-encoded mini-sessions so they survive interruptions
+        #     (closed tabs, app restarts, cross-device handoff). One
+        #     active row per (user, deck) — enforced by the repo, not
+        #     a unique index, since abandoned/completed rows for the
+        #     same (user, deck) are common. `queue` and `done` mirror
+        #     the URL params (`?cards=...&done=...`); the URL stays
+        #     the canonical interactive state, the table is the
+        #     recovery cache.
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS trivia_sessions (
+                id           TEXT PRIMARY KEY,
+                user_id      TEXT NOT NULL REFERENCES users(tailscale_login) ON DELETE CASCADE,
+                deck_id      INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+                started_at   TEXT NOT NULL,
+                last_active  TEXT NOT NULL,
+                status       TEXT NOT NULL DEFAULT 'active',  -- active | completed | abandoned
+                queue        TEXT NOT NULL DEFAULT '',        -- comma-sep remaining card_ids
+                done         TEXT NOT NULL DEFAULT ''         -- '<qid><r|w>,...' verdict chain
+            );
+            CREATE INDEX IF NOT EXISTS idx_trivia_sessions_user_status
+                ON trivia_sessions(user_id, status, last_active DESC);
+            CREATE INDEX IF NOT EXISTS idx_trivia_sessions_deck_status
+                ON trivia_sessions(deck_id, status);
+        """)
+
         # 10. Notification log: persist every push we send so the user
         #     can find missed/dismissed pushes after the fact.
         #     `seen_at` is set when the user opens /notify/log so the

@@ -26,7 +26,8 @@ from typing import Optional
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.trivia import service as trivia_service
 from prep.trivia.agent_client import AgentUnavailable
-from prep.trivia.repo import TriviaQueueRepo
+from prep.trivia.repo import TriviaQueueRepo, TriviaSessionsRepo
+from prep.trivia.session_state import format_done
 
 logger = logging.getLogger(__name__)
 
@@ -173,35 +174,69 @@ def tick(now_utc: datetime) -> None:
                     except AgentUnavailable as e:
                         logger.warning("trivia tick: refill failed for deck %s: %s", deck.id, e)
 
-            # Pick the FULL session here, not just the head card —
-            # this way the notification body matches the first card
-            # the user will see when they tap, and we can encode the
-            # whole queue in the deep-link URL so the route doesn't
-            # re-pick (which previously caused divergence: the body
-            # showed a different card than the one that opened).
-            target_size = deck.trivia_session_size or 3
-            fresh_target = max(1, target_size // 2)
-            session_cards = trivia.pick_session_for_deck(
-                deck.id, target_size=target_size, fresh_target=fresh_target
-            )
-            if not session_cards:
-                # Deck has zero cards — refill must have failed and
-                # there's nothing left to recycle. Bail this round.
-                logger.warning("trivia tick: deck %s has no cards; skipping", deck.id)
-                continue
+            # If there's an active session for this deck, RESUME it
+            # instead of picking fresh — the notification body says
+            # "N cards remaining" and the URL points at the existing
+            # queue+done. Once the user finishes (or abandons via
+            # the 7d reaper), the next tick picks fresh.
+            sessions = TriviaSessionsRepo()
+            active = sessions.get_active_for_deck(deck.user_id, deck.id)
+            if active and active.queue:
+                head_qid = active.queue[0]
+                head_prompt = trivia.prompt_for_question(head_qid)
+                if not head_prompt:
+                    # Active session points at a deleted card — abandon
+                    # and fall through to fresh-pick. Rare; happens if
+                    # the user deleted a card mid-session.
+                    sessions.replace_active(deck.user_id, deck.id, queue=[])
+                    active = None
+                else:
+                    remaining = len(active.queue)
+                    body = (
+                        f"Pick up where you left off — {remaining} card"
+                        f"{'s' if remaining != 1 else ''} remaining"
+                    )
+                    cards_param = ",".join(str(qid) for qid in active.queue)
+                    done_param = format_done(active.done) if active.done else ""
+                    url = f"/trivia/session/{deck.name}?cards={cards_param}"
+                    if done_param:
+                        url += f"&done={done_param}"
 
-            # Fire the push. Body = first card's prompt — same card
-            # the route will render when the user taps. Trimmed for
-            # native platform limits (most cap ~120 chars and
-            # gracefully truncate, but we be polite).
-            head = session_cards[0]
-            body = head.prompt
-            if len(body) > 240:
-                body = body[:237] + "..."
-            # Encode the whole picked queue in the URL so the session
-            # route renders this exact session instead of re-picking
-            # at tap time. Order preserved: the user sees `head` first.
-            cards_param = ",".join(str(c.question_id) for c in session_cards)
+            if not active or not active.queue:
+                # Pick the FULL session — this way the notification
+                # body matches the first card the user will see when
+                # they tap, and we can encode the whole queue in the
+                # deep-link URL so the route doesn't re-pick.
+                target_size = deck.trivia_session_size or 3
+                fresh_target = max(1, target_size // 2)
+                session_cards = trivia.pick_session_for_deck(
+                    deck.id, target_size=target_size, fresh_target=fresh_target
+                )
+                if not session_cards:
+                    # Deck has zero cards — refill must have failed
+                    # and there's nothing left to recycle. Bail.
+                    logger.warning("trivia tick: deck %s has no cards; skipping", deck.id)
+                    continue
+
+                # Persist the picked queue as the new active session
+                # so the route hit doesn't re-pick AND so the user
+                # can resume if they tab-close mid-session.
+                sessions.replace_active(
+                    deck.user_id,
+                    deck.id,
+                    queue=[c.question_id for c in session_cards],
+                )
+
+                # Body = first card's prompt — matches the card the
+                # route will render. Trimmed for native platform
+                # limits (most cap ~120 chars; we go to ~240 to give
+                # room while staying polite).
+                head = session_cards[0]
+                body = head.prompt
+                if len(body) > 240:
+                    body = body[:237] + "..."
+                cards_param = ",".join(str(c.question_id) for c in session_cards)
+                url = f"/trivia/session/{deck.name}?cards={cards_param}"
             # Engagement check before fire: if the user has answered
             # any card in this deck since the last push went out, the
             # prior fire counts as engaged-with → reset the streak.
@@ -221,7 +256,7 @@ def tick(now_utc: datetime) -> None:
                 user_id=deck.user_id,
                 title=deck.name or "Trivia",
                 body=body,
-                url=f"/trivia/session/{deck.name}?cards={cards_param}",
+                url=url,
                 source="trivia",
                 tag=f"trivia-{deck.name}" if deck.name else "trivia",
             )

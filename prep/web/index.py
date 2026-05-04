@@ -13,7 +13,8 @@ from fastapi.responses import HTMLResponse
 from prep.auth import current_user
 from prep.decks.repo import DeckRepo
 from prep.study.repo import SessionRepo
-from prep.trivia.repo import TriviaQueueRepo
+from prep.trivia.repo import TriviaQueueRepo, TriviaSessionsRepo
+from prep.trivia.session_state import format_done
 from prep.web.templates import templates
 
 router = APIRouter()
@@ -42,6 +43,21 @@ def index(
         if d.deck_type == d.deck_type.TRIVIA:
             item["trivia_stats"] = trivia_repo.deck_stats(d.id)
         deck_dicts.append(item)
+    # Active trivia sessions across all decks — powers the "Continue"
+    # strip at the top of the home page so the user can resume any
+    # in-progress session without going to the deck page first.
+    active_trivia = TriviaSessionsRepo().list_active(uid)
+    active_trivia_views = [
+        {
+            "deck_name": s.deck_name,
+            "remaining": s.remaining,
+            "total": s.total,
+            "last_active": s.last_active,
+            "queue_param": ",".join(str(q) for q in s.queue),
+            "done_param": format_done(s.done),
+        }
+        for s in active_trivia
+    ]
     return templates.TemplateResponse(
         "index.html",
         {
@@ -49,5 +65,6 @@ def index(
             "user": user,
             "decks": deck_dicts,
             "recent_sessions": [r.model_dump() for r in recents],
+            "active_trivia_sessions": active_trivia_views,
         },
     )

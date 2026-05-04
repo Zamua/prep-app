@@ -31,7 +31,7 @@ from prep.auth import current_user
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.trivia import service as trivia_service
 from prep.trivia.agent_client import AgentUnavailable
-from prep.trivia.repo import TriviaQueueRepo
+from prep.trivia.repo import TriviaQueueRepo, TriviaSessionsRepo
 from prep.trivia.service import build_explore_ctx, grade_with_fallback
 from prep.trivia.session_state import (
     flip_done_verdict,
@@ -184,16 +184,21 @@ def trivia_session(
     decks = DeckRepo()
     questions = QuestionRepo()
     trivia = TriviaQueueRepo()
+    sessions = TriviaSessionsRepo()
     deck_id = decks.find_id(uid, deck_name)
     if deck_id is None:
         raise HTTPException(404, "deck not found")
 
     if cards is None:
-        # Fresh session — pick + 303 to the URL with cards encoded so
-        # the remaining queue survives back-button + refresh. 303
-        # (not meta-refresh) so the browser doesn't paint a blank
-        # interstitial — that was the white-flash on tap from the
-        # notification log.
+        # No URL state — either a manual nav to the bare session URL,
+        # or a stale notification log entry. If there's an active
+        # persisted session for this deck, resume it (canonical URL
+        # rebuilt from DB). Otherwise pick a fresh queue + persist.
+        active = sessions.get_active_for_deck(uid, deck_id)
+        if active and active.queue:
+            done_qs = f"&done={format_done(active.done)}" if active.done else ""
+            ids = ",".join(str(q) for q in active.queue)
+            return responses.redirect(request, f"/trivia/session/{deck_name}?cards={ids}{done_qs}")
         target_size = decks.get_trivia_session_size(uid, deck_id)
         # Half fresh, half review (rounded down, min 1). For
         # target_size=10 that's 5/5; for 3 it's 1/2. Generate first
@@ -222,12 +227,26 @@ def trivia_session(
         session = trivia.pick_session_for_deck(
             deck_id, target_size=target_size, fresh_target=fresh_target
         )
-        ids = ",".join(str(c.question_id) for c in session)
+        picked_ids = [c.question_id for c in session]
+        # Replace any stale active session with the freshly picked
+        # queue (silent — at this point any prior session was either
+        # completed, abandoned, or empty).
+        sessions.replace_active(uid, deck_id, queue=picked_ids)
+        ids = ",".join(str(qid) for qid in picked_ids)
         return responses.redirect(request, f"/trivia/session/{deck_name}?cards={ids}")
 
     queue = parse_card_ids(cards)
     done_items = parse_done(done)
+    # Mid-session hit — keep the persistence row in sync with the URL
+    # state. start_or_resume is a no-op refresh if a row already
+    # exists; otherwise it creates one matching the current URL.
+    if queue:
+        sessions.start_or_resume(uid, deck_id, queue=queue, done=done_items)
     if not queue:
+        # End of session — mark the persisted row as completed so it
+        # stops showing in the index "Continue" strip + the scheduler
+        # picks fresh on the next tick.
+        sessions.complete(uid, deck_id)
         # Render summary: hydrate each done entry with its question
         # text + correct answer + explanation for the tap-to-expand
         # detail panels.
@@ -340,8 +359,13 @@ def trivia_session_answer(
     if verdict.get("regex_update"):
         regex_updated = questions.set_answer_regex(uid, head, verdict["regex_update"])
 
-    new_done_str = format_done(done_items + [(head, "r" if correct else "w")])
-    remaining = ",".join(str(i) for i in queue[1:])
+    new_done_items = done_items + [(head, "r" if correct else "w")]
+    new_done_str = format_done(new_done_items)
+    remaining_ids = queue[1:]
+    remaining = ",".join(str(i) for i in remaining_ids)
+    # Persist the post-answer queue + done back to the session row so
+    # a tab close right here lets the user resume the next card.
+    TriviaSessionsRepo().persist_state(uid, deck_id, queue=remaining_ids, done=new_done_items)
     # Position counter on the result view stays on the card the user
     # just answered — counter rolls UP across the session
     # (1/3 → 2/3 → 3/3) instead of down.

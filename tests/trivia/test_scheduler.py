@@ -401,3 +401,54 @@ def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
     rows = fixtures["decks"].list_trivia_decks()
     row = next(r for r in rows if r.id == deck_id)
     assert row.last_notified_at is None
+
+
+def test_tick_resumes_existing_active_session(monkeypatch, fixtures):
+    """If there's an active trivia session for the deck, the
+    scheduler resumes it rather than picking fresh: body says
+    "N cards remaining", URL points at the persisted queue+done."""
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id, qids = _make_trivia_deck(fixtures, name="resumable", n_questions=3)
+    # User answered Q0 in a prior session; Q1 + Q2 still in queue.
+    TriviaSessionsRepo().start_or_resume(
+        fixtures["user"],
+        deck_id,
+        queue=[qids[1], qids[2]],
+        done=[(qids[0], "r")],
+    )
+    sent = []
+    monkeypatch.setattr(
+        "prep.notify.push.send_to_user", lambda **kw: sent.append(kw) or {"ok": True}
+    )
+    sched.tick(datetime.now(timezone.utc))
+    assert len(sent) == 1
+    assert "Pick up where you left off" in sent[0]["body"]
+    assert "2 cards remaining" in sent[0]["body"]
+    # URL preserves the persisted queue + done chain.
+    url = sent[0]["url"]
+    assert f"cards={qids[1]},{qids[2]}" in url
+    assert f"done={qids[0]}r" in url
+
+
+def test_tick_picks_fresh_when_no_active_session(monkeypatch, fixtures):
+    """No active session → scheduler picks a fresh queue and
+    persists it so subsequent ticks resume the same one until it
+    completes."""
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id, _ = _make_trivia_deck(fixtures, name="fresh-deck", n_questions=4)
+    sessions_repo = TriviaSessionsRepo()
+    assert sessions_repo.get_active_for_deck(fixtures["user"], deck_id) is None
+
+    sent = []
+    monkeypatch.setattr(
+        "prep.notify.push.send_to_user", lambda **kw: sent.append(kw) or {"ok": True}
+    )
+    sched.tick(datetime.now(timezone.utc))
+    assert len(sent) == 1
+    assert "Pick up where you left off" not in sent[0]["body"]
+    # An active session row was created with the picked queue.
+    active = sessions_repo.get_active_for_deck(fixtures["user"], deck_id)
+    assert active is not None
+    assert len(active.queue) > 0

@@ -20,11 +20,18 @@ joins against `questions`. The queue rules:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from prep.infrastructure.db import cursor
-from prep.trivia.entities import NextCard, TriviaQueueEntry
+from prep.trivia.entities import (
+    ActiveTriviaSession,
+    NextCard,
+    TriviaQueueEntry,
+    TriviaSession,
+)
+from prep.trivia.session_state import format_done, parse_card_ids, parse_done
 
 
 class TriviaQueueRepo:
@@ -349,6 +356,17 @@ class TriviaQueueRepo:
             for r in ordered[:target_size]
         ]
 
+    def prompt_for_question(self, question_id: int) -> str | None:
+        """Cheap fetch of just the prompt text for a single qid.
+        Used by the scheduler when resuming a session — only the
+        head card's prompt is needed for the notification body."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT prompt FROM questions WHERE id = ?",
+                (question_id,),
+            ).fetchone()
+        return row["prompt"] if row else None
+
     def existing_prompts(self, deck_id: int) -> list[str]:
         """All current question prompts for `deck_id`. Passed to the
         generator so the next batch doesn't repeat anything we've
@@ -360,3 +378,180 @@ class TriviaQueueRepo:
                 (deck_id,),
             ).fetchall()
         return [r["prompt"] for r in rows]
+
+
+# Idle threshold after which an "active" session is auto-marked
+# abandoned. Mirrors the SRS reaper window (study_sessions also uses
+# 7 days). Applied lazily on `list_active`.
+_ACTIVE_TIMEOUT = timedelta(days=7)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+class TriviaSessionsRepo:
+    """Persistence for the URL-encoded mini-sessions.
+
+    Invariant: at most ONE row per (user_id, deck_id) with
+    status='active'. The `start_or_resume` and `replace_active`
+    methods enforce this — there's no unique index because completed
+    / abandoned rows for the same (user, deck) are common.
+
+    `queue` and `done` mirror the URL params (`?cards=…&done=…`).
+    Stored as the same TEXT format so persistence is lossless and
+    the route can swap between URL state and DB state freely.
+    """
+
+    def get_active_for_deck(self, user_id: str, deck_id: int) -> TriviaSession | None:
+        """Return the active session for (user, deck) if any. None if
+        none active. Doesn't run the abandon reaper — callers that
+        need fresh state should hit `list_active` first."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT * FROM trivia_sessions"
+                " WHERE user_id = ? AND deck_id = ? AND status = 'active'"
+                " ORDER BY last_active DESC LIMIT 1",
+                (user_id, deck_id),
+            ).fetchone()
+        return _row_to_trivia_session(row) if row else None
+
+    def list_active(self, user_id: str) -> list[ActiveTriviaSession]:
+        """All active trivia sessions for the user, joined with deck
+        names for the index "Continue" strip. Side-effect: idle >7d
+        sessions get aged to status='abandoned' (cheap inline reaper,
+        same pattern as SessionRepo.list_recent)."""
+        threshold = (datetime.now(timezone.utc) - _ACTIVE_TIMEOUT).isoformat(timespec="seconds")
+        with cursor() as c:
+            c.execute(
+                "UPDATE trivia_sessions SET status = 'abandoned'"
+                " WHERE user_id = ? AND status = 'active' AND last_active < ?",
+                (user_id, threshold),
+            )
+            rows = c.execute(
+                """
+                SELECT s.deck_id, s.last_active, s.queue, s.done, d.name AS deck_name
+                  FROM trivia_sessions s
+                  JOIN decks d ON d.id = s.deck_id
+                 WHERE s.user_id = ? AND s.status = 'active'
+                 ORDER BY s.last_active DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [
+            ActiveTriviaSession(
+                deck_name=r["deck_name"],
+                deck_id=r["deck_id"],
+                last_active=r["last_active"],
+                queue=parse_card_ids(r["queue"]),
+                done=parse_done(r["done"]),
+            )
+            for r in rows
+        ]
+
+    def start_or_resume(
+        self, user_id: str, deck_id: int, *, queue: list[int], done: list[tuple[int, str]]
+    ) -> TriviaSession:
+        """Insert a new active session OR refresh `last_active` on an
+        existing one for (user, deck). Returns the row either way.
+
+        If an active row exists, its persisted queue + done are
+        preserved (the URL state is treated as a navigation token,
+        not the source of truth — important for resuming from a
+        stale notification log entry). If you want to FORCE a fresh
+        queue (e.g., scheduler firing an explicit new pick), use
+        `replace_active` instead.
+        """
+        existing = self.get_active_for_deck(user_id, deck_id)
+        now = _now_iso()
+        if existing:
+            with cursor() as c:
+                c.execute(
+                    "UPDATE trivia_sessions SET last_active = ? WHERE id = ?",
+                    (now, existing.id),
+                )
+            existing.last_active = now
+            return existing
+        sid = uuid.uuid4().hex[:16]
+        with cursor() as c:
+            c.execute(
+                "INSERT INTO trivia_sessions"
+                " (id, user_id, deck_id, started_at, last_active, status, queue, done)"
+                " VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
+                (
+                    sid,
+                    user_id,
+                    deck_id,
+                    now,
+                    now,
+                    ",".join(str(q) for q in queue),
+                    format_done(done),
+                ),
+            )
+        return TriviaSession(
+            id=sid,
+            user_id=user_id,
+            deck_id=deck_id,
+            started_at=now,
+            last_active=now,
+            status="active",
+            queue=list(queue),
+            done=list(done),
+        )
+
+    def replace_active(self, user_id: str, deck_id: int, *, queue: list[int]) -> TriviaSession:
+        """Abandon any existing active session for (user, deck) and
+        start a fresh one with the given queue. Used by the
+        scheduler when no active session exists OR when the existing
+        one is empty (just-completed) — the scheduler picks a new
+        queue and we drop the old row."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE trivia_sessions SET status = 'abandoned'"
+                " WHERE user_id = ? AND deck_id = ? AND status = 'active'",
+                (user_id, deck_id),
+            )
+        return self.start_or_resume(user_id, deck_id, queue=queue, done=[])
+
+    def persist_state(
+        self, user_id: str, deck_id: int, *, queue: list[int], done: list[tuple[int, str]]
+    ) -> None:
+        """Update the active session's queue + done after an answer.
+        No-op if no active session exists (caller is mid-flow without
+        a persistence row, fine — caller can call start_or_resume
+        next time)."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE trivia_sessions SET queue = ?, done = ?, last_active = ?"
+                " WHERE user_id = ? AND deck_id = ? AND status = 'active'",
+                (
+                    ",".join(str(q) for q in queue),
+                    format_done(done),
+                    _now_iso(),
+                    user_id,
+                    deck_id,
+                ),
+            )
+
+    def complete(self, user_id: str, deck_id: int) -> None:
+        """Mark the active session for (user, deck) as completed.
+        Called when the user reaches the empty-queue summary view."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE trivia_sessions SET status = 'completed', last_active = ?"
+                " WHERE user_id = ? AND deck_id = ? AND status = 'active'",
+                (_now_iso(), user_id, deck_id),
+            )
+
+
+def _row_to_trivia_session(row) -> TriviaSession:
+    return TriviaSession(
+        id=row["id"],
+        user_id=row["user_id"],
+        deck_id=row["deck_id"],
+        started_at=row["started_at"],
+        last_active=row["last_active"],
+        status=row["status"],
+        queue=parse_card_ids(row["queue"]),
+        done=parse_done(row["done"]),
+    )

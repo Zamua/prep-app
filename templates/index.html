@@ -12,6 +12,25 @@
   </p>
 </section>
 
+{% if active_trivia_sessions %}
+<section class="recent-sessions">
+  <p class="section-eyebrow"><span>Continue trivia</span><span class="rule"></span></p>
+  <ul class="session-list" role="list">
+    {% for s in active_trivia_sessions %}
+      <li class="session-card">
+        <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ s.deck_name }}?cards={{ s.queue_param }}{% if s.done_param %}&amp;done={{ s.done_param }}{% endif %}" class="session-link">
+          <span class="session-deck">{{ s.deck_name }}</span>
+          <span class="session-meta">
+            <span class="session-state">{{ s.remaining }} of {{ s.total }} cards left</span>
+          </span>
+          <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if recent_sessions %}
 <section class="recent-sessions">
   <p class="section-eyebrow"><span>Pick up where you left off</span><span class="rule"></span></p>
@@ -85,7 +104,7 @@
 {% endif %}
 
 <section class="decks-section">
-  <p class="section-eyebrow"><span>{% if recent_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
+  <p class="section-eyebrow"><span>{% if recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
 <ol class="deck-list" role="list">
   {% for d in decks %}
     {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][loop.index0] %}

@@ -335,6 +335,41 @@ def test_index_srs_deck_keeps_due_total_line(client: TestClient, initialized_db:
     assert "in deck" in r.text
 
 
+def test_index_renders_continue_strip_when_active_trivia_sessions(
+    client: TestClient, initialized_db: str
+):
+    """If the user has an active trivia session, the index page
+    shows a 'Continue trivia' strip with the deck name + remaining
+    count, linked to the resume URL."""
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id = DeckRepo().create_trivia(
+        initialized_db, "resumable-deck", topic="x", interval_minutes=30
+    )
+    TriviaSessionsRepo().start_or_resume(
+        initialized_db,
+        deck_id,
+        queue=[101, 102, 103],
+        done=[(99, "r")],
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Continue trivia" in r.text
+    assert "3 of 4 cards left" in r.text
+    assert "/trivia/session/resumable-deck?cards=101,102,103" in r.text
+    assert "done=99r" in r.text
+
+
+def test_index_omits_continue_strip_when_no_active_trivia_sessions(
+    client: TestClient, initialized_db: str
+):
+    """No active sessions → no Continue strip rendered."""
+    DeckRepo().create_trivia(initialized_db, "geo", topic="x", interval_minutes=30)
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Continue trivia" not in r.text
+
+
 def test_study_begin_400_for_trivia_deck(client: TestClient, initialized_db: str):
     """A stale bookmark shouldn't be able to start an SRS session
     against a trivia deck."""
