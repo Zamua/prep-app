@@ -142,57 +142,70 @@
          answer (IDK submissions are confessions, not disputes). #}
       {% set _show_regrade = (not result.correct) and (not result.idk) and result.given %}
       {% if q.explanation or handoff_urls or _show_regrade %}
-        <div class="trivia-disc-row">
+        {# Bodies live as siblings of the disc-row inside .trivia-discs
+           — that way they can span full width without fighting the
+           grid placement of the summary pills. CSS :has() shows the
+           matching body when its <details> is open. (Earlier tried
+           display:contents on .trivia-disc to lift the body up to the
+           grid; iOS Safari rendered that as chaotic overlapping
+           columns. Sibling pattern is reliable.) #}
+        <div class="trivia-discs">
+          <div class="trivia-disc-row">
+            {% if q.explanation %}
+              <details class="trivia-disc trivia-disc-explain">
+                <summary>
+                  <span>Explain</span>
+                  {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
+                </summary>
+              </details>
+            {% endif %}
+            {% if handoff_urls %}
+              <details class="trivia-disc trivia-disc-explore">
+                <summary>
+                  <span>Explore</span>
+                  {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
+                </summary>
+              </details>
+            {% endif %}
+            {% if _show_regrade %}
+              <form method="post"
+                    action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/regrade{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/regrade{% endif %}"
+                    class="trivia-regrade-form">
+                <input type="hidden" name="answer" value="{{ result.given }}">
+                {% if session_total %}
+                  <input type="hidden" name="question_id" value="{{ q.id }}">
+                  <input type="hidden" name="cards" value="{{ session_remaining }}">
+                  <input type="hidden" name="done" value="{{ session_done or '' }}">
+                {% endif %}
+                <button type="submit" class="trivia-regrade-btn">
+                  {{ icon('sparkle', class_='icon icon-inline') }}
+                  <span>Re-grade</span>
+                </button>
+              </form>
+            {% endif %}
+          </div>
           {% if q.explanation %}
-            <details class="trivia-disc">
-              <summary>
-                <span>Explain</span>
-                {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
-              </summary>
-              <p class="trivia-disc-body">{{ q.explanation }}</p>
-            </details>
+            <p class="trivia-disc-body trivia-disc-body-explain">{{ q.explanation }}</p>
           {% endif %}
           {% if handoff_urls %}
-            <details class="trivia-disc">
-              <summary>
-                <span>Explore</span>
-                {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
-              </summary>
-              <div class="trivia-disc-body trivia-explore-options">
-                {% for key in ['claude', 'chatgpt'] %}
-                  {% if key in handoff_urls %}
-                    <a class="trivia-explore-option"
-                       href="{{ handoff_urls[key] }}"
-                       target="_blank" rel="noopener noreferrer">
-                      <span>Discuss with {{ handoff_providers[key].label }}</span>
-                      {{ icon('arrow-up-right', class_='icon icon-inline') }}
-                    </a>
-                  {% endif %}
-                {% endfor %}
-                <a class="trivia-explore-option"
-                   href="{{ google_search_url }}"
-                   target="_blank" rel="noopener noreferrer">
-                  <span>Search on Google</span>
-                  {{ icon('arrow-up-right', class_='icon icon-inline') }}
-                </a>
-              </div>
-            </details>
-          {% endif %}
-          {% if _show_regrade %}
-            <form method="post"
-                  action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/regrade{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/regrade{% endif %}"
-                  class="trivia-regrade-form">
-              <input type="hidden" name="answer" value="{{ result.given }}">
-              {% if session_total %}
-                <input type="hidden" name="question_id" value="{{ q.id }}">
-                <input type="hidden" name="cards" value="{{ session_remaining }}">
-                <input type="hidden" name="done" value="{{ session_done or '' }}">
-              {% endif %}
-              <button type="submit" class="trivia-regrade-btn">
-                {{ icon('sparkle', class_='icon icon-inline') }}
-                <span>Re-grade</span>
-              </button>
-            </form>
+            <div class="trivia-disc-body trivia-disc-body-explore trivia-explore-options">
+              {% for key in ['claude', 'chatgpt'] %}
+                {% if key in handoff_urls %}
+                  <a class="trivia-explore-option"
+                     href="{{ handoff_urls[key] }}"
+                     target="_blank" rel="noopener noreferrer">
+                    <span>Discuss with {{ handoff_providers[key].label }}</span>
+                    {{ icon('arrow-up-right', class_='icon icon-inline') }}
+                  </a>
+                {% endif %}
+              {% endfor %}
+              <a class="trivia-explore-option"
+                 href="{{ google_search_url }}"
+                 target="_blank" rel="noopener noreferrer">
+                <span>Search on Google</span>
+                {{ icon('arrow-up-right', class_='icon icon-inline') }}
+              </a>
+            </div>
           {% endif %}
         </div>
         {% if _show_regrade %}

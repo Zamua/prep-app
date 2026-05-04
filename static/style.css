@@ -3396,16 +3396,25 @@ body:has(dialog[open]) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
   gap: 0.4rem;
+  /* margin moved to the .trivia-discs wrapper, since it now bottoms
+     out the whole disc block (pills + open body). */
+}
+/* Disc-pill grid item. The body for each disc lives OUTSIDE the
+   <details> as a sibling of .trivia-disc-row inside .trivia-discs —
+   that way it can span the container width without fighting the
+   row's grid placement. CSS :has() further down toggles which body
+   shows based on which <details> is open. (Earlier display:contents
+   approach was unreliable on iOS Safari.) */
+.trivia-disc { min-width: 0; }
+
+/* Wrapper that holds the pill row + the (display:none-by-default)
+   bodies. Vertical stack: pills on top, then the open body. */
+.trivia-discs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
   margin: 0 0 0.9rem;
 }
-/* display:contents lifts the summary + body up to be direct grid
-   items of .trivia-disc-row. That lets the body span the full row
-   (grid-column: 1/-1) while the summary stays as a small pill in
-   one column — without that, the body was constrained to its parent
-   <details>'s single grid cell and rendered as a thin column. The
-   browser still handles the open/close hide of the body via the
-   <details> element's native semantics. */
-.trivia-disc { display: contents; }
 
 /* Shared outline-pill chrome for .trivia-disc summary + .trivia-regrade-btn:
    small italic-uppercase outlined pill with optional leading icon. The
@@ -3446,17 +3455,22 @@ body:has(dialog[open]) {
   border-color: var(--ink-soft); color: var(--ink);
   background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
 }
+/* Bodies live as siblings of .trivia-disc-row inside .trivia-discs.
+   Hidden by default; the matching :has() rule below shows the body
+   when its <details> is open. The sibling pattern (rather than body
+   nested inside <details>) lets the body span the full container
+   width without fighting the grid placement of the summary pills. */
 .trivia-disc-body {
-  /* Spans the full disc-row width because .trivia-disc above uses
-     display:contents — that lifts the body up to be a direct grid
-     item of the row, so grid-column: 1/-1 actually applies. */
-  grid-column: 1 / -1;
-  padding: 0.8rem 0.9rem; margin: 0.4rem 0 0;
+  display: none;
+  padding: 0.8rem 0.9rem; margin: 0;
   font-size: 0.95rem; line-height: 1.55; color: var(--ink-soft);
   border: 1px solid var(--rule); border-radius: 10px;
   background: color-mix(in srgb, var(--paper) 30%, transparent);
 }
-.trivia-disc-body.trivia-explore-options {
+.trivia-discs:has(.trivia-disc-explain[open]) .trivia-disc-body-explain {
+  display: block;
+}
+.trivia-discs:has(.trivia-disc-explore[open]) .trivia-disc-body-explore {
   display: flex; flex-direction: column; gap: 0.3rem;
 }
 
