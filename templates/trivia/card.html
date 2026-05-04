@@ -77,28 +77,6 @@
         </div>
       {% endif %}
     </form>
-    <script>
-      // The claude-graded path on the server can take ~5-10s. Disable
-      // the button + swap the label on submit so the user knows
-      // something's happening. Re-enables on bfcache restore so a
-      // back-button-then-resubmit works.
-      (function () {
-        var btn = document.getElementById('trivia-submit-btn');
-        if (!btn) return;
-        var orig = btn.textContent.trim();
-        var pending = btn.dataset.pendingLabel || 'Working…';
-        btn.form.addEventListener('submit', function () {
-          btn.disabled = true;
-          btn.textContent = pending;
-          btn.classList.add('is-loading');
-        });
-        window.addEventListener('pageshow', function () {
-          btn.disabled = false;
-          btn.textContent = orig;
-          btn.classList.remove('is-loading');
-        });
-      })();
-    </script>
   {% else %}
     <div class="trivia-result trivia-result-{{ 'right' if result.correct else 'wrong' }}">
       {# Side-by-side answer compare. Correct-answer card tints --right
@@ -208,18 +186,6 @@
             </div>
           {% endif %}
         </div>
-        {% if _show_regrade %}
-          <script>
-            (function () {
-              var btn = document.querySelector('.trivia-regrade-btn');
-              if (!btn) return;
-              btn.form.addEventListener('submit', function () {
-                btn.disabled = true;
-                btn.classList.add('is-loading');
-              });
-            })();
-          </script>
-        {% endif %}
       {% endif %}
 
       {% if result.regraded %}
@@ -243,4 +209,133 @@
     </div>
   {% endif %}
 </article>
+
+<script>
+  // Trivia card behaviors. One consolidated script — bound on initial
+  // page load AND re-bound after an in-place session-card swap (since
+  // innerHTML doesn't execute embedded scripts).
+  //
+  // For trivia SESSIONS (multi-card mini-sessions), the "Next card"
+  // link is intercepted: we pre-fetch the next card's HTML in the
+  // background while the user reads the result panel, then on tap we
+  // synchronously swap the DOM and call .focus() on the new input —
+  // staying inside the user-gesture context so iOS shows the
+  // keyboard automatically. Standalone /trivia/<qid> deep links use
+  // the default link navigation (no Next/keyboard concern there).
+  (function () {
+    var prefetchedHtml = null;
+    var prefetchedUrl = null;
+
+    function bindSubmitPending() {
+      var btn = document.getElementById('trivia-submit-btn');
+      if (!btn || btn.dataset.boundPending) return;
+      btn.dataset.boundPending = '1';
+      var orig = btn.textContent.trim();
+      var pending = btn.dataset.pendingLabel || 'Working…';
+      btn.form.addEventListener('submit', function () {
+        btn.disabled = true;
+        btn.textContent = pending;
+        btn.classList.add('is-loading');
+      });
+      window.addEventListener('pageshow', function () {
+        btn.disabled = false;
+        btn.textContent = orig;
+        btn.classList.remove('is-loading');
+      });
+    }
+
+    function bindRegradePending() {
+      var btn = document.querySelector('.trivia-regrade-btn');
+      if (!btn || btn.dataset.boundPending) return;
+      btn.dataset.boundPending = '1';
+      btn.form.addEventListener('submit', function () {
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+      });
+    }
+
+    function autoFocusInput() {
+      // Mid-session input — focus on (re-)bind so the cursor lands
+      // there without a manual tap. iOS keyboard appears only when
+      // .focus() is called inside a live user-gesture (handled in
+      // bindNextCardSwap below); this autofocus path covers desktop
+      // / Android and is harmless on iOS.
+      var input = document.querySelector('.trivia-answer-input');
+      if (input) {
+        try { input.focus(); } catch (e) { /* ignore */ }
+      }
+    }
+
+    function prefetchNextCard() {
+      var nextLink = document.querySelector('.trivia-next-cta');
+      if (!nextLink || nextLink.tagName !== 'A') return;
+      // Only session navigation (with session_remaining cards) is
+      // worth pre-fetching. The standalone "Dismiss" link goes home
+      // — no input to focus there.
+      if (!nextLink.href.match(/\/trivia\/session\//)) return;
+      var url = nextLink.href;
+      if (url === prefetchedUrl) return;
+      prefetchedUrl = url;
+      prefetchedHtml = null;
+      fetch(url, { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.text() : null; })
+        .then(function (html) {
+          if (prefetchedUrl === url) prefetchedHtml = html;
+        })
+        .catch(function () { /* fall through to default nav on click */ });
+    }
+
+    function bindNextCardSwap() {
+      var nextLink = document.querySelector('.trivia-next-cta');
+      if (!nextLink || nextLink.tagName !== 'A' || nextLink.dataset.boundSwap) return;
+      if (!nextLink.href.match(/\/trivia\/session\//)) return;
+      nextLink.dataset.boundSwap = '1';
+      nextLink.addEventListener('click', function (e) {
+        if (!prefetchedHtml || prefetchedUrl !== nextLink.href) {
+          // Pre-fetch hasn't landed — fall through to default
+          // navigation. Keyboard won't show on iOS this once;
+          // subsequent cards should be fine.
+          return;
+        }
+        e.preventDefault();
+        var doc = new DOMParser().parseFromString(prefetchedHtml, 'text/html');
+        var newMain = doc.querySelector('main.folio');
+        var curMain = document.querySelector('main.folio');
+        if (!newMain || !curMain) {
+          window.location.href = nextLink.href;
+          return;
+        }
+        curMain.innerHTML = newMain.innerHTML;
+        history.pushState(null, '', nextLink.href);
+        document.title = doc.title;
+        // Synchronously focus the new input — still inside the
+        // tap's user-gesture window because no async/await
+        // crossed between the click and this call (the prefetched
+        // HTML is already in memory). iOS shows keyboard.
+        autoFocusInput();
+        prefetchedHtml = null;
+        prefetchedUrl = null;
+        bindAll();
+      });
+    }
+
+    function onPopState() {
+      // Browser back/forward landed on a previous URL — let the
+      // browser do its bfcache thing. Fallback to full reload if
+      // the state machine gets confused.
+      window.location.reload();
+    }
+
+    function bindAll() {
+      bindSubmitPending();
+      bindRegradePending();
+      bindNextCardSwap();
+      prefetchNextCard();
+      autoFocusInput();
+    }
+
+    window.addEventListener('popstate', onPopState);
+    bindAll();
+  })();
+</script>
 {% endblock %}
