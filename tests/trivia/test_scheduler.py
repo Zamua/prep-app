@@ -97,9 +97,15 @@ def test_tick_sends_push_for_due_deck(monkeypatch, fixtures):
     sched.tick(datetime.now(timezone.utc))
     assert len(sent) == 1
     assert sent[0]["body"] == "Q0?"  # first card in queue
-    # Deep link → session route, not single-card route — tapping the
-    # push opens a 3-card mini-session.
-    assert sent[0]["url"] == "/trivia/session/capitals"
+    # Deep link → session route with the picked queue encoded in
+    # ?cards= so the route renders this exact session (instead of
+    # re-picking and possibly diverging from what the body teased).
+    assert sent[0]["url"].startswith("/trivia/session/capitals?cards=")
+    # Body matches the FIRST card in the encoded queue — no
+    # divergence between the notification preview and the card
+    # that actually opens.
+    head_id = int(sent[0]["url"].split("?cards=", 1)[1].split(",", 1)[0])
+    assert head_id == qids[0]
     assert sent[0]["title"] == "capitals"
     # Per-deck tag so iOS coalesces stacked pushes for this deck.
     assert sent[0]["tag"] == "trivia-capitals"
