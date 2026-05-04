@@ -3476,6 +3476,23 @@ body:has(dialog[open]) {
 .trivia-regrade-btn { width: 100%; }
 .trivia-regrade-btn:disabled { opacity: 0.6; cursor: progress; }
 .trivia-regrade-btn .icon { width: 0.95rem; height: 0.95rem; }
+/* Loading state: swap the leading sparkle icon for a spinner of the
+   same size so the button width doesn't change. Label stays
+   "Re-grade" — keeping the text constant prevents the inline-flex
+   reflow that the prior "Re-grading…" relabel caused. */
+.trivia-regrade-btn.is-loading .icon { display: none; }
+.trivia-regrade-btn.is-loading::before {
+  content: "";
+  width: 0.95rem; height: 0.95rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-async-spin 700ms linear infinite;
+  flex-shrink: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .trivia-regrade-btn.is-loading::before { animation: none; }
+}
 
 .trivia-regrade-note {
   margin: 0.6rem 0 0.2rem;

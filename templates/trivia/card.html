@@ -190,8 +190,7 @@
                 <input type="hidden" name="cards" value="{{ session_remaining }}">
                 <input type="hidden" name="done" value="{{ session_done or '' }}">
               {% endif %}
-              <button type="submit" class="trivia-regrade-btn"
-                      data-pending-label="Re-grading…">
+              <button type="submit" class="trivia-regrade-btn">
                 {{ icon('sparkle', class_='icon icon-inline') }}
                 <span>Re-grade</span>
               </button>
@@ -205,7 +204,7 @@
               if (!btn) return;
               btn.form.addEventListener('submit', function () {
                 btn.disabled = true;
-                btn.querySelector('span').textContent = btn.dataset.pendingLabel || 'Working…';
+                btn.classList.add('is-loading');
               });
             })();
           </script>
