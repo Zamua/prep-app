@@ -470,7 +470,7 @@ def deck_view(
     with cursor() as c:
         row = c.execute(
             "SELECT notifications_enabled, notification_interval_minutes, "
-            "trivia_session_size "
+            "trivia_session_size, context_prompt "
             "FROM decks WHERE id=? AND user_id=?",
             (deck_id, uid),
         ).fetchone()
@@ -480,6 +480,7 @@ def deck_view(
             "notifications_enabled": bool(row["notifications_enabled"]),
             "interval_minutes": row["notification_interval_minutes"],
             "session_size": int(row["trivia_session_size"] or 3),
+            "context_prompt": row["context_prompt"] or "",
         }
 
     # Trivia-only stats for the mastery-bar header. Cheap one-query
@@ -531,6 +532,38 @@ def deck_delete(
         raise HTTPException(404, "deck not found")
     service.delete_deck(repo, uid, name)
     return responses.redirect(request, "/")
+
+
+_MAX_TOPIC_PROMPT_CHARS = 4000
+
+
+@router.post("/deck/{name}/topic")
+def deck_update_topic(
+    request: Request,
+    name: str,
+    context_prompt: str = Form(...),
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Update the trivia deck's topic prompt. Subsequent batch
+    generations (scheduler refill OR explicit Generate) will use the
+    updated text. Existing cards are not touched. Trivia-only —
+    SRS decks have a different edit surface."""
+    uid = user["tailscale_login"]
+    if deck_repo.find_id(uid, name) is None:
+        raise HTTPException(404, "deck not found")
+    deck_type = deck_repo.get_type(uid, deck_repo.find_id(uid, name))
+    if deck_type is None or deck_type.value != "trivia":
+        raise HTTPException(400, "topic prompt only applies to trivia decks")
+    cleaned = (context_prompt or "").strip()
+    if not cleaned:
+        raise HTTPException(400, "topic prompt cannot be empty")
+    if len(cleaned) > _MAX_TOPIC_PROMPT_CHARS:
+        raise HTTPException(
+            400, f"topic prompt too long ({len(cleaned)} chars; max {_MAX_TOPIC_PROMPT_CHARS})"
+        )
+    deck_repo.update_context_prompt(uid, name, cleaned)
+    return responses.redirect(request, f"/deck/{name}")
 
 
 @router.post("/deck/{name}/notifications")

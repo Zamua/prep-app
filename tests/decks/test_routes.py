@@ -208,6 +208,78 @@ def test_deck_view_renders_edit_pill_and_hidden_panel(client: TestClient, initia
     assert "hidden" in r.text[panel_idx : panel_idx + 200]
 
 
+def test_trivia_deck_edit_panel_shows_topic_editor_not_add_cards(
+    client: TestClient, initialized_db: str
+):
+    """Trivia decks swap the SRS edit panel (add card / transform) for
+    a topic-prompt editor — that's the only knob that affects future
+    batches. Manual card add doesn't fit the trivia model."""
+    DeckRepo().create_trivia(
+        initialized_db, "geo-trivia", topic="capital cities of europe", interval_minutes=30
+    )
+    r = client.get("/deck/geo-trivia")
+    assert r.status_code == 200
+    # SRS-only UI is gone for trivia decks.
+    assert "Add a card by hand" not in r.text
+    # Topic editor is in the panel with the current context_prompt
+    # populated as the textarea value.
+    assert "Edit topic" in r.text
+    assert 'name="context_prompt"' in r.text
+    assert "capital cities of europe" in r.text
+    # Form posts to the new /topic endpoint.
+    assert "/deck/geo-trivia/topic" in r.text
+
+
+def test_topic_update_persists_for_trivia_deck(client: TestClient, initialized_db: str):
+    """POSTing a fresh context_prompt updates the deck row; subsequent
+    batch generations read the new value via DeckRepo.get_context_prompt."""
+    DeckRepo().create_trivia(
+        initialized_db, "geo-trivia", topic="europe capitals", interval_minutes=30
+    )
+    r = client.post(
+        "/deck/geo-trivia/topic",
+        data={"context_prompt": "south american capitals + their founding dates"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "/deck/geo-trivia" in r.headers["location"]
+    stored = DeckRepo().get_context_prompt(initialized_db, "geo-trivia")
+    assert stored == "south american capitals + their founding dates"
+
+
+def test_topic_update_400s_on_srs_deck(client: TestClient, initialized_db: str):
+    """SRS decks don't have a topic prompt in this sense — reject."""
+    DeckRepo().create(initialized_db, "go-systems")
+    r = client.post(
+        "/deck/go-systems/topic",
+        data={"context_prompt": "irrelevant"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_topic_update_400s_on_empty_prompt(client: TestClient, initialized_db: str):
+    """Empty topic for trivia is rejected — generation needs SOMETHING
+    to work with, and silently leaving the prior topic would be
+    surprising given the form submitted blank."""
+    DeckRepo().create_trivia(initialized_db, "geo-trivia", topic="x", interval_minutes=30)
+    r = client.post(
+        "/deck/geo-trivia/topic",
+        data={"context_prompt": "   "},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_topic_update_404s_for_unknown_deck(client: TestClient, initialized_db: str):
+    r = client.post(
+        "/deck/no-such-deck/topic",
+        data={"context_prompt": "anything"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 404
+
+
 def test_index_decks_carry_decktype(client: TestClient, initialized_db: str):
     """The index list also shows the type tag — same slot, same chrome,
     consistent across views."""

@@ -175,38 +175,64 @@
 </section>
 {% endif %}
 
-{# Add-cards panel — hidden by default. Toggled by the pencil pill
-   in the header (data-edit-toggle / aria-controls=deck-edit-panel).
-   Keeps the deck view focused on the cards listing; editing
-   surfaces are still one tap away when you need them. #}
+{# Edit panel — hidden by default. Toggled by the pencil pill in
+   the header (data-edit-toggle / aria-controls=deck-edit-panel).
+   Branches on deck_type:
+
+   - SRS: original Add-cards / claude-transform UI. Users author
+     cards by hand or steer claude across the whole deck.
+   - Trivia: only the topic prompt is editable. Cards are
+     claude-generated from this prompt at deck creation + on every
+     scheduler refill, so the topic is the lever the user actually
+     wants to turn. Manual card add/edit doesn't fit the model. #}
 <section id="deck-edit-panel" class="add-section" hidden>
-  <p class="section-eyebrow"><span>Add to this deck</span><span class="rule"></span></p>
-  <div class="add-cta-row">
-    <a class="btn btn-primary add-cta" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new">
-      {{ icon('plus', class_='icon icon-inline') }}
-      <span>Add a card by hand</span>
-    </a>
-  </div>
-
-  {% if agent_available %}
-    <p class="add-or" aria-hidden="true"><span>or</span></p>
-
-    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+  {% if deck_type == 'trivia' %}
+    <p class="section-eyebrow"><span>Edit topic</span><span class="rule"></span></p>
+    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
           method="post" class="transform-form add-ai-form">
       <label class="freetext">
         <span class="freetext-label">
           {{ icon('sparkle', class_='icon icon-inline') }}
-          Ask claude to add cards or edit existing ones
+          Topic prompt — used to generate fresh batches of cards
         </span>
-        <textarea name="prompt" rows="3" maxlength="4000"
-                  placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing"
-                  required></textarea>
+        <textarea name="context_prompt" rows="6" maxlength="4000"
+                  placeholder="e.g. distributed-systems consensus, focusing on quorum + leader election + linearizability"
+                  required>{{ deck_meta.context_prompt or '' }}</textarea>
       </label>
-      <button type="submit" class="btn btn-quiet">Apply</button>
+      <button type="submit" class="btn btn-primary">Save topic</button>
       <p class="transform-hint">
-        Claude reads the deck, proposes a patch, and you confirm before anything writes.
+        Edits apply to the next batch the scheduler generates (or your next manual Generate). Existing cards are not touched.
       </p>
     </form>
+  {% else %}
+    <p class="section-eyebrow"><span>Add to this deck</span><span class="rule"></span></p>
+    <div class="add-cta-row">
+      <a class="btn btn-primary add-cta" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new">
+        {{ icon('plus', class_='icon icon-inline') }}
+        <span>Add a card by hand</span>
+      </a>
+    </div>
+
+    {% if agent_available %}
+      <p class="add-or" aria-hidden="true"><span>or</span></p>
+
+      <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+            method="post" class="transform-form add-ai-form">
+        <label class="freetext">
+          <span class="freetext-label">
+            {{ icon('sparkle', class_='icon icon-inline') }}
+            Ask claude to add cards or edit existing ones
+          </span>
+          <textarea name="prompt" rows="3" maxlength="4000"
+                    placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing"
+                    required></textarea>
+        </label>
+        <button type="submit" class="btn btn-quiet">Apply</button>
+        <p class="transform-hint">
+          Claude reads the deck, proposes a patch, and you confirm before anything writes.
+        </p>
+      </form>
+    {% endif %}
   {% endif %}
 </section>
 
