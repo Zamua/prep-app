@@ -97,7 +97,7 @@ def build_message(
     if q.get("rubric"):
         parts.append(f"\n**Rubric:** {_trim(q['rubric'])}")
 
-    parts.append("\nWhat am I missing? How would you approach this?")
+    parts.append("\nPlease explain.")
     return "\n".join(parts)
 
 

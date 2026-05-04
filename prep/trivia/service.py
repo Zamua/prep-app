@@ -19,6 +19,7 @@ import logging
 import re
 from dataclasses import dataclass
 
+from prep import chat_handoff
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import QuestionRepo
 from prep.trivia.agent_client import AgentUnavailable, run_prompt
@@ -342,3 +343,66 @@ def grade_answer(*, expected: str, given: str) -> bool:
     if e_tokens and e_tokens.issubset(g_tokens):
         return True
     return False
+
+
+# ---- Grading dispatch (deterministic + claude tie-breaker) -------------
+
+
+def grade_with_fallback(q, user_answer: str) -> dict:
+    """Dispatch to deterministic vs claude grading per the heuristic in
+    classify_grading. Returns `{"correct": bool, "feedback": str | None}`.
+
+    Tie-breaker: when the heuristic picks deterministic AND the
+    deterministic grader says WRONG, but the user wrote a substantive
+    answer (longer or otherwise different from the expected), escalate
+    to claude. Catches paraphrase-correct answers — e.g. expected
+    "Key redistribution" + user "it prevents a cascade of reshuffling
+    work between servers" — where token-subset matching falsely
+    rejects but the meaning is right."""
+    mode = classify_grading(q.answer)
+    if mode == "claude":
+        return claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
+
+    det_correct = grade_answer(expected=q.answer, given=user_answer)
+    if det_correct:
+        return {"correct": True, "feedback": None}
+    # Deterministic said wrong — give claude a second look if it
+    # looks like a paraphrase rather than a clearly-wrong stab.
+    if looks_like_paraphrase(expected=q.answer, given=user_answer):
+        return claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
+    return {"correct": False, "feedback": None}
+
+
+# ---- Explore-with-AI handoff context ----------------------------------
+
+
+def build_explore_ctx(
+    *,
+    deck_name: str,
+    q,
+    user_answer: str,
+    correct: bool,
+    expected: str,
+    idk: bool = False,
+) -> dict:
+    """Build the "Explore further" template context for a trivia
+    card's post-answer state: AI-chat handoff URLs (Claude/ChatGPT)
+    plus a Google search link (target=_blank → native browser on
+    iOS PWA, escapes the in-app webview).
+
+    `idk=True` flags the prefilled chat message so the AI knows the
+    user skipped (vs. an empty user_answer that came from a real
+    answer like "")."""
+    msg = chat_handoff.build_message(
+        deck_name=deck_name,
+        q={"type": "short", "prompt": q.prompt, "answer": q.answer},
+        user_answer=user_answer,
+        verdict={"result": "right" if correct else "wrong"},
+        idk=idk,
+    )
+    return {
+        "handoff_urls": chat_handoff.provider_urls(msg),
+        "handoff_providers": chat_handoff.CHAT_PROVIDERS,
+        "handoff_default_provider": chat_handoff.DEFAULT_PROVIDER,
+        "google_search_url": chat_handoff.google_search_url(q.prompt),
+    }

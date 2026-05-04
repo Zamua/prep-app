@@ -25,74 +25,20 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from prep import chat_handoff
 from prep.auth import current_user
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.trivia import service as trivia_service
 from prep.trivia.agent_client import AgentUnavailable
 from prep.trivia.repo import TriviaQueueRepo
+from prep.trivia.service import build_explore_ctx, grade_with_fallback
+from prep.trivia.session_state import (
+    flip_done_verdict,
+    format_done,
+    parse_card_ids,
+    parse_done,
+)
 from prep.web import responses
 from prep.web.templates import templates
-
-
-def _grade(q, user_answer: str) -> dict:
-    """Dispatch to deterministic vs claude grading per the heuristic
-    in trivia.service.classify_grading. Returns
-    `{"correct": bool, "feedback": str | None}`.
-
-    Tie-breaker: when the heuristic picks deterministic AND the
-    deterministic grader says WRONG, but the user wrote a substantive
-    answer (longer or otherwise different from the expected), escalate
-    to claude. Catches paraphrase-correct answers — e.g. expected
-    "Key redistribution" + user "it prevents a cascade of reshuffling
-    work between servers" — where token-subset matching falsely
-    rejects but the meaning is right.
-    """
-    mode = trivia_service.classify_grading(q.answer)
-    if mode == "claude":
-        return trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
-
-    det_correct = trivia_service.grade_answer(expected=q.answer, given=user_answer)
-    if det_correct:
-        return {"correct": True, "feedback": None}
-    # Deterministic said wrong — give claude a second look if it
-    # looks like a paraphrase rather than a clearly-wrong stab.
-    if trivia_service.looks_like_paraphrase(expected=q.answer, given=user_answer):
-        return trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
-    return {"correct": False, "feedback": None}
-
-
-def _explore_ctx(
-    *,
-    deck_name: str,
-    q,
-    user_answer: str,
-    correct: bool,
-    expected: str,
-    idk: bool = False,
-) -> dict:
-    """Build the "Explore further" template context for a trivia
-    card's post-answer state: AI-chat handoff URLs (Claude/ChatGPT)
-    plus a Google search link (target=_blank → native browser on
-    iOS PWA, escapes the in-app webview).
-
-    `idk=True` flags the prefilled chat message so the AI knows the
-    user skipped (vs. an empty user_answer that came from a real
-    answer like "")."""
-    msg = chat_handoff.build_message(
-        deck_name=deck_name,
-        q={"type": "short", "prompt": q.prompt, "answer": q.answer},
-        user_answer=user_answer,
-        verdict={"result": "right" if correct else "wrong"},
-        idk=idk,
-    )
-    return {
-        "handoff_urls": chat_handoff.provider_urls(msg),
-        "handoff_providers": chat_handoff.CHAT_PROVIDERS,
-        "handoff_default_provider": chat_handoff.DEFAULT_PROVIDER,
-        "google_search_url": chat_handoff.google_search_url(q.prompt),
-    }
-
 
 router = APIRouter()
 
@@ -215,37 +161,6 @@ async def trivia_generating_reject(wid: str, user: dict = Depends(current_user))
 # list empties, the summary view renders.
 
 
-def _parse_card_ids(raw: str | None) -> list[int]:
-    if not raw:
-        return []
-    out: list[int] = []
-    for chunk in raw.split(","):
-        chunk = chunk.strip()
-        if chunk.isdigit():
-            out.append(int(chunk))
-    return out
-
-
-def _parse_done(raw: str | None) -> list[tuple[int, str]]:
-    """`done` query param format: `<qid><r|w>,<qid><r|w>,...` e.g.
-    `42r,17w,99r`. Carries per-card verdicts forward through the URL
-    chain so the end-of-session summary can render the user's run
-    without server-side session state. Malformed chunks are dropped
-    (defensive against hand-edited URLs)."""
-    if not raw:
-        return []
-    out: list[tuple[int, str]] = []
-    for chunk in raw.split(","):
-        chunk = chunk.strip()
-        if len(chunk) >= 2 and chunk[-1] in ("r", "w") and chunk[:-1].isdigit():
-            out.append((int(chunk[:-1]), chunk[-1]))
-    return out
-
-
-def _format_done(items: list[tuple[int, str]]) -> str:
-    return ",".join(f"{qid}{verdict}" for qid, verdict in items)
-
-
 @router.get("/trivia/session/{deck_name}", response_class=HTMLResponse)
 def trivia_session(
     deck_name: str,
@@ -280,8 +195,8 @@ def trivia_session(
         ids = ",".join(str(c.question_id) for c in session)
         return responses.redirect(request, f"/trivia/session/{deck_name}?cards={ids}")
 
-    queue = _parse_card_ids(cards)
-    done_items = _parse_done(done)
+    queue = parse_card_ids(cards)
+    done_items = parse_done(done)
     if not queue:
         # Render summary: hydrate each done entry with its question
         # text + correct answer + explanation for the tap-to-expand
@@ -364,8 +279,8 @@ def trivia_session_answer(
     if deck_id is None:
         raise HTTPException(404, "deck not found")
 
-    queue = _parse_card_ids(cards)
-    done_items = _parse_done(done)
+    queue = parse_card_ids(cards)
+    done_items = parse_done(done)
     if not queue:
         done_qs = f"&done={done}" if done else ""
         return responses.redirect(request, f"/trivia/session/{deck_name}?cards={done_qs}")
@@ -386,13 +301,13 @@ def trivia_session_answer(
         verdict: dict = {"correct": False, "feedback": None}
         given = ""
     else:
-        verdict = _grade(q, answer)
+        verdict = grade_with_fallback(q, answer)
         correct = verdict["correct"]
         given = answer
 
     trivia.mark_answered(head, correct=correct)
 
-    new_done_str = _format_done(done_items + [(head, "r" if correct else "w")])
+    new_done_str = format_done(done_items + [(head, "r" if correct else "w")])
     remaining = ",".join(str(i) for i in queue[1:])
     # Position counter on the result view stays on the card the user
     # just answered — counter rolls UP across the session
@@ -416,7 +331,7 @@ def trivia_session_answer(
             "session_total": total,
             "session_remaining": remaining,
             "session_done": new_done_str,
-            **_explore_ctx(
+            **build_explore_ctx(
                 deck_name=deck_name,
                 q=q,
                 user_answer=given,
@@ -471,7 +386,7 @@ def trivia_answer(
     if q is None:
         raise HTTPException(404, "question not found")
 
-    verdict = _grade(q, answer)
+    verdict = grade_with_fallback(q, answer)
     correct = verdict["correct"]
     trivia.mark_answered(question_id, correct=correct)
     deck_name = decks.find_name(user["tailscale_login"], q.deck_id)
@@ -487,7 +402,7 @@ def trivia_answer(
                 "expected": q.answer,
                 "feedback": verdict.get("feedback"),
             },
-            **_explore_ctx(
+            **build_explore_ctx(
                 deck_name=deck_name or "",
                 q=q,
                 user_answer=answer,
@@ -496,16 +411,6 @@ def trivia_answer(
             ),
         },
     )
-
-
-def _flip_done_verdict(done_items: list[tuple[int, str]], qid: int, correct: bool) -> str:
-    """Mutate the carry-forward done chain so the regraded card's
-    verdict reflects the new outcome. Called from the session regrade
-    route so the next-card link + summary view see the corrected
-    verdict."""
-    new_verdict = "r" if correct else "w"
-    out = [(q, new_verdict if q == qid else v) for q, v in done_items]
-    return _format_done(out)
 
 
 @router.post("/trivia/{question_id}/regrade", response_class=HTMLResponse)
@@ -546,7 +451,7 @@ def trivia_regrade(
                 "feedback": verdict.get("feedback"),
                 "regraded": True,
             },
-            **_explore_ctx(
+            **build_explore_ctx(
                 deck_name=deck_name or "",
                 q=q,
                 user_answer=answer,
@@ -587,10 +492,10 @@ def trivia_session_regrade(
     correct = verdict["correct"]
     trivia.set_last_correctness(question_id, correct=correct)
 
-    done_items = _parse_done(done)
-    new_done_str = _flip_done_verdict(done_items, question_id, correct)
+    done_items = parse_done(done)
+    new_done_str = flip_done_verdict(done_items, question_id, correct)
     # Position counter on the result view stays on the just-graded card.
-    queue = _parse_card_ids(cards)
+    queue = parse_card_ids(cards)
     position = max(1, len(done_items))
     total = len(done_items) + len(queue)
 
@@ -611,7 +516,7 @@ def trivia_session_regrade(
             "session_total": total,
             "session_remaining": cards,
             "session_done": new_done_str,
-            **_explore_ctx(
+            **build_explore_ctx(
                 deck_name=deck_name,
                 q=q,
                 user_answer=answer,
