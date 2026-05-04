@@ -358,7 +358,15 @@
 {% else %}
   <section class="empty-state">
     <p class="empty-headline"><em>No cards yet.</em></p>
-    <p class="empty-sub">{% if agent_available %}Use the box above to describe the first batch you'd like, or add a card by hand.{% else %}Add a question by hand to get started.{% endif %}</p>
+    <p class="empty-sub">
+      {% if deck_type == 'trivia' %}
+        Cards arrive on the next scheduler tick — claude generates a fresh batch from the deck's topic prompt.
+      {% elif agent_available %}
+        Use the box above to describe the first batch you'd like, or add a card by hand.
+      {% else %}
+        Add a question by hand to get started.
+      {% endif %}
+    </p>
   </section>
 {% endif %}
 
