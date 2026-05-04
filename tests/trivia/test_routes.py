@@ -568,8 +568,12 @@ def test_regrade_flips_wrong_to_right_on_claude_disagree(
     # Stub claude to return "right" with feedback.
     monkeypatch.setattr(
         svc,
-        "claude_grade",
-        lambda **_: {"correct": True, "feedback": "Yes, that's the canonical term."},
+        "claude_regrade",
+        lambda **_: {
+            "correct": True,
+            "feedback": "Yes, that's the canonical term.",
+            "regex_update": None,
+        },
     )
     r = client.post(
         f"/trivia/{qid}/regrade",
@@ -597,7 +601,13 @@ def test_regrade_keeps_wrong_when_claude_agrees(
     _, qid = _seed_trivia_question(initialized_db, prompt="ACID property?", answer="durability")
     TriviaQueueRepo().mark_answered(qid, correct=False)
     monkeypatch.setattr(
-        svc, "claude_grade", lambda **_: {"correct": False, "feedback": "Not the same concept."}
+        svc,
+        "claude_regrade",
+        lambda **_: {
+            "correct": False,
+            "feedback": "Not the same concept.",
+            "regex_update": None,
+        },
     )
     r = client.post(f"/trivia/{qid}/regrade", data={"answer": "throughput"})
     assert r.status_code == 200
@@ -616,7 +626,11 @@ def test_regrade_does_not_re_rotate_card(monkeypatch, client: TestClient, initia
         before = c.execute(
             "SELECT queue_position FROM trivia_queue WHERE question_id = ?", (qid,)
         ).fetchone()["queue_position"]
-    monkeypatch.setattr(svc, "claude_grade", lambda **_: {"correct": True, "feedback": ""})
+    monkeypatch.setattr(
+        svc,
+        "claude_regrade",
+        lambda **_: {"correct": True, "feedback": "", "regex_update": None},
+    )
     client.post(f"/trivia/{qid}/regrade", data={"answer": "paris"})
     with cursor() as c:
         after = c.execute(
@@ -634,7 +648,11 @@ def test_session_regrade_flips_done_chain_verdict(
     _, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
     # Pretend user answered Q0 wrong, is on the result panel for Q0.
     TriviaQueueRepo().mark_answered(qids[0], correct=False)
-    monkeypatch.setattr(svc, "claude_grade", lambda **_: {"correct": True, "feedback": ""})
+    monkeypatch.setattr(
+        svc,
+        "claude_regrade",
+        lambda **_: {"correct": True, "feedback": "", "regex_update": None},
+    )
     cards_remaining = ",".join(str(q) for q in qids[1:])
     done_before = f"{qids[0]}w"
     r = client.post(
@@ -651,6 +669,114 @@ def test_session_regrade_flips_done_chain_verdict(
     # Next-card link now carries the FLIPPED verdict for qids[0].
     assert f"done={qids[0]}r" in r.text
     assert "re-graded by claude" in r.text
+
+
+def test_answer_uses_stored_regex_for_short(monkeypatch, client: TestClient, initialized_db: str):
+    """SHORT-trivia grade path tries the stored regex first. With a
+    regex that accepts both "write-ahead log" and "wal", a user typing
+    "wal" grades right WITHOUT calling claude."""
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "db")
+    qid = QuestionRepo().add(
+        user,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            topic="db",
+            prompt="What ensures durability after a crash?",
+            answer="write-ahead log",
+            answer_regex="(write[- ]?ahead log|wal)",
+        ),
+    )
+    TriviaQueueRepo().append_card(qid, deck_id)
+
+    called = []
+    monkeypatch.setattr(svc, "claude_grade", lambda **kw: called.append(kw) or {"correct": False})
+
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "wal"})
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    assert called == []  # regex matched, claude was never invoked
+
+
+def test_regrade_persists_regex_update_when_claude_proposes_one(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Re-grade with a legitimate alternative form: claude proposes a
+    regex_update, route persists it via QuestionRepo.set_answer_regex,
+    badge appears in the rendered panel."""
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "db")
+    qid = QuestionRepo().add(
+        user,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            topic="db",
+            prompt="What ensures durability after a crash?",
+            answer="write-ahead log",
+            answer_regex="write[- ]?ahead log",
+        ),
+    )
+    TriviaQueueRepo().append_card(qid, deck_id)
+    TriviaQueueRepo().mark_answered(qid, correct=False)
+
+    monkeypatch.setattr(
+        svc,
+        "claude_regrade",
+        lambda **_: {
+            "correct": True,
+            "feedback": "WAL is the standard abbreviation.",
+            "regex_update": "(write[- ]?ahead log|wal)",
+        },
+    )
+    r = client.post(f"/trivia/{qid}/regrade", data={"answer": "wal"})
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    assert "accepted answers expanded" in r.text
+    # Persisted to the question row.
+    q = QuestionRepo().get(user, qid)
+    assert q.answer_regex == "(write[- ]?ahead log|wal)"
+
+
+def test_regrade_does_not_persist_regex_update_for_typo(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """When claude returns regex_update=None (typo case), the stored
+    regex must remain unchanged AND the 'accepted answers expanded'
+    badge must NOT show."""
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "db")
+    original_regex = "write[- ]?ahead log"
+    qid = QuestionRepo().add(
+        user,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            topic="db",
+            prompt="What ensures durability after a crash?",
+            answer="write-ahead log",
+            answer_regex=original_regex,
+        ),
+    )
+    TriviaQueueRepo().append_card(qid, deck_id)
+    TriviaQueueRepo().mark_answered(qid, correct=False)
+
+    monkeypatch.setattr(
+        svc,
+        "claude_regrade",
+        lambda **_: {
+            "correct": True,
+            "feedback": "Forgiving the typo.",
+            "regex_update": None,
+        },
+    )
+    r = client.post(f"/trivia/{qid}/regrade", data={"answer": "right-ahead log"})
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    assert "accepted answers expanded" not in r.text
+    q = QuestionRepo().get(user, qid)
+    assert q.answer_regex == original_regex
 
 
 def test_set_interval_404_for_other_users_deck(client: TestClient, initialized_db: str):

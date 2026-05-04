@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from prep import chat_handoff
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import QuestionRepo
+from prep.domain import grading
 from prep.trivia.agent_client import AgentUnavailable, run_prompt
 from prep.trivia.repo import TriviaQueueRepo
 
@@ -46,8 +47,8 @@ class GenerateOutcome:
 _GEN_PROMPT_TEMPLATE = """\
 You are generating short-answer trivia questions for a notification-driven
 flashcard app. Each card has a Q (the prompt), an A (the short answer),
-and an E (a deeper explanation that gets revealed when the user taps to
-expand "Deep dive").
+an E (a deeper explanation that gets revealed when the user taps to
+expand "Deep dive"), and an R (a regex that grades user answers).
 
 Generate exactly %(batch_size)d questions on the topic:
 
@@ -65,10 +66,27 @@ Constraints:
 
 %(existing)s
 
+REGEX GUIDANCE (the `r` field):
+- The regex grades the user's typed answer. Applied with re.IGNORECASE
+  and re.fullmatch — the whole user input must match.
+- The regex MUST match the canonical answer `a` exactly (case-insensitive).
+  After generating, mentally check: does re.fullmatch(r, a) succeed?
+- Accept obvious legitimate alternative forms a user might type:
+  abbreviations, common synonyms, equivalent number formats, etc.
+  Examples:
+    a: "write-ahead log"     r: "(write[- ]?ahead log|wal)"
+    a: "31.5 million"        r: "(31\\.5 ?(million|m|mil)|thirty[- ]one(?: and a half| point five)? million)"
+    a: "Isaac Newton"        r: "(isaac )?newton"
+- Don't try to anticipate typos — the grader has a separate path for
+  paraphrase / typo-tolerant matching. The regex is for SEMANTIC
+  alternatives, not orthographic ones.
+- Keep regexes reasonably short (under 200 chars). If you can't write
+  a good regex, return null for `r` — the grader has fallbacks.
+
 Return ONLY valid JSON, no prose, no code fences. Format:
 
 [
-  {"q": "Question text?", "a": "Short answer", "e": "2-4 sentence explanation."},
+  {"q": "Question text?", "a": "Short answer", "e": "2-4 sentence explanation.", "r": "regex|alternatives"},
   ...
 ]
 """
@@ -147,6 +165,11 @@ def generate_batch(
         # Explanation is optional — if claude omits it the card still
         # works, the Deep dive section just stays hidden.
         e = (raw.get("e") or "").strip() or None
+        # Regex is optional + validated. If claude returned something
+        # that doesn't compile or doesn't match the canonical answer,
+        # store None — the grader falls through to its legacy path.
+        r_raw = raw.get("r")
+        r = grading.validate_regex_update(r_raw, expected_literal=a) if r_raw else None
         if not q or not a:
             skipped_invalid += 1
             continue
@@ -163,6 +186,7 @@ def generate_batch(
                 prompt=q,
                 answer=a,
                 explanation=e,
+                answer_regex=r,
             ),
         )
         trivia_repo.append_card(qid, deck_id)
@@ -273,6 +297,74 @@ Respond with ONLY a JSON object, no prose, no fences:
 """
 
 
+_CLAUDE_REGRADE_PROMPT = """\
+You are RE-GRADING a single short-answer trivia question. The user
+disputed an earlier wrong verdict. Decide whether they're actually
+right, AND whether the regex used to grade this card should evolve
+to accept their answer next time.
+
+Question:
+%(prompt)s
+
+Expected answer (what we're looking for):
+%(expected)s
+
+Current grading regex (or null):
+%(current_regex)s
+
+User's answer:
+%(given)s
+
+VERDICT:
+A correct answer conveys the same fact as the expected answer. Minor
+variations in phrasing, casing, or word order are fine. Mark wrong
+if the user's answer contradicts, is too vague, or is unrelated.
+
+REGEX UPDATE (only when verdict=right):
+Decide whether the user typed a LEGITIMATE ALTERNATIVE FORM of the
+expected answer that the regex should accept going forward — for
+example a synonym, abbreviation, equivalent number format, or
+common alias. Examples:
+  expected "write-ahead log"   given "wal"            → update regex
+  expected "31.5 million"      given "31.5m"          → update regex
+  expected "Isaac Newton"      given "Sir Newton"     → update regex
+
+Do NOT propose a regex update for orthographic typos or spelling
+errors — those are forgiven by the grader but should not pollute
+the regex. Examples:
+  expected "write-ahead log"   given "right-ahead log"   → NO update (typo)
+  expected "Crash recovery"    given "crsh recovry"      → NO update (typo)
+
+When proposing a regex_update:
+- It must compile under Python's `re` with re.IGNORECASE.
+- It must match BOTH the expected answer AND the user's answer
+  (case-insensitive fullmatch).
+- Keep it under 200 chars.
+- Prefer extending the existing regex with an alternation rather
+  than rewriting from scratch (so prior accepted forms still match).
+
+If verdict=wrong, regex_update MUST be null.
+If verdict=right but the user's form is a typo (or already accepted
+by the current regex), regex_update MUST be null.
+
+Respond with ONLY a JSON object, no prose, no fences:
+
+{"verdict": "right"|"wrong", "feedback": "1-2 sentences explaining why", "regex_update": "regex|alternatives" or null}
+"""
+
+
+def _parse_grade_json(out: str) -> dict:
+    """Strip code fences / leading prose, return parsed JSON object.
+    Raises ValueError if no JSON object can be extracted."""
+    text = out.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```\s*$", "", text)
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < 0 or end < start:
+        raise ValueError("no JSON object")
+    return json.loads(text[start : end + 1])
+
+
 def claude_grade(*, prompt: str, expected: str, given: str) -> dict:
     """Synchronous claude-graded verdict. Returns
     `{"correct": bool, "feedback": str}`. Falls back to a deterministic
@@ -295,14 +387,7 @@ def claude_grade(*, prompt: str, expected: str, given: str) -> dict:
             "feedback": "(graded by string similarity — claude was unreachable)",
         }
     try:
-        text = out.strip()
-        # Tolerant of code fences / leading prose, like the batch parser.
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"\s*```\s*$", "", text)
-        start, end = text.find("{"), text.rfind("}")
-        if start < 0 or end < 0 or end < start:
-            raise ValueError("no JSON object")
-        parsed = json.loads(text[start : end + 1])
+        parsed = _parse_grade_json(out)
         verdict = (parsed.get("verdict") or "").strip().lower()
         feedback = (parsed.get("feedback") or "").strip()
         return {"correct": verdict == "right", "feedback": feedback}
@@ -311,6 +396,58 @@ def claude_grade(*, prompt: str, expected: str, given: str) -> dict:
         return {
             "correct": grade_answer(expected=expected, given=given),
             "feedback": "(graded by string similarity — claude returned malformed JSON)",
+        }
+
+
+def claude_regrade(*, prompt: str, expected: str, given: str, current_regex: str | None) -> dict:
+    """Re-grade entry point. Returns
+    `{"correct": bool, "feedback": str, "regex_update": str | None}`.
+
+    Same shape as claude_grade plus an optional `regex_update` —
+    a validated, persistable regex that the route should write to
+    the question. None when the verdict is wrong, when the user's
+    form is a typo, or when claude's proposed regex didn't pass
+    validation (compile / matches-both check).
+
+    Falls back to deterministic match on agent error; regex_update
+    is always None on the fallback path.
+    """
+    if not given.strip():
+        return {"correct": False, "feedback": "No answer given.", "regex_update": None}
+    prompt_text = _CLAUDE_REGRADE_PROMPT % {
+        "prompt": prompt.strip(),
+        "expected": expected.strip(),
+        "given": given.strip(),
+        "current_regex": current_regex or "null",
+    }
+    try:
+        out = run_prompt(prompt_text, timeout_s=30.0)
+    except AgentUnavailable as e:
+        logger.warning("claude_regrade: agent unavailable: %s", e)
+        return {
+            "correct": grade_answer(expected=expected, given=given),
+            "feedback": "(graded by string similarity — claude was unreachable)",
+            "regex_update": None,
+        }
+    try:
+        parsed = _parse_grade_json(out)
+        verdict = (parsed.get("verdict") or "").strip().lower()
+        feedback = (parsed.get("feedback") or "").strip()
+        correct = verdict == "right"
+        regex_update = None
+        if correct:
+            proposed = parsed.get("regex_update")
+            if isinstance(proposed, str) and proposed.strip():
+                regex_update = grading.validate_regex_update(
+                    proposed, expected_literal=expected, prior_given=given
+                )
+        return {"correct": correct, "feedback": feedback, "regex_update": regex_update}
+    except (ValueError, json.JSONDecodeError, KeyError) as e:
+        logger.warning("claude_regrade: bad JSON: %s", e)
+        return {
+            "correct": grade_answer(expected=expected, given=given),
+            "feedback": "(graded by string similarity — claude returned malformed JSON)",
+            "regex_update": None,
         }
 
 
@@ -349,16 +486,27 @@ def grade_answer(*, expected: str, given: str) -> bool:
 
 
 def grade_with_fallback(q, user_answer: str) -> dict:
-    """Dispatch to deterministic vs claude grading per the heuristic in
-    classify_grading. Returns `{"correct": bool, "feedback": str | None}`.
+    """Dispatch through three layers, fastest first:
 
-    Tie-breaker: when the heuristic picks deterministic AND the
-    deterministic grader says WRONG, but the user wrote a substantive
-    answer (longer or otherwise different from the expected), escalate
-    to claude. Catches paraphrase-correct answers — e.g. expected
-    "Key redistribution" + user "it prevents a cascade of reshuffling
-    work between servers" — where token-subset matching falsely
-    rejects but the meaning is right."""
+    1. **Stored regex** — if `q.answer_regex` is set and matches
+       (case-insensitive fullmatch), instant correct verdict. Claude
+       generated this regex when the card was created and it evolves
+       through re-grades to accept legitimate alternative forms.
+    2. **Deterministic string** — case/punctuation/token-subset
+       compare via `grade_answer`. Cheap; covers cases where the
+       regex is missing or doesn't match but the user typed the
+       canonical answer.
+    3. **Claude** — when classify_grading says the answer is too
+       complex for deterministic grading, OR when deterministic
+       says wrong but the answer looks substantive enough to be a
+       paraphrase.
+
+    Returns `{"correct": bool, "feedback": str | None}`.
+    """
+    regex_verdict = grading.match_regex(q.answer_regex, user_answer)
+    if regex_verdict is True:
+        return {"correct": True, "feedback": None}
+
     mode = classify_grading(q.answer)
     if mode == "claude":
         return claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)

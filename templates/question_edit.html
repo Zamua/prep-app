@@ -60,6 +60,15 @@
     </label>
 
     <label class="freetext">
+      <span class="freetext-label">Answer regex <small>(short trivia only — optional)</small></span>
+      <input type="text" name="answer_regex" maxlength="500"
+             value="{{ form.answer_regex or '' }}"
+             spellcheck="false" autocomplete="off"
+             style="font-family: var(--mono);">
+      <span class="freetext-hint">Case-insensitive regex used as the first grading pass. Auto-evolved by claude on re-grade. Leave blank to fall back to the deterministic + claude grader.</span>
+    </label>
+
+    <label class="freetext">
       <span class="freetext-label">Language <small>(code only)</small></span>
       <select name="language">
         <option value="">—</option>

@@ -142,6 +142,13 @@ class Question(BaseModel):
     # card view. NULL for srs questions and for trivia rows created
     # before the explanation column was added.
     explanation: str | None = None
+    # Optional regex pattern the SHORT grader matches against before
+    # falling through to the claude-graded path. claude generates an
+    # initial regex with each card; re-grades may evolve it when the
+    # user types a legitimate alternative form (synonym / abbr /
+    # equivalent expression). Applied with re.IGNORECASE at match
+    # time. NULL = no regex; grader falls through.
+    answer_regex: str | None = None
 
 
 class DeckCard(BaseModel):
@@ -166,6 +173,8 @@ class DeckCard(BaseModel):
     suspended: bool = False
     skeleton: str | None = None
     language: str | None = None
+    # See Question.answer_regex.
+    answer_regex: str | None = None
     # SRS state. next_due is nullable because trivia-deck questions
     # have no `cards` row — the LEFT JOIN comes back NULL for them.
     step: int = 0
@@ -196,3 +205,5 @@ class NewQuestion(BaseModel):
     skeleton: str | None = None
     language: str | None = None
     explanation: str | None = None
+    # See Question.answer_regex.
+    answer_regex: str | None = None

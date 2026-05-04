@@ -463,9 +463,19 @@ def trivia_regrade(
     if q is None:
         raise HTTPException(404, "question not found")
 
-    verdict = trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=answer)
+    verdict = trivia_service.claude_regrade(
+        prompt=q.prompt,
+        expected=q.answer,
+        given=answer,
+        current_regex=q.answer_regex,
+    )
     correct = verdict["correct"]
     trivia.set_last_correctness(question_id, correct=correct)
+    regex_updated = False
+    if verdict.get("regex_update"):
+        regex_updated = questions.set_answer_regex(
+            user["tailscale_login"], question_id, verdict["regex_update"]
+        )
 
     deck_name = decks.find_name(user["tailscale_login"], q.deck_id)
     return templates.TemplateResponse(
@@ -480,6 +490,7 @@ def trivia_regrade(
                 "expected": q.answer,
                 "feedback": verdict.get("feedback"),
                 "regraded": True,
+                "regex_updated": regex_updated,
             },
             **build_explore_ctx(
                 deck_name=deck_name or "",
@@ -518,9 +529,17 @@ def trivia_session_regrade(
     if q is None or q.deck_id != deck_id:
         raise HTTPException(404, "question not found in this deck")
 
-    verdict = trivia_service.claude_grade(prompt=q.prompt, expected=q.answer, given=answer)
+    verdict = trivia_service.claude_regrade(
+        prompt=q.prompt,
+        expected=q.answer,
+        given=answer,
+        current_regex=q.answer_regex,
+    )
     correct = verdict["correct"]
     trivia.set_last_correctness(question_id, correct=correct)
+    regex_updated = False
+    if verdict.get("regex_update"):
+        regex_updated = questions.set_answer_regex(uid, question_id, verdict["regex_update"])
 
     done_items = parse_done(done)
     new_done_str = flip_done_verdict(done_items, question_id, correct)
@@ -541,6 +560,7 @@ def trivia_session_regrade(
                 "expected": q.answer,
                 "feedback": verdict.get("feedback"),
                 "regraded": True,
+                "regex_updated": regex_updated,
             },
             "session_position": position,
             "session_total": total,

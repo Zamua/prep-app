@@ -167,6 +167,7 @@ def test_question_round_trips_dict_for_repo():
         "skeleton": None,
         "language": None,
         "explanation": None,
+        "answer_regex": None,
     }
     q = Question.model_validate(raw)
     out = q.model_dump()

@@ -97,6 +97,7 @@ def _parse_question_form(form: FormData) -> tuple[NewQuestion | None, dict, str 
     skeleton = (form.get("skeleton") or "").strip() or None
     language = (form.get("language") or "").strip() or None
     rubric = (form.get("rubric") or "").strip() or None
+    answer_regex = (form.get("answer_regex") or "").strip() or None
     choices_raw = (form.get("choices") or "").strip()
     choices = [ln.strip() for ln in choices_raw.splitlines() if ln.strip()] or None
 
@@ -108,6 +109,7 @@ def _parse_question_form(form: FormData) -> tuple[NewQuestion | None, dict, str 
         "skeleton": skeleton or "",
         "language": language or "",
         "rubric": rubric or "",
+        "answer_regex": answer_regex or "",
         "choices": choices_raw,
     }
 
@@ -148,6 +150,7 @@ def _parse_question_form(form: FormData) -> tuple[NewQuestion | None, dict, str 
             rubric=rubric,
             skeleton=skeleton,
             language=language,
+            answer_regex=answer_regex,
         ),
         raw,
         None,
@@ -175,6 +178,7 @@ def _question_form_from_entity(q) -> dict:
         "rubric": q.rubric or "",
         "skeleton": q.skeleton or "",
         "language": q.language or "",
+        "answer_regex": q.answer_regex or "",
     }
 
 

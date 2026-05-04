@@ -2,6 +2,9 @@
 
 mcq + multi + idk paths only — free-text grading goes through
 Temporal and isn't part of this module.
+
+Plus the regex helpers used by the SHORT-trivia two-phase grader
+(`match_regex` and `validate_regex_update`).
 """
 
 from __future__ import annotations
@@ -10,7 +13,7 @@ import json
 
 import pytest
 
-from prep.domain.grading import grade
+from prep.domain.grading import grade, match_regex, validate_regex_update
 
 
 def _mcq(answer: str) -> dict:
@@ -128,3 +131,71 @@ def test_free_text_types_raise_value_error(qtype: str):
     helper with one of those types is a programming error."""
     with pytest.raises(ValueError, match="Temporal worker"):
         grade({"type": qtype, "answer": "ignored"}, "ignored")
+
+
+# ---- match_regex --------------------------------------------------------
+
+
+def test_match_regex_returns_none_on_missing_pattern():
+    assert match_regex(None, "anything") is None
+    assert match_regex("", "anything") is None
+
+
+def test_match_regex_returns_none_on_uncompilable_pattern():
+    """An uncompilable pattern is treated as missing — caller falls
+    back to the next grader rather than blowing up."""
+    assert match_regex("(unclosed", "anything") is None
+
+
+def test_match_regex_case_insensitive_fullmatch():
+    pattern = "(write[- ]?ahead log|wal)"
+    assert match_regex(pattern, "Write-Ahead Log") is True
+    assert match_regex(pattern, "WAL") is True
+    assert match_regex(pattern, "write ahead log") is True
+    # fullmatch — partial matches do not count.
+    assert match_regex(pattern, "wal cache") is False
+    assert match_regex(pattern, "log") is False
+
+
+def test_match_regex_strips_input_whitespace():
+    assert match_regex("paris", "  paris  ") is True
+
+
+# ---- validate_regex_update ---------------------------------------------
+
+
+def test_validate_regex_update_accepts_when_matches_both():
+    pattern = "(write[- ]?ahead log|wal)"
+    out = validate_regex_update(pattern, expected_literal="write-ahead log", prior_given="wal")
+    assert out == pattern
+
+
+def test_validate_regex_update_rejects_when_misses_literal():
+    """A proposed regex that does not accept the canonical answer
+    would silently break grading next time — reject."""
+    out = validate_regex_update("(wal|wahl)", expected_literal="write-ahead log", prior_given="wal")
+    assert out is None
+
+
+def test_validate_regex_update_rejects_when_misses_user_form():
+    """Regression sanity: the new regex must accept the form the user
+    just typed, otherwise the round-trip would re-fail next time."""
+    out = validate_regex_update(
+        "(write[- ]?ahead log)",
+        expected_literal="write-ahead log",
+        prior_given="wal",
+    )
+    assert out is None
+
+
+def test_validate_regex_update_rejects_uncompilable():
+    out = validate_regex_update(
+        "(unclosed", expected_literal="durability", prior_given="durability"
+    )
+    assert out is None
+
+
+def test_validate_regex_update_rejects_overly_long():
+    huge = "a" * 600
+    out = validate_regex_update(huge, expected_literal="a" * 600, prior_given="a" * 600)
+    assert out is None

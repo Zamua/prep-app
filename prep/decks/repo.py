@@ -339,8 +339,8 @@ class QuestionRepo:
             cur = c.execute(
                 """
                 INSERT INTO questions
-                    (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language, explanation)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language, explanation, answer_regex)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_id,
@@ -355,6 +355,7 @@ class QuestionRepo:
                     new.skeleton if (new.skeleton and new.type.value == "code") else None,
                     new.language if new.type.value == "code" else None,
                     new.explanation,
+                    new.answer_regex,
                 ),
             )
             qid = cur.lastrowid
@@ -383,7 +384,8 @@ class QuestionRepo:
                           answer = ?,
                           rubric = ?,
                           skeleton = ?,
-                          language = ?
+                          language = ?,
+                          answer_regex = ?
                     WHERE id = ? AND user_id = ?""",
                 (
                     new.type.value,
@@ -394,12 +396,24 @@ class QuestionRepo:
                     rubric,
                     new.skeleton if (new.skeleton and new.type.value == "code") else None,
                     new.language if new.type.value == "code" else None,
+                    new.answer_regex,
                     qid,
                     user_id,
                 ),
             )
             if cur.rowcount == 0:
                 raise ValueError(f"question {qid} not found for user")
+
+    def set_answer_regex(self, user_id: str, qid: int, regex: str | None) -> bool:
+        """Update only the answer_regex column. Used by the re-grade
+        flow when claude proposes an evolved regex. user_id is the
+        IDOR guard. Returns True if a row was updated."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE questions SET answer_regex = ? WHERE id = ? AND user_id = ?",
+                (regex, qid, user_id),
+            )
+            return cur.rowcount > 0
 
     def get(self, user_id: str, qid: int) -> Question | None:
         """Fetch a question, scoped to the user's own questions only.
@@ -427,6 +441,7 @@ class QuestionRepo:
                 """
                 SELECT q.id, q.type, q.topic, q.prompt, q.suspended,
                        q.answer, q.choices, q.rubric, q.skeleton, q.language,
+                       q.answer_regex,
                        cards.step, cards.next_due, cards.last_review,
                        (SELECT COUNT(*) FROM reviews r WHERE r.question_id=q.id) AS attempts,
                        (SELECT COUNT(*) FROM reviews r
@@ -489,6 +504,7 @@ def _row_to_question(row: dict) -> Question:
         skeleton=row.get("skeleton"),
         language=row.get("language"),
         explanation=row.get("explanation"),
+        answer_regex=row.get("answer_regex"),
     )
 
 
@@ -523,6 +539,7 @@ def _row_to_deck_card(row: dict) -> DeckCard:
         suspended=bool(row.get("suspended", 0)),
         skeleton=row.get("skeleton"),
         language=row.get("language"),
+        answer_regex=row.get("answer_regex"),
         step=row.get("step") or 0,
         next_due=row["next_due"],
         last_review=row.get("last_review"),
