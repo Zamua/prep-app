@@ -699,6 +699,84 @@ def test_answer_uses_stored_regex_for_short(monkeypatch, client: TestClient, ini
     assert called == []  # regex matched, claude was never invoked
 
 
+def test_initial_answer_persists_regex_update_when_claude_proposes_one(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Initial answer (not a re-grade): claude takes the grading
+    path AND proposes a regex update for a legitimate alternative
+    form. Route persists it via QuestionRepo.set_answer_regex and
+    surfaces the badge in the result panel."""
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "db")
+    qid = QuestionRepo().add(
+        user,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            topic="db",
+            prompt="What ensures durability after a crash?",
+            answer="write-ahead log",
+            answer_regex="write[- ]?ahead log",  # narrower than ideal
+        ),
+    )
+    TriviaQueueRepo().append_card(qid, deck_id)
+    monkeypatch.setattr(
+        svc,
+        "claude_grade",
+        lambda **_: {
+            "correct": True,
+            "feedback": "WAL is a standard abbreviation.",
+            "regex_update": "(write[- ]?ahead log|wal)",
+        },
+    )
+    # Force the claude path: short answer + answer length 2 makes
+    # paraphrase-heuristic kick in once deterministic says wrong.
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "wal"})
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    assert "claude expanded the accepted-answer regex" in r.text
+    q = QuestionRepo().get(user, qid)
+    assert q.answer_regex == "(write[- ]?ahead log|wal)"
+
+
+def test_initial_answer_does_not_persist_regex_update_for_typo(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Initial answer where claude grades right but recognizes the
+    user's form as a typo (regex_update is None): the badge does NOT
+    appear and the stored regex is unchanged."""
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "db")
+    original_regex = "write[- ]?ahead log"
+    qid = QuestionRepo().add(
+        user,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            topic="db",
+            prompt="What ensures durability after a crash?",
+            answer="write-ahead log",
+            answer_regex=original_regex,
+        ),
+    )
+    TriviaQueueRepo().append_card(qid, deck_id)
+    monkeypatch.setattr(
+        svc,
+        "claude_grade",
+        lambda **_: {
+            "correct": True,
+            "feedback": "Forgiving the typo.",
+            "regex_update": None,
+        },
+    )
+    r = client.post(f"/trivia/{qid}/answer", data={"answer": "right-ahead log"})
+    assert r.status_code == 200
+    assert "trivia-result-right" in r.text
+    assert "expanded the accepted-answer regex" not in r.text
+    q = QuestionRepo().get(user, qid)
+    assert q.answer_regex == original_regex
+
+
 def test_regrade_persists_regex_update_when_claude_proposes_one(
     monkeypatch, client: TestClient, initialized_db: str
 ):

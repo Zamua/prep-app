@@ -273,35 +273,9 @@ def classify_grading(expected: str) -> str:
 
 
 _CLAUDE_GRADE_PROMPT = """\
-You are grading a single short-answer trivia question.
-
-Question:
-%(prompt)s
-
-Expected answer (what we're looking for):
-%(expected)s
-
-User's answer:
-%(given)s
-
-Decide whether the user got it right. A correct answer must convey
-the same fact as the expected answer. Minor variations in phrasing,
-casing, or word order are fine. Mark wrong if the user's answer:
-- contradicts the expected answer
-- is too vague or omits the key fact
-- is unrelated
-
-Respond with ONLY a JSON object, no prose, no fences:
-
-{"verdict": "right"|"wrong", "feedback": "1-2 sentences explaining why"}
-"""
-
-
-_CLAUDE_REGRADE_PROMPT = """\
-You are RE-GRADING a single short-answer trivia question. The user
-disputed an earlier wrong verdict. Decide whether they're actually
-right, AND whether the regex used to grade this card should evolve
-to accept their answer next time.
+You are grading a single short-answer trivia question. As part of
+the verdict, you also decide whether the regex used to grade this
+card should evolve to accept the user's answer next time.
 
 Question:
 %(prompt)s
@@ -365,56 +339,25 @@ def _parse_grade_json(out: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
-def claude_grade(*, prompt: str, expected: str, given: str) -> dict:
+def claude_grade(
+    *, prompt: str, expected: str, given: str, current_regex: str | None = None
+) -> dict:
     """Synchronous claude-graded verdict. Returns
-    `{"correct": bool, "feedback": str}`. Falls back to a deterministic
-    grade on any agent error so the user is never blocked by a flaky
-    claude call.
-    """
-    if not given.strip():
-        return {"correct": False, "feedback": "No answer given."}
-    prompt_text = _CLAUDE_GRADE_PROMPT % {
-        "prompt": prompt.strip(),
-        "expected": expected.strip(),
-        "given": given.strip(),
-    }
-    try:
-        out = run_prompt(prompt_text, timeout_s=30.0)
-    except AgentUnavailable as e:
-        logger.warning("claude_grade: agent unavailable, falling back to string match: %s", e)
-        return {
-            "correct": grade_answer(expected=expected, given=given),
-            "feedback": "(graded by string similarity — claude was unreachable)",
-        }
-    try:
-        parsed = _parse_grade_json(out)
-        verdict = (parsed.get("verdict") or "").strip().lower()
-        feedback = (parsed.get("feedback") or "").strip()
-        return {"correct": verdict == "right", "feedback": feedback}
-    except (ValueError, json.JSONDecodeError, KeyError) as e:
-        logger.warning("claude_grade: bad JSON, falling back to string match: %s", e)
-        return {
-            "correct": grade_answer(expected=expected, given=given),
-            "feedback": "(graded by string similarity — claude returned malformed JSON)",
-        }
-
-
-def claude_regrade(*, prompt: str, expected: str, given: str, current_regex: str | None) -> dict:
-    """Re-grade entry point. Returns
     `{"correct": bool, "feedback": str, "regex_update": str | None}`.
 
-    Same shape as claude_grade plus an optional `regex_update` —
-    a validated, persistable regex that the route should write to
-    the question. None when the verdict is wrong, when the user's
-    form is a typo, or when claude's proposed regex didn't pass
-    validation (compile / matches-both check).
+    `regex_update` is a validated regex the caller should persist on
+    the question (claude proposes one only when the user's answer is
+    a legitimate alternative form, not a typo). None when the verdict
+    is wrong, when the user's form is a typo, when claude didn't
+    propose one, or when the proposed regex failed validation (must
+    compile, match BOTH the canonical answer AND the user's form).
 
     Falls back to deterministic match on agent error; regex_update
     is always None on the fallback path.
     """
     if not given.strip():
         return {"correct": False, "feedback": "No answer given.", "regex_update": None}
-    prompt_text = _CLAUDE_REGRADE_PROMPT % {
+    prompt_text = _CLAUDE_GRADE_PROMPT % {
         "prompt": prompt.strip(),
         "expected": expected.strip(),
         "given": given.strip(),
@@ -423,7 +366,7 @@ def claude_regrade(*, prompt: str, expected: str, given: str, current_regex: str
     try:
         out = run_prompt(prompt_text, timeout_s=30.0)
     except AgentUnavailable as e:
-        logger.warning("claude_regrade: agent unavailable: %s", e)
+        logger.warning("claude_grade: agent unavailable, falling back to string match: %s", e)
         return {
             "correct": grade_answer(expected=expected, given=given),
             "feedback": "(graded by string similarity — claude was unreachable)",
@@ -443,12 +386,18 @@ def claude_regrade(*, prompt: str, expected: str, given: str, current_regex: str
                 )
         return {"correct": correct, "feedback": feedback, "regex_update": regex_update}
     except (ValueError, json.JSONDecodeError, KeyError) as e:
-        logger.warning("claude_regrade: bad JSON: %s", e)
+        logger.warning("claude_grade: bad JSON, falling back to string match: %s", e)
         return {
             "correct": grade_answer(expected=expected, given=given),
             "feedback": "(graded by string similarity — claude returned malformed JSON)",
             "regex_update": None,
         }
+
+
+# claude_regrade is now an alias for claude_grade — same prompt,
+# same return shape. Kept as a name so existing callers + tests
+# that read "regrade" remain explicit about the dispute path.
+claude_regrade = claude_grade
 
 
 def grade_answer(*, expected: str, given: str) -> bool:
@@ -489,36 +438,53 @@ def grade_with_fallback(q, user_answer: str) -> dict:
     """Dispatch through three layers, fastest first:
 
     1. **Stored regex** — if `q.answer_regex` is set and matches
-       (case-insensitive fullmatch), instant correct verdict. Claude
-       generated this regex when the card was created and it evolves
-       through re-grades to accept legitimate alternative forms.
+       (case-insensitive fullmatch), instant correct verdict.
     2. **Deterministic string** — case/punctuation/token-subset
-       compare via `grade_answer`. Cheap; covers cases where the
-       regex is missing or doesn't match but the user typed the
-       canonical answer.
-    3. **Claude** — when classify_grading says the answer is too
-       complex for deterministic grading, OR when deterministic
-       says wrong but the answer looks substantive enough to be a
-       paraphrase.
+       compare via `grade_answer`. Cheap; covers the canonical-form
+       case when the regex is missing or hasn't been taught the
+       form yet.
+    3. **Claude** — fires when:
+       - classify_grading says the answer is complex enough to need
+         semantic judgment, OR
+       - deterministic said wrong AND it looks like a paraphrase, OR
+       - the card has a regex that missed (implies the user is
+         engaged with regex-graded content; let claude judge whether
+         their form is a legit alt and propose a regex update).
 
-    Returns `{"correct": bool, "feedback": str | None}`.
+    Returns `{"correct": bool, "feedback": str | None,
+              "regex_update": str | None}`. regex_update is non-None
+    only when the claude path took AND claude proposed a validated
+    regex update (callers should persist via QuestionRepo).
     """
     regex_verdict = grading.match_regex(q.answer_regex, user_answer)
     if regex_verdict is True:
-        return {"correct": True, "feedback": None}
+        return {"correct": True, "feedback": None, "regex_update": None}
 
     mode = classify_grading(q.answer)
     if mode == "claude":
-        return claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
+        return claude_grade(
+            prompt=q.prompt,
+            expected=q.answer,
+            given=user_answer,
+            current_regex=q.answer_regex,
+        )
 
     det_correct = grade_answer(expected=q.answer, given=user_answer)
     if det_correct:
-        return {"correct": True, "feedback": None}
-    # Deterministic said wrong — give claude a second look if it
-    # looks like a paraphrase rather than a clearly-wrong stab.
-    if looks_like_paraphrase(expected=q.answer, given=user_answer):
-        return claude_grade(prompt=q.prompt, expected=q.answer, given=user_answer)
-    return {"correct": False, "feedback": None}
+        return {"correct": True, "feedback": None, "regex_update": None}
+    # Deterministic said wrong — escalate to claude if (a) the user's
+    # answer looks substantive enough to be a paraphrase, or (b) the
+    # card has a stored regex that missed (claude can judge alt-form
+    # vs typo and propose a regex_update accordingly).
+    has_regex = bool(q.answer_regex) and regex_verdict is False
+    if has_regex or looks_like_paraphrase(expected=q.answer, given=user_answer):
+        return claude_grade(
+            prompt=q.prompt,
+            expected=q.answer,
+            given=user_answer,
+            current_regex=q.answer_regex,
+        )
+    return {"correct": False, "feedback": None, "regex_update": None}
 
 
 # ---- Explore-with-AI handoff context ----------------------------------

@@ -328,7 +328,7 @@ def trivia_session_answer(
     is_idk = bool(idk)
     if is_idk:
         correct = False
-        verdict: dict = {"correct": False, "feedback": None}
+        verdict: dict = {"correct": False, "feedback": None, "regex_update": None}
         given = ""
     else:
         verdict = grade_with_fallback(q, answer)
@@ -336,6 +336,9 @@ def trivia_session_answer(
         given = answer
 
     trivia.mark_answered(head, correct=correct)
+    regex_updated = False
+    if verdict.get("regex_update"):
+        regex_updated = questions.set_answer_regex(uid, head, verdict["regex_update"])
 
     new_done_str = format_done(done_items + [(head, "r" if correct else "w")])
     remaining = ",".join(str(i) for i in queue[1:])
@@ -356,6 +359,7 @@ def trivia_session_answer(
                 "expected": q.answer,
                 "feedback": verdict.get("feedback"),
                 "idk": is_idk,
+                "regex_updated": regex_updated,
             },
             "session_position": position,
             "session_total": total,
@@ -419,6 +423,11 @@ def trivia_answer(
     verdict = grade_with_fallback(q, answer)
     correct = verdict["correct"]
     trivia.mark_answered(question_id, correct=correct)
+    regex_updated = False
+    if verdict.get("regex_update"):
+        regex_updated = questions.set_answer_regex(
+            user["tailscale_login"], question_id, verdict["regex_update"]
+        )
     deck_name = decks.find_name(user["tailscale_login"], q.deck_id)
     return templates.TemplateResponse(
         request,
@@ -431,6 +440,7 @@ def trivia_answer(
                 "given": answer,
                 "expected": q.answer,
                 "feedback": verdict.get("feedback"),
+                "regex_updated": regex_updated,
             },
             **build_explore_ctx(
                 deck_name=deck_name or "",

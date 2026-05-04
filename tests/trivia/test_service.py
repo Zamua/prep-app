@@ -206,7 +206,11 @@ def test_claude_grade_parses_right_verdict(monkeypatch):
         lambda _p, **_k: '{"verdict": "right", "feedback": "Same fact, different phrasing."}',
     )
     out = svc.claude_grade(prompt="Q?", expected="A long answer", given="A different phrasing")
-    assert out == {"correct": True, "feedback": "Same fact, different phrasing."}
+    assert out == {
+        "correct": True,
+        "feedback": "Same fact, different phrasing.",
+        "regex_update": None,
+    }
 
 
 def test_claude_grade_parses_wrong_verdict(monkeypatch):
@@ -216,7 +220,56 @@ def test_claude_grade_parses_wrong_verdict(monkeypatch):
         lambda _p, **_k: '```json\n{"verdict": "wrong", "feedback": "Missed the key fact."}\n```',
     )
     out = svc.claude_grade(prompt="Q?", expected="something specific", given="something else")
-    assert out == {"correct": False, "feedback": "Missed the key fact."}
+    assert out == {
+        "correct": False,
+        "feedback": "Missed the key fact.",
+        "regex_update": None,
+    }
+
+
+def test_claude_grade_returns_validated_regex_update_on_alt_form(monkeypatch):
+    """Initial-grade path now also returns regex_update when claude
+    proposes one for a legitimate alternative form (synonym/abbr).
+    The grader validates it (compiles + matches both literal and
+    user form) before passing to the caller."""
+    monkeypatch.setattr(
+        svc,
+        "run_prompt",
+        lambda _p, **_k: (
+            '{"verdict": "right", "feedback": "WAL is a standard abbreviation.",'
+            ' "regex_update": "(write[- ]?ahead log|wal)"}'
+        ),
+    )
+    out = svc.claude_grade(
+        prompt="What ensures durability?",
+        expected="write-ahead log",
+        given="wal",
+        current_regex="write[- ]?ahead log",
+    )
+    assert out["correct"] is True
+    assert out["regex_update"] == "(write[- ]?ahead log|wal)"
+
+
+def test_claude_grade_drops_regex_update_when_invalid(monkeypatch):
+    """A claude-proposed regex that doesn't match the canonical
+    expected answer is dropped — the route must never persist a
+    regex that breaks future grading of the literal answer."""
+    monkeypatch.setattr(
+        svc,
+        "run_prompt",
+        lambda _p, **_k: (
+            '{"verdict": "right", "feedback": "ok",'
+            ' "regex_update": "(wal|wahl)"}'  # doesn't match "write-ahead log"
+        ),
+    )
+    out = svc.claude_grade(
+        prompt="?",
+        expected="write-ahead log",
+        given="wal",
+        current_regex=None,
+    )
+    assert out["correct"] is True
+    assert out["regex_update"] is None
 
 
 def test_claude_grade_blank_answer_short_circuits(monkeypatch):

@@ -226,6 +226,10 @@
         <p class="trivia-regrade-note">
           <em>re-graded by claude{% if result.regex_updated %} · accepted answers expanded{% endif %}</em>
         </p>
+      {% elif result.regex_updated %}
+        <p class="trivia-regrade-note">
+          <em>claude expanded the accepted-answer regex</em>
+        </p>
       {% endif %}
 
       {% if session_total %}
