@@ -221,9 +221,9 @@ def test_tick_skips_when_user_in_quiet_hours(monkeypatch, fixtures):
 
     # Set the user's prefs to quiet 22-8 in America/New_York. Pin
     # "now" to 03:00 NY (07:00 UTC) so we're squarely inside quiet.
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.set_notification_prefs(
+    UserRepo().set_notification_prefs(
         fixtures["user"],
         {
             "mode": "off",
@@ -255,9 +255,9 @@ def test_tick_fires_outside_quiet_hours(monkeypatch, fixtures):
     from zoneinfo import ZoneInfo
 
     deck_id, _ = _make_trivia_deck(fixtures, name="active-window")
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.set_notification_prefs(
+    UserRepo().set_notification_prefs(
         fixtures["user"],
         {
             "mode": "off",

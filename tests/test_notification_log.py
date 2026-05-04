@@ -27,13 +27,18 @@ def test_send_to_user_appends_log_entry(monkeypatch, env):
 
     importlib.reload(_infra_db)
     _infra_db.init()
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    importlib.reload(_db)
-    _db.upsert_user("testuser@example.com")
+    UserRepo().upsert("testuser@example.com")
 
     monkeypatch.setattr(_push_mod, "_send_one", lambda _s, _p: "ok")
-    monkeypatch.setattr(_push_mod.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}])
+    # Stub out the actual subscription lookup — return one fake row so
+    # _send_one fires once per call.
+    monkeypatch.setattr(
+        _push_mod.PushSubsRepo,
+        "list_for_user_raw",
+        lambda self, _uid: [{"endpoint": "x", "p256dh": "p", "auth": "a"}],
+    )
 
     _push_mod.send_to_user(
         "testuser@example.com",
@@ -132,10 +137,10 @@ def test_log_renders_relative_time(client: TestClient, initialized_db: str):
 
 def test_other_users_entries_not_visible(client: TestClient, initialized_db: str):
     """IDOR check — alice's log shouldn't include bob's entries."""
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
     from prep.notify.repo import NotificationLogRepo
 
-    _db.upsert_user("bob@example.com")
+    UserRepo().upsert("bob@example.com")
     NotificationLogRepo().append(
         user_id="bob@example.com",
         title="Bob's secret",

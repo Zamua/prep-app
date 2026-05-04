@@ -92,11 +92,10 @@ def initialized_db(env: None):
     importlib.reload(_infra_db)
     _infra_db.init()
 
-    from prep import db as _db_mod
+    from prep.auth.repo import UserRepo
 
-    importlib.reload(_db_mod)
     user_id = os.environ["PREP_DEFAULT_USER"]
-    _db_mod.upsert_user(user_id, display_name=user_id.split("@")[0])
+    UserRepo().upsert(user_id, display_name=user_id.split("@")[0])
     return user_id
 
 

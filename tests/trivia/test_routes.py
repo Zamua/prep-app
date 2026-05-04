@@ -592,9 +592,9 @@ def test_session_regrade_flips_done_chain_verdict(
 def test_set_interval_404_for_other_users_deck(client: TestClient, initialized_db: str):
     """IDOR check: the route's user-scoped UPDATE leaves another user's
     deck alone, and the route 404s instead of leaking existence."""
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.upsert_user("bob@example.com")
+    UserRepo().upsert("bob@example.com")
     bob_deck_id = DeckRepo().create_trivia(
         "bob@example.com", "bobs-deck", topic="bob", interval_minutes=30
     )

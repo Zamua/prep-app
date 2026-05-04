@@ -102,15 +102,16 @@ def tick(now_utc: datetime) -> None:
     # Per-user prefs lookup; cached for this tick so we don't re-read
     # for every deck owned by the same user. Quiet hours apply to
     # trivia notifications now too (decoupled from SRS when-ready).
-    from prep import db as _legacy_db
+    from prep.auth.repo import UserRepo
 
+    users = UserRepo()
     prefs_cache: dict[str, dict] = {}
 
     def _user_in_quiet_hours(user_id: str) -> bool:
         prefs = prefs_cache.get(user_id)
         if prefs is None:
             try:
-                prefs = _legacy_db.get_notification_prefs(user_id)
+                prefs = users.get_notification_prefs(user_id)
             except Exception:
                 prefs = {}
             prefs_cache[user_id] = prefs

@@ -101,9 +101,28 @@ class DeckRepo:
         ]
 
     def due_breakdown(self, user_id: str) -> list[tuple[str, int]]:
-        """[(deck_name, due_count)] across all of user's decks. Used by
-        the notifications digest."""
-        return _legacy_db.deck_due_breakdown(user_id)
+        """[(deck_name, due_count), ...] for digest body composition.
+        Paused decks are excluded — they shouldn't contribute to the
+        digest body any more than they contribute to the trigger count.
+        Used by the notify scheduler."""
+        from prep.infrastructure.db import cursor, now
+
+        with cursor() as c:
+            rows = c.execute(
+                """SELECT d.name, COUNT(c.question_id) AS n
+                     FROM decks d
+                     LEFT JOIN questions q ON q.deck_id = d.id AND q.user_id = d.user_id
+                     LEFT JOIN cards c ON c.question_id = q.id
+                                      AND c.next_due <= ?
+                                      AND COALESCE(q.suspended, 0) = 0
+                    WHERE d.user_id = ?
+                      AND COALESCE(d.notifications_enabled, 1) = 1
+                    GROUP BY d.id
+                   HAVING n > 0
+                    ORDER BY n DESC""",
+                (now(), user_id),
+            ).fetchall()
+        return [(r["name"], int(r["n"])) for r in rows]
 
     # ---- trivia-deck-specific helpers ----------------------------------
 

@@ -172,7 +172,26 @@ class ReviewRepo:
         )
 
     def count_due_for_user(self, user_id: str) -> int:
-        return _legacy_db.count_due_for_user(user_id)
+        """Total cards due-now across the user's decks that have
+        notifications enabled. Paused decks are excluded — if 90 cards
+        are due overall but 30 are in paused decks, this returns 60.
+        The notify scheduler uses this to decide whether to send a
+        digest / threshold ping."""
+        from prep.infrastructure.db import cursor, now
+
+        with cursor() as c:
+            row = c.execute(
+                """SELECT COUNT(*) AS n
+                     FROM cards
+                     JOIN questions ON questions.id = cards.question_id
+                     JOIN decks     ON decks.id     = questions.deck_id
+                    WHERE questions.user_id = ?
+                      AND COALESCE(questions.suspended, 0) = 0
+                      AND COALESCE(decks.notifications_enabled, 1) = 1
+                      AND cards.next_due <= ?""",
+                (user_id, now()),
+            ).fetchone()
+        return int(row["n"]) if row else 0
 
 
 # ---- row-to-entity helpers ----------------------------------------------

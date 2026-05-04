@@ -29,7 +29,11 @@ def patched_send(monkeypatch, env):
         return "ok"
 
     monkeypatch.setattr(_push_mod, "_send_one", fake_send_one)
-    monkeypatch.setattr(_push_mod.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}])
+    monkeypatch.setattr(
+        _push_mod.PushSubsRepo,
+        "list_for_user_raw",
+        lambda self, _uid: [{"endpoint": "x", "p256dh": "p", "auth": "a"}],
+    )
     return _push_mod, captured
 
 
@@ -56,7 +60,11 @@ def test_send_to_user_no_root_path_passthrough(monkeypatch, env):
     importlib.reload(_push_mod)
     captured: list[dict] = []
     monkeypatch.setattr(_push_mod, "_send_one", lambda _s, p: captured.append(p) or "ok")
-    monkeypatch.setattr(_push_mod.db, "list_push_subscriptions", lambda _u: [{"endpoint": "x"}])
+    monkeypatch.setattr(
+        _push_mod.PushSubsRepo,
+        "list_for_user_raw",
+        lambda self, _uid: [{"endpoint": "x", "p256dh": "p", "auth": "a"}],
+    )
     _push_mod.send_to_user("u", "t", "b", url="/trivia/foo")
     assert captured[0]["url"] == "/trivia/foo"
 

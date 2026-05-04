@@ -18,7 +18,7 @@ import os
 
 from fastapi import HTTPException, Request
 
-from prep import db
+from prep.auth.repo import UserRepo
 
 
 def _resolve_login(request: Request) -> str | None:
@@ -49,6 +49,6 @@ def current_user(request: Request) -> dict:
         )
     display_name = request.headers.get("tailscale-user-name") or login.split("@", 1)[0]
     profile_pic = request.headers.get("tailscale-user-profile-pic") or None
-    user = db.upsert_user(login, display_name, profile_pic)
+    user = UserRepo().upsert(login, display_name, profile_pic)
     request.state.user = user
     return user

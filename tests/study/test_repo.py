@@ -66,9 +66,9 @@ def test_get_user_isolation(session_repo: SessionRepo, seeded_deck):
     user, deck_id, _ = seeded_deck
     sid = session_repo.create(user, deck_id, "Mac")
 
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.upsert_user("bob@example.com")
+    UserRepo().upsert("bob@example.com")
     assert session_repo.get("bob@example.com", sid) is None
     assert session_repo.get(user, sid) is not None
 
@@ -161,9 +161,9 @@ def test_record_review_other_users_question_raises(review_repo: ReviewRepo, seed
     """Defense in depth: record_review checks ownership even if the
     route forgets to."""
     user, _, qid = seeded_deck
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.upsert_user("bob@example.com")
+    UserRepo().upsert("bob@example.com")
     with pytest.raises(ValueError, match="not owned"):
         review_repo.record("bob@example.com", qid, "right", user_answer="A")
 

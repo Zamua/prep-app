@@ -23,8 +23,11 @@ import logging
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from prep import db
+from prep.auth.repo import UserRepo
+from prep.decks.repo import DeckRepo
 from prep.notify.push import send_to_user
+from prep.notify.repo import PushSubsRepo
+from prep.study.repo import ReviewRepo
 
 _log = logging.getLogger("prep.notify")
 
@@ -90,9 +93,13 @@ async def _tick() -> None:
     """One scheduler iteration — evaluate every subscribed user and fire
     where appropriate."""
     now_utc = datetime.now(timezone.utc)
-    for uid in db.list_users_with_push_subs():
+    users = UserRepo()
+    subs = PushSubsRepo()
+    reviews = ReviewRepo()
+    decks = DeckRepo()
+    for uid in subs.list_users_with_subs():
         try:
-            prefs = db.get_notification_prefs(uid)
+            prefs = users.get_notification_prefs(uid)
             if prefs.get("mode") == "off":
                 continue
 
@@ -103,7 +110,7 @@ async def _tick() -> None:
                 tz = ZoneInfo("America/New_York")
             local = now_utc.astimezone(tz)
 
-            due_total = db.count_due_for_user(uid)
+            due_total = reviews.count_due_for_user(uid)
             if due_total == 0:
                 continue
 
@@ -113,7 +120,7 @@ async def _tick() -> None:
                 # hours don't apply (the chosen hour IS the schedule). Idempotent
                 # via last_digest_date so a 5-minute tick window won't double-fire.
                 if _should_send_digest(prefs, local):
-                    breakdown = db.deck_due_breakdown(uid)
+                    breakdown = decks.due_breakdown(uid)
                     send_to_user(
                         uid,
                         "Prep — daily digest",
@@ -122,7 +129,7 @@ async def _tick() -> None:
                         source="srs-digest",
                     )
                     prefs["last_digest_date"] = local.date().isoformat()
-                    db.set_notification_prefs(uid, prefs)
+                    users.set_notification_prefs(uid, prefs)
             elif mode == "when-ready":
                 # Quiet hours apply here — when-ready can fire any time and the
                 # user might not want a 3am ping for a card that just rolled due.
@@ -142,7 +149,7 @@ async def _tick() -> None:
                         source="srs-when-ready",
                     )
                     prefs["last_when_ready_at"] = now_utc.isoformat()
-                    db.set_notification_prefs(uid, prefs)
+                    users.set_notification_prefs(uid, prefs)
         except Exception as e:
             _log.exception("scheduler tick failed for user %s: %s", uid, e)
 

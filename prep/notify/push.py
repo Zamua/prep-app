@@ -28,7 +28,7 @@ from pathlib import Path
 from py_vapid import Vapid01
 from pywebpush import WebPushException, webpush
 
-from prep import db
+from prep.notify.repo import PushSubsRepo
 
 # The notify package lives at <repo>/prep/notify/, but VAPID keys
 # default to the repo root (alongside data.sqlite) for the dev case.
@@ -166,14 +166,15 @@ def send_to_user(
         )
     except Exception as e:
         _log.warning("notification log append failed: %s", e)
-    subs = db.list_push_subscriptions(user_id)
+    repo = PushSubsRepo()
+    subs = repo.list_for_user_raw(user_id)
     sent = failed = pruned = 0
     for s in subs:
         result = _send_one(s, payload)
         if result == "ok":
             sent += 1
         elif result == "gone":
-            db.delete_push_subscription(s["endpoint"])
+            repo.delete_by_endpoint(s["endpoint"])
             pruned += 1
         else:
             failed += 1
@@ -191,4 +192,4 @@ def subscribe(user_id: str, sub: dict) -> None:
     auth = keys.get("auth")
     if not (endpoint and p256dh and auth):
         raise ValueError("subscription missing endpoint/keys.p256dh/keys.auth")
-    db.upsert_push_subscription(user_id, endpoint, p256dh, auth)
+    PushSubsRepo().upsert(user_id, endpoint, p256dh, auth)

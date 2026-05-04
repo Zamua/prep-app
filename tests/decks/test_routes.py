@@ -56,9 +56,9 @@ def test_delete_nonexistent_deck_404(client: TestClient, initialized_db: str):
 def test_delete_other_users_deck_404(client: TestClient, initialized_db: str):
     """User isolation: alice can't delete bob's deck even with the
     correct confirm name."""
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.upsert_user("bob@example.com", display_name="Bob")
+    UserRepo().upsert("bob@example.com", display_name="Bob")
     DeckRepo().create("bob@example.com", "bobs-deck")
     # The TestClient is authenticated as the env-default user (alice).
     r = client.post(
@@ -100,9 +100,9 @@ def test_suspend_404_on_missing_question(client: TestClient, initialized_db: str
 
 def test_suspend_other_users_question_404(client: TestClient, initialized_db: str):
     """User isolation again — alice can't suspend bob's questions."""
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.upsert_user("bob@example.com")
+    UserRepo().upsert("bob@example.com")
     deck_id = DeckRepo().create("bob@example.com", "bobs-deck")
     qid = QuestionRepo().add(
         "bob@example.com", deck_id, NewQuestion(type=QuestionType.MCQ, prompt="?", answer="A")
@@ -356,11 +356,11 @@ def test_paused_srs_deck_excluded_from_due_count(client: TestClient, initialized
     # Pause `paused`.
     client.post("/deck/paused/notifications", data={"enabled": "off"}, follow_redirects=False)
     # The digest-counter should now report 1, not 2.
-    from prep import db as _legacy_db
+    from prep.study.repo import ReviewRepo
 
-    assert _legacy_db.count_due_for_user(user) == 1
+    assert ReviewRepo().count_due_for_user(user) == 1
     # And the breakdown should only include `active`.
-    bd = _legacy_db.deck_due_breakdown(user)
+    bd = DeckRepo().due_breakdown(user)
     assert [name for name, _ in bd] == ["active"]
 
 

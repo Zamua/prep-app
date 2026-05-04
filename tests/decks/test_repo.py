@@ -97,9 +97,9 @@ def test_user_isolation_on_find(deck_repo: DeckRepo, initialized_db: str):
     deck_repo.create(alice, "shared-name")
 
     # Create a second user and a deck under their name.
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.upsert_user("bob@example.com", display_name="Bob")
+    UserRepo().upsert("bob@example.com", display_name="Bob")
     bob_deck = deck_repo.create("bob@example.com", "shared-name")
 
     alice_deck = deck_repo.find_id(alice, "shared-name")
@@ -151,9 +151,9 @@ def test_get_question_user_isolation(
 ):
     """A repo.get() with the wrong user_id returns None — no IDOR."""
     alice = initialized_db
-    from prep import db as _db
+    from prep.auth.repo import UserRepo
 
-    _db.upsert_user("bob@example.com")
+    UserRepo().upsert("bob@example.com")
 
     deck_id = deck_repo.create(alice, "alices-deck")
     qid = q_repo.add(alice, deck_id, NewQuestion(type=QuestionType.MCQ, prompt="?", answer="A"))

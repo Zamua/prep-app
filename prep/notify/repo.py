@@ -1,20 +1,23 @@
 """Repositories for the notify bounded context.
 
-Two responsibilities:
+Three responsibilities:
 - NotifyPrefsRepo — user notification preferences (a JSON blob on
-  the users table).
+  the users table; UserRepo owns the actual storage).
 - PushSubsRepo    — per-device push subscriptions.
+- NotificationLogRepo — append-only log of every push fired.
 
-Both are facades over the existing prep.db accessors for now,
-returning entities at the boundary.
+Plus a `due_breakdown` / `count_due_for_user` helper used by the
+scheduler — those were on prep.db before; surfaced here as module
+functions because they're pure queries (no entity to model) and the
+notify scheduler is the only caller.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from prep import db as _legacy_db
-from prep.infrastructure.db import cursor
+from prep.auth.repo import UserRepo
+from prep.infrastructure.db import cursor, now
 from prep.notify.entities import (
     NotificationLogEntry,
     NotificationPrefs,
@@ -29,28 +32,78 @@ class NotifyPrefsRepo:
     def get(self, user_id: str) -> NotificationPrefs:
         """Always returns a NotificationPrefs (defaults populate for
         users who've never opened settings)."""
-        raw = _legacy_db.get_notification_prefs(user_id)
+        raw = UserRepo().get_notification_prefs(user_id)
         return NotificationPrefs.model_validate(raw)
 
     def set(self, user_id: str, prefs: NotificationPrefs) -> None:
-        _legacy_db.set_notification_prefs(user_id, prefs.model_dump())
+        UserRepo().set_notification_prefs(user_id, prefs.model_dump())
 
 
 class PushSubsRepo:
     """Read/write access to push_subscriptions."""
 
     def upsert(self, user_id: str, endpoint: str, p256dh: str, auth: str) -> None:
-        _legacy_db.upsert_push_subscription(user_id, endpoint, p256dh, auth)
+        ts = now()
+        with cursor() as c:
+            c.execute(
+                """INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth, created_at, last_seen_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(endpoint) DO UPDATE SET
+                     user_id = excluded.user_id,
+                     p256dh = excluded.p256dh,
+                     auth = excluded.auth,
+                     last_seen_at = excluded.last_seen_at""",
+                (endpoint, user_id, p256dh, auth, ts, ts),
+            )
 
     def list_for_user(self, user_id: str) -> list[PushSubscription]:
-        rows = _legacy_db.list_push_subscriptions(user_id)
-        return [PushSubscription.model_validate(r) for r in rows]
+        with cursor() as c:
+            rows = c.execute(
+                "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchall()
+        return [PushSubscription.model_validate(dict(r)) for r in rows]
+
+    def list_for_user_raw(self, user_id: str) -> list[dict]:
+        """Plain dict view of `list_for_user` — used by the push
+        sender (push.py) which threads the rows straight into
+        pywebpush rather than re-validating each."""
+        with cursor() as c:
+            rows = c.execute(
+                "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def count_for_user(self, user_id: str) -> int:
-        return len(_legacy_db.list_push_subscriptions(user_id))
+        with cursor() as c:
+            row = c.execute(
+                "SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return int(row["n"] or 0)
 
     def delete_by_endpoint(self, endpoint: str) -> None:
-        _legacy_db.delete_push_subscription(endpoint)
+        """Used to prune subscriptions the push service has rejected
+        (404/410). Endpoint is the natural unique key; same endpoint
+        can only be one user's."""
+        with cursor() as c:
+            c.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+
+    def list_users_with_subs(self) -> list[str]:
+        """Return tailscale_login values for every user with at least
+        one push subscription. Used by the scheduler so we don't
+        iterate users who can't be reached anyway."""
+        with cursor() as c:
+            rows = c.execute("SELECT DISTINCT user_id FROM push_subscriptions").fetchall()
+        return [r["user_id"] for r in rows]
+
+
+# Note: due-aggregation queries (count_due_for_user, deck_due_breakdown)
+# live on the study + decks contexts respectively — they're SRS-shaped
+# data the scheduler needs but the queries belong with the data they
+# count. See study.repo.ReviewRepo.count_due_for_user and
+# decks.repo.DeckRepo.due_breakdown.
 
 
 class NotificationLogRepo:
