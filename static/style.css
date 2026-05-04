@@ -3349,19 +3349,30 @@ body:has(dialog[open]) {
   margin: 0 0 0.9rem;
 }
 .trivia-disc { min-width: 0; }
-.trivia-disc > summary {
-  list-style: none; cursor: pointer;
+
+/* Shared outline-pill chrome for .trivia-disc summary + .trivia-regrade-btn:
+   small italic-uppercase outlined pill with optional leading icon. The
+   active state (open / hover) tints with ink-soft so all three pills
+   read as one visual group. */
+.trivia-disc > summary,
+.trivia-regrade-btn {
   display: flex; align-items: center; justify-content: center; gap: 0.4rem;
   padding: 0.65rem 0.5rem;
-  font-size: 0.85rem; color: var(--ink-soft); font-style: italic;
+  font-family: inherit; font-style: italic;
+  font-size: 0.85rem; color: var(--ink-soft);
   letter-spacing: 0.05em; text-transform: uppercase;
   border: 1px solid var(--rule); border-radius: 999px;
   background: color-mix(in srgb, var(--paper) 50%, transparent);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
+.trivia-disc > summary { list-style: none; }
 .trivia-disc > summary::-webkit-details-marker { display: none; }
 .trivia-disc > summary::marker { content: ""; }
-.trivia-disc > summary .icon { color: var(--quill); flex-shrink: 0; }
-.trivia-disc[open] > summary {
+.trivia-disc > summary .icon,
+.trivia-regrade-btn .icon { color: var(--quill); flex-shrink: 0; }
+.trivia-disc[open] > summary,
+.trivia-regrade-btn:hover {
   border-color: var(--ink-soft); color: var(--ink);
   background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
 }
@@ -3385,38 +3396,14 @@ body:has(dialog[open]) {
   margin-top: 0.4rem;
 }
 
-/* --- Re-grade pill (sibling of Explain / Explore in the disc row)
-   ----
-   Shown on wrong-verdict result panels when the user typed an
-   answer. Same chrome as .trivia-disc summary so all three pills
-   (Explain / Explore further / Re-grade) read as one visual group.
-   The whole form behaves like a button — its rendering width is
-   driven by the grid column it lives in. */
+/* Re-grade pill (sibling of Explain / Explore in the disc row).
+   Chrome is shared with .trivia-disc summary above; only the
+   form-specific bits live here. The button itself fills its grid
+   column so all three pills sit at equal width. */
 .trivia-regrade-form { margin: 0; min-width: 0; }
-.trivia-regrade-btn {
-  display: flex; align-items: center; justify-content: center;
-  gap: 0.4rem;
-  width: 100%;
-  cursor: pointer;
-  font-family: inherit; font-style: italic;
-  font-size: 0.85rem; color: var(--ink-soft);
-  letter-spacing: 0.05em; text-transform: uppercase;
-  padding: 0.65rem 0.5rem;
-  border: 1px solid var(--rule); border-radius: 999px;
-  background: color-mix(in srgb, var(--paper) 50%, transparent);
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.trivia-regrade-btn:hover {
-  border-color: var(--ink-soft); color: var(--ink);
-  background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
-}
-.trivia-regrade-btn:disabled {
-  opacity: 0.6; cursor: progress;
-}
-.trivia-regrade-btn .icon {
-  width: 0.95rem; height: 0.95rem; color: var(--quill);
-  flex-shrink: 0;
-}
+.trivia-regrade-btn { width: 100%; }
+.trivia-regrade-btn:disabled { opacity: 0.6; cursor: progress; }
+.trivia-regrade-btn .icon { width: 0.95rem; height: 0.95rem; }
 
 .trivia-regrade-note {
   margin: 0.6rem 0 0.2rem;

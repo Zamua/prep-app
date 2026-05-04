@@ -12,32 +12,26 @@ Each entry: where, what, why-it-matters, suggested-fix. Keep it terse.
 
 ## Backend
 
-### TriviaQueueRepo.mark_answered + set_last_correctness
+### ✅ TriviaQueueRepo.mark_answered + set_last_correctness — DONE (#183)
 - **Where:** `prep/trivia/repo.py` lines ~108 and ~152.
-- **What:** Both update `trivia_queue.last_answered_correctly` for a
-  given question_id. `mark_answered` also rotates queue_position;
-  `set_last_correctness` does not.
-- **Suggested fix:** A single `record_verdict(question_id, correct, *,
-  rotate=True)` would express the difference as a flag. Both also reset
-  the deck's notification_ignored_streak — extract a private helper.
+- **Fix shipped:** Extracted `_deck_id_for_question` and
+  `_reset_deck_streak` static helpers shared by both methods. Both
+  public methods are now ~10 lines each (down from ~25).
 
-### `_explore_ctx` helper in trivia/routes.py
-- **Where:** Called four times (standalone answer, session answer,
+### ✅ `_explore_ctx` helper in trivia/routes.py — DONE (#182)
+- **Where:** Was called four times (standalone answer, session answer,
   standalone regrade, session regrade) with near-identical args.
-- **What:** Builds the chat-handoff prefill URLs + Google search URL
-  for the trivia card's "Explore" pill.
-- **Suggested fix:** Move to `prep/trivia/service.py` so it's not a
-  route-level private. Take a single `Result` value object instead of
-  the loose user_answer/correct/idk kwargs.
+- **Fix shipped:** Moved to `prep/trivia/service.py` as
+  `build_explore_ctx(*, deck_name, q, user_answer, correct, expected,
+  idk=False)`. Routes now `**build_explore_ctx(...)` at all 4 sites.
 
-### `from prep import db as _legacy_db` in 9 files
-- **Where:** notify/repo, notify/_legacy_module, study/routes,
+### ✅ `from prep import db as _legacy_db` in 9 files — DONE (#181)
+- **Where:** Was in notify/repo, notify/_legacy_module, study/routes,
   study/repo, auth/identity, auth/repo, trivia/scheduler,
   decks/routes, decks/repo.
-- **What:** Cross-context backdoor through the legacy db facade.
-  The actual SQL lives in 957-line prep/db.py.
-- **Suggested fix:** Audit-fix #3 (split prep/db.py into per-context
-  repos). After that, `from prep import db` should be deletable.
+- **Fix shipped:** Audit-fix #3 split prep/db.py into per-context
+  repos. `prep/db.py` is gone; all 9 files now import from their
+  respective context repos. `_legacy_db` is dead.
 
 ### Inline `<script>` blobs across templates
 - **Where:** templates/trivia/card.html (regrade auto-disable, submit
@@ -98,10 +92,13 @@ Each entry: where, what, why-it-matters, suggested-fix. Keep it terse.
   `--wrong-tint-bg`, etc. Then components reference tokens, not
   raw color-mix expressions.
 
-### Outline pill summary chrome (Explain / Explore / Re-grade)
+### ✅ Outline pill summary chrome (Explain / Explore / Re-grade) — DONE (#183)
 - **Where:** `.trivia-disc summary` + `.trivia-regrade-btn` (almost
   identical: 0.65rem padding, 0.85rem font, italic uppercase, 999px
   border-radius, var(--rule) border, color-mix paper background).
-- **What:** Two selectors, one chrome — diverged because one is a
-  `<details><summary>` and the other is a `<button>`.
-- **Suggested fix:** Single class (`.disc-pill`) applied to both.
+- **Fix shipped:** Single multi-selector rule
+  (`.trivia-disc > summary, .trivia-regrade-btn`) holds the shared
+  chrome + active state. Per-element-specific bits (`width: 100%`,
+  `:disabled`, icon size on the button; `list-style: none` and
+  marker-hide on the summary) live in tiny follow-up rules.
+  Net: -25 lines, single source of truth for the active-state tint.

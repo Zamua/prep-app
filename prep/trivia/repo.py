@@ -111,15 +111,10 @@ class TriviaQueueRepo:
         UPDATE so the rotation is atomic w.r.t. the scheduler's
         next pick.
         """
-        deck_id_row = None
         with cursor() as c:
-            deck_id_row = c.execute(
-                "SELECT deck_id FROM questions WHERE id = ?",
-                (question_id,),
-            ).fetchone()
-            if deck_id_row is None:
+            deck_id = self._deck_id_for_question(c, question_id)
+            if deck_id is None:
                 return
-            deck_id = deck_id_row["deck_id"]
             new_pos_row = c.execute(
                 """
                 SELECT COALESCE(MAX(tq.queue_position), 0) + 1 AS np
@@ -129,7 +124,6 @@ class TriviaQueueRepo:
                 """,
                 (deck_id,),
             ).fetchone()
-            new_pos = new_pos_row["np"]
             now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
             c.execute(
                 """
@@ -139,15 +133,9 @@ class TriviaQueueRepo:
                     queue_position = ?
                 WHERE question_id = ?
                 """,
-                (now_iso, 1 if correct else 0, new_pos, question_id),
+                (now_iso, 1 if correct else 0, new_pos_row["np"], question_id),
             )
-            # Reset the deck's notification backoff streak — any answer
-            # is engagement, so the next scheduler tick should fire at
-            # the deck's base interval rather than the backed-off one.
-            c.execute(
-                "UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?",
-                (deck_id,),
-            )
+            self._reset_deck_streak(c, deck_id)
 
     def set_last_correctness(self, question_id: int, correct: bool) -> None:
         """Flip the recorded verdict for a card without rotating it
@@ -156,8 +144,8 @@ class TriviaQueueRepo:
         the back of the queue a second time. Also clears the deck's
         ignored-streak since a re-grade still counts as engagement."""
         with cursor() as c:
-            row = c.execute("SELECT deck_id FROM questions WHERE id = ?", (question_id,)).fetchone()
-            if row is None:
+            deck_id = self._deck_id_for_question(c, question_id)
+            if deck_id is None:
                 return
             c.execute(
                 """UPDATE trivia_queue
@@ -165,10 +153,28 @@ class TriviaQueueRepo:
                    WHERE question_id = ?""",
                 (1 if correct else 0, question_id),
             )
-            c.execute(
-                "UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?",
-                (row["deck_id"],),
-            )
+            self._reset_deck_streak(c, deck_id)
+
+    @staticmethod
+    def _deck_id_for_question(c, question_id: int) -> int | None:
+        """Resolve the owning deck_id for a question. Returns None if
+        the row is gone (caller should treat as a no-op)."""
+        row = c.execute(
+            "SELECT deck_id FROM questions WHERE id = ?",
+            (question_id,),
+        ).fetchone()
+        return row["deck_id"] if row else None
+
+    @staticmethod
+    def _reset_deck_streak(c, deck_id: int) -> None:
+        """Zero the deck's notification backoff. Both verdict-recording
+        paths call this — any answer is engagement, so the next
+        scheduler tick should fire at the deck's base interval rather
+        than the backed-off one."""
+        c.execute(
+            "UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?",
+            (deck_id,),
+        )
 
     def count_unanswered(self, deck_id: int) -> int:
         """Number of cards in `deck_id` whose `last_answered_at IS NULL`.
