@@ -24,11 +24,11 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.datastructures import FormData
 
-from prep import db
 from prep.auth import current_user
 from prep.decks import service
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
+from prep.infrastructure.db import now as db_now
 from prep.web import responses
 from prep.web.templates import templates
 
@@ -454,7 +454,7 @@ def deck_view(
     uid = user["tailscale_login"]
     deck_id = deck_repo.get_or_create(uid, name)
     cards = q_repo.list_in_deck(uid, deck_id)
-    now_ts = db.now()
+    now_ts = db_now()
     deck_type = deck_repo.get_type(uid, deck_id)
     # Cheap row read for the per-deck notification toggle state.
     # Both srs and trivia decks expose the toggle now — srs honors

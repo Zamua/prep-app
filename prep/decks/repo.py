@@ -5,24 +5,14 @@ deck + question tables. Routes / services hold a repo, call methods
 on it, and get back `Deck` / `Question` entities (or summaries /
 None for the read paths).
 
-In this phase the repos are facades over the existing `prep.db`
-accessor functions — same SQL, same row shapes. They exist now so:
-1. callers can adopt the entity-based surface incrementally without
-   waiting on the full SQL extraction;
-2. tests can pin the entity contract against a real sqlite (in-mem
-   tmp-path-scoped) before the SQL moves;
-3. when phase 5c moves the SQL out of prep/db.py, the repo public
-   surface doesn't change — only the internals do.
-
-No service-layer logic here. Repos do reads + writes; orchestration
-lives in prep/decks/service.py.
+SQL lives here directly — no wrapping over prep.db. Repos do reads
++ writes; orchestration lives in prep/decks/service.py.
 """
 
 from __future__ import annotations
 
 import json
 
-from prep import db as _legacy_db
 from prep.decks.entities import (
     Deck,
     DeckCard,
@@ -32,6 +22,7 @@ from prep.decks.entities import (
     Question,
     QuestionType,
 )
+from prep.infrastructure.db import cursor, now
 
 
 class DeckRepo:
@@ -39,17 +30,34 @@ class DeckRepo:
 
     def get_or_create(self, user_id: str, name: str) -> int:
         """Return deck id; create with no context_prompt if missing."""
-        return _legacy_db.get_or_create_deck(user_id, name)
+        with cursor() as c:
+            row = c.execute(
+                "SELECT id FROM decks WHERE user_id = ? AND name = ?",
+                (user_id, name),
+            ).fetchone()
+            if row:
+                return row["id"]
+            cur = c.execute(
+                "INSERT INTO decks (user_id, name, created_at) VALUES (?, ?, ?)",
+                (user_id, name, now()),
+            )
+            return cur.lastrowid
 
     def find_id(self, user_id: str, name: str) -> int | None:
-        return _legacy_db.find_deck(user_id, name)
+        """Read-only deck lookup — does not auto-create. Used for
+        ownership checks on workflow status routes where we must NOT
+        side-effect on a misrouted poll."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT id FROM decks WHERE user_id = ? AND name = ?",
+                (user_id, name),
+            ).fetchone()
+        return row["id"] if row else None
 
     def find_name(self, user_id: str, deck_id: int) -> str | None:
         """Reverse of find_id: deck_id → deck name. Used by routes
         that need to redirect to a deck page after mutating one of
         its questions."""
-        from prep.infrastructure.db import cursor
-
         with cursor() as c:
             row = c.execute(
                 "SELECT name FROM decks WHERE id=? AND user_id=?",
@@ -60,8 +68,6 @@ class DeckRepo:
     def get_type(self, user_id: str, deck_id: int) -> DeckType | None:
         """Look up a deck's type without paying for the full Deck
         entity. Returns None for unknown / wrong-user deck_ids."""
-        from prep.infrastructure.db import cursor
-
         with cursor() as c:
             row = c.execute(
                 "SELECT deck_type FROM decks WHERE id=? AND user_id=?",
@@ -72,23 +78,69 @@ class DeckRepo:
         return DeckType(row["deck_type"])
 
     def create(self, user_id: str, name: str, context_prompt: str | None = None) -> int:
-        return _legacy_db.create_deck(user_id, name, context_prompt)
+        """Insert a new deck row. Caller is responsible for validating
+        the name (alphanumeric + hyphens, length cap, etc.). Raises
+        sqlite3.IntegrityError if the (user_id, name) pair already
+        exists."""
+        with cursor() as c:
+            cur = c.execute(
+                "INSERT INTO decks (user_id, name, created_at, context_prompt) VALUES (?, ?, ?, ?)",
+                (user_id, name, now(), context_prompt),
+            )
+            return cur.lastrowid
 
     def get_context_prompt(self, user_id: str, name: str) -> str | None:
-        return _legacy_db.get_deck_context_prompt(user_id, name)
+        """Returns the user-supplied context prompt for a deck, or
+        None if the deck doesn't exist or has no prompt set yet
+        (legacy decks, or a row pre-dating UI creation)."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT context_prompt FROM decks WHERE user_id = ? AND name = ?",
+                (user_id, name),
+            ).fetchone()
+        if not row:
+            return None
+        return row["context_prompt"]
 
     def update_context_prompt(self, user_id: str, name: str, context_prompt: str) -> None:
-        _legacy_db.update_deck_context_prompt(user_id, name, context_prompt)
+        with cursor() as c:
+            c.execute(
+                "UPDATE decks SET context_prompt = ? WHERE user_id = ? AND name = ?",
+                (context_prompt, user_id, name),
+            )
 
     def delete(self, user_id: str, name: str) -> int:
-        """Delete deck + all its questions/cards/reviews. Returns the
-        deleted deck's id, or 0 if no deck matched."""
-        return _legacy_db.delete_deck(user_id, name)
+        """Delete a deck by name and return the count of rows removed
+        (0 or 1). FK CASCADE removes the deck's questions; question
+        CASCADEs remove cards / reviews / study_session_answers.
+        study_sessions on the deck also cascade. So a single DELETE
+        wipes the entire subtree."""
+        with cursor() as c:
+            cur = c.execute(
+                "DELETE FROM decks WHERE user_id = ? AND name = ?",
+                (user_id, name),
+            )
+            return cur.rowcount
 
     def list_summaries(self, user_id: str) -> list[DeckSummary]:
         """All decks owned by user, with total + due counts. Used by
         the index page."""
-        rows = _legacy_db.list_decks(user_id)
+        with cursor() as c:
+            rows = c.execute(
+                """
+                SELECT d.id, d.name, d.deck_type,
+                       COUNT(q.id) AS total,
+                       SUM(CASE WHEN cards.next_due <= ? AND COALESCE(q.suspended,0)=0
+                                THEN 1 ELSE 0 END) AS due
+                  FROM decks d
+                  LEFT JOIN questions q ON q.deck_id = d.id AND q.user_id = d.user_id
+                  LEFT JOIN cards ON cards.question_id = q.id
+                 WHERE d.user_id = ?
+                 GROUP BY d.id
+                 ORDER BY d.name
+                """,
+                (now(), user_id),
+            ).fetchall()
         return [
             DeckSummary(
                 id=r["id"],
@@ -105,8 +157,6 @@ class DeckRepo:
         Paused decks are excluded — they shouldn't contribute to the
         digest body any more than they contribute to the trigger count.
         Used by the notify scheduler."""
-        from prep.infrastructure.db import cursor, now
-
         with cursor() as c:
             rows = c.execute(
                 """SELECT d.name, COUNT(c.question_id) AS n
@@ -138,8 +188,6 @@ class DeckRepo:
         the existing context_prompt column (claude reads it during
         generation). `interval_minutes` is per-deck.
         """
-        from prep.infrastructure.db import cursor, now
-
         with cursor() as c:
             cur = c.execute(
                 """
@@ -158,8 +206,6 @@ class DeckRepo:
         on the Deck entity. Includes decks with notifications disabled;
         the scheduler does its own filtering.
         """
-        from prep.infrastructure.db import cursor
-
         with cursor() as c:
             rows = c.execute(
                 """
@@ -177,8 +223,6 @@ class DeckRepo:
         in a single UPDATE. Called by the scheduler after each fire so
         the next tick reads the updated streak when computing the
         backed-off interval."""
-        from prep.infrastructure.db import cursor
-
         with cursor() as c:
             c.execute(
                 """UPDATE decks
@@ -193,8 +237,6 @@ class DeckRepo:
         path the moment a user records a verdict — gives instant
         feedback rather than waiting for the next scheduler tick to
         notice the engagement."""
-        from prep.infrastructure.db import cursor
-
         with cursor() as c:
             c.execute(
                 "UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?",
@@ -209,8 +251,6 @@ class DeckRepo:
         updated (deck exists, owned by user_id, deck_type='trivia');
         False otherwise — IDOR guard via the user_id + deck_type
         filters."""
-        from prep.infrastructure.db import cursor
-
         if minutes < 1 or minutes > 720:
             raise ValueError(f"interval out of range: {minutes}")
         with cursor() as c:
@@ -229,11 +269,9 @@ class DeckRepo:
         filter, trivia decks via the per-deck scheduler skip. Returns
         True if a row was updated (deck exists, belongs to `user_id`),
         False otherwise. user_id scoping is the IDOR guard."""
-        from prep.infrastructure.db import cursor
-
         with cursor() as c:
             cur = c.execute(
-                "UPDATE decks SET notifications_enabled = ? WHERE id = ? AND user_id = ?",
+                "UPDATE decks SET notifications_enabled = ? WHERE id = ?  AND user_id = ?",
                 (1 if enabled else 0, deck_id, user_id),
             )
             return cur.rowcount > 0
@@ -242,65 +280,138 @@ class DeckRepo:
 class QuestionRepo:
     """Read/write access to the `questions` table."""
 
-    def add(
-        self,
-        user_id: str,
-        deck_id: int,
-        new: NewQuestion,
-    ) -> int:
+    def add(self, user_id: str, deck_id: int, new: NewQuestion) -> int:
         """Insert a new question + its initial card row, return id."""
-        # `choices` on the entity is list[str] | None; the underlying
-        # accessor expects the same shape, so we pass through directly.
-        return _legacy_db.add_question(
-            user_id,
-            deck_id,
-            new.type.value,
-            new.prompt,
-            new.answer,
-            topic=new.topic,
-            choices=new.choices,
-            rubric=new.rubric,
-            skeleton=new.skeleton,
-            language=new.language,
-            explanation=new.explanation,
-        )
+        # `answer` for `multi` may come as a list — store canonically as JSON.
+        answer = new.answer
+        if isinstance(answer, list):
+            answer = json.dumps(answer)
+        rubric = new.rubric
+        if isinstance(rubric, list):
+            rubric = "\n".join(f"- {b}" for b in rubric)
+        ts = now()
+        with cursor() as c:
+            cur = c.execute(
+                """
+                INSERT INTO questions
+                    (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language, explanation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    deck_id,
+                    new.type.value,
+                    new.topic,
+                    new.prompt,
+                    json.dumps(new.choices) if new.choices else None,
+                    answer,
+                    rubric,
+                    ts,
+                    new.skeleton if (new.skeleton and new.type.value == "code") else None,
+                    new.language if new.type.value == "code" else None,
+                    new.explanation,
+                ),
+            )
+            qid = cur.lastrowid
+            c.execute(
+                "INSERT INTO cards (question_id, step, next_due) VALUES (?, 0, ?)",
+                (qid, ts),
+            )
+            return qid
 
     def update(self, user_id: str, qid: int, new: NewQuestion) -> None:
-        """In-place edit. SRS state is preserved across edits."""
-        _legacy_db.update_question(
-            user_id,
-            qid,
-            qtype=new.type.value,
-            prompt=new.prompt,
-            answer=new.answer,
-            topic=new.topic,
-            choices=new.choices,
-            rubric=new.rubric,
-            skeleton=new.skeleton,
-            language=new.language,
-        )
+        """In-place edit. SRS state is preserved across edits.
+        Raises ValueError if no row matches (user_id, qid)."""
+        answer = new.answer
+        if isinstance(answer, list):
+            answer = json.dumps(answer)
+        rubric = new.rubric
+        if isinstance(rubric, list):
+            rubric = "\n".join(f"- {b}" for b in rubric)
+        with cursor() as c:
+            cur = c.execute(
+                """UPDATE questions
+                      SET type = ?,
+                          topic = ?,
+                          prompt = ?,
+                          choices = ?,
+                          answer = ?,
+                          rubric = ?,
+                          skeleton = ?,
+                          language = ?
+                    WHERE id = ? AND user_id = ?""",
+                (
+                    new.type.value,
+                    new.topic,
+                    new.prompt,
+                    json.dumps(new.choices) if new.choices else None,
+                    answer,
+                    rubric,
+                    new.skeleton if (new.skeleton and new.type.value == "code") else None,
+                    new.language if new.type.value == "code" else None,
+                    qid,
+                    user_id,
+                ),
+            )
+            if cur.rowcount == 0:
+                raise ValueError(f"question {qid} not found for user")
 
     def get(self, user_id: str, qid: int) -> Question | None:
-        row = _legacy_db.get_question(user_id, qid)
-        if row is None:
+        """Fetch a question, scoped to the user's own questions only.
+        Returns None if qid doesn't exist OR belongs to another user
+        — same response so we don't leak existence across users."""
+        with cursor() as c:
+            row = c.execute(
+                """
+                SELECT q.*, cards.step, cards.next_due
+                  FROM questions q LEFT JOIN cards ON cards.question_id = q.id
+                 WHERE q.id = ? AND q.user_id = ?
+                """,
+                (qid, user_id),
+            ).fetchone()
+        if not row:
             return None
-        return _row_to_question(row)
+        return _row_to_question(dict(row))
 
     def list_in_deck(self, user_id: str, deck_id: int) -> list[DeckCard]:
         """All questions in a deck rendered as deck-page cards (joined
         with SRS state, deck/user context omitted since the caller
         already knows it). Used by the deck view template."""
-        rows = _legacy_db.list_questions(user_id, deck_id)
-        return [_row_to_deck_card(r) for r in rows]
+        with cursor() as c:
+            rows = c.execute(
+                """
+                SELECT q.id, q.type, q.topic, q.prompt, q.suspended,
+                       q.answer, q.choices, q.rubric, q.skeleton, q.language,
+                       cards.step, cards.next_due, cards.last_review,
+                       (SELECT COUNT(*) FROM reviews r WHERE r.question_id=q.id) AS attempts,
+                       (SELECT COUNT(*) FROM reviews r
+                         WHERE r.question_id=q.id AND r.result='right') AS rights
+                  FROM questions q
+                  LEFT JOIN cards ON cards.question_id = q.id
+                 WHERE q.deck_id = ? AND q.user_id = ?
+                 ORDER BY cards.next_due ASC, q.id ASC
+                """,
+                (deck_id, user_id),
+            ).fetchall()
+        return [_row_to_deck_card(dict(r)) for r in rows]
 
     def prompts_in_deck(self, user_id: str, deck_id: int) -> list[str]:
         """Just the prompts. Used by the AI deck-transform path to
         give claude the existing-prompts list as context without
         passing full answer keys."""
-        return _legacy_db.question_prompts_for_deck(user_id, deck_id)
+        with cursor() as c:
+            rows = c.execute(
+                "SELECT prompt FROM questions WHERE deck_id = ? AND user_id = ?",
+                (deck_id, user_id),
+            ).fetchall()
+        return [r["prompt"] for r in rows]
 
     def set_suspended(self, user_id: str, qid: int, suspended: bool) -> None:
-        _legacy_db.set_suspended(user_id, qid, suspended)
+        with cursor() as c:
+            c.execute(
+                "UPDATE questions SET suspended = ? WHERE id = ? AND user_id = ?",
+                (1 if suspended else 0, qid, user_id),
+            )
 
 
 # ---- row-to-entity helpers ----------------------------------------------

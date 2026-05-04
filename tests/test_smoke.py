@@ -28,7 +28,7 @@ def test_index_401s_when_no_identity(env: None, monkeypatch):
 
     import importlib
 
-    from prep import db as db_mod
+    from prep.infrastructure import db as db_mod
 
     importlib.reload(db_mod)
 
@@ -45,7 +45,7 @@ def test_index_uses_tailscale_header_when_present(env: None, authed_headers):
     """Tailscale headers always win over PREP_DEFAULT_USER."""
     import importlib
 
-    from prep import db as db_mod
+    from prep.infrastructure import db as db_mod
 
     importlib.reload(db_mod)
 
@@ -53,8 +53,8 @@ def test_index_uses_tailscale_header_when_present(env: None, authed_headers):
 
     importlib.reload(app_mod)
 
-    c = TestClient(app_mod.app)
-    r = c.get("/", headers=authed_headers)
+    with TestClient(app_mod.app) as c:
+        r = c.get("/", headers=authed_headers)
     assert r.status_code == 200
 
 

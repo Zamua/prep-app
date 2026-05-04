@@ -47,11 +47,14 @@ def client(env: None):
     """A FastAPI TestClient against a fresh, isolated app instance.
 
     Uses importlib.reload so each test sees a fresh module state; otherwise
-    db.py's module-level connection caches state across tests.
-    """
+    the connection cache in prep.infrastructure.db carries state across
+    tests. TestClient is entered as a context manager so the on_event
+    "startup" handler (which runs db.init() to bootstrap the schema)
+    actually fires — without it, smoke tests that don't use the
+    initialized_db fixture would hit "no such table: users"."""
     import importlib
 
-    from prep import db as db_mod
+    from prep.infrastructure import db as db_mod
 
     importlib.reload(db_mod)
 
@@ -61,7 +64,8 @@ def client(env: None):
 
     from fastapi.testclient import TestClient
 
-    return TestClient(app_mod.app)
+    with TestClient(app_mod.app) as c:
+        yield c
 
 
 @pytest.fixture

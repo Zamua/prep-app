@@ -15,14 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from prep import chat_handoff
-from prep import db as _legacy_db
 from prep.auth import current_user
 from prep.decks.entities import DeckType
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.domain import grading
+from prep.infrastructure.db import cursor, now
 from prep.study import service
 from prep.study.entities import SessionState, SessionStatus
-from prep.study.repo import ReviewRepo, SessionRepo
+from prep.study.repo import ReviewRepo, SessionRepo, StaleVersionError
 from prep.web import responses
 from prep.web.templates import templates
 
@@ -167,7 +167,7 @@ def session_view(
         st = s.last_answered_state or {}
         # Pull the most recent user_answer from reviews — single source
         # of truth, no extra column needed.
-        with _legacy_db.cursor() as c:
+        with cursor() as c:
             r = c.execute(
                 "SELECT user_answer FROM reviews WHERE question_id = ? ORDER BY id DESC LIMIT 1",
                 (qid,),
@@ -210,12 +210,12 @@ def session_view(
     # card is left, transition to completed via a synchronous bump.
     q_entity = q_repo.get(uid, s.current_question_id) if s.current_question_id else None
     if q_entity is None:
-        with _legacy_db.cursor() as c:
+        with cursor() as c:
             c.execute(
                 "UPDATE study_sessions SET status='completed', "
                 "       version = version + 1, last_active = ? "
                 " WHERE id = ? AND user_id = ?",
-                (_legacy_db.now(), sid, uid),
+                (now(), sid, uid),
             )
         return responses.redirect(request, f"/session/{sid}")
     q = q_entity.model_dump()
@@ -274,7 +274,7 @@ async def session_draft(
             body.get("draft", ""),
             int(body["version"]),
         )
-    except _legacy_db.StaleVersionError as e:
+    except StaleVersionError as e:
         return JSONResponse(
             {"error": "stale", "current_version": e.current_version},
             status_code=409,
@@ -352,7 +352,7 @@ async def session_submit(
                 user_answer=user_answer,
                 idk=idk,
             )
-        except _legacy_db.StaleVersionError as e:
+        except StaleVersionError as e:
             return _stale_response(request, sid, e.current_version)
         except Exception as e:
             raise HTTPException(500, f"failed to start grading workflow: {e}")
@@ -371,7 +371,7 @@ async def session_submit(
             user_answer=user_answer,
             verdict=verdict,
         )
-    except _legacy_db.StaleVersionError as e:
+    except StaleVersionError as e:
         return _stale_response(request, sid, e.current_version)
     return responses.redirect(request, f"/session/{sid}")
 
@@ -399,7 +399,7 @@ async def session_advance(
     expected_version = int(form["version"])
     try:
         service.advance_session(session_repo, user["tailscale_login"], sid, expected_version)
-    except _legacy_db.StaleVersionError as e:
+    except StaleVersionError as e:
         return _stale_response(request, sid, e.current_version)
     return responses.redirect(request, f"/session/{sid}")
 
@@ -431,6 +431,7 @@ def study(
     name: str,
     user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
+    review_repo: ReviewRepo = Depends(_review_repo),
 ):
     """Older single-card study path (no session). Picks one due card
     from the deck and renders it; submission goes to the matching
@@ -439,7 +440,7 @@ def study(
     use + dev-tooling."""
     uid = user["tailscale_login"]
     deck_id = deck_repo.get_or_create(uid, name)
-    due = _legacy_db.due_questions(uid, deck_id, limit=1)
+    due = review_repo.due_questions(uid, deck_id, limit=1)
     if not due:
         return templates.TemplateResponse(
             "study_empty.html",
@@ -730,7 +731,7 @@ async def study_self_grade(
                 verdict,
                 state.model_dump(),
             )
-        except _legacy_db.StaleVersionError as e:
+        except StaleVersionError as e:
             return _stale_response(request, sid, e.current_version)
         return responses.redirect(request, f"/session/{sid}")
     # No session — back to the deck page.
