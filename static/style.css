@@ -629,15 +629,17 @@ a { color: inherit; }
 }
 .notif-edit > summary::-webkit-details-marker { display: none; }
 .notif-edit > summary::marker { content: ""; }
-/* Caret on the trivia notif pill — Phosphor caret-down. Initial state
-   points DOWN (the pill is "tap to expand"); rotates 180° when the
-   <details> is open so it points UP (tap to collapse). */
+/* Caret on the trivia notif pill — Phosphor caret-down rotated to
+   point RIGHT when closed (collapsed disclosure convention) and
+   DOWN when open (expanded). Matches the iOS / macOS file-browser
+   pattern. */
 .notif-pill-caret {
   width: 0.85rem; height: 0.85rem;
   opacity: 0.7; margin-left: 0.1rem;
+  transform: rotate(-90deg);
   transition: transform 0.15s ease;
 }
-.notif-edit[open] .notif-pill-caret { transform: rotate(180deg); }
+.notif-edit[open] .notif-pill-caret { transform: rotate(0); }
 
 /* Overlay the popover instead of pushing the mastery bar / chips
    below it. Anchored to .notif-edit (position:relative) so the
@@ -3399,7 +3401,14 @@ body:has(dialog[open]) {
   gap: 0.4rem;
   margin: 0 0 0.9rem;
 }
-.trivia-disc { min-width: 0; }
+/* display:contents lifts the summary + body up to be direct grid
+   items of .trivia-disc-row. That lets the body span the full row
+   (grid-column: 1/-1) while the summary stays as a small pill in
+   one column — without that, the body was constrained to its parent
+   <details>'s single grid cell and rendered as a thin column. The
+   browser still handles the open/close hide of the body via the
+   <details> element's native semantics. */
+.trivia-disc { display: contents; }
 
 /* Shared outline-pill chrome for .trivia-disc summary + .trivia-regrade-btn:
    small italic-uppercase outlined pill with optional leading icon. The
@@ -3428,8 +3437,9 @@ body:has(dialog[open]) {
   background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
 }
 .trivia-disc-body {
-  /* Span both columns of the disc-row grid so the panel sits below
-     the two pills cleanly, regardless of which one was tapped. */
+  /* Spans the full disc-row width because .trivia-disc above uses
+     display:contents — that lifts the body up to be a direct grid
+     item of the row, so grid-column: 1/-1 actually applies. */
   grid-column: 1 / -1;
   padding: 0.8rem 0.9rem; margin: 0.4rem 0 0;
   font-size: 0.95rem; line-height: 1.55; color: var(--ink-soft);
