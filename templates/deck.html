@@ -207,6 +207,12 @@
   {% if agent_available %}
     <p class="add-or" aria-hidden="true"><span>or</span></p>
     {% if deck_type == 'trivia' %}
+      {# Trivia decks have TWO claude-driven knobs:
+         (1) topic prompt — drives FUTURE batch generation
+         (2) transform — proposes edits to EXISTING cards
+         Both write through the same Temporal workflow shape that
+         SRS decks use; the topic editor is just a different
+         operation than per-card rewrites. #}
       <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
             method="post" class="transform-form add-ai-form">
         <label class="freetext">
@@ -223,24 +229,24 @@
           Edits apply to the next batch the scheduler generates. Existing cards are not touched.
         </p>
       </form>
-    {% else %}
-      <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
-            method="post" class="transform-form add-ai-form">
-        <label class="freetext">
-          <span class="freetext-label">
-            {{ icon('sparkle', class_='icon icon-inline') }}
-            Ask claude to add cards or edit existing ones
-          </span>
-          <textarea name="prompt" rows="3" maxlength="4000"
-                    placeholder="e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing"
-                    required></textarea>
-        </label>
-        <button type="submit" class="btn btn-quiet">Apply</button>
-        <p class="transform-hint">
-          Claude reads the deck, proposes a patch, and you confirm before anything writes.
-        </p>
-      </form>
+      <p class="add-or" aria-hidden="true"><span>or</span></p>
     {% endif %}
+    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+          method="post" class="transform-form add-ai-form">
+      <label class="freetext">
+        <span class="freetext-label">
+          {{ icon('sparkle', class_='icon icon-inline') }}
+          Ask claude to {% if deck_type == 'trivia' %}edit existing cards{% else %}add cards or edit existing ones{% endif %}
+        </span>
+        <textarea name="prompt" rows="3" maxlength="4000"
+                  placeholder="{% if deck_type == 'trivia' %}e.g. reword cards so each clearly expects a 1-2 word answer (no essay-style 'explain why' prompts){% else %}e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing{% endif %}"
+                  required></textarea>
+      </label>
+      <button type="submit" class="btn btn-quiet">Apply</button>
+      <p class="transform-hint">
+        Claude reads the deck, proposes a patch, and you confirm before anything writes.
+      </p>
+    </form>
   {% endif %}
 </section>
 
