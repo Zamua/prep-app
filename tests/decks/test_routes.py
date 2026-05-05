@@ -314,7 +314,7 @@ def test_split_form_renders_card_list(client: TestClient, initialized_db: str):
     """GET on the split route shows each card with a checkbox so the
     user can select which to move."""
     user = initialized_db
-    deck_id = DeckRepo().create(user, "design-interview")
+    deck_id = DeckRepo().create(user, "distributed-systems")
     qrepo = QuestionRepo()
     qrepo.add(
         user,
@@ -334,7 +334,7 @@ def test_split_form_renders_card_list(client: TestClient, initialized_db: str):
             answer="patch",
         ),
     )
-    r = client.get("/deck/design-interview/split")
+    r = client.get("/deck/distributed-systems/split")
     assert r.status_code == 200
     assert "Two Generals problem proves what?" in r.text
     assert "HTTP method for partial update?" in r.text
@@ -345,7 +345,7 @@ def test_split_srs_deck_moves_selected_cards_into_new_deck(client: TestClient, i
     """Manual split: cards belonging to the selected ids end up in
     the new deck; un-selected stay in source."""
     user = initialized_db
-    deck_id = DeckRepo().create(user, "design-interview")
+    deck_id = DeckRepo().create(user, "distributed-systems")
     qrepo = QuestionRepo()
     q_keep = qrepo.add(
         user, deck_id, NewQuestion(type=QuestionType.SHORT, prompt="Keep me", answer="A")
@@ -355,20 +355,20 @@ def test_split_srs_deck_moves_selected_cards_into_new_deck(client: TestClient, i
     )
 
     r = client.post(
-        "/deck/design-interview/split",
-        data={"new_name": "api-design", "question_ids": [str(q_move)]},
+        "/deck/distributed-systems/split",
+        data={"new_name": "replication", "question_ids": [str(q_move)]},
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert "/deck/api-design" in r.headers["location"]
+    assert "/deck/replication" in r.headers["location"]
 
     # Source has only the unselected card.
-    src_id = DeckRepo().find_id(user, "design-interview")
+    src_id = DeckRepo().find_id(user, "distributed-systems")
     src_cards = qrepo.list_in_deck(user, src_id)
     assert [c.id for c in src_cards] == [q_keep]
 
     # Destination has only the moved card.
-    dst_id = DeckRepo().find_id(user, "api-design")
+    dst_id = DeckRepo().find_id(user, "replication")
     assert dst_id is not None
     dst_cards = qrepo.list_in_deck(user, dst_id)
     assert [c.id for c in dst_cards] == [q_move]
@@ -382,43 +382,43 @@ def test_split_trivia_deck_inherits_topic_and_creates_trivia_type(
     so the new deck is notification-driven from day one."""
     user = initialized_db
     deck_id = DeckRepo().create_trivia(
-        user, "design-interview", topic="system + api design", interval_minutes=45
+        user, "distributed-systems", topic="databases", interval_minutes=45
     )
     qrepo = QuestionRepo()
     qid = qrepo.add(user, deck_id, NewQuestion(type=QuestionType.SHORT, prompt="?", answer="A"))
 
     r = client.post(
-        "/deck/design-interview/split",
-        data={"new_name": "api-design", "question_ids": [str(qid)]},
+        "/deck/distributed-systems/split",
+        data={"new_name": "replication", "question_ids": [str(qid)]},
         follow_redirects=False,
     )
     assert r.status_code == 303
-    new_id = DeckRepo().find_id(user, "api-design")
+    new_id = DeckRepo().find_id(user, "replication")
     assert new_id is not None
     assert DeckRepo().get_type(user, new_id).value == "trivia"
     # Topic inherited from source when no override given.
-    assert DeckRepo().get_context_prompt(user, "api-design") == "system + api design"
+    assert DeckRepo().get_context_prompt(user, "replication") == "databases"
 
 
 def test_split_trivia_deck_uses_provided_topic_override(client: TestClient, initialized_db: str):
     user = initialized_db
     deck_id = DeckRepo().create_trivia(
-        user, "design-interview", topic="system + api design", interval_minutes=30
+        user, "distributed-systems", topic="databases", interval_minutes=30
     )
     qid = QuestionRepo().add(
         user, deck_id, NewQuestion(type=QuestionType.SHORT, prompt="?", answer="A")
     )
     r = client.post(
-        "/deck/design-interview/split",
+        "/deck/distributed-systems/split",
         data={
-            "new_name": "api-design",
+            "new_name": "replication",
             "question_ids": [str(qid)],
-            "new_topic": "REST + gRPC + idempotency",
+            "new_topic": "leader election + linearizability",
         },
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert DeckRepo().get_context_prompt(user, "api-design") == "REST + gRPC + idempotency"
+    assert DeckRepo().get_context_prompt(user, "replication") == "leader election + linearizability"
 
 
 def test_split_rejects_duplicate_new_name(client: TestClient, initialized_db: str):
@@ -478,7 +478,7 @@ def test_index_trivia_deck_shows_mastery_mini_bar(client: TestClient, initialize
     from prep.trivia.repo import TriviaQueueRepo
 
     deck_id = DeckRepo().create_trivia(
-        initialized_db, "design-interview", topic="x", interval_minutes=30
+        initialized_db, "distributed-systems", topic="x", interval_minutes=30
     )
     qrepo = QuestionRepo()
     trepo = TriviaQueueRepo()

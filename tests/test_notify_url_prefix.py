@@ -81,8 +81,8 @@ def test_send_to_user_forwards_tag_to_payload(patched_send):
     notifications. Default (no tag) leaves the key out → SW falls
     back to "prep-default"."""
     mod, captured = patched_send
-    mod.send_to_user("u", "t", "b", tag="trivia-design-interview")
-    assert captured[0]["tag"] == "trivia-design-interview"
+    mod.send_to_user("u", "t", "b", tag="trivia-world-history")
+    assert captured[0]["tag"] == "trivia-world-history"
 
     captured.clear()
     mod.send_to_user("u", "t", "b")  # no tag passed
