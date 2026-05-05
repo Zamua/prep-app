@@ -959,6 +959,49 @@ async def transform_view(
         if q is not None:
             deck_name = deck_repo.find_name(uid, q.deck_id) or ""
 
+    # Build a per-modification diff so the preview shows the user the
+    # OLD state (live from the DB) alongside claude's proposed NEW
+    # state. The plan only carries the new shape; old shape needs
+    # a lookup. Cheap: one fetch per modified card, small N.
+    modification_diffs: list[dict] = []
+    plan = (progress or {}).get("plan") or {}
+    for m in plan.get("modifications") or []:
+        qid = m.get("question_id")
+        if not qid:
+            continue
+        old = q_repo.get(uid, qid)
+        if old is None:
+            continue
+        modification_diffs.append(
+            {
+                "question_id": qid,
+                "old": {
+                    "type": old.type.value,
+                    "topic": old.topic or "",
+                    "prompt": old.prompt,
+                    "answer": old.answer,
+                    "rubric": old.rubric or "",
+                    "skeleton": old.skeleton or "",
+                    "language": old.language or "",
+                },
+                "new": {
+                    "type": m.get("type") or old.type.value,
+                    "topic": (m.get("topic") or old.topic or "") or "",
+                    "prompt": m.get("prompt") or old.prompt,
+                    "answer": m.get("answer") or old.answer,
+                    "rubric": m.get("rubric")
+                    if m.get("rubric") is not None
+                    else (old.rubric or ""),
+                    "skeleton": m.get("skeleton")
+                    if m.get("skeleton") is not None
+                    else (old.skeleton or ""),
+                    "language": m.get("language")
+                    if m.get("language") is not None
+                    else (old.language or ""),
+                },
+            }
+        )
+
     return templates.TemplateResponse(
         "transform.html",
         {
@@ -971,6 +1014,7 @@ async def transform_view(
             "progress": progress or {},
             "desc": desc or {},
             "status": status,
+            "modification_diffs": modification_diffs,
         },
     )
 

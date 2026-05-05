@@ -2735,6 +2735,76 @@ body:has(dialog[open]) {
   font-size: 0.85rem;
   margin-top: 0.2rem;
 }
+
+/* Per-modification before/after diff cards. One card per claude-
+   proposed modification, showing only the fields whose values
+   differ between current state (old) and proposed state (new). */
+.transform-diff-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.transform-diff-card {
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+}
+.transform-diff-header {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-style: italic;
+  color: var(--ink-mute);
+}
+.transform-diff-field {
+  margin-top: 0.6rem;
+}
+.transform-diff-field:first-of-type { margin-top: 0; }
+.transform-diff-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.transform-diff-side {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.transform-diff-side + .transform-diff-side { margin-top: 0.3rem; }
+.transform-diff-old {
+  background: color-mix(in srgb, var(--wrong) 7%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--wrong) 60%, transparent);
+}
+.transform-diff-new {
+  background: color-mix(in srgb, var(--right) 7%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--right) 60%, transparent);
+}
+.transform-diff-tag {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-style: italic;
+  color: var(--ink-mute);
+  padding-top: 0.1rem;
+  min-width: 3rem;
+}
+.transform-diff-value {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
 .transform-applied {
   margin: 0.6rem 0;
   padding: 0.6rem 0.9rem;

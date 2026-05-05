@@ -168,6 +168,12 @@ type Card struct {
 	// "go" | "java" | "python" | "javascript" | "typescript" | "rust" | "cpp".
 	// Only meaningful for `code` questions; ignored otherwise.
 	Language string `json:"language,omitempty"`
+	// Trivia-only: short paragraph claude generates with the answer,
+	// surfaced as the "Deep dive" disclosure on the trivia card view.
+	Explanation string `json:"explanation,omitempty"`
+	// Trivia-only: regex used as the first grading pass before falling
+	// back to claude. Optional; missing pattern → grader falls through.
+	AnswerRegex string `json:"answer_regex,omitempty"`
 }
 
 // InsertInput is the input for InsertCard.
@@ -269,15 +275,17 @@ type TransformInput struct {
 // CardModification is a full replacement of a card's user-visible fields.
 // Claude returns the new state, not a diff, so the merge logic is simple.
 type CardModification struct {
-	QuestionID int      `json:"question_id"`
-	Type       string   `json:"type"` // code|mcq|multi|short
-	Topic      string   `json:"topic,omitempty"`
-	Prompt     string   `json:"prompt"`
-	Choices    []string `json:"choices,omitempty"`
-	Answer     string   `json:"answer"`
-	Rubric     string   `json:"rubric,omitempty"`
-	Skeleton   string   `json:"skeleton,omitempty"`
-	Language   string   `json:"language,omitempty"`
+	QuestionID  int      `json:"question_id"`
+	Type        string   `json:"type"` // code|mcq|multi|short
+	Topic       string   `json:"topic,omitempty"`
+	Prompt      string   `json:"prompt"`
+	Choices     []string `json:"choices,omitempty"`
+	Answer      string   `json:"answer"`
+	Rubric      string   `json:"rubric,omitempty"`
+	Skeleton    string   `json:"skeleton,omitempty"`
+	Language    string   `json:"language,omitempty"`
+	Explanation string   `json:"explanation,omitempty"`
+	AnswerRegex string   `json:"answer_regex,omitempty"`
 }
 
 type TransformPlan struct {

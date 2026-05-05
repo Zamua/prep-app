@@ -135,7 +135,9 @@ Return a JSON object describing the new state of THIS card. Shape:
     "answer": "...",
     "rubric": "...",
     "skeleton": "...",          // optional starter code for code questions
-    "language": "..."           // optional, only for code (go|java|python|...)
+    "language": "...",          // optional, only for code (go|java|python|...)
+    "explanation": "...",       // trivia only — 2-4 sentence "deep dive"
+    "answer_regex": "..."       // trivia only — case-insensitive fullmatch
   }],
   "notes": "<one short sentence summarizing what changed>"
 }
@@ -169,15 +171,20 @@ Return a JSON object describing the changes to apply. Only include cards that ac
 `+"```json"+`
 {
   "modifications": [
-    {"question_id": <id>, "type": "...", "topic": "...", "prompt": "...", "choices": [...], "answer": "...", "rubric": "...", "skeleton": "...", "language": "..."}
+    {"question_id": <id>, "type": "...", "topic": "...", "prompt": "...", "choices": [...], "answer": "...", "rubric": "...", "skeleton": "...", "language": "...", "explanation": "...", "answer_regex": "..."}
   ],
   "additions": [
-    {"type": "code|mcq|multi|short", "topic": "...", "prompt": "...", "choices": [...], "answer": "...", "rubric": "...", "skeleton": "...", "language": "..."}
+    {"type": "code|mcq|multi|short", "topic": "...", "prompt": "...", "choices": [...], "answer": "...", "rubric": "...", "skeleton": "...", "language": "...", "explanation": "...", "answer_regex": "..."}
   ],
   "deletions": [<question_id>, ...],
   "notes": "<one short sentence summarizing the overall change>"
 }
 `+"```"+`
+
+Field guidance:
+- explanation + answer_regex are TRIVIA-only (the cards in the input JSON will only have them set if this is a trivia deck). They surface as a "Deep dive" disclosure (explanation, 2-4 sentences) and the first-pass grader regex (answer_regex, case-insensitive fullmatch). If you change a card's prompt/answer, ALSO update explanation + answer_regex to stay in sync — a stale regex matching the old answer will silently mis-grade.
+- For srs cards, leave explanation and answer_regex empty.
+- Preserve fields the user's request didn't ask to change.
 
 Output ONLY the JSON object, no commentary or fences. If the request asks for fewer than 1 change, return empty arrays. Cap additions at 15 cards per request.`,
 		string(cardsJSON), userPrompt)
@@ -247,11 +254,14 @@ func (a *Activities) ApplyTransform(ctx context.Context, in shared.ApplyTransfor
 			       answer = COALESCE(NULLIF(?, ''), answer),
 			       rubric = ?,
 			       skeleton = ?,
-			       language = ?
+			       language = ?,
+			       explanation = ?,
+			       answer_regex = ?
 			 WHERE id = ? AND user_id = ?`,
 			m.Type, nullIfEmpty(m.Topic), m.Prompt, choicesJSON,
 			m.Answer, nullIfEmpty(m.Rubric),
 			nullIfEmpty(m.Skeleton), nullIfEmpty(m.Language),
+			nullIfEmpty(m.Explanation), nullIfEmpty(m.AnswerRegex),
 			m.QuestionID, in.UserID,
 		)
 		if err != nil {
@@ -261,6 +271,15 @@ func (a *Activities) ApplyTransform(ctx context.Context, in shared.ApplyTransfor
 	}
 
 	// ---- Additions ----
+	// Look up deck type once so we can branch on trivia (insert into
+	// trivia_queue for rotation) vs srs (no queue concept).
+	var deckType string
+	if err := tx.QueryRow(`SELECT COALESCE(deck_type, 'srs') FROM decks WHERE id = ? AND user_id = ?`,
+		in.DeckID, in.UserID).Scan(&deckType); err != nil {
+		// Best-effort; if the deck row is gone, additions will fail at
+		// insert time anyway.
+		deckType = "srs"
+	}
 	for _, c := range in.Plan.Additions {
 		choicesJSON := jsonOrNull(c.Choices)
 		var skel, lang sql.NullString
@@ -273,10 +292,11 @@ func (a *Activities) ApplyTransform(ctx context.Context, in shared.ApplyTransfor
 			}
 		}
 		r, err := tx.Exec(`
-			INSERT INTO questions (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO questions (user_id, deck_id, type, topic, prompt, choices, answer, rubric, created_at, skeleton, language, explanation, answer_regex)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			in.UserID, in.DeckID, c.Type, nullIfEmpty(c.Topic), c.Prompt, choicesJSON,
 			c.Answer, nullIfEmpty(c.Rubric), nowISO(), skel, lang,
+			nullIfEmpty(c.Explanation), nullIfEmpty(c.AnswerRegex),
 		)
 		if err != nil {
 			return shared.TransformResult{}, fmt.Errorf("insert addition: %w", err)
@@ -286,6 +306,22 @@ func (a *Activities) ApplyTransform(ctx context.Context, in shared.ApplyTransfor
 		if _, err := tx.Exec(`INSERT INTO cards (question_id, step, next_due) VALUES (?, 0, ?)`,
 			cardID, nowISO()); err != nil {
 			return shared.TransformResult{}, fmt.Errorf("insert cards row: %w", err)
+		}
+		// Trivia decks need a trivia_queue row so the new card enters
+		// the rotation. Position = max(queue_position) + 1 within deck.
+		if deckType == "trivia" {
+			var nextPos int
+			if err := tx.QueryRow(`
+				SELECT COALESCE(MAX(tq.queue_position), 0) + 1
+				  FROM trivia_queue tq
+				  JOIN questions q ON q.id = tq.question_id
+				 WHERE q.deck_id = ?`, in.DeckID).Scan(&nextPos); err != nil {
+				return shared.TransformResult{}, fmt.Errorf("compute trivia queue pos: %w", err)
+			}
+			if _, err := tx.Exec(`INSERT INTO trivia_queue (question_id, queue_position) VALUES (?, ?)`,
+				cardID, nextPos); err != nil {
+				return shared.TransformResult{}, fmt.Errorf("insert trivia_queue row: %w", err)
+			}
 		}
 		res.AddedIDs = append(res.AddedIDs, cardID)
 	}
@@ -315,15 +351,17 @@ func (a *Activities) ApplyTransform(ctx context.Context, in shared.ApplyTransfor
 // that's relevant to rewriting. Excludes srs state, timestamps, and ids
 // the model doesn't need to think about.
 type cardForTransform struct {
-	QuestionID int      `json:"question_id"`
-	Type       string   `json:"type"`
-	Topic      string   `json:"topic,omitempty"`
-	Prompt     string   `json:"prompt"`
-	Choices    []string `json:"choices,omitempty"`
-	Answer     string   `json:"answer"`
-	Rubric     string   `json:"rubric,omitempty"`
-	Skeleton   string   `json:"skeleton,omitempty"`
-	Language   string   `json:"language,omitempty"`
+	QuestionID  int      `json:"question_id"`
+	Type        string   `json:"type"`
+	Topic       string   `json:"topic,omitempty"`
+	Prompt      string   `json:"prompt"`
+	Choices     []string `json:"choices,omitempty"`
+	Answer      string   `json:"answer"`
+	Rubric      string   `json:"rubric,omitempty"`
+	Skeleton    string   `json:"skeleton,omitempty"`
+	Language    string   `json:"language,omitempty"`
+	Explanation string   `json:"explanation,omitempty"`
+	AnswerRegex string   `json:"answer_regex,omitempty"`
 }
 
 func loadCardForTransform(dbPath, userID string, qid int) ([]cardForTransform, error) {
@@ -334,7 +372,8 @@ func loadCardForTransform(dbPath, userID string, qid int) ([]cardForTransform, e
 	defer db.Close()
 	row := db.QueryRow(`
 		SELECT id, type, COALESCE(topic, ''), prompt, choices, answer,
-		       COALESCE(rubric, ''), COALESCE(skeleton, ''), COALESCE(language, '')
+		       COALESCE(rubric, ''), COALESCE(skeleton, ''), COALESCE(language, ''),
+		       COALESCE(explanation, ''), COALESCE(answer_regex, '')
 		  FROM questions WHERE id = ? AND user_id = ?`, qid, userID)
 	c, err := scanCardForTransform(row)
 	if err != nil {
@@ -351,7 +390,8 @@ func loadDeckCardsForTransform(dbPath, userID string, deckID int) ([]cardForTran
 	defer db.Close()
 	rows, err := db.Query(`
 		SELECT id, type, COALESCE(topic, ''), prompt, choices, answer,
-		       COALESCE(rubric, ''), COALESCE(skeleton, ''), COALESCE(language, '')
+		       COALESCE(rubric, ''), COALESCE(skeleton, ''), COALESCE(language, ''),
+		       COALESCE(explanation, ''), COALESCE(answer_regex, '')
 		  FROM questions WHERE deck_id = ? AND user_id = ? AND COALESCE(suspended, 0) = 0
 		 ORDER BY id`, deckID, userID)
 	if err != nil {
@@ -377,7 +417,8 @@ func scanCardForTransform(r rowScanner) (cardForTransform, error) {
 	var c cardForTransform
 	var choicesJSON sql.NullString
 	if err := r.Scan(&c.QuestionID, &c.Type, &c.Topic, &c.Prompt,
-		&choicesJSON, &c.Answer, &c.Rubric, &c.Skeleton, &c.Language); err != nil {
+		&choicesJSON, &c.Answer, &c.Rubric, &c.Skeleton, &c.Language,
+		&c.Explanation, &c.AnswerRegex); err != nil {
 		return cardForTransform{}, err
 	}
 	if choicesJSON.Valid && choicesJSON.String != "" {

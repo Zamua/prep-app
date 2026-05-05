@@ -55,15 +55,43 @@
       </ul>
 
       {% if mods %}
-        <p class="section-eyebrow"><span>Sample modifications</span><span class="rule"></span></p>
-        <ul class="transform-list">
-          {% for m in mods[:3] %}
-            <li class="transform-list-item">
-              <span class="transform-list-id">№ {{ m.question_id }}</span>
-              <span class="transform-list-prompt">{{ m.prompt[:160] }}{% if m.prompt|length > 160 %}…{% endif %}</span>
+        <p class="section-eyebrow"><span>Modifications ({{ mods|length }})</span><span class="rule"></span></p>
+        {# Per-modification before/after diff. The fields surfaced are
+           the ones claude can edit (prompt, answer, topic, rubric,
+           type, choices). Unchanged fields collapse so the eye lands
+           on what actually changed. #}
+        <ul class="transform-diff-list">
+          {% for d in modification_diffs %}
+            <li class="transform-diff-card">
+              <p class="transform-diff-header">№ {{ d.question_id }}</p>
+              {% set fields = [
+                ('prompt', 'Prompt'),
+                ('answer', 'Answer'),
+                ('topic', 'Topic'),
+                ('rubric', 'Rubric'),
+                ('type', 'Type'),
+                ('skeleton', 'Skeleton'),
+                ('language', 'Language')
+              ] %}
+              {% for key, label in fields %}
+                {% set old_val = d.old[key] | string %}
+                {% set new_val = d.new[key] | string %}
+                {% if old_val != new_val %}
+                  <div class="transform-diff-field">
+                    <p class="transform-diff-label">{{ label }}</p>
+                    <div class="transform-diff-side transform-diff-old">
+                      <span class="transform-diff-tag">before</span>
+                      <span class="transform-diff-value">{{ old_val if old_val else '—' }}</span>
+                    </div>
+                    <div class="transform-diff-side transform-diff-new">
+                      <span class="transform-diff-tag">after</span>
+                      <span class="transform-diff-value">{{ new_val if new_val else '—' }}</span>
+                    </div>
+                  </div>
+                {% endif %}
+              {% endfor %}
             </li>
           {% endfor %}
-          {% if mods|length > 3 %}<li class="transform-list-more">+ {{ mods|length - 3 }} more</li>{% endif %}
         </ul>
       {% endif %}
 
