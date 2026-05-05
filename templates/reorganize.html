@@ -27,17 +27,17 @@
     <textarea name="prompt" rows="5" maxlength="4000"
               placeholder="e.g. split databases into transactions and replication · merge geography into world-history · fix typos across all decks · move every distributed-systems card from databases into a new distsys deck"
               required>{{ form.prompt or '' }}</textarea>
-    <span class="freetext-hint">
-      Claude will see every deck + its cards. The plan is reversible up to the point you tap Apply.
-    </span>
   </label>
-  <button type="submit" class="btn btn-primary" style="width: 100%">Suggest a plan</button>
+  <button type="submit" class="btn btn-quiet">Suggest a plan</button>
+  <p class="transform-hint">
+    Claude will see every deck + its cards. The plan is reversible up to the point you tap Apply.
+  </p>
 </form>
 
 {% if decks %}
 <section class="decks-section">
   <details class="reorganize-deck-list">
-    <summary class="section-eyebrow"><span>Your decks ({{ decks|length }})</span><span class="rule"></span></summary>
+    <summary><span class="reorganize-deck-list-label">Your decks ({{ decks|length }})</span><span class="rule"></span></summary>
     <ul class="reorganize-deck-list-items" role="list">
       {% for d in decks %}
         <li class="reorganize-deck-row">

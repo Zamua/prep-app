@@ -36,7 +36,7 @@ func (a *Activities) ComputeTransform(ctx context.Context, in shared.ComputeTran
 		return shared.TransformPlan{}, temporal.NewNonRetryableApplicationError(
 			"user_id required", "BadInput", errors.New("user_id required"))
 	}
-	if in.Scope != "card" && in.Scope != "deck" {
+	if in.Scope != "card" && in.Scope != "deck" && in.Scope != "reorganize" {
 		return shared.TransformPlan{}, temporal.NewNonRetryableApplicationError(
 			"unknown scope", "BadInput", fmt.Errorf("scope=%q", in.Scope))
 	}
