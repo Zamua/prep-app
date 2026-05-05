@@ -144,11 +144,6 @@ def tick(now_utc: datetime) -> None:
             streak = deck.notification_ignored_streak
             if not _is_due(now_utc, deck.last_notified_at, interval, streak):
                 continue
-            # Quiet hours apply across SRS when-ready + trivia. Skip
-            # without touching last_notified_at so the deck fires as
-            # soon as the window reopens.
-            if _user_in_quiet_hours(deck.user_id):
-                continue
 
             # Refill gate: when the never-shown pool drops below the
             # deck's session size, ask claude for a fresh batch. Tied
@@ -158,6 +153,11 @@ def tick(now_utc: datetime) -> None:
             # strict — a single stuck wrong card blocked generation
             # forever. Wrong cards still rotate via the queue picker;
             # they don't gate refill anymore.
+            #
+            # Refill runs even during quiet hours — the user shouldn't
+            # wake up to an empty deck. The notification itself is
+            # suppressed below; only the background generation work
+            # happens during quiet hours.
             #
             # Synchronous — the scheduler tick happily blocks ~30-60s;
             # next tick is _TICK_SECONDS away regardless. Failures are
@@ -177,6 +177,13 @@ def tick(now_utc: datetime) -> None:
                         )
                     except AgentUnavailable as e:
                         logger.warning("trivia tick: refill failed for deck %s: %s", deck.id, e)
+
+            # Quiet hours: skip the actual notification fire (and don't
+            # touch last_notified_at, so the deck fires the moment the
+            # window reopens). Refill above already ran so morning's
+            # session has fresh content.
+            if _user_in_quiet_hours(deck.user_id):
+                continue
 
             # If there's an active session for this deck, RESUME it
             # instead of picking fresh — the notification body says
