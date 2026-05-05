@@ -22,18 +22,21 @@
 <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split" class="deck-split-form">
   <section class="add-section">
     <p class="section-eyebrow"><span>New deck</span><span class="rule"></span></p>
-    <label class="freetext">
-      <span class="freetext-label">Name</span>
-      <input type="text" name="new_name" required maxlength="64"
+    <label class="form-field">
+      <span class="form-label">Name</span>
+      <input type="text" name="new_name" required maxlength="30"
              value="{{ form.new_name or '' }}"
-             placeholder="e.g. api-design" autocomplete="off">
+             pattern="[a-z0-9][a-z0-9-]{1,29}"
+             placeholder="e.g. api-design"
+             autocapitalize="none" autocorrect="off" autocomplete="off">
+      <span class="form-hint">2–30 chars, lowercase letters/digits/hyphens, used in the URL.</span>
     </label>
     {% if deck_type == 'trivia' %}
       <label class="freetext">
-        <span class="freetext-label">Topic prompt <small>(optional — defaults to source topic)</small></span>
-        <textarea name="new_topic" rows="3" maxlength="4000"
-                  placeholder="leave blank to inherit '{{ source_topic[:80] }}'…">{{ form.new_topic or '' }}</textarea>
-        <span class="freetext-hint">Used to generate fresh batches of cards on the new deck. Existing moved cards are not regenerated.</span>
+        <span class="freetext-label">Topic prompt</span>
+        <textarea name="new_topic" rows="4" maxlength="4000"
+                  placeholder="Used to generate fresh batches of cards on the new deck.">{{ form.new_topic or source_topic or '' }}</textarea>
+        <span class="freetext-hint">Pre-filled with the source deck's topic. Edit to focus the new deck (e.g., narrow to "REST + gRPC + idempotency"). Existing moved cards are not regenerated.</span>
       </label>
     {% endif %}
   </section>
@@ -41,17 +44,19 @@
   <section class="card-index">
     <p class="section-eyebrow"><span>Cards to move ({{ cards|length }} total)</span><span class="rule"></span></p>
     {% if cards %}
-      <ol class="deck-split-cards" role="list">
+      <fieldset class="choices choices-multi deck-split-cards">
+        <legend class="visually-hidden">Cards to move into the new deck</legend>
         {% for c in cards %}
-          <li class="deck-split-card">
-            <label class="deck-split-card-label">
-              <input type="checkbox" name="question_ids" value="{{ c.id }}"
-                     {% if c.id in form.selected_ids %}checked{% endif %}>
-              <span class="deck-split-card-prompt">{{ c.prompt }}</span>
-            </label>
-          </li>
+          <label class="choice">
+            <input type="checkbox" name="question_ids" value="{{ c.id }}"
+                   {% if c.id in form.selected_ids %}checked{% endif %}>
+            <span class="choice-marker" aria-hidden="true">
+              {{ icon('check', class_='icon choice-marker-check') }}
+            </span>
+            <span class="choice-text">{{ c.prompt }}</span>
+          </label>
         {% endfor %}
-      </ol>
+      </fieldset>
     {% else %}
       <p class="empty-headline"><em>No cards in this deck.</em></p>
     {% endif %}
