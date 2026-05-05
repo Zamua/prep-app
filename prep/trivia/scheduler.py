@@ -34,12 +34,10 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_INTERVAL_MINUTES = 30
 
-# Strict gate: only refill the deck once the user has answered EVERY
-# existing card correctly at least once. This stops the scheduler
-# from blowing the deck up to hundreds of cards when the user has
-# stopped engaging — if there's a single wrong/never-shown card
-# left, no new generation fires.
-_REFILL_BELOW_PENDING_REVIEW = 1
+# Idle threshold: skip the resume notification if the user has been
+# active in the session within this window (mid-session, doesn't need
+# a reminder). Doesn't gate fresh-pick — only the resume body.
+_RESUME_NOTIF_IDLE_MIN = 5
 
 # Exponential backoff cap. Effective interval is
 # `base × 2 ** min(streak, _MAX_BACKOFF_DOUBLINGS)`, so 5 doublings =
@@ -152,15 +150,21 @@ def tick(now_utc: datetime) -> None:
             if _user_in_quiet_hours(deck.user_id):
                 continue
 
-            # Refill gate: if the user is running low on cards that
-            # still need work (never-shown + wrong-answered), ask
-            # claude for a fresh batch BEFORE picking. Synchronous —
-            # the scheduler tick happily blocks ~30-60s; next tick
-            # is _TICK_SECONDS away regardless. Failures are logged
-            # and swallowed: an unavailable agent shouldn't stop us
-            # from cycling existing cards (the weighted picker can
-            # still surface review material).
-            if trivia.count_pending_review(deck.id) < _REFILL_BELOW_PENDING_REVIEW:
+            # Refill gate: when the never-shown pool drops below the
+            # deck's session size, ask claude for a fresh batch. Tied
+            # to session_size so a deck always has at least one full
+            # session's worth of fresh content queued. The prior gate
+            # ("zero pending review including wrong cards") was too
+            # strict — a single stuck wrong card blocked generation
+            # forever. Wrong cards still rotate via the queue picker;
+            # they don't gate refill anymore.
+            #
+            # Synchronous — the scheduler tick happily blocks ~30-60s;
+            # next tick is _TICK_SECONDS away regardless. Failures are
+            # logged and swallowed: an unavailable agent shouldn't
+            # stop us from cycling existing cards.
+            refill_threshold = deck.trivia_session_size or 3
+            if trivia.count_unanswered(deck.id) < refill_threshold:
                 topic = (deck.context_prompt or deck.name or "").strip()
                 if topic:
                     try:
@@ -179,9 +183,26 @@ def tick(now_utc: datetime) -> None:
             # "N cards remaining" and the URL points at the existing
             # queue+done. Once the user finishes (or abandons via
             # the 7d reaper), the next tick picks fresh.
+            #
+            # SUPPRESSION: if the user is currently mid-session
+            # (last_active within _RESUME_NOTIF_IDLE_MIN), skip the
+            # notification entirely. They don't need a "pick up" ping
+            # while they're literally answering cards — that's just
+            # noise. Doesn't touch last_notified_at so the deck fires
+            # at the next tick after they pause / leave.
             sessions = TriviaSessionsRepo()
             active = sessions.get_active_for_deck(deck.user_id, deck.id)
             if active and active.queue:
+                last_active_dt = _parse_iso(active.last_active)
+                if last_active_dt is not None:
+                    idle_seconds = (now_utc - last_active_dt).total_seconds()
+                    if idle_seconds < _RESUME_NOTIF_IDLE_MIN * 60:
+                        logger.info(
+                            "trivia tick: deck %s has active mid-session (%.0fs idle), skipping notif",
+                            deck.id,
+                            idle_seconds,
+                        )
+                        continue
                 head_qid = active.queue[0]
                 head_prompt = trivia.prompt_for_question(head_qid)
                 if not head_prompt:

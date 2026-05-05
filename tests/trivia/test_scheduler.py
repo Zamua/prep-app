@@ -196,13 +196,17 @@ def test_tick_refills_when_pending_pool_drained(monkeypatch, fixtures):
     assert gen_calls[0]["deck_id"] == deck_id
 
 
-def test_tick_holds_refill_while_user_has_wrong_cards(monkeypatch, fixtures):
-    """Wrong-answered cards count as 'pending'. If the user has 5+
-    wrong-or-fresh, no refill — they need to clear what they have."""
+def test_tick_holds_refill_while_fresh_pool_full(monkeypatch, fixtures):
+    """Refill gate is now count_unanswered < trivia_session_size. With
+    plenty of never-shown cards left, no refill — wrong-answered
+    cards no longer count toward the threshold (they rotate via the
+    queue picker)."""
     deck_id, qids = _make_trivia_deck(fixtures, n_questions=8)
-    # Six wrong + 2 fresh → pending=8 → above threshold → no refill.
-    for qid in qids[:6]:
-        fixtures["trivia"].mark_answered(qid, correct=False)
+    # 6 wrong + 2 fresh → count_unanswered = 2; default session_size
+    # is 3, threshold is 3, so 2 < 3 means refill DOES fire. To verify
+    # the refill-doesn't-fire path with the new gate, we need plenty
+    # of unanswered cards. Mark zero answered → 8 unanswered → above
+    # the 3-card threshold → no refill.
     gen_calls = []
     monkeypatch.setattr(
         "prep.trivia.service.generate_batch",
@@ -211,6 +215,15 @@ def test_tick_holds_refill_while_user_has_wrong_cards(monkeypatch, fixtures):
     monkeypatch.setattr("prep.notify.push.send_to_user", lambda **kw: {"ok": True})
     sched.tick(datetime.now(timezone.utc))
     assert gen_calls == []
+    # Smoke the new gate explicitly: with 6 wrong + 2 fresh, refill
+    # should fire (2 < 3-card session_size threshold).
+    for qid in qids[:6]:
+        fixtures["trivia"].mark_answered(qid, correct=False)
+    fixtures["decks"].record_notification_fire(
+        deck_id, (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(), 0
+    )
+    sched.tick(datetime.now(timezone.utc))
+    assert len(gen_calls) == 1, "expected refill when count_unanswered drops below session_size"
 
 
 def test_tick_skips_when_user_in_quiet_hours(monkeypatch, fixtures):
@@ -404,9 +417,11 @@ def test_tick_skips_deck_with_notifications_disabled(monkeypatch, fixtures):
 
 
 def test_tick_resumes_existing_active_session(monkeypatch, fixtures):
-    """If there's an active trivia session for the deck, the
-    scheduler resumes it rather than picking fresh: body says
-    "N cards remaining", URL points at the persisted queue+done."""
+    """If there's an active trivia session for the deck (and the user
+    isn't currently mid-session), the scheduler resumes it rather
+    than picking fresh: body says "N cards remaining", URL points at
+    the persisted queue+done."""
+    from prep.infrastructure.db import cursor as _cursor
     from prep.trivia.repo import TriviaSessionsRepo
 
     deck_id, qids = _make_trivia_deck(fixtures, name="resumable", n_questions=3)
@@ -417,6 +432,16 @@ def test_tick_resumes_existing_active_session(monkeypatch, fixtures):
         queue=[qids[1], qids[2]],
         done=[(qids[0], "r")],
     )
+    # Push last_active back beyond the mid-session-suppress window
+    # (5min) so the resume notif actually fires. Otherwise the brand-
+    # new `last_active=now` triggers the "user is currently in the
+    # session" suppression.
+    backdated = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(timespec="seconds")
+    with _cursor() as c:
+        c.execute(
+            "UPDATE trivia_sessions SET last_active = ? WHERE user_id = ? AND deck_id = ?",
+            (backdated, fixtures["user"], deck_id),
+        )
     sent = []
     monkeypatch.setattr(
         "prep.notify.push.send_to_user", lambda **kw: sent.append(kw) or {"ok": True}
@@ -429,6 +454,33 @@ def test_tick_resumes_existing_active_session(monkeypatch, fixtures):
     url = sent[0]["url"]
     assert f"cards={qids[1]},{qids[2]}" in url
     assert f"done={qids[0]}r" in url
+
+
+def test_tick_suppresses_notif_when_user_mid_session(monkeypatch, fixtures):
+    """When the user is currently mid-session (active session
+    last_active within the suppress window), the scheduler skips the
+    notification entirely — no point pinging "pick up where you left
+    off" while they're literally answering cards. last_notified_at
+    isn't advanced either, so the deck fires at the next tick after
+    they pause / leave."""
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id, qids = _make_trivia_deck(fixtures, name="mid-sess", n_questions=3)
+    # Active session with last_active = now (i.e., user actively
+    # engaged within the last few seconds).
+    TriviaSessionsRepo().start_or_resume(
+        fixtures["user"], deck_id, queue=qids[1:], done=[(qids[0], "r")]
+    )
+    sent = []
+    monkeypatch.setattr(
+        "prep.notify.push.send_to_user", lambda **kw: sent.append(kw) or {"ok": True}
+    )
+    sched.tick(datetime.now(timezone.utc))
+    assert sent == [], "expected suppression while user is mid-session"
+    # last_notified_at stayed null so the next tick re-checks.
+    rows = fixtures["decks"].list_trivia_decks()
+    row = next(r for r in rows if r.id == deck_id)
+    assert row.last_notified_at is None
 
 
 def test_tick_picks_fresh_when_no_active_session(monkeypatch, fixtures):
