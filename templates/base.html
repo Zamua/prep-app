@@ -125,13 +125,39 @@
   </script>
 
   <script>
+  // iOS 26 in PWA standalone mode swallows the synthesized click
+  // event on <summary> for the first ~5 seconds after page load
+  // (Apple radar #159814 surface). Diag log confirms touchstart /
+  // touchend / pointerdown / pointerup fire normally, but click +
+  // toggle never dispatch. Bind the toggle to pointerup instead —
+  // it fires reliably on every device. preventDefault suppresses
+  // any compatibility click that does fire later, so native
+  // activation doesn't double-toggle. Capture phase so we beat the
+  // browser's activation-behavior dispatch.
+  (function () {
+    document.addEventListener('pointerup', (e) => {
+      const summary = e.target.closest && e.target.closest('summary');
+      if (!summary) return;
+      const details = summary.parentElement;
+      if (!details || details.tagName !== 'DETAILS') return;
+      e.preventDefault();
+      if (details.hasAttribute('open')) details.removeAttribute('open');
+      else details.setAttribute('open', '');
+    }, true);
+  })();
+  </script>
+
+  <script>
   // Close any open <details> popover on Esc or outside-click. Native
   // <details> only closes when its summary is tapped — fine for inline
   // disclosures but unintuitive for our menu-style popovers (user
   // indicator panel, qcard improve form, discuss popover, rubric
   // details). One global handler covers all of them.
   (function () {
-    document.addEventListener('click', (e) => {
+    document.addEventListener('pointerup', (e) => {
+      // The summary toggler above already managed this pointer event.
+      // Outside-click logic only applies to taps NOT on a summary.
+      if (e.target.closest && e.target.closest('summary')) return;
       document.querySelectorAll('details[open]').forEach((d) => {
         if (!d.contains(e.target)) d.removeAttribute('open');
       });
