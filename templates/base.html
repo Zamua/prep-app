@@ -74,12 +74,6 @@
   // details). One global handler covers all of them.
   (function () {
     document.addEventListener('click', (e) => {
-      // Skip if the click is on a <summary> — its native toggle is
-      // about to flip the details state, and racing it can leave the
-      // user with a tap that visibly opens-then-closes (or never
-      // opens, if the order goes our way). Outside-click only applies
-      // to clicks NOT on a toggle target.
-      if (e.target.closest('summary')) return;
       document.querySelectorAll('details[open]').forEach((d) => {
         if (!d.contains(e.target)) d.removeAttribute('open');
       });
