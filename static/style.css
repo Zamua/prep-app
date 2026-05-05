@@ -705,8 +705,17 @@ a { color: inherit; }
   font-family: inherit;
   transition: background 0.12s ease, border-color 0.12s ease;
 }
-.notif-pill:hover {
-  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+/* Gate :hover behind hover-capable devices (desktop with a mouse).
+   iOS holds the :hover pseudo-class on a tapped element until the
+   user taps somewhere else, which leaves the pill looking
+   "highlighted" after the popover dismisses via tap-on-summary. */
+@media (hover: hover) {
+  .notif-pill:hover {
+    background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+  }
+  .notif-pill-paused:hover {
+    background: color-mix(in srgb, var(--wrong) 14%, transparent);
+  }
 }
 .notif-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
 
@@ -714,9 +723,6 @@ a { color: inherit; }
   color: var(--wrong);
   border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
   background: color-mix(in srgb, var(--wrong) 8%, transparent);
-}
-.notif-pill-paused:hover {
-  background: color-mix(in srgb, var(--wrong) 14%, transparent);
 }
 
 /* --- Trivia interval edit popover ---------------------------------
