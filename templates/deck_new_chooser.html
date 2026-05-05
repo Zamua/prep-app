@@ -17,18 +17,27 @@
   </p>
 </section>
 
-<div class="deck-type-options">
-  <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/srs">
-    {{ icon('cards', class_='deck-type-card-icon') }}
-    <span class="deck-type-card-title">SRS</span>
-    <span class="deck-type-card-sub">Study what's due, on a forgetting curve.</span>
-  </a>
-
-  <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/trivia">
-    {{ icon('lightning', class_='deck-type-card-icon') }}
-    <span class="deck-type-card-title">Trivia</span>
-    <span class="deck-type-card-sub">One-tap quizzes via push notifications.</span>
-  </a>
-</div>
+<ul class="deck-type-options" role="list">
+  <li>
+    <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/srs">
+      {{ icon('cards', class_='deck-type-card-icon') }}
+      <span class="deck-type-card-body">
+        <span class="deck-type-card-title">SRS</span>
+        <span class="deck-type-card-sub">Study what's due, on a forgetting curve.</span>
+      </span>
+      <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+    </a>
+  </li>
+  <li>
+    <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/trivia">
+      {{ icon('lightning', class_='deck-type-card-icon') }}
+      <span class="deck-type-card-body">
+        <span class="deck-type-card-title">Trivia</span>
+        <span class="deck-type-card-sub">One-tap quizzes via push notifications.</span>
+      </span>
+      <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+    </a>
+  </li>
+</ul>
 
 {% endblock %}
