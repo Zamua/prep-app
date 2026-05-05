@@ -146,6 +146,15 @@
         <span>split</span>
       </a>
     {% endif %}
+    {# Delete pill. Tinted danger color so it's visually separate from
+       the other deck-level actions; opens the same confirm dialog as
+       the old "Danger zone" button. #}
+    <button type="button" class="edit-pill edit-pill-danger"
+            id="open-delete-dialog"
+            title="Delete this deck">
+      {{ icon('trash', class_='icon icon-inline') }}
+      <span>delete</span>
+    </button>
   </div>
   {% if deck_type == 'trivia' and trivia_stats %}
     {# Trivia mastery bar: how done am I with this deck? Bar fills
@@ -378,16 +387,6 @@
     </p>
   </section>
 {% endif %}
-
-{# Danger zone — kept understated. The button just opens the confirm
-   dialog; real deletion requires typing the deck name. #}
-<section class="danger-zone">
-  <p class="section-eyebrow"><span>Danger zone</span><span class="rule"></span></p>
-  <button type="button" class="btn btn-quiet danger-link" id="open-delete-dialog">
-    {{ icon('trash', class_='icon icon-inline') }}
-    Delete this deck
-  </button>
-</section>
 
 {# Improve-card dialog. Single instance shared across all qcards — the
    per-card "improve" button writes its qid into the form action and

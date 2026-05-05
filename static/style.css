@@ -894,6 +894,16 @@ a { color: inherit; }
   border-color: var(--ink-soft);
   background: color-mix(in srgb, var(--ink-soft) 10%, transparent);
 }
+/* Danger variant — used for the deck-delete pill. Tinted red so it
+   reads as "destructive" without being loud at rest. */
+.edit-pill-danger {
+  color: color-mix(in srgb, var(--wrong) 75%, var(--ink-soft));
+}
+.edit-pill-danger:hover {
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  border-color: color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  color: var(--wrong);
+}
 
 .deck-meta {
   display: inline-flex;
@@ -1793,6 +1803,47 @@ textarea:focus-visible {
   outline: 2px solid var(--quill);
   outline-offset: 1px;
   border-color: var(--quill);
+}
+
+/* Match the textarea chrome on inputs + selects sitting inside a
+   .freetext label so the question-new + question-edit forms read
+   consistently — they used to render with raw browser chrome. */
+.freetext input[type="text"],
+.freetext select {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.freetext select {
+  /* Phosphor caret-down inlined as the dropdown arrow so the chrome
+     doesn't fall back to the browser's native arrow on the right. */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23676059'><path d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 0.95rem;
+  padding-right: 2.4rem;
+}
+.freetext input[type="text"]:focus-visible,
+.freetext select:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+/* Answer-regex field: kept the inline `style="font-family: var(--mono)"`
+   on question_new + question_edit; reflect that here so it's not stuck
+   at the inherited serif. */
+.freetext input[type="text"][name="answer_regex"] {
+  font-family: var(--mono);
+  font-size: 0.93rem;
 }
 
 /* Trivia free-response input. Single-line analogue of `textarea` —
