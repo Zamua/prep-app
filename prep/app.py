@@ -145,6 +145,21 @@ app.include_router(pwa_router)
 if os.environ.get("PREP_DEV") == "1":
     dev_preview.register(app, templates)
 
+
+# ---- /diag — temporary iOS first-tap event tracer ------------------------
+# Standalone page that logs every touch/pointer/mouse/click/toggle event on
+# three <details> + button variants so we can see which events iOS 26 is
+# delivering vs swallowing on PWA first-tap. No-op for everyone else; remove
+# once the bug is diagnosed.
+from fastapi import Request as _Request  # noqa: E402
+from fastapi.responses import HTMLResponse as _HTMLResponse  # noqa: E402
+
+
+@app.get("/diag", response_class=_HTMLResponse)
+def _diag(request: _Request):
+    return templates.TemplateResponse("diag.html", {"request": request, "user": None})
+
+
 # ---- Boot logging ---------------------------------------------------------
 
 _default_user_at_boot = os.environ.get("PREP_DEFAULT_USER")
