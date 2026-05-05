@@ -130,11 +130,18 @@
   // (Apple radar #159814 surface). Diag log confirms touchstart /
   // touchend / pointerdown / pointerup fire normally, but click +
   // toggle never dispatch. Bind the toggle to pointerup instead —
-  // it fires reliably on every device. preventDefault suppresses
-  // any compatibility click that does fire later, so native
-  // activation doesn't double-toggle. Capture phase so we beat the
-  // browser's activation-behavior dispatch.
+  // it fires reliably on every device.
+  //
+  // Quirk: preventDefault() on pointerup does NOT reliably suppress
+  // the compatibility click on iOS PWA, so when the synthesized
+  // click eventually fires, the browser's activation behavior runs
+  // a second toggle (symptom: tap a summary and the popover blinks
+  // open→closed). Workaround: track the most recent pointerup-driven
+  // summary toggle and call preventDefault() on the corresponding
+  // click before activation behavior gets to it. Keyboard activation
+  // (Enter/Space → click without a preceding pointerup) is unaffected.
   (function () {
+    let lastSummaryToggle = 0;
     document.addEventListener('pointerup', (e) => {
       const summary = e.target.closest && e.target.closest('summary');
       if (!summary) return;
@@ -143,6 +150,14 @@
       e.preventDefault();
       if (details.hasAttribute('open')) details.removeAttribute('open');
       else details.setAttribute('open', '');
+      lastSummaryToggle = Date.now();
+    }, true);
+    document.addEventListener('click', (e) => {
+      if (Date.now() - lastSummaryToggle > 500) return;
+      if (e.target.closest && e.target.closest('summary')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     }, true);
   })();
   </script>
