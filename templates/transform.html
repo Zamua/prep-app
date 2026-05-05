@@ -14,8 +14,12 @@
 <section class="prelude">
   <p class="eyebrow">{% if scope == 'card' %}Card · improve{% elif scope == 'reorganize' %}Reorganize · across decks{% else %}Deck · transform{% endif %}</p>
   <h1 class="display" id="display-headline">
-    {% if progress.status == 'computing' or progress.status == 'awaiting_apply' or progress.status == 'applying' %}
+    {% if progress.status == 'computing' %}
       <em>Thinking</em><span class="ellipsis"></span>
+    {% elif progress.status == 'awaiting_apply' %}
+      <em>Review</em> the plan.
+    {% elif progress.status == 'applying' %}
+      <em>Applying</em><span class="ellipsis"></span>
     {% elif progress.status == 'done' %}
       Done.
     {% elif progress.status == 'rejected' %}
@@ -69,12 +73,18 @@
             {% if mods_by_deck.update({_k: (mods_by_deck.get(_k) or []) + [d]}) %}{% endif %}
           {% endfor %}
           {% for deck_label, diffs in mods_by_deck.items() %}
-            <p class="transform-deck-label">in <strong>{{ deck_label }}</strong> ({{ diffs|length }})</p>
-            <ul class="transform-diff-list">
-              {% for d in diffs %}
-                {% include "_transform_diff_card.html" %}
-              {% endfor %}
-            </ul>
+            <section class="transform-bucket">
+              <header class="transform-bucket-head">
+                <span class="transform-bucket-prep">in</span>
+                <span class="transform-bucket-deck">{{ deck_label }}</span>
+                <span class="transform-bucket-count">({{ diffs|length }})</span>
+              </header>
+              <ul class="transform-diff-list">
+                {% for d in diffs %}
+                  {% include "_transform_diff_card.html" %}
+                {% endfor %}
+              </ul>
+            </section>
           {% endfor %}
         {% else %}
           <ul class="transform-diff-list">
@@ -94,16 +104,22 @@
             {% if adds_by_deck.update({_k: (adds_by_deck.get(_k) or []) + [a]}) %}{% endif %}
           {% endfor %}
           {% for deck_label, items in adds_by_deck.items() %}
-            <p class="transform-deck-label">to <strong>{{ deck_label }}</strong> ({{ items|length }})</p>
-            <ul class="transform-list">
-              {% for a in items[:6] %}
-                <li class="transform-list-item">
-                  <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
-                  <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
-                </li>
-              {% endfor %}
-              {% if items|length > 6 %}<li class="transform-list-more">+ {{ items|length - 6 }} more</li>{% endif %}
-            </ul>
+            <section class="transform-bucket">
+              <header class="transform-bucket-head">
+                <span class="transform-bucket-prep">to</span>
+                <span class="transform-bucket-deck">{{ deck_label }}</span>
+                <span class="transform-bucket-count">({{ items|length }})</span>
+              </header>
+              <ul class="transform-list">
+                {% for a in items[:6] %}
+                  <li class="transform-list-item">
+                    <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
+                    <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
+                  </li>
+                {% endfor %}
+                {% if items|length > 6 %}<li class="transform-list-more">+ {{ items|length - 6 }} more</li>{% endif %}
+              </ul>
+            </section>
           {% endfor %}
         {% else %}
           <ul class="transform-list">
@@ -127,11 +143,17 @@
             {% if dels_by_deck.update({_k: (dels_by_deck.get(_k) or []) + [qid]}) %}{% endif %}
           {% endfor %}
           {% for deck_label, qids in dels_by_deck.items() %}
-            <p class="transform-deck-label">from <strong>{{ deck_label }}</strong> ({{ qids|length }})</p>
-            <ul class="transform-list">
-              {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
-              {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
-            </ul>
+            <section class="transform-bucket">
+              <header class="transform-bucket-head">
+                <span class="transform-bucket-prep">from</span>
+                <span class="transform-bucket-deck">{{ deck_label }}</span>
+                <span class="transform-bucket-count">({{ qids|length }})</span>
+              </header>
+              <ul class="transform-list">
+                {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+                {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
+              </ul>
+            </section>
           {% endfor %}
         {% else %}
           <ul class="transform-list">
@@ -181,11 +203,19 @@
           {% if move_groups.update({_key: (move_groups.get(_key) or []) + [mv.question_id]}) %}{% endif %}
         {% endfor %}
         {% for label, qids in move_groups.items() %}
-          <p class="transform-deck-label">from <strong>{{ label.split(' → ')[0] }}</strong> to <strong>{{ label.split(' → ')[1] }}</strong> ({{ qids|length }})</p>
-          <ul class="transform-list">
-            {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
-            {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
-          </ul>
+          <section class="transform-bucket">
+            <header class="transform-bucket-head">
+              <span class="transform-bucket-prep">from</span>
+              <span class="transform-bucket-deck">{{ label.split(' → ')[0] }}</span>
+              <span class="transform-bucket-prep">to</span>
+              <span class="transform-bucket-deck">{{ label.split(' → ')[1] }}</span>
+              <span class="transform-bucket-count">({{ qids|length }})</span>
+            </header>
+            <ul class="transform-list">
+              {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+              {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
+            </ul>
+          </section>
         {% endfor %}
       {% endif %}
 

@@ -2811,19 +2811,48 @@ body:has(dialog[open]) {
   color: var(--ink-soft); font-style: italic; font-size: 0.85rem;
 }
 
-/* Reorganize preview — per-deck grouping label that prefixes each
-   modifications/additions/deletions/moves bucket, and a warning
-   banner for deck_deletions. */
-.transform-deck-label {
-  margin: 0.7rem 0 0.3rem;
-  font-size: 0.9rem;
-  color: var(--ink-soft);
-  font-style: italic;
+/* Reorganize preview — per-deck grouping. Each bucket is a card-
+   like container so the cross-deck shape of the plan reads at a
+   glance; the header names which deck the bucket belongs to with
+   a small italic preposition ("in" / "to" / "from"). */
+.transform-bucket {
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.65rem 0.85rem 0.5rem;
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--quill);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--paper) 50%, transparent);
 }
-.transform-deck-label strong {
-  font-style: normal;
+.transform-bucket-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+}
+.transform-bucket-prep {
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.85rem;
+}
+.transform-bucket-deck {
   font-weight: 500;
   color: var(--ink);
+}
+.transform-bucket-count {
+  color: var(--ink-mute);
+  font-size: 0.85rem;
+}
+.transform-bucket .transform-diff-list,
+.transform-bucket .transform-list {
+  margin-top: 0;
+}
+/* Defensive: claude proposed a modification but no fields actually
+   changed once we resolved it against the live card. Surface it
+   instead of rendering an empty card body that confuses the user. */
+.transform-diff-empty {
+  margin: 0.3rem 0 0;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.88rem;
 }
 .transform-warning {
   display: flex; align-items: center; gap: 0.5rem;

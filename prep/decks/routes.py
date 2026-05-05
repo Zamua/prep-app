@@ -1055,6 +1055,8 @@ async def transform_view(
                     "rubric": old.rubric or "",
                     "skeleton": old.skeleton or "",
                     "language": old.language or "",
+                    "explanation": old.explanation or "",
+                    "answer_regex": old.answer_regex or "",
                 },
                 "new": {
                     "type": m.get("type") or old.type.value,
@@ -1070,6 +1072,12 @@ async def transform_view(
                     "language": m.get("language")
                     if m.get("language") is not None
                     else (old.language or ""),
+                    "explanation": m.get("explanation")
+                    if m.get("explanation") is not None
+                    else (old.explanation or ""),
+                    "answer_regex": m.get("answer_regex")
+                    if m.get("answer_regex") is not None
+                    else (old.answer_regex or ""),
                 },
             }
         )
