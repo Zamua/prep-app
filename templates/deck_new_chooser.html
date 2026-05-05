@@ -1,5 +1,4 @@
-{# Step 1 of new-deck creation: pick which kind. Big two-button
-   layout — minimal copy, the headlines are the call to action. #}
+{# Step 1 of new-deck creation: pick which kind. #}
 {% extends "base.html" %}
 {% block title %}new deck · prep{% endblock %}
 {% block page_class %}deck-new-chooser{% endblock %}
@@ -9,19 +8,26 @@
   <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
 </nav>
 
-<h1 class="deck-chooser-headline">New deck</h1>
+<section class="prelude">
+  <p class="eyebrow">A new deck</p>
+  <h1 class="display">Pick a&nbsp;<em>kind</em>.</h1>
+  <p class="lede">
+    SRS for sit-down sessions on a forgetting curve.
+    Trivia for one-tap quizzes via push notifications.
+  </p>
+</section>
 
 <div class="deck-type-options">
   <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/srs">
     {{ icon('cards', class_='deck-type-card-icon') }}
     <span class="deck-type-card-title">SRS</span>
-    <span class="deck-type-card-sub">Spaced repetition</span>
+    <span class="deck-type-card-sub">Study what's due, on a forgetting curve.</span>
   </a>
 
   <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/new/trivia">
     {{ icon('lightning', class_='deck-type-card-icon') }}
     <span class="deck-type-card-title">Trivia</span>
-    <span class="deck-type-card-sub">Push notifications</span>
+    <span class="deck-type-card-sub">One-tap quizzes via push notifications.</span>
   </a>
 </div>
 
