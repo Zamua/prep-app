@@ -151,10 +151,6 @@
       if (details.hasAttribute('open')) details.removeAttribute('open');
       else details.setAttribute('open', '');
       lastSummaryToggle = Date.now();
-      // Drop focus from the summary so iOS doesn't leave it in a
-      // sticky :focus / :active state when our preventDefault'd click
-      // never resolves through the normal activation path.
-      summary.blur();
     }, true);
     document.addEventListener('click', (e) => {
       if (Date.now() - lastSummaryToggle > 500) return;
