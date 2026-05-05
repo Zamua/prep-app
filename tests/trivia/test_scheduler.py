@@ -504,3 +504,37 @@ def test_tick_picks_fresh_when_no_active_session(monkeypatch, fixtures):
     active = sessions_repo.get_active_for_deck(fixtures["user"], deck_id)
     assert active is not None
     assert len(active.queue) > 0
+
+
+def test_tick_does_not_resume_when_user_never_engaged(monkeypatch, fixtures):
+    """Subtle case: a prior tick picked + persisted a queue but the
+    user never tapped. The active session row exists with a non-empty
+    queue but `done` is empty. The next tick must NOT say "Pick up
+    where you left off — N cards remaining" — from the user's POV
+    they never started a session. Drop the stale row and pick fresh."""
+    from prep.infrastructure.db import cursor as _cursor
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id, qids = _make_trivia_deck(fixtures, name="never-engaged", n_questions=3)
+    sessions_repo = TriviaSessionsRepo()
+    # Simulate a prior scheduler tick: queue persisted, done empty.
+    sessions_repo.replace_active(fixtures["user"], deck_id, queue=qids)
+    # Backdate last_active past the mid-session-suppress window so the
+    # idle check doesn't gate the notif.
+    backdated = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(timespec="seconds")
+    with _cursor() as c:
+        c.execute(
+            "UPDATE trivia_sessions SET last_active = ? WHERE user_id = ? AND deck_id = ?",
+            (backdated, fixtures["user"], deck_id),
+        )
+
+    sent = []
+    monkeypatch.setattr(
+        "prep.notify.push.send_to_user", lambda **kw: sent.append(kw) or {"ok": True}
+    )
+    sched.tick(datetime.now(timezone.utc))
+    assert len(sent) == 1
+    body = sent[0]["body"]
+    assert (
+        "Pick up where you left off" not in body
+    ), f"resume-style body fired for never-engaged session: {body!r}"

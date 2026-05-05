@@ -218,6 +218,18 @@ def tick(now_utc: datetime) -> None:
                     # the user deleted a card mid-session.
                     sessions.replace_active(deck.user_id, deck.id, queue=[])
                     active = None
+                elif not active.done:
+                    # Scheduler-picked queue that the user never engaged
+                    # with (no answers in `done`). From the user's POV
+                    # they don't have a session in progress — the row
+                    # exists only because a previous notification persisted
+                    # a queue the user ignored. Drop the stale row and
+                    # fall through to a fresh pick so the new notif lands
+                    # with a different card instead of re-sending "Pick up
+                    # where you left off — N cards remaining" for a
+                    # session they never started.
+                    sessions.replace_active(deck.user_id, deck.id, queue=[])
+                    active = None
                 else:
                     remaining = len(active.queue)
                     body = (
