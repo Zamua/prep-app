@@ -67,26 +67,6 @@
   </div>
 
   <script>
-  // iOS 26 swallows the synthesized click → activation behavior on
-  // <summary> for the first few seconds after a PWA loads (Apple
-  // radar #159814; surfaces as "first tap highlights the pill but
-  // no popover opens, waiting ~5s makes it work"). Bypass the native
-  // activation entirely: own the toggle in JS so we don't depend on
-  // whatever path iOS is mis-routing. Capture-phase so we run before
-  // the browser's own activation-behavior dispatch and can prevent
-  // it cleanly.
-  (function () {
-    document.addEventListener('click', (e) => {
-      const summary = e.target.closest('summary');
-      if (!summary) return;
-      const details = summary.parentElement;
-      if (!details || details.tagName !== 'DETAILS') return;
-      e.preventDefault();
-      if (details.hasAttribute('open')) details.removeAttribute('open');
-      else details.setAttribute('open', '');
-    }, true);
-  })();
-
   // Close any open <details> popover on Esc or outside-click. Native
   // <details> only closes when its summary is tapped — fine for inline
   // disclosures but unintuitive for our menu-style popovers (user
@@ -94,9 +74,6 @@
   // details). One global handler covers all of them.
   (function () {
     document.addEventListener('click', (e) => {
-      // The summary-toggle handler above already managed the click.
-      // Outside-click logic only applies to clicks NOT on a summary.
-      if (e.target.closest('summary')) return;
       document.querySelectorAll('details[open]').forEach((d) => {
         if (!d.contains(e.target)) d.removeAttribute('open');
       });
