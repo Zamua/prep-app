@@ -25,7 +25,13 @@ class AgentUnavailable(RuntimeError):
     an error. Caller decides whether to log + skip or surface."""
 
 
-_DEFAULT_TIMEOUT_S = 300.0
+# Generation prompts ask for ~25 questions including a regex per
+# card. Claude often takes 15-25s per card these days; a full batch
+# can run 8-10 minutes, so we give a generous wall-clock budget.
+# Falling well short of this would have us silently dropping work
+# claude already did (the agent finishes server-side after the prep
+# client closes).
+_DEFAULT_TIMEOUT_S = 900.0
 
 
 def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
