@@ -556,11 +556,124 @@ a { color: inherit; }
 .back:hover { color: var(--ink); }
 
 .deck-header { margin-bottom: 1.5rem; }
+.deck-title-row {
+  display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap;
+  position: relative;
+}
 .deck-title {
   text-transform: lowercase;
   font-variation-settings: "opsz" 144, "SOFT" 60;
   margin-top: 0.4rem;
+  margin-right: 0;
 }
+
+/* Inline rename: pencil button next to the deck title; tapping
+   opens a <details> popover with the rename form. Same per-element
+   edit pattern used by .notif-edit and .deck-topic-edit — keep the
+   shape consistent. */
+.deck-rename {
+  display: inline-block;
+  position: static;
+}
+.deck-rename > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.35rem 0.45rem;
+  border-radius: 999px;
+  color: var(--ink-mute);
+  display: inline-flex; align-items: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.deck-rename > summary::-webkit-details-marker { display: none; }
+.deck-rename > summary::marker { content: ""; }
+.deck-rename > summary:hover { color: var(--ink); }
+.deck-rename > summary .icon { width: 1rem; height: 1rem; }
+.deck-rename[open] > summary { background: color-mix(in srgb, var(--ink-soft) 8%, transparent); }
+.deck-rename-form {
+  position: absolute; left: 0; top: 100%;
+  z-index: 60;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.85rem 1rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  min-width: 18rem; max-width: min(28rem, 90vw);
+}
+.deck-rename-input {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Trivia topic-prompt edit: collapsible <details> showing the
+   current topic preview + a pencil; opens to reveal the edit
+   textarea. Per-element pattern, same as rename + notif. */
+.deck-topic { margin: 0 0 1.4rem; }
+.deck-topic-edit { display: block; }
+.deck-topic-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  -webkit-tap-highlight-color: transparent;
+}
+.deck-topic-summary::-webkit-details-marker { display: none; }
+.deck-topic-summary::marker { content: ""; }
+.deck-topic-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.deck-topic-preview {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deck-topic-pencil { color: var(--ink-mute); width: 0.95rem; height: 0.95rem; }
+.deck-topic-edit:hover .deck-topic-pencil { color: var(--ink); }
+.deck-topic-edit[open] .deck-topic-summary {
+  border-color: var(--rule);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.deck-topic-form {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.85rem;
+  border: 1px solid var(--rule);
+  border-top: none;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--paper);
+}
+.deck-topic-form textarea {
+  font-family: var(--serif);
+  font-size: 1rem;
+  min-height: 4.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  resize: vertical;
+}
+.deck-topic-form .btn { align-self: flex-start; }
 
 .deck-pill-row {
   display: flex;

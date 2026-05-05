@@ -109,6 +109,22 @@ class DeckRepo:
                 (context_prompt, user_id, name),
             )
 
+    def rename(self, user_id: str, old_name: str, new_name: str) -> bool:
+        """Rename a deck. Returns True on success, False if the source
+        deck doesn't exist or the new name is already taken (the
+        UNIQUE(user_id, name) constraint catches collisions)."""
+        import sqlite3
+
+        with cursor() as c:
+            try:
+                cur = c.execute(
+                    "UPDATE decks SET name = ? WHERE user_id = ? AND name = ?",
+                    (new_name, user_id, old_name),
+                )
+            except sqlite3.IntegrityError:
+                return False
+            return cur.rowcount > 0
+
     def delete(self, user_id: str, name: str) -> int:
         """Delete a deck by name and return the count of rows removed
         (0 or 1). FK CASCADE removes the deck's questions; question

@@ -567,6 +567,55 @@ def deck_update_topic(
     return responses.redirect(request, f"/deck/{name}")
 
 
+@router.post("/deck/{name}/rename")
+def deck_rename(
+    request: Request,
+    name: str,
+    new_name: str = Form(...),
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Rename a deck. Validates the new name with the same regex used
+    on creation and rejects collisions with another existing deck of
+    the same user. Redirects to the deck under its new URL."""
+    uid = user["tailscale_login"]
+    if deck_repo.find_id(uid, name) is None:
+        raise HTTPException(404, "deck not found")
+    cleaned = _validate_deck_name(new_name)
+    if cleaned == name:
+        return responses.redirect(request, f"/deck/{name}")
+    if not deck_repo.rename(uid, name, cleaned):
+        raise HTTPException(400, f'a deck named "{cleaned}" already exists')
+    return responses.redirect(request, f"/deck/{cleaned}")
+
+
+@router.get("/deck/{name}/edit-with-claude", response_class=HTMLResponse)
+def deck_edit_with_claude(
+    request: Request,
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Dedicated page for the deck-wide AI edit prompt. Replaces the
+    inline toggle panel that used to live on the deck page; the prompt
+    + apply flow now has its own focused view."""
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    deck_type = deck_repo.get_type(uid, deck_id)
+    return templates.TemplateResponse(
+        "deck_edit_ai.html",
+        {
+            "request": request,
+            "user": user,
+            "deck_name": name,
+            "deck_type": deck_type.value if deck_type else "srs",
+            "error": None,
+        },
+    )
+
+
 @router.get("/deck/{name}/split", response_class=HTMLResponse)
 def deck_split_form(
     request: Request,

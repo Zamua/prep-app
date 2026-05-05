@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}edit with claude · {{ deck_name }} · prep{% endblock %}
+{% block page_class %}deck-edit-ai{% endblock %}
+{% block main %}
+
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow">Edit with claude</p>
+  <h1 class="display"><em>Tell</em> claude what to change.</h1>
+  <p class="lede">
+    Claude reads every card in the deck, proposes a patch, and you confirm
+    before anything writes. The plan is reversible up to the point you tap
+    Apply.
+  </p>
+</section>
+
+{% if error %}
+  <p class="error-banner">{{ error }}</p>
+{% endif %}
+
+<form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+      method="post" class="transform-form add-ai-form">
+  <label class="freetext">
+    <span class="freetext-label">
+      {{ icon('sparkle', class_='icon icon-inline') }}
+      Ask claude to {% if deck_type == 'trivia' %}edit existing cards{% else %}add cards or edit existing ones{% endif %}
+    </span>
+    <textarea name="prompt" rows="5" maxlength="4000"
+              placeholder="{% if deck_type == 'trivia' %}e.g. reword cards so each clearly expects a 1-2 word answer (no essay-style 'explain why' prompts){% else %}e.g. add 5 more cards on consensus algorithms · convert all go problems to java · fix typos · add skeletons where missing{% endif %}"
+              required></textarea>
+  </label>
+  <button type="submit" class="btn btn-quiet">Suggest a plan</button>
+  <p class="transform-hint">
+    The proposed patch shows up on the next page with before/after diffs
+    for each modified card.
+  </p>
+</form>
+
+{% endblock %}
