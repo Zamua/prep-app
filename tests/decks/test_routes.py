@@ -208,26 +208,53 @@ def test_deck_view_renders_edit_pill_and_hidden_panel(client: TestClient, initia
     assert "hidden" in r.text[panel_idx : panel_idx + 200]
 
 
-def test_trivia_deck_edit_panel_shows_topic_editor_not_add_cards(
+def test_trivia_deck_edit_panel_shows_topic_editor_and_add_card(
     client: TestClient, initialized_db: str
 ):
-    """Trivia decks swap the SRS edit panel (add card / transform) for
-    a topic-prompt editor — that's the only knob that affects future
-    batches. Manual card add doesn't fit the trivia model."""
+    """Trivia decks expose BOTH manual card-add (for non-AI users +
+    one-off corrections) AND the topic editor (drives claude's
+    batch generation when an agent is configured). Earlier iteration
+    only showed the topic editor; non-AI users had no way to seed
+    a deck."""
     DeckRepo().create_trivia(
         initialized_db, "geo-trivia", topic="capital cities of europe", interval_minutes=30
     )
     r = client.get("/deck/geo-trivia")
     assert r.status_code == 200
-    # SRS-only UI is gone for trivia decks.
-    assert "Add a card by hand" not in r.text
-    # Topic editor is in the panel with the current context_prompt
-    # populated as the textarea value.
-    assert "Edit topic" in r.text
+    # Manual add-card is back for non-AI completeness.
+    assert "Add a card by hand" in r.text
+    assert "/deck/geo-trivia/question/new" in r.text
+    # Topic editor is also rendered (when agent_available — the test
+    # client's default agent state may vary; we just check it exists
+    # by markup string).
     assert 'name="context_prompt"' in r.text
     assert "capital cities of europe" in r.text
-    # Form posts to the new /topic endpoint.
     assert "/deck/geo-trivia/topic" in r.text
+
+
+def test_manual_add_to_trivia_deck_enters_queue(client: TestClient, initialized_db: str):
+    """A card added by hand to a trivia deck must end up in the
+    trivia_queue rotation (otherwise the notification scheduler
+    can't pick it). add_question's deck-type branch handles this."""
+    from prep.trivia.repo import TriviaQueueRepo
+
+    DeckRepo().create_trivia(initialized_db, "geo-trivia", topic="capitals", interval_minutes=30)
+    r = client.post(
+        "/deck/geo-trivia/question/new",
+        data={
+            "type": "short",
+            "topic": "capitals",
+            "prompt": "Capital of France?",
+            "answer": "Paris",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    # The card lands in the trivia rotation.
+    deck_id = DeckRepo().find_id(initialized_db, "geo-trivia")
+    nxt = TriviaQueueRepo().pick_next_for_deck(deck_id)
+    assert nxt is not None
+    assert nxt.prompt == "Capital of France?"
 
 
 def test_topic_update_persists_for_trivia_deck(client: TestClient, initialized_db: str):

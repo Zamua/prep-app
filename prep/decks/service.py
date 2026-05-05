@@ -71,9 +71,24 @@ def add_question(
     user_id: str,
     deck_id: int,
     new: NewQuestion,
+    *,
+    deck_repo: DeckRepo | None = None,
 ) -> int:
-    """Insert a new question + its initial card row."""
-    return repo.add(user_id, deck_id, new)
+    """Insert a new question + its initial card row. For trivia decks
+    also append to the trivia_queue so the new question enters the
+    rotation — a manual card add on a trivia deck would otherwise
+    drop the card on the floor (the SRS `cards` row is created but
+    no notification path picks from `cards`). Pass `deck_repo` so
+    the type lookup happens here; routes that already know the deck
+    is SRS can skip it."""
+    qid = repo.add(user_id, deck_id, new)
+    if deck_repo is not None:
+        deck_type = deck_repo.get_type(user_id, deck_id)
+        if deck_type is not None and deck_type.value == "trivia":
+            from prep.trivia.repo import TriviaQueueRepo
+
+            TriviaQueueRepo().append_card(qid, deck_id)
+    return qid
 
 
 def update_question(

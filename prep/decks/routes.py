@@ -629,7 +629,7 @@ async def question_new_submit(
             {"request": request, "deck_name": name, "form": raw, "error": err},
             status_code=400,
         )
-    service.add_question(q_repo, uid, deck_id, new)
+    service.add_question(q_repo, uid, deck_id, new, deck_repo=deck_repo)
     return responses.redirect(request, f"/deck/{name}")
 
 
