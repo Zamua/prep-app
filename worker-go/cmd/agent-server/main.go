@@ -220,7 +220,13 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build argv: [--session-id <id> | --resume <id>]? <argsCSV expanded> <prompt>
+	// Build argv: [--session-id <id> | --resume <id>]? <argsCSV expanded>
+	// The prompt is piped via stdin instead of appended as an argv tail.
+	// argv had a hard ceiling at the OS ARG_MAX (~128KB on Linux), and
+	// the cross-deck reorganize prompt — which serializes every deck +
+	// every card — blew through it ("fork/exec ... argument list too
+	// long") on real prod data. claude -p reads the prompt from stdin
+	// when none follows on the command line.
 	args := []string{}
 	switch {
 	case req.SessionID != "":
@@ -229,10 +235,10 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "--resume", req.ResumeID)
 	}
 	args = append(args, expandArgs(s.argsCSV)...)
-	args = append(args, req.Prompt)
 
 	cmd := exec.CommandContext(r.Context(), s.claudeBin, args...)
 	cmd.Env = append(os.Environ(), "CLAUDE_CODE_OAUTH_TOKEN="+tok)
+	cmd.Stdin = strings.NewReader(req.Prompt)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errResp{

@@ -93,10 +93,15 @@ func (a *ShellAgent) Run(ctx context.Context, in RunInput) (RunOutput, error) {
 	case in.ResumeID != "":
 		args = append(args, "--resume", in.ResumeID)
 	}
-	args = append(args, a.renderArgs(in.Prompt)...)
+	args = append(args, a.renderArgs()...)
 
+	// Prompt rides on stdin instead of as the trailing argv element.
+	// argv had a hard ARG_MAX (~128KB on Linux) that the cross-deck
+	// reorganize prompt blows through ("argument list too long");
+	// claude -p reads stdin when no positional prompt follows.
 	cmd := exec.CommandContext(ctx, a.Bin, args...)
 	cmd.Env = os.Environ()
+	cmd.Stdin = strings.NewReader(in.Prompt)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return RunOutput{}, fmt.Errorf("agent shell failed: %w (output: %s)", err, truncate(string(out), 800))
@@ -104,7 +109,7 @@ func (a *ShellAgent) Run(ctx context.Context, in RunInput) (RunOutput, error) {
 	return RunOutput{Stdout: string(out)}, nil
 }
 
-func (a *ShellAgent) renderArgs(prompt string) []string {
+func (a *ShellAgent) renderArgs() []string {
 	csv := a.Args
 	if csv == "" {
 		csv = DefaultArgs
@@ -118,7 +123,7 @@ func (a *ShellAgent) renderArgs(prompt string) []string {
 		s = strings.ReplaceAll(s, "{mcp_config}", emptyMCPConfig)
 		out = append(out, s)
 	}
-	return append(out, prompt)
+	return out
 }
 
 // ---- HTTPAgent -------------------------------------------------------
