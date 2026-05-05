@@ -2676,14 +2676,12 @@ body:has(dialog[open]) {
   border-radius: var(--radius);
   background: var(--bg);
 }
-.transform-plan summary {
-  cursor: pointer;
+.transform-plan-head {
+  margin: 0 0 0.6rem;
   font-style: italic;
   color: var(--ink-soft);
-  list-style: none;
   font-size: 0.92rem;
 }
-.transform-plan summary::-webkit-details-marker { display: none; }
 .transform-notes {
   margin: 0.7rem 0;
   color: var(--ink-soft);

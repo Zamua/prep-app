@@ -47,8 +47,13 @@
     {% set mods = plan.modifications or [] %}
     {% set adds = plan.additions or [] %}
     {% set dels = plan.deletions or [] %}
-    <details class="transform-plan" open>
-      <summary>The plan</summary>
+    {# Always-shown plan body. Was a <details open> for a brief
+       moment but iOS Safari intermittently rendered it collapsed
+       with no marker visible — the user thought the plan was empty.
+       The collapse affordance wasn't earning its keep on a review-
+       and-confirm page; the user wants to see everything. #}
+    <section class="transform-plan">
+      <p class="transform-plan-head">The plan</p>
       {% if plan.notes %}
         <p class="transform-notes"><em>{{ plan.notes }}</em></p>
       {% endif %}
@@ -233,7 +238,7 @@
           {% endfor %}
         </ul>
       {% endif %}
-    </details>
+    </section>
   {% endif %}
 
   {% if progress.result %}
