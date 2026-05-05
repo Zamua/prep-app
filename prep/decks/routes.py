@@ -192,14 +192,15 @@ def _question_form_from_entity(q) -> dict:
 
 def _parse_transform_wid(wid: str) -> tuple[str, int] | None:
     """`transform-<scope>-<target_id>-<rand>`. Returns (scope, target_id)
-    or None if malformed. scope ∈ {card, deck}."""
+    or None if malformed. scope ∈ {card, deck, reorganize}.
+    For reorganize, target_id is the literal 0 (no single deck)."""
     if not wid.startswith("transform-"):
         return None
     parts = wid[len("transform-") :].split("-")
     if len(parts) < 3:
         return None
     scope = parts[0]
-    if scope not in ("card", "deck"):
+    if scope not in ("card", "deck", "reorganize"):
         return None
     try:
         target_id = int(parts[1])
@@ -861,6 +862,64 @@ async def deck_transform(
     return responses.redirect(request, f"/transform/{result.workflow_id}")
 
 
+@router.get("/reorganize", response_class=HTMLResponse)
+def reorganize_form(
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Form for the cross-deck reorganize flow. Free-text prompt,
+    plus a collapsible preview of the user's current decks so they
+    can see what claude has to work with."""
+    uid = user["tailscale_login"]
+    decks = sorted(deck_repo.list_summaries(uid), key=lambda d: d.name)
+    deck_views = []
+    for d in decks:
+        topic = ""
+        if d.deck_type.value == "trivia":
+            topic = deck_repo.get_context_prompt(uid, d.name) or ""
+        deck_views.append(
+            {
+                "name": d.name,
+                "deck_type": d.deck_type.value,
+                "total": d.total,
+                "topic": topic,
+            }
+        )
+    return templates.TemplateResponse(
+        "reorganize.html",
+        {
+            "request": request,
+            "user": user,
+            "decks": deck_views,
+            "form": {"prompt": ""},
+            "error": None,
+        },
+    )
+
+
+@router.post("/reorganize")
+async def reorganize_submit(
+    request: Request,
+    prompt: str = Form(...),
+    user: dict = Depends(current_user),
+):
+    """Kick off a cross-deck reorganize workflow."""
+    uid = user["tailscale_login"]
+    cleaned = (prompt or "").strip()
+    if not cleaned:
+        raise HTTPException(400, "empty prompt")
+    from prep import temporal_client
+
+    try:
+        result = await temporal_client.start_transform(
+            user_id=uid, scope="reorganize", target_id=0, prompt=cleaned
+        )
+    except Exception as e:
+        raise HTTPException(500, f"failed to start reorganize: {e}")
+    return responses.redirect(request, f"/transform/{result.workflow_id}")
+
+
 @router.post("/question/{qid}/improve")
 async def question_improve(
     request: Request,
@@ -903,7 +962,9 @@ def _require_owns_transform(
     q_repo: QuestionRepo,
 ) -> tuple[str, int]:
     """Parse + verify ownership of a transform workflow id. Routes use
-    this as the gate before signaling. Returns (scope, target_id)."""
+    this as the gate before signaling. Returns (scope, target_id).
+    Reorganize scope has no single target — only ownership-by-user
+    matters; the workflow itself enforces user_id scoping at apply time."""
     parsed = _parse_transform_wid(wid)
     if not parsed:
         raise HTTPException(400, "malformed workflow id")
@@ -912,9 +973,11 @@ def _require_owns_transform(
     if scope == "card":
         if q_repo.get(uid, target_id) is None:
             raise HTTPException(404, "transform not found")
-    else:
+    elif scope == "deck":
         if deck_repo.find_name(uid, target_id) is None:
             raise HTTPException(404, "transform not found")
+    # reorganize: no per-target check; the workflow's UserID matches
+    # the route's user via current_user, which is the trust boundary.
     return scope, target_id
 
 

@@ -30,7 +30,7 @@ const (
 )
 
 func Transform(ctx workflow.Context, in shared.TransformInput) (shared.TransformResult, error) {
-	if in.Scope != "card" && in.Scope != "deck" {
+	if in.Scope != "card" && in.Scope != "deck" && in.Scope != "reorganize" {
 		return shared.TransformResult{}, temporal.NewNonRetryableApplicationError(
 			"unknown scope", "BadInput", fmt.Errorf("scope=%q", in.Scope))
 	}

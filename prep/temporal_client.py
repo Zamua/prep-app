@@ -110,10 +110,11 @@ async def describe_workflow(workflow_id: str) -> dict[str, Any]:
 
 
 async def start_transform(*, user_id: str, scope: str, target_id: int, prompt: str) -> StartResult:
-    """Start a TransformWorkflow run. scope is 'card' (target_id = qid)
-    or 'deck' (target_id = deck_id). Card scope auto-applies; deck scope
-    waits for an apply/reject signal before writing."""
-    if scope not in ("card", "deck"):
+    """Start a TransformWorkflow run. Three scopes:
+    - 'card'       target_id = question_id; auto-applies on completion
+    - 'deck'       target_id = deck_id; preview-then-apply via signals
+    - 'reorganize' target_id ignored (cross-deck); preview-then-apply"""
+    if scope not in ("card", "deck", "reorganize"):
         raise ValueError(f"unknown transform scope {scope!r}")
     client = await _get_client()
     wid = f"transform-{scope}-{target_id}-{uuid.uuid4().hex[:10]}"

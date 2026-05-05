@@ -2736,6 +2736,63 @@ body:has(dialog[open]) {
   margin-top: 0.2rem;
 }
 
+/* Index-page Reorganize CTA — sits below the lede paragraph. Subtle
+   pill-link with sparkle + arrow icons, only renders when an agent is
+   configured (cross-deck restructuring is claude-driven). */
+.reorganize-cta-line { margin: 1rem 0 0; }
+.reorganize-cta {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.95rem;
+  font-size: 0.92rem; color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 999px;
+  text-decoration: none; font-style: italic;
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.reorganize-cta:hover {
+  border-color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.reorganize-cta .icon { width: 0.95rem; height: 0.95rem; color: var(--quill); flex-shrink: 0; }
+
+/* Reorganize-page deck preview — collapsed by default, lists each
+   deck's name + type tag + card count + (trivia) topic. */
+.reorganize-deck-list { margin-top: 1.4rem; }
+.reorganize-deck-list summary { cursor: pointer; }
+.reorganize-deck-list-items {
+  list-style: none; padding: 0; margin: 0.5rem 0 0;
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+.reorganize-deck-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--hairline); border-radius: 8px;
+  font-size: 0.92rem;
+}
+.reorganize-deck-name { font-weight: 500; }
+.reorganize-deck-meta { color: var(--ink-mute); font-size: 0.85rem; }
+.reorganize-deck-topic {
+  flex-basis: 100%;
+  color: var(--ink-soft); font-style: italic; font-size: 0.85rem;
+}
+
+/* Reorganize preview — destination grouping for card_moves and a
+   warning banner for deck_deletions. */
+.transform-move-dest {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.transform-warning {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--wrong) 60%, transparent);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
 /* Per-modification before/after diff cards. One card per claude-
    proposed modification, showing only the fields whose values
    differ between current state (old) and proposed state (new). */

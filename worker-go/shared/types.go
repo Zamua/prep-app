@@ -291,17 +291,66 @@ type CardModification struct {
 type TransformPlan struct {
 	Scope         string             `json:"scope"`
 	Modifications []CardModification `json:"modifications,omitempty"`
-	Additions     []Card             `json:"additions,omitempty"`
+	Additions     []CardAddition     `json:"additions,omitempty"`
 	Deletions     []int              `json:"deletions,omitempty"`
+	// Cross-deck operations. Only populated for scope="reorganize" —
+	// the per-deck scopes (card / deck) leave these empty.
+	NewDecks      []NewDeckOp    `json:"new_decks,omitempty"`
+	CardMoves     []CardMoveOp   `json:"card_moves,omitempty"`
+	DeckRenames   []DeckRenameOp `json:"deck_renames,omitempty"`
+	DeckDeletions []int          `json:"deck_deletions,omitempty"`
 	// Notes is a short human-readable summary of what claude decided to do
 	// (e.g., "added skeletons to 5 cards"). Surfaced on the preview page.
 	Notes string `json:"notes,omitempty"`
+}
+
+// CardAddition is a card to insert plus the destination deck name.
+// For per-deck scopes (card / deck), DestDeck is empty and the apply
+// path uses ApplyTransformInput.DeckID. For reorganize scope, DestDeck
+// names which deck (existing OR one of the proposed NewDecks) the
+// card lands in. Anonymous embedding flattens Card's fields to the
+// JSON top level so claude returns one flat object per addition.
+type CardAddition struct {
+	DestDeck string `json:"dest_deck,omitempty"`
+	Card
+}
+
+// NewDeckOp describes a deck claude proposes to create as part of a
+// reorganize plan. Other ops (card_moves, additions) reference it by
+// `name`. Apply creates these first so subsequent ops can resolve.
+type NewDeckOp struct {
+	Name            string `json:"name"`
+	DeckType        string `json:"deck_type"` // "srs" | "trivia"
+	Topic           string `json:"topic,omitempty"`
+	IntervalMinutes int    `json:"interval_minutes,omitempty"` // trivia only
+}
+
+// CardMoveOp reassigns a question to a different deck. DestDeck is the
+// destination deck's NAME (not id) so the same plan can move into a
+// deck claude proposed in NewDecks. Apply resolves name → id after
+// new decks have been created.
+type CardMoveOp struct {
+	QuestionID int    `json:"question_id"`
+	DestDeck   string `json:"dest_deck"`
+}
+
+// DeckRenameOp renames an existing deck. Identified by DeckID (not
+// name) so a rename + a NewDeck-with-the-same-name in the same plan
+// don't ambiguously refer to each other.
+type DeckRenameOp struct {
+	DeckID  int    `json:"deck_id"`
+	NewName string `json:"new_name"`
 }
 
 type TransformResult struct {
 	ModifiedIDs []int `json:"modified_ids"`
 	AddedIDs    []int `json:"added_ids"`
 	DeletedIDs  []int `json:"deleted_ids"`
+	// Cross-deck result fields. Populated only for scope="reorganize".
+	CreatedDeckIDs []int `json:"created_deck_ids,omitempty"`
+	RenamedDeckIDs []int `json:"renamed_deck_ids,omitempty"`
+	MovedCardIDs   []int `json:"moved_card_ids,omitempty"`
+	DeletedDeckIDs []int `json:"deleted_deck_ids,omitempty"`
 }
 
 type TransformProgress struct {

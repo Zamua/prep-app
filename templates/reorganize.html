@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}reorganize · prep{% endblock %}
+{% block page_class %}reorganize{% endblock %}
+{% block main %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a>
+</nav>
+
+<section class="prelude">
+  <p class="eyebrow accent">Reorganize</p>
+  <h1 class="display">Restructure <em>across decks</em>.</h1>
+  <p class="lede">
+    Tell claude how you'd like your collection rearranged. It reads every deck, proposes a multi-deck plan, and you review the diff before anything writes. Iterate by sending feedback if the first plan isn't quite right.
+  </p>
+</section>
+
+{% if error %}
+  <p class="error-banner">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="{{ request.scope.get('root_path','') }}/reorganize" class="transform-form add-ai-form">
+  <label class="freetext">
+    <span class="freetext-label">
+      {{ icon('sparkle', class_='icon icon-inline') }}
+      What should change?
+    </span>
+    <textarea name="prompt" rows="5" maxlength="4000"
+              placeholder="e.g. split databases into transactions and replication · merge geography into world-history · fix typos across all decks · move every distributed-systems card from databases into a new distsys deck"
+              required>{{ form.prompt or '' }}</textarea>
+    <span class="freetext-hint">
+      Claude will see every deck + its cards. The plan is reversible up to the point you tap Apply.
+    </span>
+  </label>
+  <button type="submit" class="btn btn-primary" style="width: 100%">Suggest a plan</button>
+</form>
+
+{% if decks %}
+<section class="decks-section">
+  <details class="reorganize-deck-list">
+    <summary class="section-eyebrow"><span>Your decks ({{ decks|length }})</span><span class="rule"></span></summary>
+    <ul class="reorganize-deck-list-items" role="list">
+      {% for d in decks %}
+        <li class="reorganize-deck-row">
+          <span class="reorganize-deck-name">{{ d.name }}</span>
+          <span class="tag tag-decktype tag-decktype-{{ d.deck_type }}">{{ d.deck_type }}</span>
+          <span class="reorganize-deck-meta">{{ d.total }} card{{ '' if d.total == 1 else 's' }}</span>
+          {% if d.topic %}
+            <span class="reorganize-deck-topic">{{ d.topic[:120] }}{% if d.topic|length > 120 %}…{% endif %}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </details>
+</section>
+{% endif %}
+{% endblock %}

@@ -10,6 +10,15 @@
     re-surface on a forgetting curve — the more you remember, the longer
     they sleep.
   </p>
+  {% if agent_available and decks %}
+    <p class="reorganize-cta-line">
+      <a href="{{ request.scope.get('root_path','') }}/reorganize" class="reorganize-cta">
+        {{ icon('sparkle', class_='icon icon-inline') }}
+        <span>Reorganize · ask claude to restructure your decks</span>
+        {{ icon('arrow-right', class_='icon icon-inline') }}
+      </a>
+    </p>
+  {% endif %}
 </section>
 
 {% if active_trivia_sessions %}

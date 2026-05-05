@@ -109,10 +109,63 @@
       {% endif %}
 
       {% if dels %}
-        <p class="section-eyebrow"><span>Deletions</span><span class="rule"></span></p>
+        <p class="section-eyebrow"><span>Card deletions</span><span class="rule"></span></p>
         <ul class="transform-list">
           {% for qid in dels[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
           {% if dels|length > 6 %}<li class="transform-list-more">+ {{ dels|length - 6 }} more</li>{% endif %}
+        </ul>
+      {% endif %}
+
+      {# Cross-deck operations — only present for scope=reorganize plans #}
+      {% set new_decks = plan.new_decks or [] %}
+      {% set card_moves = plan.card_moves or [] %}
+      {% set deck_renames = plan.deck_renames or [] %}
+      {% set deck_dels = plan.deck_deletions or [] %}
+
+      {% if new_decks %}
+        <p class="section-eyebrow"><span>New decks ({{ new_decks|length }})</span><span class="rule"></span></p>
+        <ul class="transform-list">
+          {% for d in new_decks %}
+            <li class="transform-list-item">
+              <span class="tag tag-decktype tag-decktype-{{ d.deck_type or 'srs' }}">{{ d.deck_type or 'srs' }}</span>
+              <span class="transform-list-prompt"><strong>{{ d.name }}</strong>{% if d.topic %} · {{ d.topic[:100] }}{% if d.topic|length > 100 %}…{% endif %}{% endif %}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if deck_renames %}
+        <p class="section-eyebrow"><span>Renames ({{ deck_renames|length }})</span><span class="rule"></span></p>
+        <ul class="transform-list">
+          {% for r in deck_renames %}
+            <li class="transform-list-item">
+              <span class="transform-list-prompt">deck № {{ r.deck_id }} → <strong>{{ r.new_name }}</strong></span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if card_moves %}
+        <p class="section-eyebrow"><span>Card moves ({{ card_moves|length }})</span><span class="rule"></span></p>
+        {# Group moves by destination so the user sees per-deck buckets. #}
+        {% set grouped = {} %}
+        {% for mv in card_moves %}
+          {% if grouped.update({mv.dest_deck: (grouped.get(mv.dest_deck) or []) + [mv.question_id]}) %}{% endif %}
+        {% endfor %}
+        {% for dest, qids in grouped.items() %}
+          <p class="transform-move-dest">→ <strong>{{ dest }}</strong> ({{ qids|length }} card{{ '' if qids|length == 1 else 's' }})</p>
+          <ul class="transform-list">
+            {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+            {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
+          </ul>
+        {% endfor %}
+      {% endif %}
+
+      {% if deck_dels %}
+        <p class="section-eyebrow"><span>Deck deletions ({{ deck_dels|length }})</span><span class="rule"></span></p>
+        <p class="transform-warning">⚠ The deck and ALL its remaining cards will be removed.</p>
+        <ul class="transform-list">
+          {% for did in deck_dels %}<li class="transform-list-item"><span class="transform-list-id">deck № {{ did }}</span></li>{% endfor %}
         </ul>
       {% endif %}
     </details>
