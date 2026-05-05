@@ -102,18 +102,23 @@
         </button>
       </form>
     {% endif %}
-    {# Edit pill: toggles the add/topic panel below. The panel
-       used to live inline on the deck page; tucking it behind the
-       pencil keeps the deck view focused on the cards. #}
-    <button type="button" class="edit-pill" data-edit-toggle
-            aria-controls="deck-edit-panel" aria-expanded="false"
-            title="Edit deck — add cards or AI prompt">
-      {{ icon('pencil-simple-line', class_='icon icon-inline') }}
-      <span>edit</span>
-    </button>
-    {# Split pill: separate from edit because splitting is a
-       multi-card reorganize action, not an edit-this-single-deck
-       action. Hidden when there are no cards to split. #}
+    {# Deck-level action pills. Mirrors the index page's "new deck" /
+       "edit with claude" pattern — each action gets its own pill. #}
+    <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new"
+       class="edit-pill" title="Add a card by hand">
+      {{ icon('plus', class_='icon icon-inline') }}
+      <span>add</span>
+    </a>
+    {% if agent_available %}
+      <button type="button" class="edit-pill" data-edit-toggle
+              aria-controls="claude-edit-panel" aria-expanded="false"
+              title="Edit with claude — propose changes via prompt">
+        {{ icon('sparkle', class_='icon icon-inline') }}
+        <span>edit with claude</span>
+      </button>
+    {% endif %}
+    {# Split pill: cross-deck reorganize action (not an edit-this-
+       single-deck action). Hidden when there are no cards to split. #}
     {% if questions %}
       <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split"
          class="edit-pill" title="Split into a new deck">
@@ -185,70 +190,51 @@
 </section>
 {% endif %}
 
-{# Edit panel — hidden by default. Toggled by the pencil pill in
-   the header (data-edit-toggle / aria-controls=deck-edit-panel).
-   Branches on deck_type:
-
-   - SRS: Add-by-hand always; claude-transform when an agent is
-     configured.
-   - Trivia: Add-by-hand always (non-AI users still need a way to
-     populate a trivia deck); topic editor when an agent is
-     configured (drives claude's batch generation). #}
-<section id="deck-edit-panel" class="add-section" hidden>
-  <p class="section-eyebrow"><span>Add to this deck</span><span class="rule"></span></p>
-  <div class="add-cta-row">
-    <a class="btn btn-primary add-cta" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new">
-      {{ icon('plus', class_='icon icon-inline') }}
-      <span>Add a card by hand</span>
-    </a>
-  </div>
-
-
-  {% if agent_available %}
-    <p class="add-or" aria-hidden="true"><span>or</span></p>
-    {% if deck_type == 'trivia' %}
-      {# Trivia decks have TWO claude-driven knobs:
-         (1) topic prompt — drives FUTURE batch generation
-         (2) transform — proposes edits to EXISTING cards
-         Both write through the same Temporal workflow shape that
-         SRS decks use; the topic editor is just a different
-         operation than per-card rewrites. #}
-      <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
-            method="post" class="transform-form add-ai-form">
-        <label class="freetext">
-          <span class="freetext-label">
-            {{ icon('sparkle', class_='icon icon-inline') }}
-            Topic prompt — used to generate fresh batches of cards
-          </span>
-          <textarea name="context_prompt" rows="6" maxlength="4000"
-                    placeholder="e.g. distributed-systems consensus, focusing on quorum + leader election + linearizability"
-                    required>{{ deck_meta.context_prompt or '' }}</textarea>
-        </label>
-        <button type="submit" class="btn btn-quiet">Save topic</button>
-        <p class="transform-hint">
-          Edits apply to the next batch the scheduler generates. Existing cards are not touched.
-        </p>
-      </form>
-      <p class="add-or" aria-hidden="true"><span>or</span></p>
-    {% endif %}
-    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+{# Claude-edit panel — hidden by default, toggled by the "edit with
+   claude" pill above. Manual add-card has its own pill ("add" → direct
+   link to /question/new), so this panel is purely AI-driven. Trivia
+   decks get a topic-prompt editor (drives future batch generation) IN
+   ADDITION to the per-card transform form. #}
+{% if agent_available %}
+<section id="claude-edit-panel" class="add-section" hidden>
+  <p class="section-eyebrow"><span>Edit with claude</span><span class="rule"></span></p>
+  {% if deck_type == 'trivia' %}
+    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
           method="post" class="transform-form add-ai-form">
       <label class="freetext">
         <span class="freetext-label">
           {{ icon('sparkle', class_='icon icon-inline') }}
-          Ask claude to {% if deck_type == 'trivia' %}edit existing cards{% else %}add cards or edit existing ones{% endif %}
+          Topic prompt — used to generate fresh batches of cards
         </span>
-        <textarea name="prompt" rows="3" maxlength="4000"
-                  placeholder="{% if deck_type == 'trivia' %}e.g. reword cards so each clearly expects a 1-2 word answer (no essay-style 'explain why' prompts){% else %}e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing{% endif %}"
-                  required></textarea>
+        <textarea name="context_prompt" rows="6" maxlength="4000"
+                  placeholder="e.g. distributed-systems consensus, focusing on quorum + leader election + linearizability"
+                  required>{{ deck_meta.context_prompt or '' }}</textarea>
       </label>
-      <button type="submit" class="btn btn-quiet">Apply</button>
+      <button type="submit" class="btn btn-quiet">Save topic</button>
       <p class="transform-hint">
-        Claude reads the deck, proposes a patch, and you confirm before anything writes.
+        Edits apply to the next batch the scheduler generates. Existing cards are not touched.
       </p>
     </form>
+    <p class="add-or" aria-hidden="true"><span>or</span></p>
   {% endif %}
+  <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/transform"
+        method="post" class="transform-form add-ai-form">
+    <label class="freetext">
+      <span class="freetext-label">
+        {{ icon('sparkle', class_='icon icon-inline') }}
+        Ask claude to {% if deck_type == 'trivia' %}edit existing cards{% else %}add cards or edit existing ones{% endif %}
+      </span>
+      <textarea name="prompt" rows="3" maxlength="4000"
+                placeholder="{% if deck_type == 'trivia' %}e.g. reword cards so each clearly expects a 1-2 word answer (no essay-style 'explain why' prompts){% else %}e.g. add 5 more system-design cards · convert all go problems to java · fix typos · add skeletons where missing{% endif %}"
+                required></textarea>
+    </label>
+    <button type="submit" class="btn btn-quiet">Apply</button>
+    <p class="transform-hint">
+      Claude reads the deck, proposes a patch, and you confirm before anything writes.
+    </p>
+  </form>
 </section>
+{% endif %}
 
 {% if questions %}
   <section class="card-index">
@@ -469,11 +455,10 @@
 
 <script>
 (function () {
-  // Pencil-pill toggle: reveals/hides the deck-edit-panel that
-  // contains the add-card / AI-prompt forms. Tiny progressive
-  // enhancement — without JS the panel stays hidden, but the
-  // /deck/<name>/question/new + /deck/<name>/transform endpoints
-  // remain reachable directly.
+  // "Edit with claude" pill toggles claude-edit-panel below. Tiny
+  // progressive enhancement — without JS the panel stays hidden, but
+  // /deck/<name>/transform + /deck/<name>/topic endpoints remain
+  // reachable directly. The "add" pill is a plain link, no JS needed.
   const editToggle = document.querySelector('[data-edit-toggle]');
   const editPanel = editToggle && document.getElementById(editToggle.getAttribute('aria-controls'));
   if (editToggle && editPanel) {

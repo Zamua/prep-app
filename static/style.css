@@ -3325,15 +3325,8 @@ body:has(dialog[open]) {
   margin: 2rem 0 2.4rem;
 }
 .add-section .section-eyebrow { margin-top: 0; margin-bottom: 1rem; }
-.add-cta-row {
-  display: flex; gap: 0.7rem; margin-bottom: 1rem;
-}
-.add-cta-row .add-cta { flex: 1; }
-@media (max-width: 540px) {
-  .add-cta-row { flex-direction: column; }
-}
-/* "— or —" divider between manual and AI surfaces. Tiny serif label,
-   centered between two thin rules. */
+/* "— or —" divider between trivia's topic-prompt form and the
+   transform form. Tiny serif label, centered between two thin rules. */
 .add-or {
   display: flex; align-items: center; gap: 0.8rem;
   margin: 1.1rem 0; padding: 0;
@@ -3344,12 +3337,6 @@ body:has(dialog[open]) {
 }
 .add-or span {
   font-family: "Fraunces", Georgia, serif;
-}
-.add-cta {
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: 0.55rem; min-height: 3rem;
-  /* both ctas use btn-primary so they read as equal-weight; the AI
-     option doesn't outshout the manual one. */
 }
 .add-ai-form {
   display: grid; gap: 0.6rem;

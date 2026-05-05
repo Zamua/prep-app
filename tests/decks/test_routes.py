@@ -189,44 +189,34 @@ def test_trivia_deck_renders_mastery_bar_with_breakdown(client: TestClient, init
     assert "1 wrong" in r.text
 
 
-def test_deck_view_renders_edit_pill_and_hidden_panel(client: TestClient, initialized_db: str):
-    """The pencil-pill in the header controls a hidden #deck-edit-panel
-    via aria-controls. The add/transform forms live inside that panel,
-    not laid out on the page."""
+def test_deck_view_renders_add_and_split_pills(client: TestClient, initialized_db: str):
+    """Deck-action pills mirror the index page pattern — each action gets
+    its own pill. "add" is a direct link to /question/new (no panel
+    toggle); "edit with claude" only renders when an agent is configured;
+    "split" is a direct link too. There's no longer a single "edit" pill
+    that hides both manual + AI behind one toggle."""
     DeckRepo().create(initialized_db, "go-systems")
     r = client.get("/deck/go-systems")
     assert r.status_code == 200
-    # Pencil pill is in the header pill row.
     assert "edit-pill" in r.text
-    assert "data-edit-toggle" in r.text
-    assert 'aria-controls="deck-edit-panel"' in r.text
-    # Panel exists, holds the Add-by-hand button, ships hidden.
-    assert 'id="deck-edit-panel"' in r.text
-    assert "Add a card by hand" in r.text  # still in DOM, just hidden
-    # `hidden` attribute appears on the panel section.
-    panel_idx = r.text.find('id="deck-edit-panel"')
-    assert "hidden" in r.text[panel_idx : panel_idx + 200]
+    # "add" pill links straight to the question-new form.
+    assert "/deck/go-systems/question/new" in r.text
 
 
-def test_trivia_deck_edit_panel_shows_topic_editor_and_add_card(
-    client: TestClient, initialized_db: str
-):
-    """Trivia decks expose BOTH manual card-add (for non-AI users +
-    one-off corrections) AND the topic editor (drives claude's
-    batch generation when an agent is configured). Earlier iteration
-    only showed the topic editor; non-AI users had no way to seed
-    a deck."""
+def test_trivia_deck_edit_panel_shows_topic_editor(client: TestClient, initialized_db: str):
+    """Trivia decks: when an agent is configured, the claude-edit panel
+    carries the topic-prompt editor (drives future batch generation) in
+    addition to the per-card transform. The "add" pill (manual card add)
+    is its own separate action, not in the panel."""
     DeckRepo().create_trivia(
         initialized_db, "geo-trivia", topic="capital cities of europe", interval_minutes=30
     )
     r = client.get("/deck/geo-trivia")
     assert r.status_code == 200
-    # Manual add-card is back for non-AI completeness.
-    assert "Add a card by hand" in r.text
+    # Manual add-card is reachable via its own pill.
     assert "/deck/geo-trivia/question/new" in r.text
-    # Topic editor is also rendered (when agent_available — the test
-    # client's default agent state may vary; we just check it exists
-    # by markup string).
+    # Topic editor is also rendered when agent_available — the test
+    # client's default agent state may vary; we just check it by markup.
     assert 'name="context_prompt"' in r.text
     assert "capital cities of europe" in r.text
     assert "/deck/geo-trivia/topic" in r.text
