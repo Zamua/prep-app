@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}split {{ deck_name }} · prep{% endblock %}
+{% block page_class %}deck-split{% endblock %}
+{% block main %}
+<section class="deck-header">
+  <p class="eyebrow">
+    <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+  </p>
+  <h1 class="display deck-title">Split <em>{{ deck_name }}</em></h1>
+  <p class="lede">
+    Pick the cards to move into a new deck. Selected cards are reassigned (no copy); originals are not preserved here.
+    {% if deck_type == 'trivia' %}
+      Any in-progress mini-session on this deck is abandoned so it doesn't reference moved cards.
+    {% endif %}
+  </p>
+</section>
+
+{% if error %}
+  <p class="error-banner">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split" class="deck-split-form">
+  <section class="add-section">
+    <p class="section-eyebrow"><span>New deck</span><span class="rule"></span></p>
+    <label class="freetext">
+      <span class="freetext-label">Name</span>
+      <input type="text" name="new_name" required maxlength="64"
+             value="{{ form.new_name or '' }}"
+             placeholder="e.g. api-design" autocomplete="off">
+    </label>
+    {% if deck_type == 'trivia' %}
+      <label class="freetext">
+        <span class="freetext-label">Topic prompt <small>(optional — defaults to source topic)</small></span>
+        <textarea name="new_topic" rows="3" maxlength="4000"
+                  placeholder="leave blank to inherit '{{ source_topic[:80] }}'…">{{ form.new_topic or '' }}</textarea>
+        <span class="freetext-hint">Used to generate fresh batches of cards on the new deck. Existing moved cards are not regenerated.</span>
+      </label>
+    {% endif %}
+  </section>
+
+  <section class="card-index">
+    <p class="section-eyebrow"><span>Cards to move ({{ cards|length }} total)</span><span class="rule"></span></p>
+    {% if cards %}
+      <ol class="deck-split-cards" role="list">
+        {% for c in cards %}
+          <li class="deck-split-card">
+            <label class="deck-split-card-label">
+              <input type="checkbox" name="question_ids" value="{{ c.id }}"
+                     {% if c.id in form.selected_ids %}checked{% endif %}>
+              <span class="deck-split-card-prompt">{{ c.prompt }}</span>
+            </label>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="empty-headline"><em>No cards in this deck.</em></p>
+    {% endif %}
+  </section>
+
+  <section class="primary-action">
+    <button type="submit" class="btn btn-primary" {% if not cards %}disabled{% endif %} style="width: 100%">
+      Move selected to new deck
+    </button>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" style="width: 100%; margin-top: 0.6rem">Cancel</a>
+  </section>
+</form>
+{% endblock %}

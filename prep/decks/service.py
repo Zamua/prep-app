@@ -91,6 +91,96 @@ def add_question(
     return qid
 
 
+def split_deck(
+    *,
+    deck_repo: DeckRepo,
+    question_repo: QuestionRepo,
+    user_id: str,
+    source_deck_id: int,
+    new_deck_name: str,
+    question_ids: list[int],
+    new_topic_prompt: str | None = None,
+) -> int:
+    """Manual split flow:
+
+    1. Validate inputs (new name non-empty, no collision, ≥1 card
+       selected).
+    2. Create the new deck — same type as source. For trivia decks,
+       inherit `notification_interval_minutes` and use either the
+       provided `new_topic_prompt` or the source's `context_prompt`.
+       SRS: just create with optional `context_prompt`.
+    3. Reassign the selected questions via `move_to_deck`.
+    4. Trivia-specific: abandon any active session on the SOURCE
+       deck (avoids stale-card-in-queue weirdness — the moved cards
+       no longer belong there). The destination is brand-new so it
+       has no active session yet.
+
+    Returns the new deck's id. Raises ValueError on validation
+    failure with a user-facing message; route turns it into a 400.
+    """
+    cleaned_name = (new_deck_name or "").strip()
+    if not cleaned_name:
+        raise ValueError("new deck name is required")
+    if not question_ids:
+        raise ValueError("select at least one card to move")
+    if deck_repo.find_id(user_id, cleaned_name) is not None:
+        raise ValueError(f'a deck named "{cleaned_name}" already exists')
+
+    source_type = deck_repo.get_type(user_id, source_deck_id)
+    if source_type is None:
+        raise ValueError("source deck not found")
+
+    # Create the destination deck. Trivia and SRS take different
+    # paths because trivia decks need an interval + topic.
+    if source_type.value == "trivia":
+        # Pull source's interval to inherit (sensible default; user
+        # can adjust on the new deck after).
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            row = c.execute(
+                "SELECT notification_interval_minutes, context_prompt"
+                " FROM decks WHERE id = ? AND user_id = ?",
+                (source_deck_id, user_id),
+            ).fetchone()
+        interval = (row["notification_interval_minutes"] or 30) if row else 30
+        topic = (
+            (new_topic_prompt or "").strip()
+            or (row["context_prompt"] if row else None)
+            or cleaned_name
+        )
+        new_id = deck_repo.create_trivia(
+            user_id, cleaned_name, topic=topic, interval_minutes=interval
+        )
+    else:
+        new_id = deck_repo.create(
+            user_id, cleaned_name, context_prompt=(new_topic_prompt or "").strip() or None
+        )
+
+    moved = question_repo.move_to_deck(user_id, question_ids, new_id)
+    if moved == 0:
+        # All requested ids belonged to another user / wrong deck —
+        # roll back the just-created deck so we don't leave a husk.
+        deck_repo.delete(user_id, cleaned_name)
+        raise ValueError("none of the selected cards could be moved")
+
+    # Trivia: abandon any active session on the source so the user
+    # doesn't get a "resume your session" pointing at moved cards.
+    if source_type.value == "trivia":
+        from prep.trivia.repo import TriviaSessionsRepo
+
+        sessions = TriviaSessionsRepo()
+        existing = sessions.get_active_for_deck(user_id, source_deck_id)
+        if existing:
+            sessions.replace_active(user_id, source_deck_id, queue=[])
+            # replace_active above abandons + creates a fresh empty
+            # active row. We immediately mark THAT one completed too
+            # so it doesn't show up in the index Continue strip.
+            sessions.complete(user_id, source_deck_id)
+
+    return new_id
+
+
 def update_question(
     repo: QuestionRepo,
     user_id: str,

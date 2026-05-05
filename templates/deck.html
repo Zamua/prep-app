@@ -193,6 +193,16 @@
     </a>
   </div>
 
+  {% if questions %}
+    <p class="section-eyebrow" style="margin-top: 1.4rem"><span>Reorganize</span><span class="rule"></span></p>
+    <div class="add-cta-row">
+      <a class="btn btn-quiet add-cta" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split">
+        {{ icon('arrow-up-right', class_='icon icon-inline') }}
+        <span>Split into a new deck</span>
+      </a>
+    </div>
+  {% endif %}
+
   {% if agent_available %}
     <p class="add-or" aria-hidden="true"><span>or</span></p>
     {% if deck_type == 'trivia' %}

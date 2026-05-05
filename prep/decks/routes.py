@@ -566,6 +566,104 @@ def deck_update_topic(
     return responses.redirect(request, f"/deck/{name}")
 
 
+@router.get("/deck/{name}/split", response_class=HTMLResponse)
+def deck_split_form(
+    request: Request,
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Render the manual split-deck form: card list with checkboxes,
+    new-deck-name field, optional new-topic-prompt for trivia."""
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    cards = q_repo.list_in_deck(uid, deck_id)
+    deck_type = deck_repo.get_type(uid, deck_id)
+    source_topic = ""
+    if deck_type is not None and deck_type.value == "trivia":
+        source_topic = deck_repo.get_context_prompt(uid, name) or ""
+    return templates.TemplateResponse(
+        "deck_split.html",
+        {
+            "request": request,
+            "user": user,
+            "deck_name": name,
+            "deck_type": deck_type.value if deck_type else "srs",
+            "cards": cards,
+            "source_topic": source_topic,
+            "error": None,
+            "form": {"new_name": "", "new_topic": "", "selected_ids": set()},
+        },
+    )
+
+
+@router.post("/deck/{name}/split", response_class=HTMLResponse)
+async def deck_split_submit(
+    request: Request,
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Apply the split: create the new deck, reassign selected
+    questions. Re-renders the form on validation error so the user
+    keeps their input."""
+    uid = user["tailscale_login"]
+    source_deck_id = deck_repo.find_id(uid, name)
+    if source_deck_id is None:
+        raise HTTPException(404, "deck not found")
+
+    form = await request.form()
+    new_name = (form.get("new_name") or "").strip()
+    new_topic = (form.get("new_topic") or "").strip()
+    selected_raw = form.getlist("question_ids")
+    selected_ids: list[int] = []
+    for sid in selected_raw:
+        try:
+            selected_ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+
+    def rerender(error: str, status: int = 400):
+        deck_type = deck_repo.get_type(uid, source_deck_id)
+        return templates.TemplateResponse(
+            "deck_split.html",
+            {
+                "request": request,
+                "user": user,
+                "deck_name": name,
+                "deck_type": deck_type.value if deck_type else "srs",
+                "cards": q_repo.list_in_deck(uid, source_deck_id),
+                "source_topic": (deck_repo.get_context_prompt(uid, name) or ""),
+                "error": error,
+                "form": {
+                    "new_name": new_name,
+                    "new_topic": new_topic,
+                    "selected_ids": set(selected_ids),
+                },
+            },
+            status_code=status,
+        )
+
+    try:
+        service.split_deck(
+            deck_repo=deck_repo,
+            question_repo=q_repo,
+            user_id=uid,
+            source_deck_id=source_deck_id,
+            new_deck_name=new_name,
+            question_ids=selected_ids,
+            new_topic_prompt=new_topic or None,
+        )
+    except ValueError as e:
+        return rerender(str(e))
+
+    return responses.redirect(request, f"/deck/{new_name}")
+
+
 @router.post("/deck/{name}/notifications")
 def deck_toggle_notifications(
     request: Request,

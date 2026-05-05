@@ -433,6 +433,30 @@ class QuestionRepo:
             return None
         return _row_to_question(dict(row))
 
+    def move_to_deck(self, user_id: str, question_ids: list[int], dest_deck_id: int) -> int:
+        """Reassign the given questions to `dest_deck_id`. user_id +
+        a join against decks.user_id are the IDOR guards — questions
+        owned by another user (or pointing at a foreign destination)
+        won't move. Returns the count of rows actually updated."""
+        if not question_ids:
+            return 0
+        placeholders = ",".join("?" * len(question_ids))
+        with cursor() as c:
+            # Confirm dest deck belongs to user before we touch anything.
+            dst = c.execute(
+                "SELECT id FROM decks WHERE id = ? AND user_id = ?",
+                (dest_deck_id, user_id),
+            ).fetchone()
+            if not dst:
+                return 0
+            cur = c.execute(
+                f"""UPDATE questions
+                       SET deck_id = ?
+                     WHERE id IN ({placeholders}) AND user_id = ?""",
+                (dest_deck_id, *question_ids, user_id),
+            )
+            return cur.rowcount
+
     def list_in_deck(self, user_id: str, deck_id: int) -> list[DeckCard]:
         """All questions in a deck rendered as deck-page cards (joined
         with SRS state, deck/user context omitted since the caller
