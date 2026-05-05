@@ -1026,8 +1026,16 @@ async def transform_view(
     # OLD state (live from the DB) alongside claude's proposed NEW
     # state. The plan only carries the new shape; old shape needs
     # a lookup. Cheap: one fetch per modified card, small N.
-    modification_diffs: list[dict] = []
+    # For reorganize plans we also resolve each card's source deck
+    # name so the template can group changes by deck.
     plan = (progress or {}).get("plan") or {}
+    deck_id_to_name: dict[int, str] = {s.id: s.name for s in deck_repo.list_summaries(uid)}
+
+    def _deck_for_qid(qid: int) -> str:
+        q = q_repo.get(uid, qid)
+        return deck_id_to_name.get(q.deck_id, "") if q is not None else ""
+
+    modification_diffs: list[dict] = []
     for m in plan.get("modifications") or []:
         qid = m.get("question_id")
         if not qid:
@@ -1038,6 +1046,7 @@ async def transform_view(
         modification_diffs.append(
             {
                 "question_id": qid,
+                "deck_name": deck_id_to_name.get(old.deck_id, ""),
                 "old": {
                     "type": old.type.value,
                     "topic": old.topic or "",
@@ -1065,6 +1074,18 @@ async def transform_view(
             }
         )
 
+    # For reorganize: pre-resolve deck names for deletions + card_moves
+    # (sources) so the template can group them by deck without doing
+    # per-row lookups in jinja.
+    deletion_decks: dict[int, str] = {
+        qid: _deck_for_qid(qid) for qid in (plan.get("deletions") or [])
+    }
+    move_source_decks: dict[int, str] = {
+        mv.get("question_id"): _deck_for_qid(mv.get("question_id"))
+        for mv in (plan.get("card_moves") or [])
+        if mv.get("question_id")
+    }
+
     return templates.TemplateResponse(
         "transform.html",
         {
@@ -1078,6 +1099,9 @@ async def transform_view(
             "desc": desc or {},
             "status": status,
             "modification_diffs": modification_diffs,
+            "deletion_decks": deletion_decks,
+            "move_source_decks": move_source_decks,
+            "deck_id_to_name": deck_id_to_name,
         },
     )
 

@@ -1,0 +1,35 @@
+{# Per-modification before/after diff card. The fields surfaced are
+   the ones claude can edit (prompt, answer, topic, rubric, type,
+   skeleton, language). Unchanged fields collapse so the eye lands
+   on what actually changed. Caller passes `d` (a modification_diff
+   dict). Used by transform.html for both single-deck and reorganize
+   scopes — the per-deck grouping wraps this partial. #}
+<li class="transform-diff-card">
+  <p class="transform-diff-header">№ {{ d.question_id }}</p>
+  {% set fields = [
+    ('prompt', 'Prompt'),
+    ('answer', 'Answer'),
+    ('topic', 'Topic'),
+    ('rubric', 'Rubric'),
+    ('type', 'Type'),
+    ('skeleton', 'Skeleton'),
+    ('language', 'Language')
+  ] %}
+  {% for key, label in fields %}
+    {% set old_val = d.old[key] | string %}
+    {% set new_val = d.new[key] | string %}
+    {% if old_val != new_val %}
+      <div class="transform-diff-field">
+        <p class="transform-diff-label">{{ label }}</p>
+        <div class="transform-diff-side transform-diff-old">
+          <span class="transform-diff-tag">before</span>
+          <span class="transform-diff-value">{{ old_val if old_val else '—' }}</span>
+        </div>
+        <div class="transform-diff-side transform-diff-new">
+          <span class="transform-diff-tag">after</span>
+          <span class="transform-diff-value">{{ new_val if new_val else '—' }}</span>
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
+</li>

@@ -10,15 +10,6 @@
     re-surface on a forgetting curve — the more you remember, the longer
     they sleep.
   </p>
-  {% if agent_available and decks %}
-    <p class="reorganize-cta-line">
-      <a href="{{ request.scope.get('root_path','') }}/reorganize" class="reorganize-cta">
-        {{ icon('sparkle', class_='icon icon-inline') }}
-        <span>Reorganize · ask claude to restructure your decks</span>
-        {{ icon('arrow-right', class_='icon icon-inline') }}
-      </a>
-    </p>
-  {% endif %}
 </section>
 
 {% if active_trivia_sessions %}
@@ -178,6 +169,22 @@
       <span class="deck-arrow">{{ icon('arrow-right') }}</span>
     </a>
   </li>
+  {# Cross-deck reorganize lives alongside "new deck" as another
+     deck-level action — same dashed-tile chrome, sparkle in place
+     of the "+". Only renders when an agent is configured AND there
+     are existing decks to restructure. #}
+  {% if agent_available and decks %}
+    <li class="deck-card deck-card-new deck-card-reorganize">
+      <a href="{{ request.scope.get('root_path','') }}/reorganize" class="deck-link">
+        <span class="deck-numeral deck-numeral-plus" aria-hidden="true">{{ icon('sparkle') }}</span>
+        <span class="deck-body">
+          <span class="deck-name">reorganize</span>
+          <span class="deck-stats"><span class="stat-label">ask claude to restructure your decks</span></span>
+        </span>
+        <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+      </a>
+    </li>
+  {% endif %}
 </ol>
 </section>
 {% endblock %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if scope == 'card' %}improving card{% else %}transforming deck{% endif %} · prep{% endblock %}
+{% block title %}{% if scope == 'card' %}improving card{% elif scope == 'reorganize' %}reorganizing decks{% else %}transforming deck{% endif %} · prep{% endblock %}
 {% block page_class %}transform transform-{{ scope }}{% endblock %}
 {% block main %}
 
@@ -12,7 +12,7 @@
 </nav>
 
 <section class="prelude">
-  <p class="eyebrow">{% if scope == 'card' %}Card · improve{% else %}Deck · transform{% endif %}</p>
+  <p class="eyebrow">{% if scope == 'card' %}Card · improve{% elif scope == 'reorganize' %}Reorganize · across decks{% else %}Deck · transform{% endif %}</p>
   <h1 class="display" id="display-headline">
     {% if progress.status == 'computing' or progress.status == 'awaiting_apply' or progress.status == 'applying' %}
       <em>Thinking</em><span class="ellipsis"></span>
@@ -54,66 +54,91 @@
         <li><strong>{{ dels|length }}</strong> deletion{{ '' if dels|length == 1 else 's' }}</li>
       </ul>
 
+      {# In single-deck transforms every change belongs to the same
+         deck, so per-deck grouping is just noise. For reorganize we
+         group every section by deck to make the cross-deck shape of
+         the plan obvious. #}
+      {% set group_by_deck = scope == 'reorganize' %}
+
       {% if mods %}
         <p class="section-eyebrow"><span>Modifications ({{ mods|length }})</span><span class="rule"></span></p>
-        {# Per-modification before/after diff. The fields surfaced are
-           the ones claude can edit (prompt, answer, topic, rubric,
-           type, choices). Unchanged fields collapse so the eye lands
-           on what actually changed. #}
-        <ul class="transform-diff-list">
+        {% if group_by_deck %}
+          {% set mods_by_deck = {} %}
           {% for d in modification_diffs %}
-            <li class="transform-diff-card">
-              <p class="transform-diff-header">№ {{ d.question_id }}</p>
-              {% set fields = [
-                ('prompt', 'Prompt'),
-                ('answer', 'Answer'),
-                ('topic', 'Topic'),
-                ('rubric', 'Rubric'),
-                ('type', 'Type'),
-                ('skeleton', 'Skeleton'),
-                ('language', 'Language')
-              ] %}
-              {% for key, label in fields %}
-                {% set old_val = d.old[key] | string %}
-                {% set new_val = d.new[key] | string %}
-                {% if old_val != new_val %}
-                  <div class="transform-diff-field">
-                    <p class="transform-diff-label">{{ label }}</p>
-                    <div class="transform-diff-side transform-diff-old">
-                      <span class="transform-diff-tag">before</span>
-                      <span class="transform-diff-value">{{ old_val if old_val else '—' }}</span>
-                    </div>
-                    <div class="transform-diff-side transform-diff-new">
-                      <span class="transform-diff-tag">after</span>
-                      <span class="transform-diff-value">{{ new_val if new_val else '—' }}</span>
-                    </div>
-                  </div>
-                {% endif %}
-              {% endfor %}
-            </li>
+            {% set _k = d.deck_name or '(unknown)' %}
+            {% if mods_by_deck.update({_k: (mods_by_deck.get(_k) or []) + [d]}) %}{% endif %}
           {% endfor %}
-        </ul>
+          {% for deck_label, diffs in mods_by_deck.items() %}
+            <p class="transform-deck-label">in <strong>{{ deck_label }}</strong> ({{ diffs|length }})</p>
+            <ul class="transform-diff-list">
+              {% for d in diffs %}
+                {% include "_transform_diff_card.html" %}
+              {% endfor %}
+            </ul>
+          {% endfor %}
+        {% else %}
+          <ul class="transform-diff-list">
+            {% for d in modification_diffs %}
+              {% include "_transform_diff_card.html" %}
+            {% endfor %}
+          </ul>
+        {% endif %}
       {% endif %}
 
       {% if adds %}
-        <p class="section-eyebrow"><span>Sample additions</span><span class="rule"></span></p>
-        <ul class="transform-list">
-          {% for a in adds[:3] %}
-            <li class="transform-list-item">
-              <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
-              <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
-            </li>
+        <p class="section-eyebrow"><span>{% if group_by_deck %}Additions ({{ adds|length }}){% else %}Sample additions{% endif %}</span><span class="rule"></span></p>
+        {% if group_by_deck %}
+          {% set adds_by_deck = {} %}
+          {% for a in adds %}
+            {% set _k = a.dest_deck or '(unknown)' %}
+            {% if adds_by_deck.update({_k: (adds_by_deck.get(_k) or []) + [a]}) %}{% endif %}
           {% endfor %}
-          {% if adds|length > 3 %}<li class="transform-list-more">+ {{ adds|length - 3 }} more</li>{% endif %}
-        </ul>
+          {% for deck_label, items in adds_by_deck.items() %}
+            <p class="transform-deck-label">to <strong>{{ deck_label }}</strong> ({{ items|length }})</p>
+            <ul class="transform-list">
+              {% for a in items[:6] %}
+                <li class="transform-list-item">
+                  <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
+                  <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
+                </li>
+              {% endfor %}
+              {% if items|length > 6 %}<li class="transform-list-more">+ {{ items|length - 6 }} more</li>{% endif %}
+            </ul>
+          {% endfor %}
+        {% else %}
+          <ul class="transform-list">
+            {% for a in adds[:3] %}
+              <li class="transform-list-item">
+                <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
+                <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
+              </li>
+            {% endfor %}
+            {% if adds|length > 3 %}<li class="transform-list-more">+ {{ adds|length - 3 }} more</li>{% endif %}
+          </ul>
+        {% endif %}
       {% endif %}
 
       {% if dels %}
-        <p class="section-eyebrow"><span>Card deletions</span><span class="rule"></span></p>
-        <ul class="transform-list">
-          {% for qid in dels[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
-          {% if dels|length > 6 %}<li class="transform-list-more">+ {{ dels|length - 6 }} more</li>{% endif %}
-        </ul>
+        <p class="section-eyebrow"><span>Card deletions ({{ dels|length }})</span><span class="rule"></span></p>
+        {% if group_by_deck %}
+          {% set dels_by_deck = {} %}
+          {% for qid in dels %}
+            {% set _k = deletion_decks.get(qid) or '(unknown)' %}
+            {% if dels_by_deck.update({_k: (dels_by_deck.get(_k) or []) + [qid]}) %}{% endif %}
+          {% endfor %}
+          {% for deck_label, qids in dels_by_deck.items() %}
+            <p class="transform-deck-label">from <strong>{{ deck_label }}</strong> ({{ qids|length }})</p>
+            <ul class="transform-list">
+              {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+              {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
+            </ul>
+          {% endfor %}
+        {% else %}
+          <ul class="transform-list">
+            {% for qid in dels[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+            {% if dels|length > 6 %}<li class="transform-list-more">+ {{ dels|length - 6 }} more</li>{% endif %}
+          </ul>
+        {% endif %}
       {% endif %}
 
       {# Cross-deck operations — only present for scope=reorganize plans #}
@@ -147,13 +172,16 @@
 
       {% if card_moves %}
         <p class="section-eyebrow"><span>Card moves ({{ card_moves|length }})</span><span class="rule"></span></p>
-        {# Group moves by destination so the user sees per-deck buckets. #}
-        {% set grouped = {} %}
+        {# Group moves by (source → destination) so the user sees clear
+           per-pair buckets — "from X to Y: …". #}
+        {% set move_groups = {} %}
         {% for mv in card_moves %}
-          {% if grouped.update({mv.dest_deck: (grouped.get(mv.dest_deck) or []) + [mv.question_id]}) %}{% endif %}
+          {% set _src = move_source_decks.get(mv.question_id) or '(unknown)' %}
+          {% set _key = _src ~ ' → ' ~ mv.dest_deck %}
+          {% if move_groups.update({_key: (move_groups.get(_key) or []) + [mv.question_id]}) %}{% endif %}
         {% endfor %}
-        {% for dest, qids in grouped.items() %}
-          <p class="transform-move-dest">→ <strong>{{ dest }}</strong> ({{ qids|length }} card{{ '' if qids|length == 1 else 's' }})</p>
+        {% for label, qids in move_groups.items() %}
+          <p class="transform-deck-label">from <strong>{{ label.split(' → ')[0] }}</strong> to <strong>{{ label.split(' → ')[1] }}</strong> ({{ qids|length }})</p>
           <ul class="transform-list">
             {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
             {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
@@ -163,9 +191,16 @@
 
       {% if deck_dels %}
         <p class="section-eyebrow"><span>Deck deletions ({{ deck_dels|length }})</span><span class="rule"></span></p>
-        <p class="transform-warning">⚠ The deck and ALL its remaining cards will be removed.</p>
+        <p class="transform-warning">
+          {{ icon('warning-circle', class_='icon icon-inline') }}
+          The deck and ALL its remaining cards will be removed.
+        </p>
         <ul class="transform-list">
-          {% for did in deck_dels %}<li class="transform-list-item"><span class="transform-list-id">deck № {{ did }}</span></li>{% endfor %}
+          {% for did in deck_dels %}
+            <li class="transform-list-item">
+              <span class="transform-list-id">{{ deck_id_to_name.get(did) or ('deck № ' ~ did) }}</span>
+            </li>
+          {% endfor %}
         </ul>
       {% endif %}
     </details>
@@ -184,7 +219,7 @@
 
   {# Action row depends on the workflow's status. #}
   <div class="study-actions transform-actions">
-    {% if scope == 'deck' and progress.status == 'awaiting_apply' %}
+    {% if scope in ('deck', 'reorganize') and progress.status == 'awaiting_apply' %}
       <form method="post" action="{{ request.scope.get('root_path','') }}/transform/{{ wid }}/apply" style="flex:1;min-width:10rem">
         <button class="btn btn-primary" type="submit" style="width:100%">Apply changes</button>
       </form>
