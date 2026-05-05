@@ -2734,19 +2734,42 @@ body:has(dialog[open]) {
   margin-top: 0.2rem;
 }
 
-/* Index-page Reorganize tile — sits next to the "new deck" tile in
-   the deck list. Same dashed-card chrome (.deck-card-new) but with
-   a sparkle icon in the numeral slot in place of the "+". The icon
-   needs explicit sizing because the parent's font-size styling was
-   meant for a glyph, not an SVG. */
-.deck-card-reorganize .deck-numeral-plus {
-  display: inline-flex; align-items: center; justify-content: center;
+/* Deck-list action pills — small inline buttons under the section
+   eyebrow ("new deck", "edit with claude"). Replaced the earlier
+   approach where these were full-width dashed tiles in the deck
+   list itself; pills are smaller, lighter, and don't compete with
+   the actual decks for attention. */
+.deck-actions {
+  display: flex; flex-wrap: wrap; gap: 0.45rem;
+  margin: 0 0 1rem;
 }
-.deck-card-reorganize .deck-numeral-plus .icon {
-  width: 1.4rem; height: 1.4rem;
+.deck-action-pill {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.88rem; color: var(--ink);
+  border: 1px dashed var(--rule); border-radius: 999px;
+  text-decoration: none;
+  background: transparent;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.deck-action-pill:hover {
+  border-style: solid;
+  border-color: var(--quill);
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  color: var(--quill);
+}
+.deck-action-pill .deck-action-icon {
+  font-weight: 300;
   color: var(--ink-mute);
+  font-size: 1.05rem;
+  line-height: 1;
 }
-.deck-card-reorganize:hover .deck-numeral-plus .icon { color: var(--quill); }
+.deck-action-pill:hover .deck-action-icon { color: var(--quill); }
+.deck-action-pill .icon {
+  width: 0.95rem; height: 0.95rem;
+  color: var(--quill);
+  flex-shrink: 0;
+}
 
 /* Reorganize-page deck preview — collapsed by default, lists each
    deck's name + type tag + card count + (trivia) topic. Summary

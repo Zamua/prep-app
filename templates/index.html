@@ -105,6 +105,22 @@
 
 <section class="decks-section">
   <p class="section-eyebrow"><span>{% if recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
+  {# Deck-level actions sit under the section header as small pills,
+     not as full-width tiles in the list. New deck is always available;
+     "edit with claude" only when an agent is configured + there's at
+     least one deck to edit. #}
+  <div class="deck-actions">
+    <a href="{{ request.scope.get('root_path','') }}/decks/new" class="deck-action-pill">
+      <span class="deck-action-icon" aria-hidden="true">+</span>
+      <span>new deck</span>
+    </a>
+    {% if agent_available and decks %}
+      <a href="{{ request.scope.get('root_path','') }}/reorganize" class="deck-action-pill">
+        {{ icon('sparkle', class_='icon icon-inline') }}
+        <span>edit with claude</span>
+      </a>
+    {% endif %}
+  </div>
 <ol class="deck-list" role="list">
   {% for d in decks %}
     {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][loop.index0] %}
@@ -158,32 +174,6 @@
   {% endfor %}
   {% if not decks %}
     <li class="deck-card empty"><p>No decks yet.</p></li>
-  {% endif %}
-  <li class="deck-card deck-card-new">
-    <a href="{{ request.scope.get('root_path','') }}/decks/new" class="deck-link">
-      <span class="deck-numeral deck-numeral-plus" aria-hidden="true">+</span>
-      <span class="deck-body">
-        <span class="deck-name">new deck</span>
-        <span class="deck-stats"><span class="stat-label">describe something to learn</span></span>
-      </span>
-      <span class="deck-arrow">{{ icon('arrow-right') }}</span>
-    </a>
-  </li>
-  {# Cross-deck reorganize lives alongside "new deck" as another
-     deck-level action — same dashed-tile chrome, sparkle in place
-     of the "+". Only renders when an agent is configured AND there
-     are existing decks to restructure. #}
-  {% if agent_available and decks %}
-    <li class="deck-card deck-card-new deck-card-reorganize">
-      <a href="{{ request.scope.get('root_path','') }}/reorganize" class="deck-link">
-        <span class="deck-numeral deck-numeral-plus" aria-hidden="true">{{ icon('sparkle') }}</span>
-        <span class="deck-body">
-          <span class="deck-name">reorganize</span>
-          <span class="deck-stats"><span class="stat-label">ask claude to restructure your decks</span></span>
-        </span>
-        <span class="deck-arrow">{{ icon('arrow-right') }}</span>
-      </a>
-    </li>
   {% endif %}
 </ol>
 </section>

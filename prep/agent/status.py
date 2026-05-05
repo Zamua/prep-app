@@ -101,5 +101,19 @@ def set_available(value: bool) -> None:
 
 def init_availability() -> None:
     """Re-run the probe and cache the result. Called once at app
-    startup; safe to call again to refresh."""
-    set_available(probe())
+    startup; safe to call again to refresh.
+
+    Retries the probe a few times because in docker-compose deploys
+    the prep + agent containers boot in parallel — agent-server may
+    not be listening yet when prep imports. Without retries a fresh
+    deploy left agent_available=False until the user manually hit
+    /settings/agent/connect, which made AI-gated UI (the cross-deck
+    edit pill, etc.) silently disappear after every redeploy."""
+    import time
+
+    for _ in range(8):
+        if probe():
+            set_available(True)
+            return
+        time.sleep(0.5)
+    set_available(False)

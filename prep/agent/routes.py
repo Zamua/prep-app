@@ -45,9 +45,13 @@ def _refresh_agent_status() -> dict:
 
 @router.get("/settings/agent", response_class=HTMLResponse)
 def settings_agent_view(request: Request, user: dict = Depends(current_user)):
+    # Fold a cache refresh into the page render — whatever the live
+    # status says is what the agent_available context_processor will
+    # serve next, so AI-gated UI snaps to truth on the next nav.
+    s = _refresh_agent_status()
     return templates.TemplateResponse(
         "settings_agent.html",
-        {"request": request, "status": _agent_mod.status(), "error": None, "flash": None},
+        {"request": request, "status": s, "error": None, "flash": None},
     )
 
 
