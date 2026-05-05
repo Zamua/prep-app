@@ -578,17 +578,20 @@ a { color: inherit; }
 .deck-rename > summary {
   list-style: none;
   cursor: pointer;
-  padding: 0.35rem 0.45rem;
-  border-radius: 999px;
-  color: var(--ink-mute);
-  display: inline-flex; align-items: center;
+  display: inline-block;
   -webkit-tap-highlight-color: transparent;
 }
 .deck-rename > summary::-webkit-details-marker { display: none; }
 .deck-rename > summary::marker { content: ""; }
-.deck-rename > summary:hover { color: var(--ink); }
-.deck-rename > summary .icon { width: 1rem; height: 1rem; }
-.deck-rename[open] > summary { background: color-mix(in srgb, var(--ink-soft) 8%, transparent); }
+.deck-rename-trigger {
+  display: inline-flex; align-items: center;
+  padding: 0.35rem 0.45rem;
+  border-radius: 999px;
+  color: var(--ink-mute);
+}
+.deck-rename > summary:hover .deck-rename-trigger { color: var(--ink); }
+.deck-rename-trigger .icon { width: 1rem; height: 1rem; }
+.deck-rename[open] .deck-rename-trigger { background: color-mix(in srgb, var(--ink-soft) 8%, transparent); }
 .deck-rename-form {
   position: absolute; left: 0; top: 100%;
   z-index: 60;
@@ -616,9 +619,15 @@ a { color: inherit; }
    textarea. Per-element pattern, same as rename + notif. */
 .deck-topic { margin: 0 0 1.4rem; }
 .deck-topic-edit { display: block; }
-.deck-topic-summary {
+.deck-topic-summary-trigger {
   list-style: none;
   cursor: pointer;
+  display: block;
+  -webkit-tap-highlight-color: transparent;
+}
+.deck-topic-summary-trigger::-webkit-details-marker { display: none; }
+.deck-topic-summary-trigger::marker { content: ""; }
+.deck-topic-summary {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -627,10 +636,7 @@ a { color: inherit; }
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--paper) 60%, transparent);
-  -webkit-tap-highlight-color: transparent;
 }
-.deck-topic-summary::-webkit-details-marker { display: none; }
-.deck-topic-summary::marker { content: ""; }
 .deck-topic-eyebrow {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
@@ -647,7 +653,7 @@ a { color: inherit; }
   white-space: nowrap;
 }
 .deck-topic-pencil { color: var(--ink-mute); width: 0.95rem; height: 0.95rem; }
-.deck-topic-edit:hover .deck-topic-pencil { color: var(--ink); }
+.deck-topic-summary-trigger:hover .deck-topic-pencil { color: var(--ink); }
 .deck-topic-edit[open] .deck-topic-summary {
   border-color: var(--rule);
   border-bottom-left-radius: 0;
@@ -732,13 +738,17 @@ a { color: inherit; }
    with equal gutters, instead of hugging the right edge whenever the
    triggering pill happens to sit far-right in the row. */
 .notif-edit { position: static; }
-/* Strip the default <summary> marker so the pill chrome is the
-   only visible affordance. DON'T zero padding/margin here — that
-   would override `.notif-pill`'s padding and the closed-state pill
-   collapses to text-only. */
-.notif-edit > summary {
+/* Summary is a plain transparent click target — the visible pill
+   chrome lives on a <span class="notif-pill"> child of the summary.
+   Keeping the summary itself free of display:inline-flex /
+   padding / borders sidesteps an iOS Safari quirk where the first
+   tap on a flex-display summary doesn't fire its toggle. */
+.notif-edit > summary,
+.notif-edit-summary {
   list-style: none;
   cursor: pointer;
+  display: inline-block;
+  -webkit-tap-highlight-color: transparent;
 }
 .notif-edit > summary::-webkit-details-marker { display: none; }
 .notif-edit > summary::marker { content: ""; }

@@ -10,9 +10,12 @@
        input + Save. Pure HTML + form POST; the route validates the
        new name and 303-redirects to /deck/<new_name> on success. #}
     <details class="deck-rename">
-      <summary class="deck-rename-trigger" title="Rename deck">
-        {{ icon('pencil-simple-line', class_='icon icon-inline') }}
-        <span class="visually-hidden">Rename deck</span>
+      {# Plain summary + visible chrome on a <span> child — same iOS
+         first-tap pattern used by .notif-edit / .user-indicator. #}
+      <summary class="deck-rename-summary" title="Rename deck" aria-label="Rename deck">
+        <span class="deck-rename-trigger">
+          {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+        </span>
       </summary>
       <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/rename"
             class="deck-rename-form">
@@ -40,13 +43,20 @@
       {%- set _interval = deck_meta.interval_minutes or 30 -%}
       {%- set _presets = [15, 30, 60, 120, 240, 480] -%}
       <details class="notif-edit">
-        <summary class="notif-pill notif-pill-summary {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}">
-          {{ icon('bell', class_='icon icon-inline notif-pill-bell') }}
-          {% if deck_meta.notifications_enabled %}
-            <span>every {{ _interval }}m</span>
-          {% else %}
-            <span>paused</span>
-          {% endif %}
+        {# Following the user-indicator pattern: the <summary> stays
+           a plain click target (no display:flex on the summary itself),
+           and the visible pill chrome lives on a <span> child. iOS
+           Safari sometimes drops the first tap on a flex-display
+           summary; this layout sidesteps that. #}
+        <summary class="notif-edit-summary" aria-label="Notification settings">
+          <span class="notif-pill notif-pill-summary {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}">
+            {{ icon('bell', class_='icon icon-inline notif-pill-bell') }}
+            {% if deck_meta.notifications_enabled %}
+              <span>every {{ _interval }}m</span>
+            {% else %}
+              <span>paused</span>
+            {% endif %}
+          </span>
         </summary>
         <div class="notif-popover" role="group" aria-label="Notification settings">
           <p class="notif-popover-eyebrow">notification frequency</p>
@@ -227,17 +237,20 @@
 {% if deck_type == 'trivia' %}
 <section class="deck-topic">
   <details class="deck-topic-edit">
-    <summary class="deck-topic-summary">
-      <span class="deck-topic-eyebrow">topic prompt</span>
-      <span class="deck-topic-preview">
-        {%- set _topic = deck_meta.context_prompt or '' -%}
-        {%- if _topic -%}
-          {{ _topic[:120] }}{% if _topic|length > 120 %}…{% endif %}
-        {%- else -%}
-          <em>not set — claude needs this to generate fresh batches</em>
-        {%- endif -%}
+    {# Same first-tap pattern: plain summary + chrome on a <span>. #}
+    <summary class="deck-topic-summary-trigger" aria-label="Edit topic prompt">
+      <span class="deck-topic-summary">
+        <span class="deck-topic-eyebrow">topic prompt</span>
+        <span class="deck-topic-preview">
+          {%- set _topic = deck_meta.context_prompt or '' -%}
+          {%- if _topic -%}
+            {{ _topic[:120] }}{% if _topic|length > 120 %}…{% endif %}
+          {%- else -%}
+            <em>not set — claude needs this to generate fresh batches</em>
+          {%- endif -%}
+        </span>
+        {{ icon('pencil-simple-line', class_='icon icon-inline deck-topic-pencil') }}
       </span>
-      {{ icon('pencil-simple-line', class_='icon icon-inline deck-topic-pencil') }}
     </summary>
     <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
           method="post" class="deck-topic-form">
