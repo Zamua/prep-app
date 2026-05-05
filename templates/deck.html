@@ -102,7 +102,7 @@
         </button>
       </form>
     {% endif %}
-    {# Edit pill: toggles the add/transform panel below. The panel
+    {# Edit pill: toggles the add/topic panel below. The panel
        used to live inline on the deck page; tucking it behind the
        pencil keeps the deck view focused on the cards. #}
     <button type="button" class="edit-pill" data-edit-toggle
@@ -111,6 +111,16 @@
       {{ icon('pencil-simple-line', class_='icon icon-inline') }}
       <span>edit</span>
     </button>
+    {# Split pill: separate from edit because splitting is a
+       multi-card reorganize action, not an edit-this-single-deck
+       action. Hidden when there are no cards to split. #}
+    {% if questions %}
+      <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split"
+         class="edit-pill" title="Split into a new deck">
+        {{ icon('arrow-up-right', class_='icon icon-inline') }}
+        <span>split</span>
+      </a>
+    {% endif %}
   </div>
   {% if deck_type == 'trivia' and trivia_stats %}
     {# Trivia mastery bar: how done am I with this deck? Bar fills
@@ -193,15 +203,6 @@
     </a>
   </div>
 
-  {% if questions %}
-    <p class="section-eyebrow" style="margin-top: 1.4rem"><span>Reorganize</span><span class="rule"></span></p>
-    <div class="add-cta-row">
-      <a class="btn btn-quiet add-cta" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split">
-        {{ icon('arrow-up-right', class_='icon icon-inline') }}
-        <span>Split into a new deck</span>
-      </a>
-    </div>
-  {% endif %}
 
   {% if agent_available %}
     <p class="add-or" aria-hidden="true"><span>or</span></p>
