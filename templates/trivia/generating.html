@@ -1,45 +1,43 @@
-{# Polling page for TriviaGenerateWorkflow. JS hits
-   /trivia/gen/<wid>/status every 1.5s, surfaces the workflow's
-   live state (status + plan + counts), and either:
-   - in awaiting_feedback: renders the plan with replan/accept/
-     reject controls
-   - in generating/applying: renders a real progress bar driven
-     by generated_count / total
-   - in done: redirects to the deck page #}
+{# Polling page for TriviaGenerateWorkflow. Mirrors the chrome of
+   transform.html so the workflow-tracking pages feel like one
+   surface: prelude (status-driven headline) + transform-panel
+   (status row + body sections) + study-actions (apply/reject row).
+   The body content is JS-driven (status, progress bar, plan list)
+   since this workflow has more granular progress than transform —
+   planning → awaiting_feedback → generating → applying → done. #}
 {% extends "base.html" %}
 {% block title %}generating · {{ deck_name }} · prep{% endblock %}
-{% block page_class %}trivia-generating{% endblock %}
+{% block page_class %}trivia-generating transform{% endblock %}
 {% block main %}
 
 <nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} home</a>
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
 </nav>
 
 <section class="prelude">
-  <p class="eyebrow">{{ deck_name }}</p>
-  <h1 class="display">Planning&nbsp;<em>your batch</em>.</h1>
-  <p class="lede">
-    Claude first sketches an outline (titles + briefs). You can replan
-    or accept; on accept, claude expands each item into a full card in
-    parallel. Safe to navigate away — the workflow keeps running.
-  </p>
+  <p class="eyebrow">{{ deck_name }} · generating</p>
+  <h1 class="display" id="display-headline">
+    <em>Planning</em><span class="ellipsis"></span>
+  </h1>
 </section>
 
-<div class="trivia-gen" data-wid="{{ wid }}" data-deck-name="{{ deck_name }}">
-  <div class="trivia-gen-status-row">
-    <span class="trivia-gen-status-label" id="trivia-gen-label">Starting…</span>
+<div class="transform-panel" data-wid="{{ wid }}" data-deck-name="{{ deck_name }}" id="trivia-gen-panel">
+  <p class="transform-status" id="trivia-gen-status" data-status="">
+    <span id="trivia-gen-label">starting…</span>
     <span class="trivia-gen-status-counts" id="trivia-gen-counts"></span>
-  </div>
-  <progress class="trivia-gen-progress" id="trivia-gen-progress" value="0" max="100"></progress>
-  <p class="trivia-gen-error" id="trivia-gen-error" hidden></p>
+    <a href="#" id="trivia-gen-refresh" class="transform-refresh">refresh now</a>
+  </p>
 
-  {# Plan-review block: renders during awaiting_feedback / replanning.
+  <progress class="trivia-gen-progress" id="trivia-gen-progress" value="0" max="100"></progress>
+  <p class="form-error trivia-gen-error" id="trivia-gen-error" hidden></p>
+
+  {# Plan-review block: shown during awaiting_feedback / replanning.
      JS swaps content in #trivia-plan-list per status update. #}
   <section class="trivia-plan-review" id="trivia-plan-review" hidden>
     <p class="section-eyebrow"><span>Proposed batch</span><span class="rule"></span></p>
     <ol class="trivia-plan-list" id="trivia-plan-list"></ol>
 
-    <form class="trivia-feedback-form" id="trivia-feedback-form">
+    <form class="trivia-feedback-form transform-form add-ai-form" id="trivia-feedback-form">
       <label class="freetext">
         <span class="freetext-label">
           {{ icon('sparkle', class_='icon icon-inline') }}
@@ -48,28 +46,34 @@
         <textarea name="feedback" rows="3" maxlength="2000"
                   placeholder="e.g. add 5 more from the multiplayer era · drop the cheat-code ones · go deeper on the engine internals"></textarea>
       </label>
-      <div class="trivia-plan-actions">
-        <button type="submit" class="btn btn-quiet" id="trivia-replan-btn" disabled>Replan</button>
-        <button type="button" class="btn btn-primary" id="trivia-accept-btn">Looks good — generate cards</button>
-        <button type="button" class="btn btn-quiet trivia-reject-btn" id="trivia-reject-btn">Cancel</button>
-      </div>
+      <button type="submit" class="btn btn-quiet" id="trivia-replan-btn" disabled>Replan</button>
     </form>
   </section>
 
-  <p class="form-hint">
-    <a id="trivia-gen-jump" class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">
-      Skip the wait — open the deck page
-    </a>
-  </p>
+  <div class="study-actions transform-actions" id="trivia-gen-actions" hidden>
+    <form id="trivia-accept-form" style="flex:1;min-width:10rem">
+      <button type="button" class="btn btn-primary" id="trivia-accept-btn" style="width:100%">Looks good — generate cards</button>
+    </form>
+    <form id="trivia-reject-form" style="flex:1;min-width:10rem">
+      <button type="button" class="btn btn-quiet" id="trivia-reject-btn" style="width:100%">Cancel</button>
+    </form>
+  </div>
+
+  <div class="study-actions transform-actions" id="trivia-gen-done-actions" hidden>
+    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Open deck</a>
+  </div>
 </div>
 
 <script>
   (function () {
-    var root = document.querySelector('.trivia-gen');
+    var root = document.getElementById('trivia-gen-panel');
     if (!root) return;
     var wid = root.dataset.wid;
     var deck = root.dataset.deckName;
     var rootPath = "{{ request.scope.get('root_path','') }}";
+
+    var headline = document.getElementById('display-headline');
+    var statusRow = document.getElementById('trivia-gen-status');
     var label = document.getElementById('trivia-gen-label');
     var counts = document.getElementById('trivia-gen-counts');
     var bar = document.getElementById('trivia-gen-progress');
@@ -79,18 +83,25 @@
     var feedbackForm = document.getElementById('trivia-feedback-form');
     var feedbackBox = feedbackForm.querySelector('textarea[name="feedback"]');
     var replanBtn = document.getElementById('trivia-replan-btn');
+    var actionsRow = document.getElementById('trivia-gen-actions');
+    var doneRow = document.getElementById('trivia-gen-done-actions');
     var acceptBtn = document.getElementById('trivia-accept-btn');
     var rejectBtn = document.getElementById('trivia-reject-btn');
+    var refreshLink = document.getElementById('trivia-gen-refresh');
 
-    var labels = {
-      'planning': 'Planning the batch…',
-      'awaiting_feedback': 'Review the plan',
-      'replanning': 'Replanning…',
-      'generating': 'Generating cards…',
-      'applying': 'Saving cards…',
-      'done': 'Done — redirecting…',
-      'rejected': 'Cancelled',
-      'failed': 'Generation failed',
+    // Status → user-facing label + display headline. The headline
+    // mirrors the transform.html style (italic verb + animated dots
+    // / final-state title) so the two workflow pages read alike.
+    var STATE = {
+      starting:           {label: 'starting…',          h: '<em>Planning</em><span class="ellipsis"></span>'},
+      planning:           {label: 'planning the batch', h: '<em>Planning</em><span class="ellipsis"></span>'},
+      awaiting_feedback:  {label: 'review the plan',    h: '<em>Review</em> the plan.'},
+      replanning:         {label: 'replanning',         h: '<em>Replanning</em><span class="ellipsis"></span>'},
+      generating:         {label: 'generating cards',   h: '<em>Generating</em><span class="ellipsis"></span>'},
+      applying:           {label: 'saving cards',       h: '<em>Saving</em><span class="ellipsis"></span>'},
+      done:               {label: 'done',               h: 'Done.'},
+      rejected:           {label: 'cancelled',          h: 'Cancelled.'},
+      failed:             {label: 'generation failed',  h: 'Failed.'},
     };
 
     feedbackBox.addEventListener('input', function () {
@@ -133,8 +144,12 @@
       });
     });
 
+    refreshLink.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      tick();
+    });
+
     function renderPlan(plan) {
-      // Diff naive — replace the whole list. Cheap; plan size is small.
       planList.innerHTML = '';
       (plan || []).forEach(function (item) {
         var li = document.createElement('li');
@@ -151,12 +166,20 @@
       });
     }
 
+    function setHeadline(html) {
+      headline.innerHTML = html;
+    }
+
     function tick() {
-      fetch(rootPath + '/trivia/gen/' + wid + '/status', {credentials: 'same-origin'})
+      fetch(rootPath + '/trivia/gen/' + wid + '/status', {credentials: 'same-origin', cache: 'no-store'})
         .then(function (r) { return r.json(); })
         .then(function (p) {
           var status = p.status || 'starting';
-          label.textContent = labels[status] || status;
+          var s = STATE[status] || {label: status, h: '<em>' + status + '</em>'};
+          label.textContent = s.label;
+          setHeadline(s.h);
+          statusRow.dataset.status = status;
+
           if (p.error) {
             err.textContent = p.error;
             err.hidden = false;
@@ -166,45 +189,55 @@
 
           var total = p.total || 0;
           if (status === 'awaiting_feedback' || status === 'replanning') {
-            // Plan visible. Progress bar shows the planning phase
-            // as "0% — waiting on you" rather than indeterminate, so
-            // the user knows we're not still chewing.
+            // Plan visible. Bar pinned to 0 so the user knows we're
+            // waiting on them, not still chewing.
             bar.value = 0;
             bar.max = 100;
             counts.textContent = total ? (total + ' planned' + (p.round > 1 ? ' · round ' + p.round : '')) : '';
             renderPlan(p.plan);
             planSection.hidden = false;
-            // Disable replan during a replan-in-flight; re-enable when
-            // status flips back to awaiting_feedback.
+            actionsRow.hidden = false;
+            doneRow.hidden = true;
             replanBtn.disabled = (status === 'replanning') || !feedbackBox.value.trim();
             acceptBtn.disabled = (status === 'replanning');
           } else if (status === 'generating' || status === 'applying') {
             planSection.hidden = true;
+            actionsRow.hidden = true;
+            doneRow.hidden = true;
             var generated = p.generated_count || 0;
             var inserted = p.inserted || 0;
-            // During generating: progress reflects expansions landed.
-            // During applying: each landed expansion is being inserted;
-            // we hold the bar at "generated_count / total" since insert
-            // is fast.
             var num = (status === 'applying') ? (inserted || generated) : generated;
             if (total > 0) {
               bar.value = Math.round(100 * num / total);
+              bar.max = 100;
               counts.textContent = num + ' / ' + total;
             } else {
               bar.removeAttribute('value');
+              counts.textContent = '';
             }
-          } else if (status === 'planning') {
+          } else if (status === 'planning' || status === 'starting') {
+            planSection.hidden = true;
+            actionsRow.hidden = true;
+            doneRow.hidden = true;
             bar.removeAttribute('value');
             counts.textContent = '';
-          }
-
-          if (status === 'done') {
-            bar.value = 100;
+          } else if (status === 'done') {
+            bar.value = 100; bar.max = 100;
             counts.textContent = (p.inserted || 0) + ' inserted';
-            window.location.href = rootPath + '/deck/' + (p.deck_name || deck);
+            planSection.hidden = true;
+            actionsRow.hidden = true;
+            doneRow.hidden = false;
+            // Auto-redirect after a brief beat so the user sees the
+            // final state before landing back on the deck page.
+            setTimeout(function () {
+              window.location.href = rootPath + '/deck/' + (p.deck_name || deck);
+            }, 700);
             return;
-          }
-          if (status === 'rejected' || status === 'failed') {
+          } else if (status === 'rejected' || status === 'failed') {
+            planSection.hidden = true;
+            actionsRow.hidden = true;
+            doneRow.hidden = false;
+            bar.removeAttribute('value');
             return;  // stop polling
           }
           setTimeout(tick, 1500);

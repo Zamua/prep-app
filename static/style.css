@@ -4032,23 +4032,13 @@ body:has(dialog[open]) {
    Drives the plan-then-expand UI: status row, progress bar, plan
    review list, replan/accept/reject controls. */
 
-.trivia-gen { margin-top: 1rem; }
-
-.trivia-gen-status-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.4rem;
-}
-
-.trivia-gen-status-label {
-  font-size: 1.05rem;
-  color: var(--ink);
-  font-style: italic;
-}
-
+/* Trivia generation polling page lives inside .transform-panel
+   (shared chrome with the deck/card transform polling page); these
+   rules just style the trivia-specific bits — the progress bar,
+   the inline counts span, and the plan list. The status row +
+   refresh link inherit from .transform-status. */
 .trivia-gen-status-counts {
+  margin-left: 0.6rem;
   font-size: 0.9rem;
   color: var(--ink-mute);
   font-feature-settings: "lnum" on;
@@ -4057,6 +4047,7 @@ body:has(dialog[open]) {
 .trivia-gen-progress {
   width: 100%;
   height: 0.6rem;
+  margin-top: 0.5rem;
   border-radius: 999px;
   border: none;
   overflow: hidden;
@@ -4072,12 +4063,6 @@ body:has(dialog[open]) {
   transition: width 0.3s ease;
 }
 .trivia-gen-progress::-moz-progress-bar { background: var(--quill); }
-
-.trivia-gen-error {
-  color: var(--wrong);
-  font-size: 0.9rem;
-  margin: 0.5rem 0 0;
-}
 
 .trivia-plan-review {
   margin-top: 1.5rem;
@@ -4117,19 +4102,6 @@ body:has(dialog[open]) {
 }
 
 .trivia-feedback-form { margin: 0; }
-
-.trivia-plan-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.7rem;
-  flex-wrap: wrap;
-}
-
-.trivia-plan-actions .btn { flex: 1 1 auto; min-width: 0; }
-.trivia-reject-btn {
-  flex: 0 0 auto !important;
-  color: var(--ink-mute);
-}
 
 /* --- Notification log + masthead unseen badge --- */
 
