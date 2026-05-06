@@ -30,7 +30,12 @@
 </nav>
 
 <article class="trivia-card-body">
-  <div class="trivia-prompt">{{ q.prompt }}</div>
+  {# Render prompt through the markdown filter so technical decks
+     (DSA, Python idioms, Go concurrency, etc.) can include fenced
+     code blocks in the question text. The .prose class carries the
+     existing app-wide code/inline-code/list/heading styling — same
+     rules used by the SRS study prompt. #}
+  <div class="trivia-prompt prose">{{ q.prompt|markdown }}</div>
 
   {% if result is none %}
     <form method="post"

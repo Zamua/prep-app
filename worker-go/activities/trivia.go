@@ -35,15 +35,15 @@ Generate exactly %d questions on the topic:
 %s
 
 Constraints:
-- Each question (q) fits in a phone notification body — <= 140 characters.
-- Each answer (a) is 1-5 words. Names, numbers, short phrases. Not sentences.
-- Each explanation (e) is 2-4 sentences. Surface the WHY: context, causation, why this matters, common misconception, or a memorable hook. Treat the user as smart and curious — go beyond restating the answer. ~300 characters is a good target.
-- Cover varied sub-areas of the topic; don't all be the same flavor.
+- Question (q): default to <= 140 chars so the push-notification preview reads well. When the topic naturally calls for a snippet, table, or multi-line formatted content, the q MAY be longer and include markdown fenced code blocks — keep the FIRST line a short plain-language summary so the notification preview stays meaningful.
+- Answer (a): short enough to type on a phone in a few seconds. A few words, a number, an identifier, a brief phrase, a small expression. Not full sentences.
+- Explanation (e): 2-4 sentences, ~300 chars. Surface the WHY: context, causation, why this matters, common misconception, or a memorable hook. Treat the user as smart and curious — go beyond restating the answer.
+- Cover varied sub-areas of the topic; don't all be the same flavor. The deck's topic prompt above may also specify the kinds of card shapes to produce — follow its guidance when present.
 - Don't repeat any of these existing questions:
 
 %s
 
-Return ONLY valid JSON, no prose, no code fences. Format:
+Output ONLY a valid JSON array, with no surrounding prose or markdown fences around the JSON itself. The q field MAY contain markdown (including fenced code blocks) inside the JSON string — escape newlines as \n. Format:
 
 [
   {"q": "Question text?", "a": "Short answer", "e": "2-4 sentence explanation."},
@@ -62,13 +62,13 @@ Plan exactly %d cards. Don't generate full questions yet — just an outline. Ea
 - "title": a short label (3-8 words). What the card will be about.
 - "brief": 1 sentence describing the angle / what the question will probe.
 
-Cover varied sub-areas of the topic; don't pile up around the same flavor. Diversity beats depth at this stage.
+Cover varied sub-areas of the topic; don't pile up around the same flavor. Diversity beats depth at this stage. If the deck's topic prompt specifies particular card shapes, vary across them and call out the intended shape in the brief.
 
 Don't repeat any of these existing cards (already in the deck):
 
 %s
 
-Return ONLY a JSON array, no prose, no fences:
+Return ONLY a JSON array, no prose, no fences around the array itself:
 
 [
   {"title": "Soundtrack composer", "brief": "Identify the composer of the original soundtrack."},
@@ -93,10 +93,10 @@ The card was planned as:
   title: %s
   brief: %s
 
-Write the FULL card content. Output a single JSON object (no prose, no fences) with these fields:
+Write the FULL card content. Output a single JSON object (no surrounding prose or fences around the object itself) with these fields:
 
-- "q": the question text. Fits in a phone notification body — <= 140 characters.
-- "a": the short answer. 1-5 words. Names, numbers, short phrases. Not sentences.
+- "q": the question text. Default to <= 140 chars so the push-notification preview reads well. If the brief calls for a snippet, table, or multi-line formatted content the q MAY be longer and include markdown fenced code blocks inside the JSON string — escape newlines as \n. When you do, keep the FIRST line a short plain-language summary so the notification still previews meaningfully.
+- "a": the short answer. Short enough to type on a phone in a few seconds — a few words, a number, an identifier, a small expression, or a brief phrase. Not full sentences.
 - "e": a 2-4 sentence explanation. Surface the WHY — context, causation, common misconception, memorable hook. Treat the user as smart and curious. ~300 characters is a good target.
 
 Output ONLY the JSON object.

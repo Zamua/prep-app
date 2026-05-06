@@ -55,13 +55,21 @@ Generate exactly %(batch_size)d questions on the topic:
 %(topic)s
 
 Constraints:
-- Each question (q) fits in a phone notification body — <= 140 characters.
-- Each answer (a) is 1-5 words. Names, numbers, short phrases. Not sentences.
-- Each explanation (e) is 2-4 sentences. Surface the WHY: context,
-  causation, why this matters, common misconception, or a memorable
-  hook. Treat the user as smart and curious — go beyond restating the
-  answer. ~300 characters is a good target.
+- Question (q): default to <= 140 chars so the push-notification preview
+  reads well. When the topic naturally calls for a snippet, table, or
+  multi-line formatted content the q MAY be longer and include markdown
+  fenced code blocks — keep the FIRST line a short plain-language summary
+  so the notification preview stays meaningful.
+- Answer (a): short enough to type on a phone in a few seconds. A few
+  words, a number, an identifier, a brief phrase, a small expression.
+  Not full sentences.
+- Explanation (e): 2-4 sentences. Surface the WHY: context, causation,
+  why this matters, common misconception, or a memorable hook. Treat
+  the user as smart and curious — go beyond restating the answer.
+  ~300 characters is a good target.
 - Cover varied sub-areas of the topic; don't all be the same flavor.
+  The deck's topic prompt above may also specify the kinds of card
+  shapes to produce — follow its guidance when present.
 - Don't repeat any of these existing questions:
 
 %(existing)s
