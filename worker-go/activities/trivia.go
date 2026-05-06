@@ -38,7 +38,7 @@ Constraints:
 - Question (q): default to <= 140 chars so the push-notification preview reads well. When the topic naturally calls for a snippet, table, or multi-line formatted content, the q MAY be longer and include markdown fenced code blocks — keep the FIRST line a short plain-language summary so the notification preview stays meaningful.
 - Answer (a): short enough to type on a phone in a few seconds. A few words, a number, an identifier, a brief phrase, a small expression. Not full sentences.
 - Explanation (e): 2-4 sentences, ~300 chars. Surface the WHY: context, causation, why this matters, common misconception, or a memorable hook. Treat the user as smart and curious — go beyond restating the answer.
-- Cover varied sub-areas of the topic; don't all be the same flavor. The deck's topic prompt above may also specify the kinds of card shapes to produce — follow its guidance when present.
+- Cover varied sub-areas of the topic AND vary the recall shape across cards — different facets, angles, or skill probes that the topic naturally supports (e.g., a programming topic might warrant code traces, idiom recall, complexity drills, bug spotters; a history topic might warrant who/what/when/why probes; a music topic might warrant chord/interval/composer probes — pick shapes that fit). Don't pile up around one flavor. If the deck's topic prompt above explicitly calls out shapes, follow it.
 - Don't repeat any of these existing questions:
 
 %s
@@ -62,7 +62,7 @@ Plan exactly %d cards. Don't generate full questions yet — just an outline. Ea
 - "title": a short label (3-8 words). What the card will be about.
 - "brief": 1 sentence describing the angle / what the question will probe.
 
-Cover varied sub-areas of the topic; don't pile up around the same flavor. Diversity beats depth at this stage. If the deck's topic prompt specifies particular card shapes, vary across them and call out the intended shape in the brief.
+Cover varied sub-areas of the topic AND vary the recall shape — different facets, angles, or skill probes that the topic naturally supports. For example, a programming topic might warrant code traces, idiom recall, complexity drills, bug spotters, and pattern recognition; a history topic might warrant who/what/when/why probes. Diversity beats depth at this stage. Call out the intended shape in the brief when it's clear. If the deck's topic prompt explicitly calls out shapes, follow it.
 
 Don't repeat any of these existing cards (already in the deck):
 

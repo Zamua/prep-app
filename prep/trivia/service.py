@@ -67,9 +67,14 @@ Constraints:
   why this matters, common misconception, or a memorable hook. Treat
   the user as smart and curious — go beyond restating the answer.
   ~300 characters is a good target.
-- Cover varied sub-areas of the topic; don't all be the same flavor.
-  The deck's topic prompt above may also specify the kinds of card
-  shapes to produce — follow its guidance when present.
+- Cover varied sub-areas of the topic AND vary the recall shape across
+  cards — different facets, angles, or skill probes that the topic
+  naturally supports (e.g., a programming topic might warrant code
+  traces, idiom recall, complexity drills, bug spotters; a history
+  topic might warrant who/what/when/why probes; a music topic might
+  warrant chord/interval/composer probes — pick shapes that fit).
+  Don't pile up around one flavor. If the deck's topic prompt above
+  explicitly calls out shapes, follow it.
 - Don't repeat any of these existing questions:
 
 %(existing)s
