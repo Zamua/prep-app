@@ -3181,7 +3181,8 @@ body:has(dialog[open]) {
   color: var(--ink-mute);
   font-style: italic;
 }
-.form-field input[type="text"] {
+.form-field input[type="text"],
+.form-field input[type="number"] {
   font: inherit;
   font-variation-settings: "opsz" 14, "SOFT" 30;
   font-size: 1.1rem;
@@ -3191,7 +3192,8 @@ body:has(dialog[open]) {
   border-radius: var(--radius);
   color: var(--ink);
 }
-.form-field input[type="text"]:focus-visible {
+.form-field input[type="text"]:focus-visible,
+.form-field input[type="number"]:focus-visible {
   outline: 2px solid var(--quill);
   outline-offset: 1px;
   border-color: var(--quill);
