@@ -66,63 +66,6 @@
     </footer>
   </div>
 
-  {# Diagnostic event-trace overlay: TEMPORARILY UNCONDITIONAL on
-     staging while we chase the iOS first-tap bug. Captures touch /
-     pointer / mouse / click events and <details> toggle events into
-     an on-screen log so we can debug iOS PWA tap behavior without a
-     Mac for Web Inspector. Self-contained — only active on staging
-     (the env-label is "staging" only when ROOT_PATH contains it).
-     Remove once the bug is diagnosed. #}
-  <script>
-  (function () {
-    // Staging-only — never load on prod. ROOT_PATH on staging is
-    // "/prep-staging", on prod is "/prep". Check the actual location
-    // since base.html doesn't have access to the python env directly.
-    if (!window.location.pathname.startsWith("/prep-staging/")) return;
-    const overlay = document.createElement('pre');
-    overlay.id = 'diag-overlay';
-    overlay.setAttribute('aria-live', 'polite');
-    Object.assign(overlay.style, {
-      position: 'fixed', left: '0.4rem', right: '0.4rem', bottom: '0.4rem',
-      maxHeight: '40vh', overflow: 'auto',
-      padding: '0.5rem 0.7rem',
-      background: 'rgba(13, 13, 13, 0.92)', color: '#cfc',
-      fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem',
-      lineHeight: '1.35', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-      borderRadius: '8px', zIndex: 99999, pointerEvents: 'auto'
-    });
-    document.documentElement.appendChild(overlay);
-    const t0 = performance.now();
-    const lines = [];
-    function push(s) {
-      lines.push(s);
-      if (lines.length > 200) lines.splice(0, lines.length - 200);
-      overlay.textContent = lines.join('\n');
-      overlay.scrollTop = overlay.scrollHeight;
-    }
-    push(`page-loaded @ ${(performance.now() - t0).toFixed(0)}ms · standalone=${navigator.standalone}`);
-    const events = ['touchstart', 'touchend', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'];
-    events.forEach((type) => {
-      document.addEventListener(type, (e) => {
-        if (e.target && e.target.closest && e.target.closest('#diag-overlay')) return;
-        const ms = (performance.now() - t0).toFixed(0).padStart(6, ' ');
-        const tag = (e.target && e.target.tagName || '').toLowerCase();
-        const cls = (e.target && e.target.className && typeof e.target.className === 'string')
-          ? '.' + e.target.className.split(' ').filter(Boolean).slice(0, 2).join('.')
-          : '';
-        push(`${ms}ms  ${type.padEnd(13)}  ${tag}${cls}`);
-      }, true);
-    });
-    document.addEventListener('toggle', (e) => {
-      const t = e.target;
-      if (t && t.tagName === 'DETAILS') {
-        const ms = (performance.now() - t0).toFixed(0).padStart(6, ' ');
-        const cls = t.className ? '.' + t.className.split(' ').filter(Boolean).slice(0, 2).join('.') : '';
-        push(`${ms}ms  toggle         details${cls}  open=${t.open}`);
-      }
-    }, true);
-  })();
-  </script>
 
   <script>
   // iOS 26 in PWA standalone mode swallows the synthesized click
