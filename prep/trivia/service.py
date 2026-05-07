@@ -69,12 +69,20 @@ Constraints:
   ~300 characters is a good target.
 - Cover varied sub-areas of the topic AND vary the recall shape across
   cards — different facets, angles, or skill probes that the topic
-  naturally supports (e.g., a programming topic might warrant code
-  traces, idiom recall, complexity drills, bug spotters; a history
-  topic might warrant who/what/when/why probes; a music topic might
-  warrant chord/interval/composer probes — pick shapes that fit).
-  Don't pile up around one flavor. If the deck's topic prompt above
-  explicitly calls out shapes, follow it.
+  naturally supports. Pick shapes that fit; if the deck's topic prompt
+  above explicitly calls out shapes, follow it. Aim for 3-5 DISTINCT
+  shapes across the batch and don't let any single shape exceed ~30%%
+  of the cards.
+
+  Concrete examples of shape variety (illustrative — adapt to YOUR
+  topic; a music topic doesn't need code traces, a history topic
+  doesn't need complexity drills):
+    {"q": "Predict the output:\\n```python\\nx = [3,1,4,1,5]\\nprint(sorted(set(x)))\\n```", "a": "[1, 3, 4, 5]", "e": "..."}
+    {"q": "Pythonic way to count occurrences in an iterable", "a": "Counter(items)", "e": "..."}
+    {"q": "Worst-case time complexity of list.pop(0)", "a": "O(n)", "e": "..."}
+    {"q": "Two sorted arrays, find the median in O(log n). Pattern?", "a": "binary search on partition", "e": "..."}
+    {"q": "What's wrong?\\n```python\\nfor i in range(len(a)):\\n    a.append(a[i])\\n```", "a": "infinite loop — appending while iterating", "e": "..."}
+    {"q": "Goal: only one goroutine reads from a channel at a time. Primitive?", "a": "sync.Mutex", "e": "..."}
 - Don't repeat any of these existing questions:
 
 %(existing)s
