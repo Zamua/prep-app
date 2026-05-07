@@ -77,6 +77,57 @@ def test_list_summaries_includes_counts(
     # them as due. Pinning that behavior — anyone tweaking the insert
     # path or the due query should notice this assertion change.
     assert summaries[0].due == 2
+    assert summaries[0].pinned is False
+
+
+def test_set_pinned_floats_deck_to_top(deck_repo: DeckRepo, initialized_db: str):
+    user = initialized_db
+    deck_repo.create(user, "alpha")
+    deck_repo.create(user, "beta")
+    zulu_id = deck_repo.create(user, "zulu")
+    # Default order is alphabetical.
+    names = [s.name for s in deck_repo.list_summaries(user)]
+    assert names == ["alpha", "beta", "zulu"]
+    # Pinning zulu floats it to the top.
+    assert deck_repo.set_pinned(user, zulu_id, True) is True
+    names = [s.name for s in deck_repo.list_summaries(user)]
+    assert names == ["zulu", "alpha", "beta"]
+    assert deck_repo.list_summaries(user)[0].pinned is True
+
+
+def test_set_pinned_recent_first_among_pinned(deck_repo: DeckRepo, initialized_db: str):
+    import time
+
+    user = initialized_db
+    a = deck_repo.create(user, "alpha")
+    b = deck_repo.create(user, "beta")
+    deck_repo.set_pinned(user, a, True)
+    time.sleep(1.1)  # pinned_at granularity is seconds (ISO timespec)
+    deck_repo.set_pinned(user, b, True)
+    names = [s.name for s in deck_repo.list_summaries(user)]
+    # Most recently pinned floats above earlier-pinned.
+    assert names[:2] == ["beta", "alpha"]
+
+
+def test_set_pinned_unpin_drops_from_top(deck_repo: DeckRepo, initialized_db: str):
+    user = initialized_db
+    a = deck_repo.create(user, "alpha")
+    deck_repo.create(user, "beta")
+    deck_repo.set_pinned(user, a, True)
+    assert deck_repo.list_summaries(user)[0].name == "alpha"
+    deck_repo.set_pinned(user, a, False)
+    # Back to alphabetical, no pinned flags.
+    summaries = deck_repo.list_summaries(user)
+    assert [s.name for s in summaries] == ["alpha", "beta"]
+    assert all(not s.pinned for s in summaries)
+
+
+def test_set_pinned_user_scoped(deck_repo: DeckRepo, initialized_db: str):
+    user = initialized_db
+    deck_id = deck_repo.create(user, "alpha")
+    # Wrong user_id → no row updated.
+    assert deck_repo.set_pinned("someone-else@tailnet", deck_id, True) is False
+    assert deck_repo.list_summaries(user)[0].pinned is False
 
 
 def test_delete_removes_deck_and_questions(

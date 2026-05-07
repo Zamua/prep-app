@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}decks · prep{% endblock %}
 {% block page_class %}index{% endblock %}
+{% import "macros/deck_card.html" as deck_card_macro with context %}
 {% block main %}
 <section class="prelude">
   <p class="eyebrow">The decks</p>
@@ -103,8 +104,22 @@
 </script>
 {% endif %}
 
+{# Pinned decks sit in their own labeled section above the rest, so
+   the user's curated set reads as a separate group rather than just a
+   re-ordered list. Section is omitted entirely when nothing is pinned. #}
+{% if pinned_decks %}
+<section class="decks-section decks-section-pinned">
+  <p class="section-eyebrow"><span>Pinned</span><span class="rule"></span></p>
+  <ol class="deck-list" role="list">
+    {% for d in pinned_decks %}
+      {{ deck_card_macro.card(d, loop.index) }}
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
 <section class="decks-section">
-  <p class="section-eyebrow"><span>{% if recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
+  <p class="section-eyebrow"><span>{% if pinned_decks %}Other decks{% elif recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
   {# Deck-level actions sit under the section header as small pills,
      not as full-width tiles in the list. New deck is always available;
      "edit with claude" only when an agent is configured + there's at
@@ -114,7 +129,7 @@
       <span class="deck-action-icon" aria-hidden="true">+</span>
       <span>new deck</span>
     </a>
-    {% if agent_available and decks %}
+    {% if agent_available and (decks or pinned_decks) %}
       <a href="{{ request.scope.get('root_path','') }}/reorganize" class="deck-action-pill">
         {{ icon('sparkle', class_='icon icon-inline') }}
         <span>edit with claude</span>
@@ -123,56 +138,9 @@
   </div>
 <ol class="deck-list" role="list">
   {% for d in decks %}
-    {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][loop.index0] %}
-    <li class="deck-card" style="--i: {{ loop.index }}">
-      <a href="{{ request.scope.get('root_path','') }}/deck/{{ d.name }}" class="deck-link">
-        <span class="deck-numeral" aria-hidden="true">{{ roman }}</span>
-        <span class="deck-body">
-          <span class="deck-name">
-            {{ d.name }}
-            {# Same deck-type tag as the deck page header — consistent
-               slot, subtle italic. Trivia tag stands out so the deck
-               list communicates "these are the notification-driven
-               ones" at a glance. #}
-            <span class="tag tag-decktype tag-decktype-{{ d.deck_type }}">{{ d.deck_type }}</span>
-          </span>
-          {% if d.deck_type == 'trivia' and d.trivia_stats %}
-            {# Mini mastery bar — visual ratio + count. Replaces the
-               "n due now · m total" line which is meaningless for
-               trivia (no SRS schedule). #}
-            {% set _t = d.trivia_stats.total or 1 %}
-            {% set _mp = (100 * d.trivia_stats.mastered / _t) %}
-            {% set _wp = (100 * d.trivia_stats.wrong / _t) %}
-            <span class="deck-mastery-mini">
-              <span class="deck-mastery-mini-bar" role="progressbar"
-                    aria-valuenow="{{ _mp | round | int }}" aria-valuemin="0" aria-valuemax="100">
-                <span class="deck-mastery-mini-fill deck-mastery-mini-fill-right" style="width: {{ _mp | round(2) }}%"></span>
-                <span class="deck-mastery-mini-fill deck-mastery-mini-fill-wrong"
-                      style="left: {{ _mp | round(2) }}%; width: {{ _wp | round(2) }}%"></span>
-              </span>
-              <span class="deck-mastery-mini-label">
-                <span class="stat-value">{{ d.trivia_stats.mastered }}</span><span class="stat-label">/{{ d.trivia_stats.total }} mastered</span>
-              </span>
-            </span>
-          {% else %}
-            <span class="deck-stats">
-              <span class="stat-due {% if (d.due or 0) > 0 %}is-active{% endif %}">
-                <span class="stat-value">{{ d.due or 0 }}</span>
-                <span class="stat-label">due now</span>
-              </span>
-              <span class="stat-divider" aria-hidden="true">·</span>
-              <span class="stat-total">
-                <span class="stat-value">{{ d.total or 0 }}</span>
-                <span class="stat-label">in deck</span>
-              </span>
-            </span>
-          {% endif %}
-        </span>
-        <span class="deck-arrow">{{ icon('arrow-right') }}</span>
-      </a>
-    </li>
+    {{ deck_card_macro.card(d, loop.index) }}
   {% endfor %}
-  {% if not decks %}
+  {% if not decks and not pinned_decks %}
     <li class="deck-card empty"><p>No decks yet.</p></li>
   {% endif %}
 </ol>

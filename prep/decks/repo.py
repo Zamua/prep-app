@@ -140,11 +140,12 @@ class DeckRepo:
 
     def list_summaries(self, user_id: str) -> list[DeckSummary]:
         """All decks owned by user, with total + due counts. Used by
-        the index page."""
+        the index page. Pinned decks float to the top, ordered by
+        most-recently-pinned first; the rest fall through to alpha."""
         with cursor() as c:
             rows = c.execute(
                 """
-                SELECT d.id, d.name, d.deck_type,
+                SELECT d.id, d.name, d.deck_type, d.pinned_at,
                        COUNT(q.id) AS total,
                        SUM(CASE WHEN cards.next_due <= ? AND COALESCE(q.suspended,0)=0
                                 THEN 1 ELSE 0 END) AS due
@@ -153,7 +154,7 @@ class DeckRepo:
                   LEFT JOIN cards ON cards.question_id = q.id
                  WHERE d.user_id = ?
                  GROUP BY d.id
-                 ORDER BY d.name
+                 ORDER BY (d.pinned_at IS NULL), d.pinned_at DESC, d.name
                 """,
                 (now(), user_id),
             ).fetchall()
@@ -164,6 +165,7 @@ class DeckRepo:
                 total=r["total"] or 0,
                 due=r["due"] or 0,
                 deck_type=DeckType(r["deck_type"] or "srs"),
+                pinned=r["pinned_at"] is not None,
             )
             for r in rows
         ]
@@ -335,6 +337,18 @@ class DeckRepo:
             cur = c.execute(
                 "UPDATE decks SET notifications_enabled = ? WHERE id = ?  AND user_id = ?",
                 (1 if enabled else 0, deck_id, user_id),
+            )
+            return cur.rowcount > 0
+
+    def set_pinned(self, user_id: str, deck_id: int, pinned: bool) -> bool:
+        """Pin or unpin the deck. Pinning stamps `pinned_at = now()`;
+        unpinning sets it to NULL. The index sorts pinned-first by
+        pinned_at DESC, so re-pinning floats a deck back to the top
+        of the pinned group. Returns True if a row was updated."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE decks SET pinned_at = ? WHERE id = ? AND user_id = ?",
+                (now() if pinned else None, deck_id, user_id),
             )
             return cur.rowcount > 0
 

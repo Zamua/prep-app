@@ -110,6 +110,7 @@ class DeckSummary(BaseModel):
     total: int
     due: int
     deck_type: DeckType = DeckType.SRS
+    pinned: bool = False
 
 
 class Question(BaseModel):

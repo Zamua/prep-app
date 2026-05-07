@@ -39,19 +39,29 @@ def _agent_context(request: Request) -> dict:
     return {"agent_available": _agent_mod.is_available}
 
 
-# Cache-bust the static CSS link in base.html so deploys actually
-# invalidate the browser's cached copy. Computed once at module
-# import (i.e. per app boot, which lines up with each deploy since
-# the container restarts on every `make deploy-stag`).
-try:
-    _STATIC_CSS_MTIME = int((_REPO_ROOT / "static" / "css" / "index.css").stat().st_mtime)
-except OSError:
-    _STATIC_CSS_MTIME = 0
+# Cache-bust the static-asset URLs (CSS link + importmap base) in
+# base.html so deploys actually invalidate the browser's cached copy.
+# Computed once at module import (i.e. per app boot — the container
+# restarts on every `make deploy-stag`/`make deploy-prod`, which is
+# the only time static assets can change in production).
+#
+# Why not file mtime: we tried `static/css/index.css.mtime` first, but
+# editing a JS module without touching CSS left the cache-bust token
+# unchanged, and browsers (notably iOS PWA standalone) kept serving
+# the prior deploy's modules off the same versioned URL. Using boot
+# time guarantees every deploy gets a fresh URL space regardless of
+# which subset of assets actually changed. Mounted volumes can't
+# reset this because the prep code lives in the image, not the volume.
+import time as _time
+
+_STATIC_BUILD_VERSION = int(_time.time())
 
 
 def _assets_context(request: Request) -> dict:
-    """Expose static-asset cache-bust tokens to all templates."""
-    return {"static_css_mtime": _STATIC_CSS_MTIME}
+    """Expose static-asset cache-bust tokens to all templates. Both
+    the CSS `?v=` query and the importmap base path use the same
+    boot-stamped version."""
+    return {"static_css_mtime": _STATIC_BUILD_VERSION}
 
 
 def _notif_unseen_context(request: Request) -> dict:

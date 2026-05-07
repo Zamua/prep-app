@@ -36,6 +36,25 @@
   font-style: italic;
 }
 
+/* Pinned cards float to the top via the SQL ORDER BY; we additionally
+ * hint the difference visually so the user can see WHY a deck is at
+ * the top. Subtle accent border-left + a small filled pin glyph next
+ * to the name. Restrained — not so loud that the index becomes a
+ * crayon box once the user pins a few. */
+.deck-card-pinned {
+  border-color: color-mix(in srgb, var(--quill) 40%, var(--hairline));
+  border-left-width: 3px;
+  border-left-color: color-mix(in srgb, var(--quill) 70%, transparent);
+}
+.deck-pin-mark {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.35rem;
+  color: var(--quill);
+  opacity: 0.7;
+}
+.deck-pin-mark .icon { width: 0.85rem; height: 0.85rem; }
+
 .deck-link {
   display: grid;
   grid-template-columns: auto 1fr auto;

@@ -467,11 +467,15 @@ def deck_view(
     # per-deck scheduler skip.
     from prep.infrastructure.db import cursor
 
-    deck_meta: dict[str, Any] = {"deck_id": deck_id, "notifications_enabled": True}
+    deck_meta: dict[str, Any] = {
+        "deck_id": deck_id,
+        "notifications_enabled": True,
+        "pinned": False,
+    }
     with cursor() as c:
         row = c.execute(
             "SELECT notifications_enabled, notification_interval_minutes, "
-            "trivia_session_size, context_prompt "
+            "trivia_session_size, context_prompt, pinned_at "
             "FROM decks WHERE id=? AND user_id=?",
             (deck_id, uid),
         ).fetchone()
@@ -482,6 +486,7 @@ def deck_view(
             "interval_minutes": row["notification_interval_minutes"],
             "session_size": int(row["trivia_session_size"] or 3),
             "context_prompt": row["context_prompt"] or "",
+            "pinned": row["pinned_at"] is not None,
         }
 
     # Trivia-only stats for the mastery-bar header. Cheap one-query
@@ -712,6 +717,25 @@ async def deck_split_submit(
         return rerender(str(e))
 
     return responses.redirect(request, f"/deck/{new_name}")
+
+
+@router.post("/deck/{name}/pin")
+def deck_toggle_pin(
+    request: Request,
+    name: str,
+    pinned: str = Form(...),
+    user: dict = Depends(current_user),
+    repo: DeckRepo = Depends(_deck_repo),
+):
+    """Toggle deck pin. Pinned decks float to the top of the index,
+    most-recently-pinned first. 404 if the deck doesn't belong to
+    the user."""
+    uid = user["tailscale_login"]
+    deck_id = repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    repo.set_pinned(uid, deck_id, pinned == "on")
+    return responses.redirect(request, f"/deck/{name}")
 
 
 @router.post("/deck/{name}/notifications")

@@ -343,6 +343,14 @@ def init() -> None:
                 "ALTER TABLE decks ADD COLUMN trivia_session_size " "INTEGER NOT NULL DEFAULT 3"
             )
 
+        # 8b. Pinned decks float to the top of the index. The column
+        #     stores the timestamp the user pinned the deck (NULL =
+        #     unpinned), so within the pinned group we can show
+        #     most-recently-pinned first — same UX pattern as Slack
+        #     channel pins or Apple Notes.
+        if "pinned_at" not in cols:
+            c.execute("ALTER TABLE decks ADD COLUMN pinned_at TEXT")
+
         # 9. Trivia card explanations: a short paragraph claude generates
         #    alongside the Q+A. Surfaced in the trivia card view as a
         #    "Deep dive" disclosure so the user can learn the why behind

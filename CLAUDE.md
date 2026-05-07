@@ -160,6 +160,33 @@ Server is the source of truth, HTML is the API, JS is sprinkles. No
 SPA framework, no JS bundler, no Tailwind. Pages POST forms; JS adds
 polish. Most actions degrade to plain forms.
 
+### UX rails (don't violate without a reason)
+
+- **No layout shift on interaction.** A control's bounding box should
+  not change when it's tapped. Buttons with two label states (e.g.
+  "pin" / "pinned") need `min-width` sized to the longer label so the
+  toggle doesn't reflow neighboring elements. Loading states swap
+  icon-for-spinner of equal size, not text-for-text of unequal width.
+  Inline content with growable elements (counters, chips that flip
+  state) should reserve their final width up front. We've been
+  burned by this twice with submit-pending.js textContent swaps —
+  if it shifts neighbors when toggled, fix the chrome, not the text.
+- **Every action must look responsive within ~50ms.** Tap → nothing
+  → page eventually reloads is bad UX even when the round-trip is
+  legitimately slow. Feedback options, in order of preference:
+  (1) `data-submit-pending` on the form so the button gets `is-loading`
+  immediately, (2) optimistic DOM update if the action is reversible,
+  (3) a brief disabled state with a spinner. The 303-redirect-to-
+  full-page-render flow is fine but ONLY when the button itself
+  shows pending state during the round-trip.
+- **Constant-size loading states.** When a button enters `is-loading`,
+  its width must not change. The shared CSS pattern is: hide the
+  current icon (`display: none`), render a `::before` spinner of the
+  same size; keep the label as-is. Do NOT replace the label with
+  "Working…" unless the button has `data-pending-label` AND the
+  caller has accepted the width change (e.g. full-width primary
+  CTAs where the row collapses anyway).
+
 ### CSS
 
 Single entry stylesheet (`static/css/index.css`) declares native

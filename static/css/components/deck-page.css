@@ -180,6 +180,73 @@
   background: color-mix(in srgb, var(--wrong) 14%, transparent);
 }
 
+/* Pin pill on the deck-pill-row — same visual language as the
+ * notif pill (small, lowercase, italic). Inactive: outlined; active:
+ * accent fill so "this deck is pinned" reads at a glance. The form
+ * wrapper carries no chrome of its own; the <button> IS the pill.
+ *
+ * Constant width across both states ("pin" / "pinned") so toggling
+ * doesn't push neighboring pills around when the page re-renders.
+ * `justify-content: center` keeps the icon+label centered inside the
+ * fixed slot. */
+.deck-pin-form { margin: 0; }
+.tag-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 5.5rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  font-style: italic;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.tag-pin:hover {
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.tag-pin .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+.tag-pin-active {
+  color: var(--quill);
+  border-color: color-mix(in srgb, var(--quill) 50%, transparent);
+  background: color-mix(in srgb, var(--quill) 8%, transparent);
+}
+.tag-pin-active:hover {
+  background: color-mix(in srgb, var(--quill) 14%, transparent);
+}
+
+/* Pending state — submit-pending.js adds .is-loading on submit, so
+ * the icon swaps for a spinner and the button is disabled. The pin
+ * POST does a full 303→GET re-render, which can take a noticeable
+ * beat on slower paths; without this the user assumed the tap didn't
+ * register and re-tapped. Reuses the btn-async-spin keyframe in
+ * components/buttons.css. */
+.tag-pin.is-loading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+.tag-pin.is-loading .icon { display: none; }
+.tag-pin.is-loading::before {
+  content: "";
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-async-spin 700ms linear infinite;
+  flex-shrink: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tag-pin.is-loading::before { animation: none; }
+}
+
 /* Trivia interval edit popover —
  * Tapping the trivia "every Nm" pill expands a <details> popover
  * with preset chips + a custom-minutes input + the pause/resume

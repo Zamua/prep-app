@@ -1,0 +1,51 @@
+{# Deck card list item, used by the index. Shared between the pinned
+   group (rendered first, with its own section eyebrow) and the rest
+   of the user's decks. The roman-numeral tag uses the (1-based)
+   `index` parameter directly so each section's numerals start at I. #}
+
+{% macro card(d, index) %}
+{% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][index - 1] %}
+<li class="deck-card{% if d.pinned %} deck-card-pinned{% endif %}" style="--i: {{ index }}">
+  <a href="{{ request.scope.get('root_path','') }}/deck/{{ d.name }}" class="deck-link">
+    <span class="deck-numeral" aria-hidden="true">{{ roman }}</span>
+    <span class="deck-body">
+      <span class="deck-name">
+        {{ d.name }}
+        {% if d.pinned %}
+          <span class="deck-pin-mark" aria-label="pinned" title="Pinned to top">{{ icon('push-pin', class_='icon icon-inline') }}</span>
+        {% endif %}
+        <span class="tag tag-decktype tag-decktype-{{ d.deck_type }}">{{ d.deck_type }}</span>
+      </span>
+      {% if d.deck_type == 'trivia' and d.trivia_stats %}
+        {% set _t = d.trivia_stats.total or 1 %}
+        {% set _mp = (100 * d.trivia_stats.mastered / _t) %}
+        {% set _wp = (100 * d.trivia_stats.wrong / _t) %}
+        <span class="deck-mastery-mini">
+          <span class="deck-mastery-mini-bar" role="progressbar"
+                aria-valuenow="{{ _mp | round | int }}" aria-valuemin="0" aria-valuemax="100">
+            <span class="deck-mastery-mini-fill deck-mastery-mini-fill-right" style="width: {{ _mp | round(2) }}%"></span>
+            <span class="deck-mastery-mini-fill deck-mastery-mini-fill-wrong"
+                  style="left: {{ _mp | round(2) }}%; width: {{ _wp | round(2) }}%"></span>
+          </span>
+          <span class="deck-mastery-mini-label">
+            <span class="stat-value">{{ d.trivia_stats.mastered }}</span><span class="stat-label">/{{ d.trivia_stats.total }} mastered</span>
+          </span>
+        </span>
+      {% else %}
+        <span class="deck-stats">
+          <span class="stat-due {% if (d.due or 0) > 0 %}is-active{% endif %}">
+            <span class="stat-value">{{ d.due or 0 }}</span>
+            <span class="stat-label">due now</span>
+          </span>
+          <span class="stat-divider" aria-hidden="true">·</span>
+          <span class="stat-total">
+            <span class="stat-value">{{ d.total or 0 }}</span>
+            <span class="stat-label">in deck</span>
+          </span>
+        </span>
+      {% endif %}
+    </span>
+    <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+  </a>
+</li>
+{% endmacro %}

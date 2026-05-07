@@ -27,22 +27,25 @@ def index(
     deck_repo: DeckRepo = Depends(DeckRepo),
     session_repo: SessionRepo = Depends(SessionRepo),
 ):
-    """Home page: the user's decks (sorted by name) plus the last
-    five active study sessions across all decks."""
+    """Home page: the user's decks plus the last five active study
+    sessions across all decks. The repo orders pinned-first (recency
+    DESC) then alphabetical; we split into pinned + unpinned groups
+    so the template can render them as separate sections."""
     uid = user["tailscale_login"]
-    decks = sorted(deck_repo.list_summaries(uid), key=lambda d: d.name)
+    summaries = deck_repo.list_summaries(uid)
     recents = session_repo.list_recent(uid, limit=5)
     # Trivia decks need extra stats for the mini mastery bar — total /
     # mastered / wrong / unanswered. SRS decks use the existing due/total
     # rendering and don't need this. One query per trivia deck is fine
     # at this scale (a single user has tens of decks at most).
     trivia_repo = TriviaQueueRepo()
-    deck_dicts = []
-    for d in decks:
+    pinned: list[dict] = []
+    others: list[dict] = []
+    for d in summaries:
         item = d.model_dump()
         if d.deck_type == d.deck_type.TRIVIA:
             item["trivia_stats"] = trivia_repo.deck_stats(d.id)
-        deck_dicts.append(item)
+        (pinned if d.pinned else others).append(item)
     # Active trivia sessions across all decks — powers the "Continue"
     # strip at the top of the home page so the user can resume any
     # in-progress session without going to the deck page first.
@@ -63,7 +66,8 @@ def index(
         {
             "request": request,
             "user": user,
-            "decks": deck_dicts,
+            "pinned_decks": pinned,
+            "decks": others,
             "recent_sessions": [r.model_dump() for r in recents],
             "active_trivia_sessions": active_trivia_views,
         },

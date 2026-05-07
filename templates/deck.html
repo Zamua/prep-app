@@ -32,6 +32,20 @@
      metadata rather than competing for attention. #}
   <div class="deck-pill-row">
     <span class="tag tag-decktype tag-decktype-{{ deck_type }}">{{ deck_type }}</span>
+    {# Pin toggle. POSTs to /deck/<name>/pin with `pinned=on|off` —
+       on flips pinned_at to now() (deck floats to top of index),
+       off clears it. Active state gets a filled pin icon + accent
+       color so paused/pinned/etc. read at a glance. #}
+    <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
+          class="deck-pin-form" data-submit-pending>
+      <input type="hidden" name="pinned" value="{{ 'off' if deck_meta.pinned else 'on' }}">
+      <button type="submit"
+              class="tag tag-pin {% if deck_meta.pinned %}tag-pin-active{% endif %}"
+              title="{{ 'Unpin from top of index' if deck_meta.pinned else 'Pin to top of index' }}">
+        {{ icon('push-pin' if deck_meta.pinned else 'push-pin-simple', class_='icon icon-inline') }}
+        <span>{{ 'pinned' if deck_meta.pinned else 'pin' }}</span>
+      </button>
+    </form>
     {% if deck_type == 'trivia' %}
       {# Trivia decks: <details> popover lets the user adjust the
          interval AND pause/resume from one place. Closed state shows
