@@ -197,15 +197,39 @@ def test_classify_grading_picks_claude_for_long_or_complex(expected):
 
 
 # ---- claude_grade -----------------------------------------------------
+#
+# claude_grade is async (so it can `await` the agent without parking a
+# Starlette threadpool thread). pytest-asyncio's `asyncio_mode = "auto"`
+# means any `async def` test function is auto-marked. Tests stub
+# `run_prompt_async` (the async http client wrapper) with a small
+# coroutine factory.
 
 
-def test_claude_grade_parses_right_verdict(monkeypatch):
+def _afake_run(value):
+    """Return a coroutine factory whose call resolves to `value`."""
+
+    async def fn(_prompt, **_kw):
+        return value
+
+    return fn
+
+
+def _afake_run_raising(exc):
+    async def fn(*_a, **_kw):
+        raise exc
+
+    return fn
+
+
+async def test_claude_grade_parses_right_verdict(monkeypatch):
     monkeypatch.setattr(
         svc,
-        "run_prompt",
-        lambda _p, **_k: '{"verdict": "right", "feedback": "Same fact, different phrasing."}',
+        "run_prompt_async",
+        _afake_run('{"verdict": "right", "feedback": "Same fact, different phrasing."}'),
     )
-    out = svc.claude_grade(prompt="Q?", expected="A long answer", given="A different phrasing")
+    out = await svc.claude_grade(
+        prompt="Q?", expected="A long answer", given="A different phrasing"
+    )
     assert out == {
         "correct": True,
         "feedback": "Same fact, different phrasing.",
@@ -213,13 +237,13 @@ def test_claude_grade_parses_right_verdict(monkeypatch):
     }
 
 
-def test_claude_grade_parses_wrong_verdict(monkeypatch):
+async def test_claude_grade_parses_wrong_verdict(monkeypatch):
     monkeypatch.setattr(
         svc,
-        "run_prompt",
-        lambda _p, **_k: '```json\n{"verdict": "wrong", "feedback": "Missed the key fact."}\n```',
+        "run_prompt_async",
+        _afake_run('```json\n{"verdict": "wrong", "feedback": "Missed the key fact."}\n```'),
     )
-    out = svc.claude_grade(prompt="Q?", expected="something specific", given="something else")
+    out = await svc.claude_grade(prompt="Q?", expected="something specific", given="something else")
     assert out == {
         "correct": False,
         "feedback": "Missed the key fact.",
@@ -227,20 +251,20 @@ def test_claude_grade_parses_wrong_verdict(monkeypatch):
     }
 
 
-def test_claude_grade_returns_validated_regex_update_on_alt_form(monkeypatch):
+async def test_claude_grade_returns_validated_regex_update_on_alt_form(monkeypatch):
     """Initial-grade path now also returns regex_update when claude
     proposes one for a legitimate alternative form (synonym/abbr).
     The grader validates it (compiles + matches both literal and
     user form) before passing to the caller."""
     monkeypatch.setattr(
         svc,
-        "run_prompt",
-        lambda _p, **_k: (
+        "run_prompt_async",
+        _afake_run(
             '{"verdict": "right", "feedback": "WAL is a standard abbreviation.",'
             ' "regex_update": "(write[- ]?ahead log|wal)"}'
         ),
     )
-    out = svc.claude_grade(
+    out = await svc.claude_grade(
         prompt="What ensures durability?",
         expected="write-ahead log",
         given="wal",
@@ -250,19 +274,19 @@ def test_claude_grade_returns_validated_regex_update_on_alt_form(monkeypatch):
     assert out["regex_update"] == "(write[- ]?ahead log|wal)"
 
 
-def test_claude_grade_drops_regex_update_when_invalid(monkeypatch):
+async def test_claude_grade_drops_regex_update_when_invalid(monkeypatch):
     """A claude-proposed regex that doesn't match the canonical
     expected answer is dropped — the route must never persist a
     regex that breaks future grading of the literal answer."""
     monkeypatch.setattr(
         svc,
-        "run_prompt",
-        lambda _p, **_k: (
+        "run_prompt_async",
+        _afake_run(
             '{"verdict": "right", "feedback": "ok",'
             ' "regex_update": "(wal|wahl)"}'  # doesn't match "write-ahead log"
         ),
     )
-    out = svc.claude_grade(
+    out = await svc.claude_grade(
         prompt="?",
         expected="write-ahead log",
         given="wal",
@@ -272,26 +296,26 @@ def test_claude_grade_drops_regex_update_when_invalid(monkeypatch):
     assert out["regex_update"] is None
 
 
-def test_claude_grade_blank_answer_short_circuits(monkeypatch):
-    monkeypatch.setattr(svc, "run_prompt", lambda *_a, **_k: pytest.fail("should not call agent"))
-    out = svc.claude_grade(prompt="Q?", expected="A long answer here", given="   ")
+async def test_claude_grade_blank_answer_short_circuits(monkeypatch):
+    async def boom(*_a, **_k):
+        pytest.fail("should not call agent")
+
+    monkeypatch.setattr(svc, "run_prompt_async", boom)
+    out = await svc.claude_grade(prompt="Q?", expected="A long answer here", given="   ")
     assert out["correct"] is False
 
 
-def test_claude_grade_falls_back_on_agent_unavailable(monkeypatch):
-    def boom(*_a, **_k):
-        raise AgentUnavailable("agent down")
-
-    monkeypatch.setattr(svc, "run_prompt", boom)
+async def test_claude_grade_falls_back_on_agent_unavailable(monkeypatch):
+    monkeypatch.setattr(svc, "run_prompt_async", _afake_run_raising(AgentUnavailable("agent down")))
     # Agent down → fall back to deterministic; "London" != "Paris" → wrong.
-    out = svc.claude_grade(prompt="Capital of France?", expected="Paris", given="London")
+    out = await svc.claude_grade(prompt="Capital of France?", expected="Paris", given="London")
     assert out["correct"] is False
     assert "claude was unreachable" in out["feedback"]
 
 
-def test_claude_grade_falls_back_on_bad_json(monkeypatch):
-    monkeypatch.setattr(svc, "run_prompt", lambda *_a, **_k: "not even json")
-    out = svc.claude_grade(prompt="Q?", expected="anything", given="something")
+async def test_claude_grade_falls_back_on_bad_json(monkeypatch):
+    monkeypatch.setattr(svc, "run_prompt_async", _afake_run("not even json"))
+    out = await svc.claude_grade(prompt="Q?", expected="anything", given="something")
     # No JSON → fall back to deterministic match (empty token-set tests, returns False here).
     assert isinstance(out["correct"], bool)
     assert "malformed JSON" in out["feedback"]

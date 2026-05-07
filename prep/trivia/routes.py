@@ -253,7 +253,7 @@ def trivia_session(
 
 
 @router.post("/trivia/session/{deck_name}/answer", response_class=HTMLResponse)
-def trivia_session_answer(
+async def trivia_session_answer(
     deck_name: str,
     request: Request,
     cards: str = Form(""),
@@ -299,7 +299,7 @@ def trivia_session_answer(
         verdict: dict = {"correct": False, "feedback": None, "regex_update": None}
         given = ""
     else:
-        verdict = grade_with_fallback(q, answer)
+        verdict = await grade_with_fallback(q, answer)
         correct = verdict["correct"]
         given = answer
 
@@ -377,7 +377,7 @@ def trivia_card(
 
 
 @router.post("/trivia/{question_id}/answer", response_class=HTMLResponse)
-def trivia_answer(
+async def trivia_answer(
     question_id: int,
     request: Request,
     answer: str = Form(""),
@@ -393,7 +393,7 @@ def trivia_answer(
     if q is None:
         raise HTTPException(404, "question not found")
 
-    verdict = grade_with_fallback(q, answer)
+    verdict = await grade_with_fallback(q, answer)
     correct = verdict["correct"]
     trivia.mark_answered(question_id, correct=correct)
     regex_updated = False
@@ -427,7 +427,7 @@ def trivia_answer(
 
 
 @router.post("/trivia/{question_id}/regrade", response_class=HTMLResponse)
-def trivia_regrade(
+async def trivia_regrade(
     question_id: int,
     request: Request,
     answer: str = Form(""),
@@ -446,7 +446,7 @@ def trivia_regrade(
     if q is None:
         raise HTTPException(404, "question not found")
 
-    verdict = trivia_service.claude_regrade(
+    verdict = await trivia_service.claude_regrade(
         prompt=q.prompt,
         expected=q.answer,
         given=answer,
@@ -487,7 +487,7 @@ def trivia_regrade(
 
 
 @router.post("/trivia/session/{deck_name}/regrade", response_class=HTMLResponse)
-def trivia_session_regrade(
+async def trivia_session_regrade(
     deck_name: str,
     request: Request,
     question_id: int = Form(...),
@@ -512,7 +512,7 @@ def trivia_session_regrade(
     if q is None or q.deck_id != deck_id:
         raise HTTPException(404, "question not found in this deck")
 
-    verdict = trivia_service.claude_regrade(
+    verdict = await trivia_service.claude_regrade(
         prompt=q.prompt,
         expected=q.answer,
         given=answer,

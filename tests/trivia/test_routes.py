@@ -15,6 +15,28 @@ from prep.trivia import service as svc
 from prep.trivia.repo import TriviaQueueRepo
 
 
+def _afake(value):
+    """Helper for monkeypatching the async claude_grade / claude_regrade
+    functions. Returns a coroutine factory whose call accepts arbitrary
+    kwargs (matching the real signature) and resolves to `value`."""
+
+    async def fn(**_kw):
+        return value
+
+    return fn
+
+
+def _afake_recording(record_into, value):
+    """Like `_afake` but appends each invocation's kwargs to a list so
+    a test can later assert on what arguments claude was called with."""
+
+    async def fn(**kw):
+        record_into.append(kw)
+        return value
+
+    return fn
+
+
 def _seed_trivia_question(initialized_db: str, prompt="Capital of France?", answer="Paris"):
     user = initialized_db
     deck_id = DeckRepo().create(user, "capitals")
@@ -509,11 +531,13 @@ def test_regrade_flips_wrong_to_right_on_claude_disagree(
     monkeypatch.setattr(
         svc,
         "claude_regrade",
-        lambda **_: {
-            "correct": True,
-            "feedback": "Yes, that's the canonical term.",
-            "regex_update": None,
-        },
+        _afake(
+            {
+                "correct": True,
+                "feedback": "Yes, that's the canonical term.",
+                "regex_update": None,
+            }
+        ),
     )
     r = client.post(
         f"/trivia/{qid}/regrade",
@@ -543,11 +567,13 @@ def test_regrade_keeps_wrong_when_claude_agrees(
     monkeypatch.setattr(
         svc,
         "claude_regrade",
-        lambda **_: {
-            "correct": False,
-            "feedback": "Not the same concept.",
-            "regex_update": None,
-        },
+        _afake(
+            {
+                "correct": False,
+                "feedback": "Not the same concept.",
+                "regex_update": None,
+            }
+        ),
     )
     r = client.post(f"/trivia/{qid}/regrade", data={"answer": "throughput"})
     assert r.status_code == 200
@@ -569,7 +595,7 @@ def test_regrade_does_not_re_rotate_card(monkeypatch, client: TestClient, initia
     monkeypatch.setattr(
         svc,
         "claude_regrade",
-        lambda **_: {"correct": True, "feedback": "", "regex_update": None},
+        _afake({"correct": True, "feedback": "", "regex_update": None}),
     )
     client.post(f"/trivia/{qid}/regrade", data={"answer": "paris"})
     with cursor() as c:
@@ -591,7 +617,7 @@ def test_session_regrade_flips_done_chain_verdict(
     monkeypatch.setattr(
         svc,
         "claude_regrade",
-        lambda **_: {"correct": True, "feedback": "", "regex_update": None},
+        _afake({"correct": True, "feedback": "", "regex_update": None}),
     )
     cards_remaining = ",".join(str(q) for q in qids[1:])
     done_before = f"{qids[0]}w"
@@ -630,8 +656,8 @@ def test_answer_uses_stored_regex_for_short(monkeypatch, client: TestClient, ini
     )
     TriviaQueueRepo().append_card(qid, deck_id)
 
-    called = []
-    monkeypatch.setattr(svc, "claude_grade", lambda **kw: called.append(kw) or {"correct": False})
+    called: list = []
+    monkeypatch.setattr(svc, "claude_grade", _afake_recording(called, {"correct": False}))
 
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "wal"})
     assert r.status_code == 200
@@ -663,11 +689,13 @@ def test_initial_answer_persists_regex_update_when_claude_proposes_one(
     monkeypatch.setattr(
         svc,
         "claude_grade",
-        lambda **_: {
-            "correct": True,
-            "feedback": "WAL is a standard abbreviation.",
-            "regex_update": "(write[- ]?ahead log|wal)",
-        },
+        _afake(
+            {
+                "correct": True,
+                "feedback": "WAL is a standard abbreviation.",
+                "regex_update": "(write[- ]?ahead log|wal)",
+            }
+        ),
     )
     # Force the claude path: short answer + answer length 2 makes
     # paraphrase-heuristic kick in once deterministic says wrong.
@@ -703,11 +731,13 @@ def test_initial_answer_does_not_persist_regex_update_for_typo(
     monkeypatch.setattr(
         svc,
         "claude_grade",
-        lambda **_: {
-            "correct": True,
-            "feedback": "Forgiving the typo.",
-            "regex_update": None,
-        },
+        _afake(
+            {
+                "correct": True,
+                "feedback": "Forgiving the typo.",
+                "regex_update": None,
+            }
+        ),
     )
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "right-ahead log"})
     assert r.status_code == 200
@@ -742,11 +772,13 @@ def test_regrade_persists_regex_update_when_claude_proposes_one(
     monkeypatch.setattr(
         svc,
         "claude_regrade",
-        lambda **_: {
-            "correct": True,
-            "feedback": "WAL is the standard abbreviation.",
-            "regex_update": "(write[- ]?ahead log|wal)",
-        },
+        _afake(
+            {
+                "correct": True,
+                "feedback": "WAL is the standard abbreviation.",
+                "regex_update": "(write[- ]?ahead log|wal)",
+            }
+        ),
     )
     r = client.post(f"/trivia/{qid}/regrade", data={"answer": "wal"})
     assert r.status_code == 200
@@ -783,11 +815,13 @@ def test_regrade_does_not_persist_regex_update_for_typo(
     monkeypatch.setattr(
         svc,
         "claude_regrade",
-        lambda **_: {
-            "correct": True,
-            "feedback": "Forgiving the typo.",
-            "regex_update": None,
-        },
+        _afake(
+            {
+                "correct": True,
+                "feedback": "Forgiving the typo.",
+                "regex_update": None,
+            }
+        ),
     )
     r = client.post(f"/trivia/{qid}/regrade", data={"answer": "right-ahead log"})
     assert r.status_code == 200

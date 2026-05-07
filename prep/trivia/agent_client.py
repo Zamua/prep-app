@@ -19,6 +19,8 @@ import os
 import urllib.error
 import urllib.request
 
+import httpx
+
 
 class AgentUnavailable(RuntimeError):
     """Raised when the agent container can't be reached or returns
@@ -34,20 +36,30 @@ class AgentUnavailable(RuntimeError):
 _DEFAULT_TIMEOUT_S = 900.0
 
 
-def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
-    """POST a single prompt to the agent's /run endpoint and return
-    its stdout. Raises `AgentUnavailable` on transport / HTTP errors.
-    """
+def _agent_url() -> str:
     base = (os.environ.get("PREP_AGENT_URL") or "").strip()
     if not base:
         raise AgentUnavailable(
             "PREP_AGENT_URL is not set — trivia generation needs the "
             "agent container to be running and reachable."
         )
+    return base.rstrip("/") + "/run"
 
+
+def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
+    """POST a single prompt to the agent's /run endpoint and return
+    its stdout. Raises `AgentUnavailable` on transport / HTTP errors.
+
+    Synchronous version, used by trivia generation (which runs on the
+    Temporal worker, not on the request path). Request-path callers
+    (grading) must use `run_prompt_async` instead — a slow agent call
+    in a sync def blocks Starlette's threadpool, which is what took
+    prod down on 2026-05-07.
+    """
+    url = _agent_url()
     body = json.dumps({"prompt": prompt}).encode("utf-8")
     req = urllib.request.Request(
-        base.rstrip("/") + "/run",
+        url,
         data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -65,4 +77,27 @@ def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
             err = str(e)
         raise AgentUnavailable(f"agent HTTP {e.code}: {err}") from e
     except (urllib.error.URLError, OSError, TimeoutError) as e:
+        raise AgentUnavailable(f"agent unreachable: {e}") from e
+
+
+async def run_prompt_async(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
+    """Async counterpart to `run_prompt`, for callers that run on the
+    request path. Uses httpx.AsyncClient so a slow agent call yields
+    the event loop instead of holding a Starlette threadpool slot.
+    Same `AgentUnavailable` contract as the sync version."""
+    url = _agent_url()
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s) as client:
+            r = await client.post(url, json={"prompt": prompt})
+            if r.status_code != 200:
+                try:
+                    err = r.json().get("error", "")
+                except Exception:
+                    err = r.text
+                raise AgentUnavailable(f"agent HTTP {r.status_code}: {err}")
+            data = r.json()
+            if "stdout" not in data:
+                raise AgentUnavailable(f"agent returned no stdout: {str(data)[:300]}")
+            return data["stdout"]
+    except (httpx.TimeoutException, httpx.TransportError) as e:
         raise AgentUnavailable(f"agent unreachable: {e}") from e

@@ -17,13 +17,14 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 from prep import chat_handoff
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import QuestionRepo
 from prep.domain import grading
-from prep.trivia.agent_client import AgentUnavailable, run_prompt
+from prep.trivia.agent_client import AgentUnavailable, run_prompt, run_prompt_async
 from prep.trivia.repo import TriviaQueueRepo
 
 logger = logging.getLogger(__name__)
@@ -365,10 +366,19 @@ def _parse_grade_json(out: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
-def claude_grade(
+# Per-call timeout for the grading agent invocation. Tuned down from
+# the 30s we used to ship — observed wall-time is 5-10s with sonnet,
+# and a long tail beyond ~12s has historically meant the agent has
+# wedged. Capping shorter trades a small risk of false fallbacks for
+# bounded blast radius if the agent goes sideways. The fallback path
+# (deterministic string match) is still available downstream.
+_GRADE_TIMEOUT_S = 12.0
+
+
+async def claude_grade(
     *, prompt: str, expected: str, given: str, current_regex: str | None = None
 ) -> dict:
-    """Synchronous claude-graded verdict. Returns
+    """Async claude-graded verdict. Returns
     `{"correct": bool, "feedback": str, "regex_update": str | None}`.
 
     `regex_update` is a validated regex the caller should persist on
@@ -380,6 +390,11 @@ def claude_grade(
 
     Falls back to deterministic match on agent error; regex_update
     is always None on the fallback path.
+
+    Async so the route can `await` the (potentially slow) agent call
+    without parking a Starlette threadpool thread the whole time —
+    sync claude_grade calls had taken prod down by exhausting that
+    pool when several answers landed back-to-back.
     """
     if not given.strip():
         return {"correct": False, "feedback": "No answer given.", "regex_update": None}
@@ -389,15 +404,22 @@ def claude_grade(
         "given": given.strip(),
         "current_regex": current_regex or "null",
     }
+    t0 = time.monotonic()
     try:
-        out = run_prompt(prompt_text, timeout_s=30.0)
+        out = await run_prompt_async(prompt_text, timeout_s=_GRADE_TIMEOUT_S)
     except AgentUnavailable as e:
-        logger.warning("claude_grade: agent unavailable, falling back to string match: %s", e)
+        elapsed = time.monotonic() - t0
+        logger.warning(
+            "claude_grade: agent unavailable after %.1fs, falling back to string match: %s",
+            elapsed,
+            e,
+        )
         return {
             "correct": grade_answer(expected=expected, given=given),
             "feedback": "(graded by string similarity — claude was unreachable)",
             "regex_update": None,
         }
+    elapsed = time.monotonic() - t0
     try:
         parsed = _parse_grade_json(out)
         verdict = (parsed.get("verdict") or "").strip().lower()
@@ -410,9 +432,14 @@ def claude_grade(
                 regex_update = grading.validate_regex_update(
                     proposed, expected_literal=expected, prior_given=given
                 )
+        logger.info("claude_grade ok in %.1fs (verdict=%s)", elapsed, verdict)
         return {"correct": correct, "feedback": feedback, "regex_update": regex_update}
     except (ValueError, json.JSONDecodeError, KeyError) as e:
-        logger.warning("claude_grade: bad JSON, falling back to string match: %s", e)
+        logger.warning(
+            "claude_grade: bad JSON after %.1fs, falling back to string match: %s",
+            elapsed,
+            e,
+        )
         return {
             "correct": grade_answer(expected=expected, given=given),
             "feedback": "(graded by string similarity — claude returned malformed JSON)",
@@ -460,7 +487,7 @@ def grade_answer(*, expected: str, given: str) -> bool:
 # ---- Grading dispatch (deterministic + claude tie-breaker) -------------
 
 
-def grade_with_fallback(q, user_answer: str) -> dict:
+async def grade_with_fallback(q, user_answer: str) -> dict:
     """Dispatch through three layers, fastest first:
 
     1. **Stored regex** — if `q.answer_regex` is set and matches
@@ -481,14 +508,16 @@ def grade_with_fallback(q, user_answer: str) -> dict:
               "regex_update": str | None}`. regex_update is non-None
     only when the claude path took AND claude proposed a validated
     regex update (callers should persist via QuestionRepo).
-    """
+
+    Async because the claude path is async — see claude_grade for
+    why (event-loop yielding vs. threadpool blocking)."""
     regex_verdict = grading.match_regex(q.answer_regex, user_answer)
     if regex_verdict is True:
         return {"correct": True, "feedback": None, "regex_update": None}
 
     mode = classify_grading(q.answer)
     if mode == "claude":
-        return claude_grade(
+        return await claude_grade(
             prompt=q.prompt,
             expected=q.answer,
             given=user_answer,
@@ -504,7 +533,7 @@ def grade_with_fallback(q, user_answer: str) -> dict:
     # vs typo and propose a regex_update accordingly).
     has_regex = bool(q.answer_regex) and regex_verdict is False
     if has_regex or looks_like_paraphrase(expected=q.answer, given=user_answer):
-        return claude_grade(
+        return await claude_grade(
             prompt=q.prompt,
             expected=q.answer,
             given=user_answer,
