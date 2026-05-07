@@ -39,85 +39,7 @@
     {% set pinned = deck_meta.pinned %}
     {% include "partials/pin_form.html" %}
     {% if deck_type == 'trivia' %}
-      {# Trivia decks: <details> popover lets the user adjust the
-         interval AND pause/resume from one place. Closed state shows
-         "every Nm" or "paused" + a small caret hint; open state shows
-         preset chips, a custom-minutes input, and the pause toggle. #}
-      {%- set _interval = deck_meta.interval_minutes or 30 -%}
-      {%- set _presets = [15, 30, 60, 120, 240, 480] -%}
-      <details class="notif-edit">
-        <summary class="notif-pill notif-pill-summary {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}">
-          {{ icon('bell', class_='icon icon-inline notif-pill-bell') }}
-          {% if deck_meta.notifications_enabled %}
-            <span>every {{ _interval }}m</span>
-          {% else %}
-            <span>paused</span>
-          {% endif %}
-        </summary>
-        <div class="notif-popover" role="group" aria-label="Notification settings">
-          <p class="notif-popover-eyebrow">notification frequency</p>
-          <form method="post"
-                action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/interval"
-                class="notif-preset-row"
-                data-submit-ajax
-                data-ajax-update=".notif-pill-summary > span"
-                data-ajax-renderer="interval"
-                data-ajax-preset-active-class="notif-preset-active">
-            {% for m in _presets %}
-              <button type="submit" name="minutes" value="{{ m }}"
-                      class="notif-preset {% if m == _interval %}notif-preset-active{% endif %}">
-                {% if m < 60 %}{{ m }}m{% else %}{{ (m / 60) | int }}h{% endif %}
-              </button>
-            {% endfor %}
-          </form>
-          <form method="post"
-                action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/interval"
-                class="notif-custom"
-                data-submit-ajax
-                data-ajax-update=".notif-pill-summary > span"
-                data-ajax-renderer="interval">
-            <span class="notif-custom-label">custom (minutes)</span>
-            <input type="number" name="minutes" min="1" max="720"
-                   placeholder="e.g. 90" class="notif-custom-input"
-                   aria-label="Custom notification interval in minutes">
-            <button type="submit" class="notif-custom-save">Set</button>
-          </form>
-
-          {%- set _session_size = deck_meta.session_size or 3 -%}
-          {%- set _size_presets = [1, 2, 3, 5, 10] -%}
-          <p class="notif-popover-eyebrow notif-popover-eyebrow-divider">session size</p>
-          <p class="notif-popover-help">cards per mini-session when you tap a notification</p>
-          <form method="post"
-                action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/session_size"
-                class="notif-preset-row"
-                data-submit-ajax
-                data-ajax-preset-active-class="notif-preset-active">
-            {% for n in _size_presets %}
-              <button type="submit" name="size" value="{{ n }}"
-                      class="notif-preset {% if n == _session_size %}notif-preset-active{% endif %}">
-                {{ n }}
-              </button>
-            {% endfor %}
-          </form>
-
-          <div class="notif-popover-footer">
-            <form method="post"
-                  action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/notifications"
-                  class="notif-pause-form">
-              <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
-              <button type="submit" class="notif-pause-toggle">
-                {% if deck_meta.notifications_enabled %}
-                  {{ icon('pause', class_='icon icon-inline') }}
-                  <span>pause</span>
-                {% else %}
-                  {{ icon('play', class_='icon icon-inline') }}
-                  <span>resume</span>
-                {% endif %}
-              </button>
-            </form>
-          </div>
-        </div>
-      </details>
+      {% include "partials/notif_edit.html" %}
     {% else %}
       {# SRS decks: keep the original single-tap toggle — no interval
          to set, just on/off. #}
@@ -256,7 +178,9 @@
     </summary>
     <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
           method="post" class="deck-topic-form"
-          data-submit-ajax>
+          hx-post="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
+          hx-swap="none"
+          hx-on::after-request="if(event.detail.successful) this.closest('details').removeAttribute('open')">
       <label class="form-label">Topic prompt — used to generate fresh batches of cards</label>
       <textarea name="context_prompt" rows="6" maxlength="4000"
                 placeholder="e.g. distributed-systems consensus, focusing on quorum + leader election + linearizability"
@@ -371,11 +295,16 @@
                  qcard's .is-suspended class. JS below toggles the class
                  after a successful fetch POST so the user gets an
                  inline state change without a full-page reload. #}
+              {# Both forms always rendered; CSS shows one based on the
+                 qcard's .is-suspended class. htmx toggles the class
+                 only on a successful request — this lets us update
+                 inline without rendering a fragment, since the only
+                 visual change is the class flip (CSS handles the rest). #}
               <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post"
                     class="qcard-action-form qcard-action-form--suspend"
-                    data-submit-ajax
-                    data-ajax-toggle-target="closest:.qcard"
-                    data-ajax-toggle-class="is-suspended">
+                    hx-post="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend"
+                    hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) this.closest('.qcard').classList.add('is-suspended')">
                 <button class="qcard-action" type="submit" aria-label="Suspend this card">
                   {{ icon('pause', class_='icon icon-inline') }}
                   <span class="qcard-action-label">suspend</span>
@@ -383,9 +312,9 @@
               </form>
               <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post"
                     class="qcard-action-form qcard-action-form--unsuspend"
-                    data-submit-ajax
-                    data-ajax-toggle-target="closest:.qcard"
-                    data-ajax-toggle-class="is-suspended">
+                    hx-post="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend"
+                    hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) this.closest('.qcard').classList.remove('is-suspended')">
                 <button class="qcard-action" type="submit" aria-label="Unsuspend this card">
                   {{ icon('play', class_='icon icon-inline') }}
                   <span class="qcard-action-label">unsuspend</span>

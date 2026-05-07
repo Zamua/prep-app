@@ -560,6 +560,40 @@ async def trivia_session_regrade(
     )
 
 
+def _notif_edit_response(request: Request, decks: DeckRepo, uid: str, deck_id: int):
+    """Render the notif-edit partial fragment for an htmx swap. Reads
+    the deck's current trivia metadata directly so the fragment matches
+    what the inline render in deck.html produces. Used as the htmx
+    response body for the three trivia-deck settings routes (interval,
+    session_size, notifications)."""
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        row = c.execute(
+            "SELECT notifications_enabled, notification_interval_minutes, "
+            "trivia_session_size FROM decks WHERE id=? AND user_id=?",
+            (deck_id, uid),
+        ).fetchone()
+    deck_meta = {
+        "deck_id": deck_id,
+        "notifications_enabled": bool(row["notifications_enabled"]) if row else True,
+        "interval_minutes": row["notification_interval_minutes"] if row else None,
+        "session_size": int(row["trivia_session_size"] or 3) if row else 3,
+    }
+    return templates.TemplateResponse(request, "partials/notif_edit.html", {"deck_meta": deck_meta})
+
+
+def _redirect_or_notif_edit(
+    request: Request, decks: DeckRepo, uid: str, deck_id: int, deck_name: str
+):
+    """Branch: htmx request → fragment swap; otherwise → 303 redirect.
+    Used by all three trivia notification-settings routes which share
+    the same UI surface (the notif-edit popover)."""
+    if request.headers.get("hx-request") == "true":
+        return _notif_edit_response(request, decks, uid, deck_id)
+    return responses.redirect(request, f"/deck/{deck_name}")
+
+
 @router.post("/trivia/decks/{deck_id}/notifications")
 def trivia_toggle_notifications(
     deck_id: int,
@@ -570,9 +604,11 @@ def trivia_toggle_notifications(
     """Flip the per-deck notification cycle on or off. Pausing also
     abandons any in-progress sessions on the deck — see
     decks.service.set_notifications_enabled. 404 if the deck doesn't
-    belong to the user. Returns a 303 (no meta-refresh interstitial —
-    the meta-refresh chrome was the source of the white-flash on
-    toggle)."""
+    belong to the user.
+
+    htmx-aware: HX-Request returns the notif-edit partial with the
+    new state baked in so the popover swaps in place. Otherwise a
+    standard 303 to the deck page (no-JS path)."""
     from prep.decks import service as decks_service
 
     decks = DeckRepo()
@@ -580,7 +616,7 @@ def trivia_toggle_notifications(
     if not decks_service.set_notifications_enabled(decks, uid, deck_id, enabled == "on"):
         raise HTTPException(404, "trivia deck not found")
     deck_name = decks.find_name(uid, deck_id) or ""
-    return responses.redirect(request, f"/deck/{deck_name}")
+    return _redirect_or_notif_edit(request, decks, uid, deck_id, deck_name)
 
 
 @router.post("/trivia/decks/{deck_id}/interval")
@@ -592,8 +628,7 @@ def trivia_set_interval(
 ):
     """Update the deck's base notification interval. Form input is
     plain-text minutes (1..720); rejects garbage with 400, IDOR-guards
-    via user-scoped repo. 303s back to the deck page so the rendered
-    pill picks up the new value."""
+    via user-scoped repo. htmx-aware response shape (see helper)."""
     try:
         m = int(minutes)
     except (TypeError, ValueError) as e:
@@ -601,10 +636,11 @@ def trivia_set_interval(
     if m < 1 or m > 720:
         raise HTTPException(400, "interval must be between 1 and 720 minutes")
     decks = DeckRepo()
-    if not decks.set_notification_interval(user["tailscale_login"], deck_id, m):
+    uid = user["tailscale_login"]
+    if not decks.set_notification_interval(uid, deck_id, m):
         raise HTTPException(404, "trivia deck not found")
-    deck_name = decks.find_name(user["tailscale_login"], deck_id) or ""
-    return responses.redirect(request, f"/deck/{deck_name}")
+    deck_name = decks.find_name(uid, deck_id) or ""
+    return _redirect_or_notif_edit(request, decks, uid, deck_id, deck_name)
 
 
 @router.post("/trivia/decks/{deck_id}/session_size")
@@ -614,10 +650,8 @@ def trivia_set_session_size(
     size: str = Form(...),
     user: dict = Depends(current_user),
 ):
-    """Update the deck's mini-session card count (1..20). Form input is
-    plain text; rejects garbage with 400, IDOR-guards via user-scoped
-    repo. 303s back to the deck page so the popover re-renders with the
-    new active preset."""
+    """Update the deck's mini-session card count (1..20). htmx-aware
+    response shape (see helper)."""
     try:
         n = int(size)
     except (TypeError, ValueError) as e:
@@ -625,10 +659,11 @@ def trivia_set_session_size(
     if n < 1 or n > 20:
         raise HTTPException(400, "session size must be between 1 and 20 cards")
     decks = DeckRepo()
-    if not decks.set_trivia_session_size(user["tailscale_login"], deck_id, n):
+    uid = user["tailscale_login"]
+    if not decks.set_trivia_session_size(uid, deck_id, n):
         raise HTTPException(404, "trivia deck not found")
-    deck_name = decks.find_name(user["tailscale_login"], deck_id) or ""
-    return responses.redirect(request, f"/deck/{deck_name}")
+    deck_name = decks.find_name(uid, deck_id) or ""
+    return _redirect_or_notif_edit(request, decks, uid, deck_id, deck_name)
 
 
 @router.post("/trivia/decks/{deck_id}/generate", response_class=HTMLResponse)

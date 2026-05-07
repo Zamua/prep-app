@@ -21,7 +21,7 @@ import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.datastructures import FormData
 
 from prep.auth import current_user
@@ -569,6 +569,10 @@ def deck_update_topic(
             400, f"topic prompt too long ({len(cleaned)} chars; max {_MAX_TOPIC_PROMPT_CHARS})"
         )
     deck_repo.update_context_prompt(uid, name, cleaned)
+    if request.headers.get("hx-request") == "true":
+        # htmx caller (data-popover form): nothing to swap; the popover
+        # closes via hx-on::after-request on the form. 204 = "no body".
+        return Response(status_code=204)
     return responses.redirect(request, f"/deck/{name}")
 
 
@@ -898,6 +902,10 @@ def question_suspend(
     if q is None:
         raise HTTPException(404, "question not found")
     service.suspend_question(q_repo, uid, qid)
+    if request.headers.get("hx-request") == "true":
+        # htmx caller toggles the .is-suspended class via
+        # hx-on::after-request — nothing to swap, return 204.
+        return Response(status_code=204)
     deck_name = deck_repo.find_name(uid, q.deck_id)
     return responses.redirect(request, f"/deck/{deck_name}")
 
@@ -916,6 +924,8 @@ def question_unsuspend(
     if q is None:
         raise HTTPException(404, "question not found")
     service.unsuspend_question(q_repo, uid, qid)
+    if request.headers.get("hx-request") == "true":
+        return Response(status_code=204)
     deck_name = deck_repo.find_name(uid, q.deck_id)
     return responses.redirect(request, f"/deck/{deck_name}")
 
