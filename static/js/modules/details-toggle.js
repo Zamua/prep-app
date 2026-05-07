@@ -48,19 +48,30 @@ export function init() {
     true,
   );
 
-  // Outside-pointerup → close open details. Skip when the target is
-  // a summary (the toggler above already handled it). Skip when the
-  // target is inside a [data-details-body] element — those are body
-  // panels rendered as a sibling of the <details> for layout reasons
-  // (see trivia-card.html: explore body lives as a .trivia-discs
-  // child, not a <details> child, so the row of pills can grid
-  // independently of the body's full-width panel). Without this
-  // exemption, tapping a link in the body would close the details
-  // mid-tap and on iOS the synthesized click would never reach the
-  // <a>'s navigation.
+  // Outside-pointerup → close open details. Skip when:
+  //   - target is a summary (the toggler above handled it).
+  //   - target is inside [data-details-body] (sibling popover bodies;
+  //     e.g. trivia card explore/explain — they're children of
+  //     .trivia-discs, not the <details> itself).
+  //   - target is an actionable element (link, button, role=button,
+  //     submit input). Closing details on the SAME pointerup that
+  //     would fire a link click shifts layout on iOS just before the
+  //     synthesized click resolves, and the click either cancels or
+  //     re-targets to the now-shifted element underneath. Symptom is
+  //     "tap registers but nothing happens; second tap works"
+  //     (reported 2026-05-07 19:44 UTC: tap Next-card while Explain
+  //     is open → Explain closes, no nav; tap "all decks" while
+  //     interval popover is open → popover closes, no nav).
+  //
+  // Net behavior: open details persist through taps on actions until
+  // the user re-taps the summary (toggle), presses Escape, or taps a
+  // genuinely-non-actionable region of the page.
   document.addEventListener("pointerup", (e) => {
     if (e.target.closest && e.target.closest("summary")) return;
     if (e.target.closest && e.target.closest("[data-details-body]")) return;
+    if (e.target.closest && e.target.closest("a, button, [role='button'], input[type='submit']")) {
+      return;
+    }
     document.querySelectorAll("details[open]").forEach((d) => {
       if (!d.contains(e.target)) d.removeAttribute("open");
     });

@@ -138,6 +138,27 @@ def test_claude_regrade_round_trip(http: httpx.Client, test_deck: dict):
     ), "regrade did not surface — route may have failed silently"
 
 
+def test_details_toggle_skips_close_on_action_taps(http: httpx.Client):
+    """Static-asset assertion: the details-toggle.js outside-pointerup
+    handler must skip closing when the tap is on an actionable element
+    (link/button/role=button/submit input). Without that exemption,
+    iOS PWA cancels the click navigation when the close shifts layout
+    mid-tap. Reported 2026-05-07 19:44 UTC: 'tap Next while Explain
+    open does nothing'; 'tap back link while interval popover open
+    does nothing'."""
+    home = http.get("/").text
+    m = re.search(r"/static/js/v(\d+)/", home)
+    assert m, "no versioned import path"
+    js = http.get(f"/static/js/v{m.group(1)}/modules/details-toggle.js").text
+    # Hard-coded substring assertion — the exemption must be present
+    # in the deployed JS. Don't bother parsing; if the literal string
+    # disappears, that's the regression.
+    assert "input[type='submit']" in js, (
+        "details-toggle.js no longer has the action-element exemption — "
+        "tapping a link/button while an open <details> popover loses navigation on iOS"
+    )
+
+
 def test_metrics_exposes_threadpool_gauges(http: httpx.Client):
     """Prometheus scrape target. Must serve plain-text exposition with
     the prep-specific metrics. Catches a regression that drops the
