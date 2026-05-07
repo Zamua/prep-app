@@ -83,7 +83,12 @@ Constraints:
     {"q": "Two sorted arrays, find the median in O(log n). Pattern?", "a": "binary search on partition", "e": "..."}
     {"q": "What's wrong?\\n```python\\nfor i in range(len(a)):\\n    a.append(a[i])\\n```", "a": "infinite loop — appending while iterating", "e": "..."}
     {"q": "Goal: only one goroutine reads from a channel at a time. Primitive?", "a": "sync.Mutex", "e": "..."}
-- Don't repeat any of these existing questions:
+- Don't duplicate any EXACT existing question. Drilling the same
+  underlying concept from a DIFFERENT shape is encouraged — e.g., the
+  same idea probed via a code trace AND a complexity drill AND an
+  idiom card builds deeper recall than any single angle. Vary the
+  shape, not just the wording.
+- Existing questions to avoid duplicating exactly:
 
 %(existing)s
 
