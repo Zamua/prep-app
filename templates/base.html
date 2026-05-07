@@ -66,6 +66,13 @@
   </div>
 
 
+  {# htmx — declarative AJAX via attributes (hx-post, hx-target, hx-swap).
+     Replaces the hand-rolled prep/static/js/modules/submit-ajax.js for
+     state-changing forms. Routes that detect `HX-Request: true` return
+     just the fragment to swap; otherwise they keep their existing
+     POST→303 behavior so no-JS fallback still works. #}
+  <script src="{{ request.scope.get('root_path','') }}/static/js/vendor/htmx-2.0.4.min.js?v={{ static_css_mtime|default(0) }}" defer></script>
+
   {# Native ES module bootstrap. Importmap aliases @/ → /static/js/v<build>/
      — the version segment gives every deploy a fresh URL space (handled
      server-side; see prep/app.py:_versioned_js). This is the canonical

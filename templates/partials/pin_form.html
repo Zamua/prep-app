@@ -1,0 +1,24 @@
+{# Pin/unpin form. Two render contexts:
+
+   1. Inline on deck.html — initial render with the deck's current state.
+   2. As an htmx swap target — server returns this fragment after a
+      pin toggle so htmx can `hx-swap=outerHTML` it into the existing
+      form's slot, reflecting the new state without a page reload.
+
+   Inputs:
+     deck_name  — string, the deck's URL slug
+     pinned     — bool, the current pinned state #}
+<form method="post"
+      action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
+      class="deck-pin-form"
+      hx-post="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
+      hx-target="this"
+      hx-swap="outerHTML">
+  <input type="hidden" name="pinned" value="{{ 'off' if pinned else 'on' }}">
+  <button type="submit"
+          class="tag tag-pin {% if pinned %}tag-pin-active{% endif %}"
+          title="{{ 'Unpin from top of index' if pinned else 'Pin to top of index' }}">
+    {{ icon('push-pin' if pinned else 'push-pin-simple', class_='icon icon-inline') }}
+    <span>{{ 'pinned' if pinned else 'pin' }}</span>
+  </button>
+</form>

@@ -172,17 +172,27 @@ def _versioned_js(build: str, path: str):
     from fastapi import HTTPException
     from fastapi.responses import FileResponse
 
-    target = (BASE_DIR / "static" / "js" / path).resolve()
+    # FastAPI's `v{build}` path-param is greedy on any string after
+    # `/static/js/v`, so this route also catches `/static/js/vendor/…`
+    # (build="endor"), `/static/js/version.txt` etc. Disambiguate:
+    # if `build` looks like our timestamp, strip it and serve from
+    # static/js/{path} with immutable cache. Otherwise treat the
+    # whole `v{build}/{path}` as the literal sub-path under static/js
+    # (no version stripping, no immutable cache — same handling the
+    # StaticFiles mount would have given it).
+    is_versioned = build.isdigit()
+    if is_versioned:
+        rel = path
+    else:
+        rel = f"v{build}/{path}"
+    target = (BASE_DIR / "static" / "js" / rel).resolve()
     js_root = (BASE_DIR / "static" / "js").resolve()
     if js_root not in target.parents and target != js_root:
         raise HTTPException(status_code=404)
     if not target.is_file():
         raise HTTPException(status_code=404)
-    return FileResponse(
-        target,
-        media_type="application/javascript",
-        headers={"cache-control": "public, max-age=31536000, immutable"},
-    )
+    headers = {"cache-control": "public, max-age=31536000, immutable"} if is_versioned else {}
+    return FileResponse(target, media_type="application/javascript", headers=headers)
 
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")

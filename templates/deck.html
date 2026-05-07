@@ -36,23 +36,8 @@
        on flips pinned_at to now() (deck floats to top of index),
        off clears it. Active state gets a filled pin icon + accent
        color so paused/pinned/etc. read at a glance. #}
-    <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
-          class="deck-pin-form"
-          data-submit-ajax
-          data-ajax-toggle-target=".tag-pin"
-          data-ajax-toggle-class="tag-pin-active"
-          data-ajax-toggle-label-target=".tag-pin > span"
-          data-ajax-toggle-label-on="pinned"
-          data-ajax-toggle-label-off="pin"
-          data-ajax-flip-hidden="pinned">
-      <input type="hidden" name="pinned" value="{{ 'off' if deck_meta.pinned else 'on' }}">
-      <button type="submit"
-              class="tag tag-pin {% if deck_meta.pinned %}tag-pin-active{% endif %}"
-              title="{{ 'Unpin from top of index' if deck_meta.pinned else 'Pin to top of index' }}">
-        {{ icon('push-pin' if deck_meta.pinned else 'push-pin-simple', class_='icon icon-inline') }}
-        <span>{{ 'pinned' if deck_meta.pinned else 'pin' }}</span>
-      </button>
-    </form>
+    {% set pinned = deck_meta.pinned %}
+    {% include "partials/pin_form.html" %}
     {% if deck_type == 'trivia' %}
       {# Trivia decks: <details> popover lets the user adjust the
          interval AND pause/resume from one place. Closed state shows

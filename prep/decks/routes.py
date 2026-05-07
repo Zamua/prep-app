@@ -729,12 +729,24 @@ def deck_toggle_pin(
 ):
     """Toggle deck pin. Pinned decks float to the top of the index,
     most-recently-pinned first. 404 if the deck doesn't belong to
-    the user."""
+    the user.
+
+    htmx-aware: when the request carries `HX-Request: true`, return
+    just the pin-form fragment so the client can swap it in place
+    (no full-page reload, no nav race with a follow-up tap).
+    Otherwise, fall back to the POST→303 redirect for the no-JS path."""
     uid = user["tailscale_login"]
     deck_id = repo.find_id(uid, name)
     if deck_id is None:
         raise HTTPException(404, "deck not found")
-    repo.set_pinned(uid, deck_id, pinned == "on")
+    is_pinned = pinned == "on"
+    repo.set_pinned(uid, deck_id, is_pinned)
+    if request.headers.get("hx-request") == "true":
+        return templates.TemplateResponse(
+            request,
+            "partials/pin_form.html",
+            {"deck_name": name, "pinned": is_pinned},
+        )
     return responses.redirect(request, f"/deck/{name}")
 
 
