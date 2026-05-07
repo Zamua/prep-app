@@ -50,11 +50,20 @@ def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
     """POST a single prompt to the agent's /run endpoint and return
     its stdout. Raises `AgentUnavailable` on transport / HTTP errors.
 
-    Synchronous version, used by trivia generation (which runs on the
-    Temporal worker, not on the request path). Request-path callers
-    (grading) must use `run_prompt_async` instead — a slow agent call
-    in a sync def blocks Starlette's threadpool, which is what took
-    prod down on 2026-05-07.
+    Synchronous. Safe to call ONLY from contexts that aren't on the
+    asyncio event loop:
+    - the Temporal worker (separate Go process; calls back into prep
+      to write rows but doesn't share our event loop)
+    - inside an `asyncio.to_thread(...)` wrapper (which is what
+      notify.scheduler does for the in-process trivia refill tick)
+
+    Calling this directly from an async coroutine blocks the entire
+    event loop for up to `timeout_s` seconds — taking down ALL request
+    handling, not just the caller. Caught the hard way at 19:30 UTC on
+    2026-05-07: notify scheduler's `_tick` was awaiting `_trivia_tick`
+    synchronously, which called generate_batch which called this
+    function which blocked on urlopen. Request-path callers must use
+    `run_prompt_async` instead.
     """
     url = _agent_url()
     body = json.dumps({"prompt": prompt}).encode("utf-8")
