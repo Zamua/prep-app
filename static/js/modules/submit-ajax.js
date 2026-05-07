@@ -96,6 +96,50 @@ export function attachDeclarative(root = document) {
         submitter.classList.add(presetClass);
       }
 
+      // Binary-toggle support (pin/unpin, pause/resume, suspend/unsuspend):
+      //   data-ajax-toggle-target=<selector>     element whose class flips
+      //   data-ajax-toggle-class=<class>         the class flipped
+      //   data-ajax-toggle-label-target=<selector> optional element whose
+      //                                          textContent flips
+      //   data-ajax-toggle-label-on=<text>       label when class is ON
+      //   data-ajax-toggle-label-off=<text>      label when class is OFF
+      //   data-ajax-flip-hidden=<input-name>     a hidden input whose
+      //                                          value should flip on/off
+      //                                          so the next submit
+      //                                          toggles back.
+      const toggleClass = form.dataset.ajaxToggleClass;
+      const toggleTargetSel = form.dataset.ajaxToggleTarget;
+      if (toggleClass && toggleTargetSel) {
+        // `closest:.foo` walks UP from the form (handy when each row
+        // has its own form, like per-card suspend/unsuspend); plain
+        // selectors do form-then-document scan.
+        let target;
+        if (toggleTargetSel.startsWith("closest:")) {
+          target = form.closest(toggleTargetSel.slice("closest:".length));
+        } else {
+          target =
+            form.querySelector(toggleTargetSel) || document.querySelector(toggleTargetSel);
+        }
+        if (target) {
+          target.classList.toggle(toggleClass);
+          const labelSel = form.dataset.ajaxToggleLabelTarget;
+          const labelOn = form.dataset.ajaxToggleLabelOn;
+          const labelOff = form.dataset.ajaxToggleLabelOff;
+          if (labelSel && labelOn !== undefined && labelOff !== undefined) {
+            const labelEl =
+              form.querySelector(labelSel) || document.querySelector(labelSel);
+            if (labelEl) {
+              labelEl.textContent = target.classList.contains(toggleClass) ? labelOn : labelOff;
+            }
+          }
+        }
+      }
+      const flipName = form.dataset.ajaxFlipHidden;
+      if (flipName) {
+        const input = form.querySelector(`input[type="hidden"][name="${flipName}"]`);
+        if (input) input.value = input.value === "on" ? "off" : "on";
+      }
+
       // Close the parent <details> popover so the user gets a "yep,
       // saved" visual confirmation. Without this they'd see the
       // popover linger after the action.

@@ -37,7 +37,15 @@
        off clears it. Active state gets a filled pin icon + accent
        color so paused/pinned/etc. read at a glance. #}
     <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
-          class="deck-pin-form" data-submit-pending>
+          class="deck-pin-form"
+          data-submit-pending
+          data-submit-ajax
+          data-ajax-toggle-target=".tag-pin"
+          data-ajax-toggle-class="tag-pin-active"
+          data-ajax-toggle-label-target=".tag-pin > span"
+          data-ajax-toggle-label-on="pinned"
+          data-ajax-toggle-label-off="pin"
+          data-ajax-flip-hidden="pinned">
       <input type="hidden" name="pinned" value="{{ 'off' if deck_meta.pinned else 'on' }}">
       <button type="submit"
               class="tag tag-pin {% if deck_meta.pinned %}tag-pin-active{% endif %}"
@@ -263,7 +271,8 @@
       {{ icon('pencil-simple-line', class_='icon icon-inline deck-topic-pencil') }}
     </summary>
     <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/topic"
-          method="post" class="deck-topic-form">
+          method="post" class="deck-topic-form"
+          data-submit-ajax>
       <label class="form-label">Topic prompt — used to generate fresh batches of cards</label>
       <textarea name="context_prompt" rows="6" maxlength="4000"
                 placeholder="e.g. distributed-systems consensus, focusing on quorum + leader election + linearizability"
@@ -378,13 +387,21 @@
                  qcard's .is-suspended class. JS below toggles the class
                  after a successful fetch POST so the user gets an
                  inline state change without a full-page reload. #}
-              <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post" class="qcard-action-form qcard-action-form--suspend">
+              <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/suspend" method="post"
+                    class="qcard-action-form qcard-action-form--suspend"
+                    data-submit-ajax
+                    data-ajax-toggle-target="closest:.qcard"
+                    data-ajax-toggle-class="is-suspended">
                 <button class="qcard-action" type="submit" aria-label="Suspend this card">
                   {{ icon('pause', class_='icon icon-inline') }}
                   <span class="qcard-action-label">suspend</span>
                 </button>
               </form>
-              <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post" class="qcard-action-form qcard-action-form--unsuspend">
+              <form action="{{ request.scope.get('root_path','') }}/question/{{ q.id }}/unsuspend" method="post"
+                    class="qcard-action-form qcard-action-form--unsuspend"
+                    data-submit-ajax
+                    data-ajax-toggle-target="closest:.qcard"
+                    data-ajax-toggle-class="is-suspended">
                 <button class="qcard-action" type="submit" aria-label="Unsuspend this card">
                   {{ icon('play', class_='icon icon-inline') }}
                   <span class="qcard-action-label">unsuspend</span>
