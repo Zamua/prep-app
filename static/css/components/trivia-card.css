@@ -11,8 +11,14 @@
   padding: 0.2rem 0.7rem; border-radius: 999px;
   font-size: 0.78rem; letter-spacing: 0.06em; font-style: italic;
   text-transform: lowercase;
+  /* Two-word verdicts ("not quite") were wrapping when the back-link
+     deck name on the left was long enough to crowd the row. The pill
+     squeezed into a too-narrow slot and broke between words. Force
+     a single line and let the row size to its content. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.trivia-verdict-pill .icon { width: 0.8rem; height: 0.8rem; }
+.trivia-verdict-pill .icon { width: 0.8rem; height: 0.8rem; flex-shrink: 0; }
 .tvp-right {
   background: color-mix(in srgb, var(--right) 14%, transparent);
   color: var(--right);

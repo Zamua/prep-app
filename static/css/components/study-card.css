@@ -8,6 +8,12 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  /* gap so the back link doesn't bump into the verdict pill or
+     card-id when the row gets crowded; flex-wrap keeps everything
+     on screen for very long deck names by dropping items to a new
+     row instead of squishing the pill mid-row. */
+  gap: 0.6rem;
+  flex-wrap: wrap;
   margin-bottom: 1.5rem;
   font-size: 0.92rem;
 }
@@ -15,6 +21,7 @@
   font-style: italic;
   color: var(--ink-mute);
   font-feature-settings: "onum" on;
+  flex-shrink: 0;
 }
 
 .study-card {
