@@ -67,76 +67,18 @@
   </div>
 
 
-  <script>
-  // iOS 26 in PWA standalone mode swallows the synthesized click
-  // event on <summary> for the first ~5 seconds after page load
-  // (Apple radar #159814 surface). Diag log confirms touchstart /
-  // touchend / pointerdown / pointerup fire normally, but click +
-  // toggle never dispatch. Bind the toggle to pointerup instead —
-  // it fires reliably on every device.
-  //
-  // Quirk: preventDefault() on pointerup does NOT reliably suppress
-  // the compatibility click on iOS PWA, so when the synthesized
-  // click eventually fires, the browser's activation behavior runs
-  // a second toggle (symptom: tap a summary and the popover blinks
-  // open→closed). Workaround: track the most recent pointerup-driven
-  // summary toggle and call preventDefault() on the corresponding
-  // click before activation behavior gets to it. Keyboard activation
-  // (Enter/Space → click without a preceding pointerup) is unaffected.
-  (function () {
-    let lastSummaryToggle = 0;
-    document.addEventListener('pointerup', (e) => {
-      const summary = e.target.closest && e.target.closest('summary');
-      if (!summary) return;
-      const details = summary.parentElement;
-      if (!details || details.tagName !== 'DETAILS') return;
-      e.preventDefault();
-      if (details.hasAttribute('open')) details.removeAttribute('open');
-      else details.setAttribute('open', '');
-      lastSummaryToggle = Date.now();
-    }, true);
-    document.addEventListener('click', (e) => {
-      if (Date.now() - lastSummaryToggle > 500) return;
-      if (e.target.closest && e.target.closest('summary')) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }, true);
-  })();
+  {# Native ES module bootstrap. Importmap aliases @/ → /static/js/
+     so app.js can `import "@/modules/poller.js"` cleanly. Always-on
+     behaviors (details toggle, dialog backdrop close, submit-pending)
+     register on load; per-feature modules (poller) lazy-load when a
+     data-* hook on the page asks for them. #}
+  <script type="importmap">
+  {
+    "imports": {
+      "@/": "{{ request.scope.get('root_path','') }}/static/js/"
+    }
+  }
   </script>
-
-  <script>
-  // Close any open <details> popover on Esc or outside-click. Native
-  // <details> only closes when its summary is tapped — fine for inline
-  // disclosures but unintuitive for our menu-style popovers (user
-  // indicator panel, qcard improve form, discuss popover, rubric
-  // details). One global handler covers all of them.
-  (function () {
-    document.addEventListener('pointerup', (e) => {
-      // The summary toggler above already managed this pointer event.
-      // Outside-click logic only applies to taps NOT on a summary.
-      if (e.target.closest && e.target.closest('summary')) return;
-      document.querySelectorAll('details[open]').forEach((d) => {
-        if (!d.contains(e.target)) d.removeAttribute('open');
-      });
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        let any = false;
-        document.querySelectorAll('details[open]').forEach((d) => {
-          d.removeAttribute('open');
-          any = true;
-        });
-        // Also close any open <dialog> elements (showModal handles Esc
-        // natively, but a programmatically-opened modal without showModal
-        // wouldn't — this is belt-and-suspenders).
-        document.querySelectorAll('dialog[open]').forEach((d) => {
-          d.close();
-          any = true;
-        });
-      }
-    });
-  })();
-  </script>
+  <script type="module" src="{{ request.scope.get('root_path','') }}/static/js/app.js?v={{ static_css_mtime|default(0) }}"></script>
 </body>
 </html>

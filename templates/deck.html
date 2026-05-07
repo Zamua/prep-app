@@ -395,7 +395,7 @@
    workflow and 303s to the polling page (full nav is fine; we want
    the user to land on /transform/<wid>). #}
 {% if agent_available %}
-<dialog id="improve-dialog" class="card-preview improve-dialog" aria-label="Improve card with AI">
+<dialog id="improve-dialog" class="card-preview improve-dialog" aria-label="Improve card with AI" data-dialog>
   <form method="dialog" class="card-preview-close-form">
     <button type="submit" class="card-preview-close" aria-label="Close">
       {{ icon('x', class_='icon') }}
@@ -424,7 +424,7 @@
 {# Card-preview dialog. Native <dialog> handles Esc + tab focus trapping;
    we wire backdrop-click to close as well. Content is filled per-click
    from the matching qcard's <template>. #}
-<dialog id="card-preview" class="card-preview" aria-label="Card preview">
+<dialog id="card-preview" class="card-preview" aria-label="Card preview" data-dialog>
   <form method="dialog" class="card-preview-close-form">
     <button type="submit" class="card-preview-close" aria-label="Close">
       {{ icon('x', class_='icon') }}
@@ -435,7 +435,7 @@
 
 {# Delete-deck confirmation dialog. Type-the-name-to-confirm pattern —
    prevents accidental clicks in a way "Are you sure?" doesn't. #}
-<dialog id="delete-deck-dialog" class="delete-dialog" aria-label="Delete deck confirmation">
+<dialog id="delete-deck-dialog" class="delete-dialog" aria-label="Delete deck confirmation" data-dialog>
   <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/delete" class="delete-form">
     <h2 class="delete-headline">Delete <em>{{ deck_name }}</em>?</h2>
     <p class="delete-warn">
@@ -494,11 +494,8 @@
     });
   });
 
-  // Backdrop click to close. Native <dialog> doesn't do this by default —
-  // a click on the dialog's padding area registers as target=dlg.
-  dlg.addEventListener('click', (e) => {
-    if (e.target === dlg) dlg.close();
-  });
+  // (Backdrop click + Esc handled by the shared dialog module — see
+  // static/js/modules/dialog.js, hooked via data-dialog attr.)
 })();
 
 // AI improve dialog. One dialog shared across all qcards — wire the
@@ -533,7 +530,6 @@
   });
 
   if (cancel) cancel.addEventListener('click', () => dlg.close());
-  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({
@@ -606,10 +602,7 @@
       dlg.close();
     });
   }
-  // Backdrop click closes (same pattern as preview dialog).
-  dlg.addEventListener('click', (e) => {
-    if (e.target === dlg) dlg.close();
-  });
+  // (Backdrop click handled by data-dialog → static/js/modules/dialog.js.)
   // Enable Delete only when the typed value matches the deck name exactly.
   if (input && submitBtn) {
     input.addEventListener('input', () => {

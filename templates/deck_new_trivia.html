@@ -23,7 +23,7 @@
 <p class="form-error">{{ error }}</p>
 {% endif %}
 
-<form method="post" action="{{ request.scope.get('root_path','') }}/decks/new/trivia" class="deck-new-form" autocomplete="off">
+<form method="post" action="{{ request.scope.get('root_path','') }}/decks/new/trivia" class="deck-new-form" autocomplete="off" data-submit-pending>
   <label class="form-field">
     <span class="form-label">Deck name</span>
     <input type="text" name="name" value="{{ name_value }}" required
@@ -68,28 +68,6 @@
   </div>
 </form>
 
-<script>
-  // Disable the submit button + swap its label to "Generating…" so a
-  // double-tap doesn't fire two POSTs while the server kicks off the
-  // temporal workflow + 303s to the polling page. Re-enables on
-  // pageshow if the user back-navigates here (so the form is usable
-  // again after a server-side validation 400).
-  (function () {
-    var form = document.querySelector('.deck-new-form');
-    var btn = document.getElementById('trivia-submit');
-    if (!form || !btn) return;
-    var orig = btn.textContent.trim();
-    var pending = btn.dataset.pendingLabel || 'Working…';
-    form.addEventListener('submit', function () {
-      btn.disabled = true;
-      btn.textContent = pending;
-      btn.classList.add('is-loading');
-    });
-    window.addEventListener('pageshow', function () {
-      btn.disabled = false;
-      btn.textContent = orig;
-      btn.classList.remove('is-loading');
-    });
-  })();
-</script>
+{# Submit-pending behavior is wired by static/js/modules/submit-pending.js
+   via the form's data-submit-pending attr. #}
 {% endblock %}
