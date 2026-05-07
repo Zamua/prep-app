@@ -1,0 +1,333 @@
+/* Transform — the AI "improve a card" + "reorganize a deck" surface.
+ *
+ * Includes:
+ *   - .transform-section / .transform-form (the prompt input form),
+ *   - the per-card improve dialog (card-preview chrome),
+ *   - the .transform-panel polling/preview page,
+ *   - the bucket-grouped diff cards that show before/after for each
+ *     proposed modification,
+ *   - the AI-graded transform-applied banner.
+ */
+
+.transform-section {
+  margin-top: 2.5rem;
+}
+.transform-section .section-eyebrow { margin-top: 0; margin-bottom: 0.9rem; }
+.transform-form {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.95rem 1.1rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--warm);
+}
+.transform-form textarea {
+  font-family: var(--serif);
+  font-size: 1rem;
+  min-height: 4.5rem;
+  resize: vertical;
+}
+.transform-form .btn { justify-self: end; min-width: 8rem; }
+.transform-hint {
+  margin-top: 0.6rem;
+  font-style: italic;
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+}
+
+/* Per-card improve form. The <details> wrapper sits in the footer
+ * action row (so the "improve" summary lines up with suspend), but
+ * when open the form needs to span the qcard's full width — not the
+ * tiny inline cell. Absolute positioning relative to the qcard does
+ * the job; .qcard already has `position: relative` from being a list
+ * item with absolute children possibilities. */
+.qcard { position: relative; }
+/* Improve-card dialog body. Inherits .card-preview chrome (rounded,
+ * centered modal w/ backdrop) via composition. The form fills the
+ * modal; close-X is positioned absolutely by the .card-preview-close
+ * rules. */
+.improve-dialog {
+  /* Slightly narrower than the card-preview — improve only needs a
+     prompt textarea, no full card content. */
+  max-width: min(34rem, calc(100vw - 1.6rem));
+  width: min(34rem, 100%);
+}
+.improve-dialog-body {
+  padding: 0.4rem 1.4rem 1.4rem;
+  display: grid;
+  gap: 0.95rem;
+  /* Take all remaining space below the sticky close-form (same flex
+     trick as .card-preview-body — see [open] gate above). */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.improve-card-context {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  background: var(--code-bg, var(--warm));
+  border-radius: var(--radius);
+  font-style: italic; color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  /* Wrap long prompts; cap height so a giant prompt doesn't shove the
+     textarea off-screen. */
+  max-height: 6rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+.improve-card-num {
+  font-family: var(--serif); font-style: italic; color: var(--ink-mute);
+  margin-right: 0.4rem;
+}
+.improve-dialog-body textarea {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  min-height: 5rem;
+  width: 100%;
+}
+.improve-dialog-actions {
+  display: flex; gap: 0.6rem; justify-content: flex-end;
+}
+@media (max-width: 480px) {
+  .improve-dialog-actions { flex-direction: column-reverse; }
+  .improve-dialog-actions .btn { width: 100%; }
+}
+.btn-tiny {
+  padding: 0.4rem 0.9rem;
+  min-height: 2.2rem;
+  font-size: 0.88rem;
+}
+
+/* Transform polling/preview page */
+.transform-panel {
+  margin-top: 1.2rem;
+  padding: 1.4rem 1.4rem 1.2rem;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.transform-status {
+  margin: 0 0 1rem;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 1rem;
+}
+.transform-status[data-status="done"]      { color: var(--right); }
+.transform-status[data-status="failed"]    { color: var(--wrong); }
+.transform-status[data-status="rejected"]  { color: var(--ink-mute); }
+.transform-refresh {
+  margin-left: 0.6rem;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+.transform-refresh:hover { color: var(--quill); text-decoration-color: var(--quill); }
+.transform-plan {
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.transform-plan-head {
+  margin: 0 0 0.6rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+.transform-notes {
+  margin: 0.7rem 0;
+  color: var(--ink-soft);
+  font-size: 1rem;
+}
+.transform-counts {
+  list-style: none;
+  margin: 0.7rem 0 0.4rem;
+  padding: 0;
+  display: flex;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+  color: var(--ink-mute);
+  font-size: 0.95rem;
+}
+.transform-counts strong {
+  color: var(--ink);
+  font-style: normal;
+  font-feature-settings: "lnum" on;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1.05rem;
+}
+.transform-list {
+  list-style: none;
+  margin: 0.5rem 0 0.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.transform-list-item {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+.transform-list-id {
+  font-style: italic;
+  font-feature-settings: "onum" on;
+  color: var(--ink-mute);
+  flex-shrink: 0;
+}
+.transform-list-prompt {
+  font-size: 0.92rem;
+}
+.transform-list-more {
+  color: var(--ink-mute);
+  font-style: italic;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+
+/* Reorganize preview — per-deck grouping. Each bucket is a card-
+ * like container so the cross-deck shape of the plan reads at a
+ * glance; the header names which deck the bucket belongs to with
+ * a small italic preposition ("in" / "to" / "from"). */
+.transform-bucket {
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.65rem 0.85rem 0.5rem;
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--quill);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--paper) 50%, transparent);
+}
+.transform-bucket-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+}
+.transform-bucket-prep {
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.85rem;
+}
+.transform-bucket-deck {
+  font-weight: 500;
+  color: var(--ink);
+}
+.transform-bucket-count {
+  color: var(--ink-mute);
+  font-size: 0.85rem;
+}
+.transform-bucket .transform-diff-list,
+.transform-bucket .transform-list {
+  margin-top: 0;
+}
+/* Defensive: claude proposed a modification but no fields actually
+ * changed once we resolved it against the live card. Surface it
+ * instead of rendering an empty card body that confuses the user. */
+.transform-diff-empty {
+  margin: 0.3rem 0 0;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.88rem;
+}
+.transform-warning {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--wrong) 60%, transparent);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-style: italic;
+}
+.transform-warning .icon {
+  width: 1rem; height: 1rem;
+  color: color-mix(in srgb, var(--wrong) 80%, transparent);
+  flex-shrink: 0;
+}
+
+/* Per-modification before/after diff cards. One card per claude-
+ * proposed modification, showing only the fields whose values
+ * differ between current state (old) and proposed state (new). */
+.transform-diff-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.transform-diff-card {
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+}
+.transform-diff-header {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-style: italic;
+  color: var(--ink-mute);
+}
+.transform-diff-field {
+  margin-top: 0.6rem;
+}
+.transform-diff-field:first-of-type { margin-top: 0; }
+.transform-diff-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.transform-diff-side {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.transform-diff-side + .transform-diff-side { margin-top: 0.3rem; }
+.transform-diff-old {
+  background: color-mix(in srgb, var(--wrong) 7%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--wrong) 60%, transparent);
+}
+.transform-diff-new {
+  background: color-mix(in srgb, var(--right) 7%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--right) 60%, transparent);
+}
+.transform-diff-tag {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-style: italic;
+  color: var(--ink-mute);
+  padding-top: 0.1rem;
+  min-width: 3rem;
+}
+.transform-diff-value {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.transform-applied {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.9rem;
+  background: color-mix(in srgb, var(--right) 8%, var(--paper));
+  border-left: 3px solid var(--right);
+  border-radius: var(--radius);
+  font-style: italic;
+  color: var(--right);
+}
+.transform-actions { margin-top: 1.2rem; }

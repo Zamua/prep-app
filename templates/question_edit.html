@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}edit card № {{ q.id }} · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}deck-new{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+{% call nav.back_with_aside("/deck/" ~ deck_name, deck_name) %}
   <span class="card-id">№ {{ q.id }}</span>
-</nav>
+{% endcall %}
 
 <article class="deck-new-card">
   <p class="section-eyebrow"><span>Edit card</span><span class="rule"></span></p>

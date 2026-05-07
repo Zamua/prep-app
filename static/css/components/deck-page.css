@@ -1,0 +1,622 @@
+/* Deck page — chrome above the card list:
+ *   - back link, title row + inline rename, trivia topic edit,
+ *   - the pill row (notif / edit / delete pills + trivia interval popover),
+ *   - the deck-meta figures ("12 due / 84 total"),
+ *   - the trivia mastery bar that replaces deck-meta for trivia decks,
+ *   - the primary "Begin study" action,
+ *   - the generate-more section,
+ *   - the danger zone (delete deck button + delete-confirm dialog).
+ */
+
+.back {
+  text-decoration: none;
+  color: var(--ink-mute);
+  font-style: italic;
+  font-size: 0.95rem;
+}
+.back:hover { color: var(--ink); }
+
+.deck-header { margin-bottom: 1.5rem; }
+.deck-title-row {
+  display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap;
+  position: relative;
+}
+.deck-title {
+  text-transform: lowercase;
+  font-variation-settings: "opsz" 144, "SOFT" 60;
+  margin-top: 0.4rem;
+  margin-right: 0;
+}
+
+/* Inline rename: pencil button next to the deck title; tapping
+ * opens a <details> popover with the rename form. Same per-element
+ * edit pattern used by .notif-edit and .deck-topic-edit — keep the
+ * shape consistent. */
+.deck-rename {
+  display: inline-block;
+  position: static;
+}
+.deck-rename > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.35rem 0.45rem;
+  border-radius: 999px;
+  color: var(--ink-mute);
+  display: inline-flex; align-items: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.deck-rename > summary::-webkit-details-marker { display: none; }
+.deck-rename > summary::marker { content: ""; }
+.deck-rename > summary:hover { color: var(--ink); }
+.deck-rename > summary .icon { width: 1rem; height: 1rem; }
+.deck-rename[open] > summary { background: color-mix(in srgb, var(--ink-soft) 8%, transparent); }
+.deck-rename-form {
+  position: absolute; left: 0; top: 100%;
+  z-index: 60;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.85rem 1rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  min-width: 18rem; max-width: min(28rem, 90vw);
+}
+.deck-rename-input {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Trivia topic-prompt edit: collapsible <details> showing the
+ * current topic preview + a pencil; opens to reveal the edit
+ * textarea. Per-element pattern, same as rename + notif. */
+.deck-topic { margin: 0 0 1.4rem; }
+.deck-topic-edit { display: block; }
+.deck-topic-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  -webkit-tap-highlight-color: transparent;
+}
+.deck-topic-summary::-webkit-details-marker { display: none; }
+.deck-topic-summary::marker { content: ""; }
+.deck-topic-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.deck-topic-preview {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deck-topic-pencil { color: var(--ink-mute); width: 0.95rem; height: 0.95rem; }
+.deck-topic-edit:hover .deck-topic-pencil { color: var(--ink); }
+.deck-topic-edit[open] .deck-topic-summary {
+  border-color: var(--rule);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.deck-topic-form {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.85rem;
+  border: 1px solid var(--rule);
+  border-top: none;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--paper);
+}
+.deck-topic-form textarea {
+  font-family: var(--serif);
+  font-size: 1rem;
+  min-height: 4.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  resize: vertical;
+}
+.deck-topic-form .btn { align-self: flex-start; }
+
+.deck-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 0.7rem;
+  /* Positioning context for .notif-popover so the popover hangs from
+     the row rather than the individual pill — keeps it centered with
+     equal gutters even when the triggering pill is far-right. */
+  position: relative;
+}
+
+.notif-pill-form { margin: 0; }
+.notif-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  font-style: italic;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.notif-pill:hover {
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.notif-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+
+.notif-pill-paused {
+  color: var(--wrong);
+  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+}
+.notif-pill-paused:hover {
+  background: color-mix(in srgb, var(--wrong) 14%, transparent);
+}
+
+/* Trivia interval edit popover —
+ * Tapping the trivia "every Nm" pill expands a <details> popover
+ * with preset chips + a custom-minutes input + the pause/resume
+ * toggle. Browsers' default <summary> chrome (focus rings on
+ * keyboard nav, marker arrow on the left) gets stripped — the pill
+ * itself is the visual control. Caret on the right rotates 180°
+ * when open as the only visual cue that there's expanded state. */
+/* Position context for the popover lives on the deck-pill-row, not on
+ * .notif-edit. That way the popover anchors to the pill ROW (which
+ * spans the full deck-header width) and can be horizontally centered
+ * with equal gutters, instead of hugging the right edge whenever the
+ * triggering pill happens to sit far-right in the row. */
+.notif-edit { position: static; }
+/* Strip the default <summary> marker so the pill chrome is the
+ * only visible affordance. DON'T zero padding/margin here — that
+ * would override `.notif-pill`'s padding and the closed-state pill
+ * collapses to text-only. */
+.notif-edit > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.notif-edit > summary::-webkit-details-marker { display: none; }
+.notif-edit > summary::marker { content: ""; }
+/* Bell icon on the trivia notif pill — labels the pill as a
+ * notification control without an extra "tap to expand" caret. The
+ * pill itself looks tappable from its outline chrome; affordance is
+ * carried by the click target, not a glyph. */
+.notif-pill-bell {
+  width: 0.95rem; height: 0.95rem;
+  opacity: 0.75; flex-shrink: 0;
+}
+
+/* Overlay the popover instead of pushing the mastery bar / chips
+ * below it. Anchored to .notif-edit (position:relative) so the
+ * popover sits just under the pill regardless of how the pill row
+ * wraps. Solid paper background + shadow so it reads as floating
+ * above the content it covers. */
+.notif-popover {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  /* Span the row with equal gutters: stretch from left:0 to right:0
+     of the pill row, then internally clamp width via max-width and
+     center via margin-inline:auto. On narrow viewports the popover
+     fills the row; on wider it sits centered up to its max width. */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 22rem;
+  z-index: 30;
+  padding: 0.85rem 0.95rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; gap: 0.7rem;
+}
+.notif-popover-eyebrow {
+  font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-mute); font-style: italic;
+  margin: 0;
+}
+/* Eyebrow used to start a second section inside the popover (e.g.
+ * "session size" below "notification frequency"). Dashed rule above
+ * visually separates the two groups without needing a heavy hr. */
+.notif-popover-eyebrow-divider {
+  margin-top: 0.4rem;
+  padding-top: 0.7rem;
+  border-top: 1px dashed color-mix(in srgb, var(--ink-mute) 22%, transparent);
+}
+.notif-popover-help {
+  font-size: 0.8rem; color: var(--ink-mute); font-style: italic;
+  margin: -0.4rem 0 0;
+}
+.notif-preset-row {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin: 0; padding: 0; border: 0;
+}
+.notif-preset {
+  flex: 1 1 auto;
+  min-width: 3rem;
+  font-family: inherit; font-style: italic;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent; color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.notif-preset:hover {
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.notif-preset-active {
+  background: color-mix(in srgb, var(--quill) 14%, transparent);
+  border-color: var(--quill);
+  color: var(--ink);
+  font-weight: 500;
+}
+.notif-custom {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem; color: var(--ink-mute); font-style: italic;
+  margin: 0;
+}
+.notif-custom-label {
+  flex: 0 0 auto;
+}
+.notif-custom-input {
+  flex: 1; min-width: 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--rule); border-radius: 8px;
+  font-family: inherit; font-size: 0.9rem;
+  background: var(--bg); color: var(--ink);
+}
+.notif-custom-save {
+  flex: 0 0 auto;
+  font-family: inherit; font-style: italic;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent; color: var(--ink-soft);
+  cursor: pointer;
+}
+.notif-custom-save:hover {
+  background: color-mix(in srgb, var(--quill) 12%, transparent);
+  border-color: var(--quill);
+  color: var(--ink);
+}
+.notif-popover-footer {
+  display: flex; justify-content: flex-end;
+  margin-top: 0.1rem; padding-top: 0.55rem;
+  border-top: 1px dashed color-mix(in srgb, var(--ink-mute) 22%, transparent);
+}
+.notif-pause-form { margin: 0; }
+.notif-pause-toggle {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: transparent; border: none;
+  color: var(--ink-mute); font-style: italic;
+  font-family: inherit; font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+.notif-pause-toggle:hover { color: var(--wrong); }
+.notif-pause-toggle .icon { width: 0.85rem; height: 0.85rem; }
+
+/* Edit pill: same chrome family as notif-pill, lives in the same row.
+ * When the panel is open the pill picks up an "active" treatment so
+ * the user knows what state things are in. */
+.edit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  font-style: italic;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.edit-pill:hover {
+  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+}
+.edit-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+.edit-pill-open {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink-soft) 10%, transparent);
+}
+/* Danger variant — used for the deck-delete pill. Tinted red so it
+ * reads as "destructive" without being loud at rest. */
+.edit-pill-danger {
+  color: color-mix(in srgb, var(--wrong) 75%, var(--ink-soft));
+}
+.edit-pill-danger:hover {
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  border-color: color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  color: var(--wrong);
+}
+
+.deck-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  color: var(--ink-mute);
+  margin: 0;
+  font-size: 1rem;
+}
+
+.meta-figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+}
+.figure {
+  font-variation-settings: "opsz" 144, "SOFT" 50;
+  font-weight: 500;
+  font-size: 1.5rem;
+  color: var(--ink-soft);
+  font-feature-settings: "lnum" on;
+}
+.meta-figure.is-active .figure { color: var(--quill); }
+.figure-label { font-style: italic; font-size: 0.92rem; }
+.meta-divider { color: var(--rule); }
+
+/* Primary action (Begin study) — full-width prominent button below
+ * the deck header, taller than the default .btn so it reads as the
+ * page's main affordance. */
+.primary-action {
+  margin: 2rem 0 0;
+}
+.primary-action .btn {
+  width: 100%;
+  min-height: 3.2rem;
+  font-size: 1.05rem;
+}
+
+/* Generate-more section — small "add cards" form sitting below the
+ * deck card list. Warm-tinted card with a number-input + button. */
+.generate-section {
+  margin-top: 2.5rem;
+}
+.generate-section .section-eyebrow {
+  margin-top: 0;
+  margin-bottom: 0.9rem;
+}
+.generate-form {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.95rem 1.1rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--warm);
+}
+
+.number-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  flex: 1 1 auto;
+}
+.number-input input {
+  width: 3.4rem;
+  min-height: 2.9rem;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-style: normal;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1.05rem;
+  background: var(--paper);
+  border: 1px solid var(--ink-mute);
+  border-radius: 8px;
+  color: var(--ink);
+  text-align: center;
+  font-feature-settings: "lnum" on;
+}
+.number-input input:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+
+/* Danger zone (deck deletion) —
+ * Delete trigger: dangerous-looking at rest, even more dangerous on
+ * hover. Subtle wrong-tinted background + a real wrong-colored border
+ * so a careless tap doesn't blend in with the page chrome. The trash
+ * icon also picks up the wrong color via currentColor. */
+.danger-zone {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--hairline);
+}
+.danger-zone .section-eyebrow {
+  margin: 0 0 0.6rem;
+  color: var(--ink-mute);
+}
+.danger-link {
+  color: var(--wrong);
+  background: color-mix(in srgb, var(--wrong) 6%, var(--paper));
+  border-color: color-mix(in srgb, var(--wrong) 45%, var(--rule));
+}
+.danger-link:hover,
+.danger-link:focus-visible {
+  color: var(--paper);
+  background: var(--wrong);
+  border-color: var(--wrong);
+}
+.danger-link:active {
+  background: color-mix(in srgb, var(--wrong) 85%, var(--ink));
+  border-color: color-mix(in srgb, var(--wrong) 85%, var(--ink));
+}
+
+/* Delete-confirm dialog. Uses the same .card-preview chrome (centered
+ * modal w/ backdrop) but tinted toward the wrong-state palette to make
+ * it read as destructive. */
+.delete-dialog {
+  max-width: min(34rem, calc(100vw - 1.6rem));
+  width: min(34rem, 100%);
+  padding: 0;
+  margin: auto;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--wrong) 30%, var(--rule));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  color: var(--ink);
+  overflow: hidden;
+}
+.delete-dialog::backdrop {
+  background: rgba(20, 17, 13, 0.55);
+  backdrop-filter: blur(2px);
+}
+.delete-form {
+  padding: 1.6rem 1.5rem 1.4rem;
+  display: grid;
+  gap: 0.95rem;
+}
+.delete-headline {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 144, "SOFT" 60;
+  font-weight: 380;
+  font-size: 1.7rem;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--ink);
+}
+.delete-headline em {
+  font-style: italic;
+  color: var(--wrong);
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+}
+.delete-warn {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+.delete-warn code {
+  font-family: var(--mono);
+  background: color-mix(in srgb, var(--wrong) 8%, var(--warm));
+  border: 1px solid color-mix(in srgb, var(--wrong) 30%, var(--hairline));
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+  font-size: 0.92em;
+  color: var(--wrong);
+}
+.delete-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+.delete-actions > .btn { flex: 1; min-width: 8rem; }
+.delete-button {
+  background: var(--wrong);
+  border-color: var(--wrong);
+  color: var(--paper);
+}
+.delete-button:hover {
+  background: color-mix(in srgb, var(--wrong) 80%, var(--ink));
+  border-color: color-mix(in srgb, var(--wrong) 80%, var(--ink));
+  color: var(--paper);
+}
+.delete-button:disabled {
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--ink-mute);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Trivia deck mastery bar (deck-page header) —
+ * Replaces the SRS "n due now · m total" line for trivia decks.
+ * Bar fills --right for mastered, --wrong for last-answered-wrong;
+ * unfilled remainder is the unanswered pool. */
+.deck-mastery {
+  margin: 0.7rem 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.deck-mastery-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.deck-mastery-label {
+  font-style: italic;
+  color: var(--ink);
+  font-size: 1rem;
+}
+.deck-mastery-pct {
+  font-feature-settings: "lnum" on, "tnum" on;
+  font-size: 1.4rem;
+  color: var(--right);
+  font-weight: 500;
+  font-variation-settings: "opsz" 144, "SOFT" 50;
+}
+.deck-mastery-bar {
+  display: flex;
+  height: 0.6rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+}
+.deck-mastery-fill { height: 100%; }
+.deck-mastery-fill-right { background: var(--right); }
+.deck-mastery-fill-wrong { background: var(--wrong); opacity: 0.7; }
+.deck-mastery-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.deck-mastery-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-style: italic;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--hairline);
+  font-feature-settings: "lnum" on, "tnum" on;
+}
+.deck-mastery-chip-unans { color: var(--ink-mute); }
+.deck-mastery-chip-wrong {
+  color: var(--wrong);
+  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+}

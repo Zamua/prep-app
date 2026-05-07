@@ -1,0 +1,140 @@
+/* Card preview dialog — full-card detail modal launched by tapping
+ * a .qcard on the deck page. Native <dialog> centered with
+ * ::backdrop, sticky close button at the top. Body scrolls inside
+ * the modal so the page underneath stays put.
+ */
+
+.card-index-hint {
+  margin: 0 0 0.7rem;
+  font-style: italic;
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+}
+
+.qcard {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.qcard:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 2px;
+}
+
+.card-preview {
+  /* Native <dialog>. showModal() centers in viewport + applies ::backdrop.
+     `dvh` (dynamic viewport height) excludes mobile browser chrome so the
+     max-height matches the actually-visible region. iOS Safari pre-15.4
+     gracefully falls back to vh via the cascade below. */
+  max-width: min(46rem, calc(100vw - 1.6rem));
+  max-height: calc(100vh - 1.6rem);
+  max-height: calc(100dvh - 1.6rem);
+  width: min(46rem, 100%);
+  padding: 0;
+  margin: auto;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  color: var(--ink);
+  overflow: hidden;
+  /* Don't let dialog scroll bleed into the page (iOS scroll-chaining). */
+  overscroll-behavior: contain;
+}
+/* Flex layout ONLY when the dialog is open. Without the [open] gate,
+   `display: flex` here overrides the UA's `dialog:not([open]) {
+   display: none }` rule and the (empty) dialog renders inline at the
+   bottom of the deck page. (Hit on 2026-04-28.) */
+.card-preview[open] {
+  display: flex;
+  flex-direction: column;
+}
+.card-preview::backdrop {
+  background: rgba(20, 17, 13, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+/* Lock the page from scrolling while ANY native <dialog> is open.
+   Belt-and-suspenders alongside the dialog's own overscroll-behavior:
+   prevents iOS from rubber-banding the page when the user touch-drags
+   inside the dialog. :has() is widely supported (iOS 15.4+, all modern
+   browsers); the dialog still works without it, just may scroll-chain. */
+body:has(dialog[open]) {
+  overflow: hidden;
+  /* Preserve scrollbar gutter so layout doesn't shift on open. */
+  scrollbar-gutter: stable;
+}
+.card-preview-close-form {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.6rem 0.6rem 0;
+  z-index: 2;
+  background: linear-gradient(to bottom, var(--paper), var(--paper) 70%, transparent);
+}
+.card-preview-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.card-preview-close:hover,
+.card-preview-close:focus-visible {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+  background: var(--warm);
+  outline: none;
+}
+.card-preview-close .icon { width: 1.1rem; height: 1.1rem; }
+.card-preview-body {
+  padding: 0.4rem 1.4rem 1.6rem;
+  overflow-y: auto;
+  /* No max-height needed — flex on the parent (.card-preview) gives this
+     all remaining space below the sticky close-form. The previous
+     calc(100vh - …) caused iOS to scroll the page underneath the
+     modal because vh includes hidden URL bar / toolbar height. */
+  flex: 1 1 auto;
+  min-height: 0; /* lets flex children actually shrink + scroll inside */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+@media (max-width: 480px) {
+  .card-preview-body { padding: 0.2rem 1rem 1.2rem; }
+}
+.card-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: 0.4rem 0 1rem;
+}
+.card-preview-choices {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.card-preview-choices li {
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-size: 0.96rem;
+  color: var(--ink);
+}
+.card-preview-stats {
+  margin: 0.4rem 0 0;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.92rem;
+}

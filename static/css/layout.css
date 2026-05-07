@@ -1,0 +1,14 @@
+/* Page chrome / structural layout. Currently just the .paper wrapper
+ * (centered max-width column with safe-area-aware padding). Masthead,
+ * folio, etc. live in their own component files even though they're
+ * arguably layout — keeping this file tight to "page-frame" only.
+ */
+
+.paper {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding:
+    calc(var(--safe-top) + 1.25rem)
+    var(--safe-side)
+    calc(var(--safe-bottom) + 4rem);
+}

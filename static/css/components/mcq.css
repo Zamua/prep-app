@@ -1,0 +1,122 @@
+/* mcq / multi answer grid — the post-grade view of multiple-choice
+ * answers, showing each option with its state (correct picked,
+ * wrong picked, correct missed, idle) plus a tally line below.
+ */
+
+.answer-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.answer-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 0.85rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.answer-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem; height: 1.6rem;
+  border-radius: 50%;
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  border: 1.5px solid var(--rule);
+  background: var(--bg);
+  color: var(--ink-mute);
+}
+.answer-marker .icon {
+  /* Slightly inset from the bezel so the icon doesn't crowd the rim. */
+  width: 0.85em;
+  height: 0.85em;
+  vertical-align: middle;
+}
+
+.answer-text { color: var(--ink); }
+
+.answer-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  font-style: italic;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+.answer-tags .tag {
+  padding: 0.18rem 0.55rem;
+  font-size: 0.7rem;
+}
+
+/* State styling */
+.state-correct-picked {
+  background: color-mix(in srgb, var(--right) 9%, var(--paper));
+  border-color: color-mix(in srgb, var(--right) 35%, var(--hairline));
+}
+.state-correct-picked .answer-marker {
+  background: var(--right);
+  color: var(--paper);
+  border-color: var(--right);
+}
+.state-correct-picked .tag-correct,
+.state-correct-picked .tag-pick {
+  background: color-mix(in srgb, var(--right) 18%, transparent);
+  border-color: color-mix(in srgb, var(--right) 50%, transparent);
+  color: var(--right);
+}
+
+.state-wrong-picked {
+  background: color-mix(in srgb, var(--wrong) 9%, var(--paper));
+  border-color: color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+}
+.state-wrong-picked .answer-marker {
+  background: var(--wrong);
+  color: var(--paper);
+  border-color: var(--wrong);
+}
+.state-wrong-picked .tag-pick {
+  background: color-mix(in srgb, var(--wrong) 18%, transparent);
+  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+  color: var(--wrong);
+}
+
+.state-correct-missed {
+  background: color-mix(in srgb, var(--right) 4%, var(--paper));
+  border-color: color-mix(in srgb, var(--right) 35%, var(--hairline));
+  border-style: dashed;
+}
+.state-correct-missed .answer-marker {
+  border-color: var(--right);
+  color: var(--right);
+  background: var(--paper);
+}
+.state-correct-missed .tag-correct {
+  border-color: color-mix(in srgb, var(--right) 50%, transparent);
+  color: var(--right);
+  background: transparent;
+}
+
+.state-idle {
+  opacity: 0.55;
+}
+
+.answer-tally {
+  margin: 0.9rem 0 0;
+  font-size: 0.92rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.answer-tally em { color: var(--ink-soft); font-style: italic; }

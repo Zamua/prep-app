@@ -1,0 +1,120 @@
+/* Result page — the post-grade screen. Big verdict mark + headline +
+ * sub-line, the feedback body / model-answer reproduction blocks,
+ * the rubric-details disclosure, and the page-result-{right,wrong}
+ * tinting hook.
+ */
+
+.verdict-block {
+  text-align: left;
+  padding: 1.5rem 0 1.4rem;
+  margin-bottom: 0.5rem;
+  /* Hairline separator formalizes the break that the eyebrows below imply. */
+  border-bottom: 1px solid var(--hairline);
+}
+
+.verdict-mark {
+  display: inline-block;
+  /* font-size doubles as the icon size — see .icon { width: 1em } above.
+     Slightly smaller cap than the old serif glyph because Phosphor Light
+     reads heavier at the same nominal size. */
+  font-size: clamp(3rem, 12vw, 4.6rem);
+  line-height: 1;
+  margin-bottom: 0.2rem;
+  animation: stamp 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+.verdict-mark .icon {
+  vertical-align: middle;
+}
+.verdict-mark-right { color: var(--right); }
+.verdict-mark-wrong { color: var(--wrong); }
+
+.verdict-headline {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 144, "SOFT" 60;
+  font-weight: 380;
+  font-size: clamp(2.2rem, 7vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  margin: 0;
+  color: var(--ink);
+}
+
+.verdict-sub {
+  margin: 0.3rem 0 0;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 1rem;
+}
+.verdict-sub strong { color: var(--ink); font-style: normal; }
+
+.result-section { margin-top: 1.4rem; }
+
+.feedback-body {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--ink);
+  border-left: 2px solid var(--rule);
+  padding-left: 1rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.reproduction {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  background: var(--warm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  /* pre-wrap preserves newlines but only breaks at whitespace; long unbroken
+     tokens (`func New(n int) *BBQ {`) won't break without overflow-wrap.
+     overflow-wrap: anywhere lets the browser break inside long tokens so
+     code stays inside the cream block on narrow viewports. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--ink);
+  overflow-x: auto;
+}
+@media (max-width: 480px) {
+  .reproduction { font-size: 0.8rem; padding: 0.85rem 0.95rem; }
+}
+.reproduction-model { background: color-mix(in srgb, var(--right) 6%, var(--warm)); }
+.reproduction-rubric { background: var(--bg); margin-top: 0.6rem; font-size: 0.8rem; }
+
+.rubric-details {
+  margin-top: 0.6rem;
+}
+.rubric-details summary {
+  cursor: pointer;
+  font-style: italic;
+  color: var(--ink-mute);
+  padding: 0.7rem 0;
+  user-select: none;
+  list-style: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.rubric-details summary::-webkit-details-marker { display: none; }
+.rubric-details summary::before {
+  /* CSS-drawn chevron — rotates 90° when [open]. Looks intentional, not
+     like a literal punctuation char. */
+  content: "";
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-right: 1.5px solid var(--ink-mute);
+  border-bottom: 1.5px solid var(--ink-mute);
+  transform: rotate(-45deg);
+  margin-right: 0.55rem;
+  transition: transform 200ms ease;
+  vertical-align: 0.1em;
+}
+.rubric-details[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.page-result-right .verdict-block { color: var(--right); }
+.page-result-wrong .verdict-block { color: var(--wrong); }

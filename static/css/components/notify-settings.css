@@ -1,0 +1,232 @@
+/* Notification settings (/settings/notifications) — the per-user
+ * push-notification preferences page.
+ *
+ * Includes:
+ *   - the explainer block (lede + bullet list),
+ *   - the radio-card .notify-mode picker (digest / when-ready / off),
+ *   - the .notify-extras card with quiet-hours + max-per-session
+ *     inputs,
+ *   - the toggle-check checkbox primitive ("set quiet hours"),
+ *   - the .time-input wrapper for the AM/PM picker,
+ *   - the subscribe toggle button + status box.
+ */
+
+.notify-explainer {
+  margin: 1rem 0 1.4rem;
+}
+.notify-explainer ul {
+  margin: 0.5rem 0 0.4rem 0;
+  padding-left: 1.2rem;
+  color: var(--ink-soft);
+  font-size: 0.96rem;
+  line-height: 1.6;
+}
+.notify-explainer li { margin-bottom: 0.4rem; }
+.notify-explainer .muted {
+  margin: 0.4rem 0 0;
+  font-style: italic;
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+}
+
+.notify-form {
+  display: grid;
+  gap: 1.2rem;
+  margin-top: 1rem;
+}
+
+.notify-mode {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.notify-mode-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--paper);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+.notify-mode-option:hover { border-color: var(--rule); background: var(--warm); }
+.notify-mode-option input { position: absolute; opacity: 0; pointer-events: none; }
+
+.notify-mode-marker {
+  width: 1.2rem; height: 1.2rem;
+  border-radius: 50%;
+  border: 2px solid var(--ink-mute);
+  display: inline-block;
+  margin-top: 0.18rem;
+  position: relative;
+  flex-shrink: 0;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+.notify-mode-option.is-selected .notify-mode-marker {
+  border-color: var(--quill);
+  background: var(--quill);
+  box-shadow: inset 0 0 0 4px var(--paper);
+}
+.notify-mode-option.is-selected {
+  border-color: var(--quill);
+  background: color-mix(in srgb, var(--quill) 7%, var(--paper));
+}
+
+.notify-mode-text {
+  display: grid;
+  gap: 0.2rem;
+}
+.notify-mode-label {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 36, "SOFT" 30;
+  font-weight: 480;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+.notify-mode-help {
+  font-size: 0.9rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+
+.notify-extras {
+  padding: 0.7rem 1rem;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: var(--warm);
+}
+.notify-extras .number-input { margin: 0.2rem 0; }
+.notify-extras .section-eyebrow { margin: 0 0 0.6rem; }
+.quiet-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+/* `display: flex` above overrides the user-agent `[hidden]` rule. Restore
+ * it so the toggle-check / hidden attribute actually hides the row. */
+.quiet-row[hidden] { display: none; }
+
+/* Time picker — `<input type="time">` styled to fit alongside number inputs.
+ * Browsers render their own AM/PM widget on iOS/Android; we just give the
+ * wrapper consistent typography and the input the same border treatment. */
+.time-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 1rem;
+}
+.time-input .time-label { font-style: italic; }
+.time-input input[type="time"] {
+  font: inherit;
+  font-style: normal;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1.05rem;
+  padding: 0.45rem 0.65rem;
+  min-height: 2.7rem;
+  background: var(--paper);
+  border: 1px solid var(--ink-mute);
+  border-radius: 8px;
+  color: var(--ink);
+}
+.time-input input[type="time"]:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+
+/* Inline checkbox toggle ("Set quiet hours"). Custom box rendered via
+ * ::before on the label-text <span>; native checkbox is visually
+ * hidden but stays focusable so keyboard + screen-reader work
+ * unchanged. Visual language matches the .notify-mode-option radio
+ * markers — same border + filled-quill checked state. */
+.toggle-check {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 0.96rem;
+  margin: 0.4rem 0 0.8rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.toggle-check input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.toggle-check > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.toggle-check > span::before {
+  content: "";
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--ink-mute);
+  background: var(--bg);
+  flex-shrink: 0;
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+.toggle-check:hover > span::before {
+  border-color: var(--ink-soft);
+}
+.toggle-check input[type="checkbox"]:checked + span::before {
+  border-color: var(--quill);
+  background: var(--quill);
+  /* Inner negative-space "tick" via inset shadow — same trick the
+     .notify-mode-option radio marker uses to draw a filled center
+     against the page background. */
+  box-shadow: inset 0 0 0 3px var(--paper);
+}
+.toggle-check input[type="checkbox"]:focus-visible + span::before {
+  outline: 2px solid var(--quill);
+  outline-offset: 2px;
+}
+
+.quiet-tz {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.82rem;
+}
+.quiet-tz em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.9em;
+  color: var(--ink-soft);
+}
+.quiet-help {
+  margin: 0.5rem 0 0;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+}
+
+/* Single subscribe-toggle button: shows "Enable" or "Disable" label
+ * based on data-state, set by JS from the local PushManager state. */
+#toggle-btn .toggle-label-on,
+#toggle-btn .toggle-label-off { display: none; }
+#toggle-btn[data-state="off"] .toggle-label-off { display: inline; }
+#toggle-btn[data-state="on"]  .toggle-label-on  { display: inline; }
+
+.notify-status {
+  margin: 0.4rem 0 0.2rem;
+  padding: 0.7rem 0.95rem;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+.notify-status[data-kind="ok"]    { color: var(--right); border-color: color-mix(in srgb, var(--right) 30%, var(--hairline)); }
+.notify-status[data-kind="error"] { color: var(--wrong); border-color: color-mix(in srgb, var(--wrong) 30%, var(--hairline)); }

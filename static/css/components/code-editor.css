@@ -1,0 +1,159 @@
+/* Code-editor action buttons (vim toggle, copy, reset skeleton) +
+ * the CodeMirror mount chrome + .lang-tag chip. Used inside the
+ * .freetext-actions row on code-type cards.
+ */
+
+/* Pill-shaped buttons that read clearly as interactive — replaces the
+ * underlined text-link style which was hard to see and easy to mis-tap.
+ * Sized larger than .freetext-reset so they're a real touch target. */
+.code-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  min-height: 2.3rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 14, "SOFT" 50;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+.code-action:hover,
+.code-action:focus-visible {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+  outline: none;
+}
+.code-action .icon {
+  width: 0.95em;
+  height: 0.95em;
+}
+.code-action-label {
+  font-style: italic;
+}
+.code-action-state {
+  /* Pill-within-a-pill that surfaces ON/OFF state for the vim toggle. */
+  display: inline-block;
+  padding: 0.05em 0.45em;
+  border-radius: 999px;
+  background: var(--warm);
+  border: 1px solid var(--hairline);
+  color: var(--ink-mute);
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* Active state for the vim toggle. aria-pressed is the source of truth. */
+.code-action[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--quill) 10%, var(--paper));
+  border-color: var(--quill);
+  color: var(--quill);
+}
+.code-action[aria-pressed="true"] .code-action-state {
+  background: var(--quill);
+  border-color: var(--quill);
+  color: var(--paper);
+}
+/* Mode picker — pill-styled <select> with the editor's current input
+ * mode. Inherits the .code-action pill chrome; the native select
+ * widget renders the OS picker on tap (12-key wheel on iOS). */
+.code-action-mode {
+  cursor: pointer;
+  padding-right: 0.55rem;  /* tighter to fit chevron */
+}
+.code-action-mode select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-style: italic;
+  font-size: 0.88rem;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 1rem 0 0;
+  /* Custom chevron via background-image — keeps the pill clean. */
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(-45deg, transparent 50%, currentColor 50%);
+  background-position: calc(100% - 0.5rem) 0.55em,
+                       calc(100% - 0.25rem) 0.55em;
+  background-size: 0.25rem 0.25rem;
+  background-repeat: no-repeat;
+}
+.code-action-mode select:focus { outline: none; }
+/* Async-button success / error tints for the copy button. Reuses
+ * .btn-async-state machinery from the discuss popover. */
+.code-action.is-success {
+  background: color-mix(in srgb, var(--right) 12%, var(--paper));
+  border-color: color-mix(in srgb, var(--right) 50%, var(--rule));
+  color: var(--right);
+}
+.code-action.is-error {
+  background: color-mix(in srgb, var(--wrong) 10%, var(--paper));
+  border-color: color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  color: var(--wrong);
+}
+.lang-tag {
+  display: inline-block;
+  font-style: normal;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  margin-left: 0.45rem;
+  padding: 0.1em 0.5em;
+  border: 1px solid color-mix(in srgb, var(--quill) 40%, var(--hairline));
+  border-radius: 999px;
+  color: var(--quill);
+  background: color-mix(in srgb, var(--quill) 8%, transparent);
+  font-family: var(--mono);
+  text-transform: lowercase;
+  vertical-align: 0.05em;
+}
+
+/* CodeMirror mount — styled so it lives inside the .study-card's cream
+ * palette without fighting CM's default white background. */
+.cm-mount {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+.cm-mount .cm-editor {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 18rem;
+}
+.cm-mount .cm-editor.cm-focused {
+  outline: 2px solid var(--quill);
+  outline-offset: -2px;
+}
+.cm-mount .cm-gutters {
+  background: var(--warm);
+  border-right: 1px solid var(--hairline);
+  color: var(--ink-mute);
+}
+.cm-mount .cm-content { padding: 0.5rem 0; }
+.cm-mount .cm-line { padding: 0 0.6rem; }
+.cm-mount .cm-activeLine { background: color-mix(in srgb, var(--quill) 6%, transparent); }
+.cm-mount .cm-activeLineGutter { background: color-mix(in srgb, var(--quill) 12%, var(--warm)); }
+.cm-mount .cm-cursor { border-left-color: var(--ink); }
+.cm-mount .cm-selectionBackground,
+.cm-mount .cm-content ::selection { background: color-mix(in srgb, var(--quill) 25%, transparent); }
+/* Vim mode bar */
+.cm-mount .cm-vim-panel {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  padding: 0.3rem 0.6rem;
+}

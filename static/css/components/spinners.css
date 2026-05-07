@@ -1,0 +1,65 @@
+/* Spinners + shared animation primitives.
+ *
+ * .grading-panel + .grading-spinner: the post-submit "reading your
+ * answer…" surface that polls until the grading workflow completes.
+ *
+ * Animation keyframes that components elsewhere reference:
+ *   rise   — slide-up + fade-in for cards, panels, popovers
+ *   stamp  — punch-in for the result page's verdict mark
+ *   pulse  — breathing animation for the status-dot
+ *   blink  — staggered dot animation for the grading spinner
+ *
+ * The reduced-motion guard cancels animations + transitions globally
+ * for users who prefer it.
+ */
+
+.grading-panel {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem 1.5rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+  animation: rise 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.grading-spinner {
+  /* Inline next to "Reading your answer" so the dots feel like an ellipsis
+     animation, not orphaned punctuation. */
+  display: inline-flex;
+  gap: 0.2em;
+  margin-left: 0.25em;
+  vertical-align: 0.18em;
+}
+.grading-spinner .dot {
+  width: 0.32em; height: 0.32em;
+  border-radius: 50%;
+  background: var(--quill);
+  opacity: 0.5;
+  animation: blink 1.4s ease-in-out infinite;
+}
+.grading-spinner .d2 { animation-delay: 0.18s; }
+.grading-spinner .d3 { animation-delay: 0.36s; }
+
+@keyframes blink {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+  40%           { transform: scale(1.1);  opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes stamp {
+  from { opacity: 0; transform: scale(0.6) rotate(-6deg); }
+  60%  { opacity: 1; transform: scale(1.04) rotate(-2deg); }
+  to   { opacity: 1; transform: scale(1) rotate(-2deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

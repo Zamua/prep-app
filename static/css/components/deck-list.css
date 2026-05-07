@@ -1,0 +1,273 @@
+/* Deck list (index page) — list of paper cards, each card is a link
+ * to its deck page. Includes:
+ *   - the SRS deck card with numeral / name / "due / total" stats,
+ *   - the trivia deck card (mini mastery bar replaces stats row),
+ *   - the dashed "new deck" tile that opens the kind picker,
+ *   - the small action pills under the section eyebrow ("new deck",
+ *     "edit with claude") and the reorganize-page deck preview.
+ */
+
+.deck-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.deck-card {
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: transform 250ms cubic-bezier(.2,.7,.2,1), box-shadow 250ms ease, border-color 250ms ease;
+  animation: rise 600ms cubic-bezier(.2,.7,.2,1) both;
+  animation-delay: calc(var(--i, 1) * 60ms);
+}
+.deck-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--rule);
+}
+.deck-card.empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+
+.deck-link {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.25rem 1.4rem;
+  text-decoration: none;
+  color: inherit;
+  min-height: 5.5rem;
+}
+
+.deck-numeral {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 2rem;
+  color: var(--quill);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.deck-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.deck-name {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 60, "SOFT" 30;
+  font-weight: 480;
+  font-size: 1.6rem;
+  line-height: 1;
+  text-transform: lowercase;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+.deck-stats {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  color: var(--ink-mute);
+  font-size: 0.92rem;
+}
+
+.stat-due, .stat-total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+}
+
+.stat-value {
+  font-feature-settings: "onum" on, "kern" on;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.stat-due.is-active .stat-value { color: var(--quill); }
+
+.stat-label { font-style: italic; }
+.stat-divider { color: var(--rule); }
+
+/* Trivia deck card on the index page —
+ * For trivia decks the "due / total" stat row is meaningless (no SRS
+ * schedule). Replace with a mini mastery bar: thin colored track
+ * showing mastered (green) + wrong (red) + the unanswered remainder
+ * as the unfilled tail, plus a "N / M mastered" caption. Mirrors the
+ * deck-page mastery bar but compact enough for a list row. */
+.deck-mastery-mini {
+  display: flex; flex-direction: column;
+  gap: 0.4rem;
+  color: var(--ink-mute);
+  font-size: 0.92rem;
+}
+.deck-mastery-mini-bar {
+  position: relative;
+  display: block;
+  height: 6px;
+  background: color-mix(in srgb, var(--ink-soft) 16%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.deck-mastery-mini-fill {
+  position: absolute; top: 0; bottom: 0;
+  display: block;
+}
+.deck-mastery-mini-fill-right {
+  left: 0;
+  background: color-mix(in srgb, var(--right) 80%, transparent);
+}
+.deck-mastery-mini-fill-wrong {
+  /* `left:` set inline so it stacks immediately after the right fill. */
+  background: color-mix(in srgb, var(--wrong) 75%, transparent);
+}
+.deck-mastery-mini-label {
+  display: inline-flex; align-items: baseline; gap: 0.2em;
+}
+.deck-mastery-mini-label .stat-value {
+  font-weight: 600; color: var(--ink-soft);
+  font-feature-settings: "onum" on, "kern" on;
+}
+.deck-mastery-mini-label .stat-label {
+  font-style: italic;
+}
+
+.deck-arrow {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  color: var(--ink-mute);
+  transition: transform 250ms cubic-bezier(.2,.7,.2,1), color 250ms ease;
+}
+.deck-card:hover .deck-arrow {
+  transform: translateX(4px);
+  color: var(--quill);
+}
+
+/* Deck-list action pills — small inline buttons under the section
+ * eyebrow ("new deck", "edit with claude"). Replaced the earlier
+ * approach where these were full-width dashed tiles in the deck
+ * list itself; pills are smaller, lighter, and don't compete with
+ * the actual decks for attention. */
+.deck-actions {
+  display: flex; flex-wrap: wrap; gap: 0.45rem;
+  margin: 0 0 1rem;
+}
+.deck-action-pill {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.88rem; color: var(--ink);
+  border: 1px dashed var(--rule); border-radius: 999px;
+  text-decoration: none;
+  background: transparent;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.deck-action-pill:hover {
+  border-style: solid;
+  border-color: var(--quill);
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  color: var(--quill);
+}
+.deck-action-pill .deck-action-icon {
+  font-weight: 300;
+  color: var(--ink-mute);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.deck-action-pill:hover .deck-action-icon { color: var(--quill); }
+.deck-action-pill .icon {
+  width: 0.95rem; height: 0.95rem;
+  color: var(--quill);
+  flex-shrink: 0;
+}
+
+/* Reorganize-page deck preview — collapsed by default, lists each
+ * deck's name + type tag + card count + (trivia) topic. Summary
+ * styled like .section-eyebrow with a CSS-drawn chevron that
+ * rotates 90° on [open]. */
+.reorganize-deck-list { margin-top: 1.4rem; }
+.reorganize-deck-list > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-style: italic;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 0;
+  padding: 0.4rem 0;
+  min-height: 36px;
+}
+.reorganize-deck-list > summary::-webkit-details-marker { display: none; }
+.reorganize-deck-list > summary::marker { content: ""; }
+.reorganize-deck-list > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-right: 1.5px solid var(--ink-mute);
+  border-bottom: 1.5px solid var(--ink-mute);
+  transform: rotate(-45deg);
+  transition: transform 200ms ease;
+  flex-shrink: 0;
+  vertical-align: 0.1em;
+}
+.reorganize-deck-list[open] > summary::before {
+  transform: rotate(45deg);
+}
+.reorganize-deck-list > summary .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+.reorganize-deck-list-label { white-space: nowrap; }
+.reorganize-deck-list-items {
+  list-style: none; padding: 0; margin: 0.5rem 0 0;
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+.reorganize-deck-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--hairline); border-radius: 8px;
+  font-size: 0.92rem;
+}
+.reorganize-deck-name { font-weight: 500; }
+.reorganize-deck-meta { color: var(--ink-mute); font-size: 0.85rem; }
+.reorganize-deck-topic {
+  flex-basis: 100%;
+  color: var(--ink-soft); font-style: italic; font-size: 0.85rem;
+}
+
+/* New-deck tile — dashed-border variant of .deck-card that opens
+ * the kind-picker (SRS / trivia) on tap. */
+.deck-card-new {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+}
+.deck-card-new:hover {
+  background: var(--paper);
+  border-color: var(--quill);
+  border-style: solid;
+}
+.deck-numeral-plus {
+  font-style: normal !important;
+  color: var(--ink-mute);
+  font-weight: 300;
+}
+.deck-card-new:hover .deck-numeral-plus { color: var(--quill); }

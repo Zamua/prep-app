@@ -1,0 +1,91 @@
+/* Recent-sessions block — appears above the deck list on the index
+ * page. Each session is a paper card with deck name, state, divider,
+ * arrow, plus an absolutely-positioned discard button on the left.
+ */
+
+.recent-sessions {
+  margin-bottom: 2rem;
+}
+.recent-sessions .section-eyebrow {
+  margin-top: 0;
+  margin-bottom: 0.7rem;
+}
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.session-card {
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 200ms ease;
+}
+.session-card:hover { border-color: var(--rule); }
+.session-link {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.85rem 1.05rem;
+  text-decoration: none;
+  color: inherit;
+}
+.session-deck {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 36, "SOFT" 30;
+  font-size: 1.1rem;
+  font-weight: 480;
+  color: var(--ink);
+  text-transform: lowercase;
+  letter-spacing: -0.005em;
+}
+.session-meta {
+  grid-column: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.83rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.session-state { color: var(--quill); font-style: italic; }
+.session-divider { color: var(--rule); }
+.session-link .deck-arrow { grid-column: 2; grid-row: 1 / span 2; }
+
+/* Session-card discard button — absolutely positioned on the left
+ * edge, mirrors the resume-arrow's right placement. Borderless icon-
+ * only button; mute by default, terracotta on hover/focus. */
+.session-card { position: relative; }
+.session-discard-form {
+  position: absolute; top: 50%; left: 0.5rem;
+  transform: translateY(-50%);
+  z-index: 2; margin: 0;
+}
+.session-discard {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.2rem; height: 2.2rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--ink-mute);
+  opacity: 0.55;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 160ms ease, opacity 160ms ease;
+}
+.session-discard:hover, .session-discard:focus-visible {
+  color: var(--wrong); opacity: 1; outline: none;
+}
+.session-discard .icon { width: 1em; height: 1em; }
+
+/* Make room on the session-link so the deck name doesn't sit under
+ * the discard. Symmetric with the right-side arrow's gutter. */
+.session-card .session-link { padding-left: 2.6rem; }
+
+/* Section divider between sessions and decks */
+.decks-section { margin-top: 1.6rem; }
+.decks-section .section-eyebrow { margin-bottom: 0.9rem; }

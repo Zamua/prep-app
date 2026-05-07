@@ -1,3 +1,13 @@
-/* Forms. Migrate .form-field / .form-label / .form-hint / .form-error
- * / .freetext + descendants from legacy.css when convenient.
+/* Forms — currently a placeholder. The form-related rules from the
+ * pre-overhaul stylesheet ended up living in their consumer files
+ * instead of being lifted here:
+ *
+ *   - .form-field / .form-label / .form-hint / .form-error live
+ *     in deck-new.css (the page that drives them).
+ *   - .freetext / .freetext-label{,-row} / .freetext-actions /
+ *     .freetext-reset / textarea / .freetext input / .freetext
+ *     select live in study-card.css (the page that drives them).
+ *
+ * Add genuinely cross-cutting form primitives here when one shows
+ * up — but resist lifting rules that only one page uses.
  */

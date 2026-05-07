@@ -1,5 +1,71 @@
-/* Prelude block — eyebrow + display headline + lede paragraph at the
- * top of most pages. Migrate .prelude / .eyebrow / .display / .lede /
- * .ellipsis / .section-eyebrow + .rule from legacy.css when
- * convenient.
+/* Prelude block — the eyebrow + display headline + lede paragraph at
+ * the top of most pages. Plus the related .section-eyebrow (small
+ * caps label + horizontal rule) used to break later sections, and
+ * the .ellipsis utility used for "loading…" text that appears in
+ * generation / grading / transform statuses.
  */
+
+.eyebrow {
+  font-family: var(--serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 14, "SOFT" 100;
+  color: var(--ink-mute);
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.8rem;
+}
+
+.display {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 144, "SOFT" 60;
+  font-weight: 380;
+  font-size: clamp(2.4rem, 8vw, 3.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+  margin: 0 0 1.2rem;
+  color: var(--ink);
+}
+.display em {
+  font-style: italic;
+  color: var(--quill);
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+}
+
+.lede {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: var(--measure-tight);
+  margin: 0 0 2.5rem;
+}
+
+.section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-style: italic;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 2.5rem 0 0.9rem;
+}
+.section-eyebrow .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+.eyebrow-aside {
+  font-style: italic;
+  font-size: 0.75rem;
+  color: var(--ink-mute);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.ellipsis::after {
+  content: "…";
+  display: inline-block;
+  animation: ellipsis-blink 1.4s infinite;
+}
+@keyframes ellipsis-blink { 50% { opacity: 0.3; } }

@@ -1,0 +1,34 @@
+/* Colophon — italic page-foot rule + "prep · made with care" label
+ * at the bottom of most pages. Hidden on focused screens (study,
+ * result, grading, generation, error) so the literary mood doesn't
+ * compete with the working surface.
+ */
+
+.colophon {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-style: italic;
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+.colophon .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+.colophon-text em { color: var(--ink-soft); }
+
+/* Focused screens (study, result, grading, generation) hide the colophon
+ * to keep attention on the card. The literary mood lives on index/deck. */
+.page-study .colophon,
+.page-study-empty .colophon,
+.page-result .colophon,
+.page-result-right .colophon,
+.page-result-wrong .colophon,
+.page-grading .colophon,
+.page-generation .colophon {
+  display: none;
+}

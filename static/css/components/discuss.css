@@ -1,0 +1,125 @@
+/* Discuss popover (handoff to external AI chat) — a <details> sitting
+ * between the result content and the next/back actions. Tap opens a
+ * menu of options (deep-link to ChatGPT/Claude/etc) plus a "copy
+ * prompt" button.
+ */
+
+.discuss {
+  /* Sit just above the next/back actions, separated by air. The element
+     is a <details> so the open/closed state is browser-managed; no JS. */
+  position: relative;
+  margin: 1.6rem 0 0.6rem;
+}
+.discuss summary {
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.discuss summary::-webkit-details-marker { display: none; }
+
+.discuss-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1rem;
+  min-height: 2.6rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-variation-settings: "opsz" 14, "SOFT" 50;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  transition: border-color 200ms ease, color 200ms ease, background 200ms ease;
+}
+.discuss-trigger:hover {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+.discuss[open] .discuss-trigger {
+  background: var(--warm);
+  border-color: var(--quill);
+  color: var(--quill);
+}
+.discuss-caret {
+  font-size: 0.7rem;
+  transition: transform 200ms ease;
+  opacity: 0.7;
+}
+.discuss[open] .discuss-caret { transform: rotate(180deg); }
+
+.discuss-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  min-width: 14rem;
+  max-width: 90vw;
+  padding: 0.4rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  z-index: 25;
+  display: grid;
+  gap: 0.2rem;
+  animation: rise 220ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.discuss-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.7rem 0.95rem;
+  min-height: 2.6rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 0.98rem;
+  transition: background 180ms ease, color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.discuss-option:hover,
+.discuss-option:focus-visible {
+  background: var(--warm);
+  color: var(--quill);
+  outline: none;
+}
+.discuss-option-arrow {
+  color: var(--ink-mute);
+  font-size: 0.95rem;
+}
+.discuss-option:hover .discuss-option-arrow,
+.discuss-option:focus-visible .discuss-option-arrow {
+  color: var(--quill);
+}
+.discuss-copy {
+  /* It's a <button>, not an <a> — strip the default button chrome so it
+     reads as another menu row. Cursor + tap-highlight already inherit. */
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.discuss-copy.discuss-copy-success {
+  background: color-mix(in srgb, var(--right) 10%, transparent);
+  color: var(--right);
+}
+.discuss-copy.discuss-copy-success .discuss-option-arrow {
+  color: var(--right);
+}
+/* Two stacked icons in the copy button; toggle via the success class on
+   the parent so the SVG doesn't get clobbered by JS textContent swaps. */
+.copy-icon-default,
+.copy-icon-success {
+  display: inline-flex;
+  align-items: center;
+}
+.copy-icon-success { display: none; }
+.discuss-copy-success .copy-icon-default { display: none; }
+.discuss-copy-success .copy-icon-success { display: inline-flex; }

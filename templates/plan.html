@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}planning {{ deck_name }} · prep{% endblock %}
 {% block page_class %}plan{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
 
 {# Defensive defaults — Go's json marshaller emits null for nil slices,
@@ -11,9 +12,7 @@
 {% set status = progress.status or 'starting' %}
 {% set round = progress.round or 1 %}
 
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
-</nav>
+{{ nav.back("/deck/" ~ deck_name, deck_name) }}
 
 <section class="prelude">
   <p class="eyebrow">{{ deck_name }} · plan</p>
@@ -123,62 +122,38 @@
   {% endif %}
 </div>
 
-<script>
-(function () {
-  // Same poll-then-reload-on-transition pattern as transform.html. The
-  // server-side rendered status is the source of truth; we just notice
-  // changes and reload to pick them up. iOS PWA suspends setInterval when
-  // the tab is hidden — fire an immediate tick on visibilitychange→visible.
+<script type="module">
+  // Reload on workflow status / round / generated-count change.
+  // Same shape as transform.html, just additional fields to watch.
+  import {startPoller} from "@/modules/poller.js";
+
   const root = "{{ request.scope.get('root_path','') }}";
   const wid = "{{ wid }}";
   const initialStatus = "{{ status }}";
   const initialRound = {{ round }};
   const initialGenerated = {{ generated }};
   const TERMINAL = ['done', 'rejected', 'failed', 'gone'];
-  if (TERMINAL.includes(initialStatus)) return;
 
-  let lastStatus = initialStatus;
-  let lastRound = initialRound;
-  let lastGenerated = initialGenerated;
-  let pollHandle = null;
-
-  const tick = async () => {
-    try {
-      const r = await fetch(root + "/plan/" + wid + "/status?_=" + Date.now(),
-                            { cache: "no-store" });
-      if (!r.ok) return;
-      const j = await r.json();
-      const s = j.status || '';
-      const round = j.round || 1;
-      const generated = j.generated_count || 0;
-      // Reload on any visible state change: status, replan round, or
-      // running generation count.
-      if (s !== lastStatus || round !== lastRound || generated !== lastGenerated) {
-        location.reload();
-        return;
-      }
-    } catch (e) { /* swallow */ }
-  };
-
-  const startPolling = () => {
-    if (pollHandle) return;
-    pollHandle = setInterval(tick, 2000);
-  };
-  const stopPolling = () => {
-    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
-  };
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopPolling();
-    else { tick(); startPolling(); }
-  });
+  if (!TERMINAL.includes(initialStatus)) {
+    let lastStatus = initialStatus;
+    let lastRound = initialRound;
+    let lastGenerated = initialGenerated;
+    startPoller({
+      url: root + "/plan/" + wid + "/status",
+      intervalMs: 2000,
+      onTick: (j) => {
+        const s = j.status || '';
+        const round = j.round || 1;
+        const generated = j.generated_count || 0;
+        if (s !== lastStatus || round !== lastRound || generated !== lastGenerated) {
+          location.reload();
+        }
+      },
+    });
+  }
 
   const refresh = document.getElementById('t-refresh');
   if (refresh) refresh.addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
-
-  startPolling();
-  tick();
-})();
 </script>
 
 {% endblock %}

@@ -1,0 +1,247 @@
+/* Card index — the deck page's list of question cards (.qcard). Each
+ * card shows the prompt, tags (type / topic / suspended), card stats
+ * footer, and inline action pills (improve / suspend / unsuspend).
+ * The qcard is also the trigger for the card-preview dialog (see
+ * card-preview.css).
+ */
+
+.qcards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+  counter-reset: qc;
+}
+
+.qcard {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  box-shadow: var(--shadow-sm);
+  animation: rise 500ms cubic-bezier(.2,.7,.2,1) both;
+  animation-delay: calc(var(--i, 1) * 30ms);
+  transition: border-color 200ms ease;
+  /* Clip oversized children so a long topic chip can't push the
+     card past the viewport. Tag-topic still ellipsises within. */
+  overflow: hidden;
+  min-width: 0;
+}
+.qcard:hover { border-color: var(--rule); }
+.qcard.is-suspended { opacity: 0.5; }
+
+.qcard-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.qcard-num {
+  font-style: italic;
+  color: var(--ink-mute);
+  font-feature-settings: "onum" on;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+
+.qcard-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  font-style: italic;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--ink-soft);
+  background: var(--warm);
+  font-variation-settings: "opsz" 14, "SOFT" 80;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag-type {
+  border-color: var(--ink-soft);
+  background: transparent;
+  flex-shrink: 0;
+}
+.tag-topic {
+  /* Topics can be long ("system design, api-design, distributed
+     systems, napkin math") — single-line ellipsis on the deck index
+     to keep cards compact. The full text wraps in the card-preview
+     dialog override below. */
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+/* Inside the card-preview dialog the topic chip should wrap so the
+   full text is readable. We only override the inherited `.tag` rules
+   that prevent wrapping; everything else (border, color, padding)
+   stays the same. */
+.card-preview-body .tag-topic {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+.tag-suspended {
+  color: var(--wrong);
+  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  flex-shrink: 0;
+}
+.tag-code  { color: var(--quill); border-color: color-mix(in srgb, var(--quill) 50%, transparent); }
+.tag-mcq   { color: var(--right); border-color: color-mix(in srgb, var(--right) 50%, transparent); }
+.tag-multi { color: var(--right); border-color: color-mix(in srgb, var(--right) 50%, transparent); }
+.tag-short { color: var(--ink-soft); }
+
+/* Deck-type tag — used in the deck header + the index list. Subtle
+   for SRS (the default flow), more prominent quill tint for trivia
+   so the notification-driven decks stand out. */
+.tag-decktype {
+  background: transparent;
+  flex-shrink: 0;
+}
+.tag-decktype-srs    { color: var(--ink-mute); border-color: var(--hairline); }
+.tag-decktype-trivia { color: var(--quill); border-color: color-mix(in srgb, var(--quill) 50%, transparent); }
+
+.qcard-prompt {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.qcard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-top: 1px dashed var(--hairline);
+  padding-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+
+.qcard-stats {
+  /* Allow stats to wrap inline if very long; never grow past 70% so the
+     suspend button stays anchored on the right. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.qcard-stats-divider { color: var(--rule); margin: 0 0.15rem; }
+
+.qcard-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;  /* visible separator between adjacent action pills */
+}
+
+/* Pill-shaped action buttons in the qcard footer (improve / suspend /
+   unsuspend). Replaces the old underlined `.link-btn` styling, which
+   used negative margins to grow the touch target — those margins
+   silently overlapped between adjacent buttons, making it impossible
+   to tap reliably between them. These have honest borders, no
+   negative margins, and a real ~36px touch height. */
+.qcard-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  min-height: 2.2rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  list-style: none;  /* covers the <summary> case */
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+}
+.qcard-action::-webkit-details-marker { display: none; }
+.qcard-action:hover,
+.qcard-action:focus-visible {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+  outline: none;
+}
+.qcard-action .icon {
+  width: 0.95em;
+  height: 0.95em;
+}
+.qcard-action-label {
+  font-style: italic;
+}
+.qcard-action-form {
+  /* The form is just a wrapper around the button — no own layout. */
+  display: inline-flex;
+  margin: 0;
+}
+
+/* Both suspend AND unsuspend forms are always rendered; this rule
+   shows the one matching the qcard's current state. JS swaps
+   .is-suspended after a successful fetch so the toggle is inline,
+   no full-page reload. */
+.qcard:not(.is-suspended) .qcard-action-form--unsuspend { display: none; }
+.qcard.is-suspended .qcard-action-form--suspend { display: none; }
+/* Same pattern for the "suspended" chip in the qcard header. */
+.qcard:not(.is-suspended) .tag-suspended { display: none; }
+
+/* Phone widths: drop the action-button labels so the qcard-stats row
+   gets its width back. aria-labels still announce the action to screen
+   readers. The .icon stays the same size. Buttons become squarer pills
+   with consistent ~36px touch targets. */
+@media (max-width: 540px) {
+  .qcard-actions { gap: 0.35rem; }
+  .qcard-action {
+    padding: 0.5rem 0.65rem;
+    min-width: 2.2rem;
+    justify-content: center;
+  }
+  .qcard-action-label { display: none; }
+  .qcard-action .icon { width: 1.05em; height: 1.05em; }
+}
+
+.link-btn {
+  /* Touch-target target: 44px on iOS. Visual size kept compact via padding,
+     because the negative-margin trick on .qcard-foot pulls the bottom back. */
+  background: none;
+  border: none;
+  padding: 0.7rem 0.8rem;
+  margin: -0.7rem -0.8rem;
+  min-height: 44px;
+  font: inherit;
+  font-style: italic;
+  color: var(--ink-mute);
+  cursor: pointer;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+.link-btn:hover { color: var(--wrong); text-decoration-color: var(--wrong); }
+.link-btn:active { color: var(--wrong); }

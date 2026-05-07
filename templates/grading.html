@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}grading · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}grading{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+{% call nav.back_with_aside("/deck/" ~ deck_name, deck_name) %}
   <span class="card-id">workflow {{ wid[-10:] }}</span>
-</nav>
+{% endcall %}
 
 <section class="grading-panel" id="grade-panel"
          data-status-url="{{ request.scope.get('root_path','') }}/grading/{{ wid }}/status"
@@ -39,8 +39,9 @@
 </section>
 
 {% if not failed %}
-<script>
-(function () {
+<script type="module">
+  import {startPoller} from "@/modules/poller.js";
+
   const panel = document.getElementById('grade-panel');
   const statusUrl = panel.dataset.statusUrl;
   const selfUrl = panel.dataset.selfUrl;
@@ -49,27 +50,23 @@
 
   const TERMINAL = new Set(['done', 'failed', 'COMPLETED', 'FAILED', 'CANCELED', 'TERMINATED']);
 
-  async function poll () {
-    try {
-      const r = await fetch(statusUrl, { cache: 'no-store' });
-      const j = await r.json();
-      const p = j.progress;
-      const d = j.desc;
-      const status = (p && p.status) || (d && d.status) || 'unknown';
+  startPoller({
+    url: statusUrl,
+    intervalMs: 1500,
+    stopWhen: (j) => {
+      const status = (j.progress && j.progress.status) || (j.desc && j.desc.status) || 'unknown';
+      return TERMINAL.has(status);
+    },
+    onTick: (j) => {
+      const status = (j.progress && j.progress.status) || (j.desc && j.desc.status) || 'unknown';
       $statusText.textContent = status;
       $dot.className = 'status-dot status-' + status.toLowerCase();
       if (TERMINAL.has(status)) {
-        // Reload self — server-side render now returns result.html.
+        // Server-side render now returns result.html — reload self.
         window.location.href = selfUrl;
-        return;
       }
-    } catch (e) {
-      console.error('poll error', e);
-    }
-    setTimeout(poll, 1500);
-  }
-  poll();
-})();
+    },
+  });
 </script>
 {% endif %}
 {% endblock %}

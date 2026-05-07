@@ -7,11 +7,10 @@
 {% extends "base.html" %}
 {% block title %}generating · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}trivia-generating transform{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
 
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
-</nav>
+{{ nav.back("/deck/" ~ deck_name, deck_name) }}
 
 <section class="prelude">
   <p class="eyebrow">{{ deck_name }} · generating</p>
@@ -35,105 +34,91 @@
   </div>
 </div>
 
-<script>
-  (function () {
-    var root = document.getElementById('trivia-gen-panel');
-    if (!root) return;
-    var wid = root.dataset.wid;
-    var deck = root.dataset.deckName;
-    var rootPath = "{{ request.scope.get('root_path','') }}";
+<script type="module">
+  import {startPoller} from "@/modules/poller.js";
 
-    var headline = document.getElementById('display-headline');
-    var statusRow = document.getElementById('trivia-gen-status');
-    var label = document.getElementById('trivia-gen-label');
-    var counts = document.getElementById('trivia-gen-counts');
-    var bar = document.getElementById('trivia-gen-progress');
-    var err = document.getElementById('trivia-gen-error');
-    var doneRow = document.getElementById('trivia-gen-done-actions');
-    var refreshLink = document.getElementById('trivia-gen-refresh');
+  const panel = document.getElementById('trivia-gen-panel');
+  const wid = panel.dataset.wid;
+  const deck = panel.dataset.deckName;
+  const rootPath = "{{ request.scope.get('root_path','') }}";
 
-    // Status → user-facing label + display headline. The headline
-    // mirrors the transform.html style (italic verb + animated dots
-    // / final-state title) so the two workflow pages read alike.
-    var STATE = {
-      starting:   {label: 'starting…',         h: '<em>Generating</em><span class="ellipsis"></span>'},
-      generating: {label: 'asking claude',     h: '<em>Generating</em><span class="ellipsis"></span>'},
-      applying:   {label: 'saving cards',      h: '<em>Saving</em><span class="ellipsis"></span>'},
-      done:       {label: 'done',              h: 'Done.'},
-      failed:     {label: 'generation failed', h: 'Failed.'},
-    };
+  const headline = document.getElementById('display-headline');
+  const statusRow = document.getElementById('trivia-gen-status');
+  const label = document.getElementById('trivia-gen-label');
+  const counts = document.getElementById('trivia-gen-counts');
+  const bar = document.getElementById('trivia-gen-progress');
+  const err = document.getElementById('trivia-gen-error');
+  const doneRow = document.getElementById('trivia-gen-done-actions');
+  const refreshLink = document.getElementById('trivia-gen-refresh');
 
-    refreshLink.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      tick();
-    });
+  // Status → user-facing label + display headline. The headline
+  // mirrors transform.html (italic verb + animated dots / final-state
+  // title) so the two workflow pages read alike.
+  const STATE = {
+    starting:   {label: 'starting…',         h: '<em>Generating</em><span class="ellipsis"></span>'},
+    generating: {label: 'asking claude',     h: '<em>Generating</em><span class="ellipsis"></span>'},
+    applying:   {label: 'saving cards',      h: '<em>Saving</em><span class="ellipsis"></span>'},
+    done:       {label: 'done',              h: 'Done.'},
+    failed:     {label: 'generation failed', h: 'Failed.'},
+  };
 
-    function setHeadline(html) { headline.innerHTML = html; }
+  const TERMINAL = new Set(['done', 'failed']);
 
-    function tick() {
-      fetch(rootPath + '/trivia/gen/' + wid + '/status', {credentials: 'same-origin', cache: 'no-store'})
-        .then(function (r) { return r.json(); })
-        .then(function (p) {
-          var status = p.status || 'starting';
-          var s = STATE[status] || {label: status, h: '<em>' + status + '</em>'};
-          label.textContent = s.label;
-          setHeadline(s.h);
-          statusRow.dataset.status = status;
+  startPoller({
+    url: rootPath + '/trivia/gen/' + wid + '/status',
+    intervalMs: 1500,
+    stopWhen: (p) => TERMINAL.has(p.status || ''),
+    onTick: (p) => {
+      const status = p.status || 'starting';
+      const s = STATE[status] || {label: status, h: '<em>' + status + '</em>'};
+      label.textContent = s.label;
+      headline.innerHTML = s.h;
+      statusRow.dataset.status = status;
 
-          if (p.error) {
-            err.textContent = p.error;
-            err.hidden = false;
-          } else {
-            err.hidden = true;
-          }
+      if (p.error) { err.textContent = p.error; err.hidden = false; }
+      else { err.hidden = true; }
 
-          var total = p.total || 0;
-          var generated = p.generated_count || 0;
-          var inserted = p.inserted || 0;
+      const total = p.total || 0;
+      const generated = p.generated_count || 0;
+      const inserted = p.inserted || 0;
 
-          if (status === 'generating') {
-            // Single claude call in flight. No per-card progress
-            // available until the call returns; show indeterminate.
-            doneRow.hidden = true;
-            bar.removeAttribute('value');
-            counts.textContent = total ? ('asking for ' + total) : '';
-          } else if (status === 'applying') {
-            doneRow.hidden = true;
-            if (total > 0) {
-              bar.value = Math.round(100 * (inserted || generated) / total);
-              bar.max = 100;
-              counts.textContent = (inserted || generated) + ' / ' + total;
-            } else {
-              bar.removeAttribute('value');
-              counts.textContent = '';
-            }
-          } else if (status === 'done') {
-            bar.value = 100; bar.max = 100;
-            counts.textContent = inserted + ' inserted';
-            doneRow.hidden = false;
-            // Brief beat so the final state is visible, then redirect.
-            setTimeout(function () {
-              window.location.href = rootPath + '/deck/' + (p.deck_name || deck);
-            }, 700);
-            return;
-          } else if (status === 'failed') {
-            doneRow.hidden = false;
-            bar.removeAttribute('value');
-            return;  // stop polling
-          } else {
-            // starting / unknown
-            doneRow.hidden = true;
-            bar.removeAttribute('value');
-            counts.textContent = '';
-          }
-          setTimeout(tick, 1500);
-        })
-        .catch(function () {
-          setTimeout(tick, 3000);
-        });
-    }
-    tick();
-  })();
+      if (status === 'generating') {
+        doneRow.hidden = true;
+        bar.removeAttribute('value');
+        counts.textContent = total ? ('asking for ' + total) : '';
+      } else if (status === 'applying') {
+        doneRow.hidden = true;
+        if (total > 0) {
+          bar.value = Math.round(100 * (inserted || generated) / total);
+          bar.max = 100;
+          counts.textContent = (inserted || generated) + ' / ' + total;
+        } else {
+          bar.removeAttribute('value');
+          counts.textContent = '';
+        }
+      } else if (status === 'done') {
+        bar.value = 100; bar.max = 100;
+        counts.textContent = inserted + ' inserted';
+        doneRow.hidden = false;
+        // Brief beat so the final state is visible, then redirect.
+        setTimeout(() => {
+          window.location.href = rootPath + '/deck/' + (p.deck_name || deck);
+        }, 700);
+      } else if (status === 'failed') {
+        doneRow.hidden = false;
+        bar.removeAttribute('value');
+      } else {
+        doneRow.hidden = true;
+        bar.removeAttribute('value');
+        counts.textContent = '';
+      }
+    },
+  });
+
+  refreshLink.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    location.reload();
+  });
 </script>
 
 {% endblock %}

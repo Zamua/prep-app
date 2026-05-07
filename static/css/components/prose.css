@@ -2,7 +2,68 @@
  * blockquotes. Used by SRS study prompts, trivia card prompts, and
  * anywhere the markdown filter renders user-/agent-authored content.
  *
- * Migrate .prose / .prose code / .prose pre / .prose pre code /
- * .prose strong / .prose em / .prose ul / .prose ol / .prose li /
- * .prose h1..h4 / .prose blockquote from legacy.css when convenient.
+ * Also includes the .prose-answer blocks rendered on the result page
+ * for short-answer questions (user's submission + the model answer).
  */
+
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--quill) 10%, var(--warm));
+  border: 1px solid color-mix(in srgb, var(--quill) 25%, var(--hairline));
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+}
+.prose pre {
+  background: var(--warm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.7em 0;
+}
+.prose pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.prose strong { font-variation-settings: "opsz" 14, "wght" 600; }
+.prose em { font-style: italic; }
+.prose ul, .prose ol { padding-left: 1.4rem; margin: 0.5em 0; }
+.prose li { margin: 0.25em 0; }
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 36, "SOFT" 40;
+  margin: 0.6em 0 0.3em;
+}
+.prose blockquote {
+  border-left: 2px solid var(--rule);
+  padding-left: 0.9rem;
+  color: var(--ink-soft);
+  margin: 0.5em 0;
+}
+
+/* Short-answer prose blocks — rendered on the result page for
+ * short-answer questions (the user's reproduction + the model
+ * answer). Same italic-quote styling as a blockquote, with a
+ * right-tinted variant for the model answer. */
+.prose-answer {
+  margin: 0;
+  padding: 1rem 1.2rem;
+  border-left: 3px solid var(--rule);
+  background: var(--paper);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-style: italic;
+  font-size: 1.02rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+}
+.prose-answer-model {
+  border-left-color: var(--right);
+  background: color-mix(in srgb, var(--right) 5%, var(--paper));
+  font-style: normal;
+  color: var(--ink);
+}

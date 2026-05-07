@@ -167,31 +167,34 @@ Single entry stylesheet (`static/css/index.css`) declares native
 
 ```
 static/css/
-├── index.css        — entry: @layer order + @import
-├── reset.css        — minimal modern reset
-├── tokens.css       — :root design tokens (light + dark vars)
-├── base.css         — html / body / a / .icon / .icon-inline
-├── components/
-│   ├── buttons.css  — placeholder; migrate .btn family in
-│   ├── forms.css    — placeholder
-│   ├── prelude.css  — placeholder
-│   └── prose.css    — placeholder
-└── legacy.css       — pre-overhaul style.css, wrapped @layer legacy.
-                       Migrate components into components/<name>.css
-                       incrementally, deleting the matching block
-                       from legacy.css as you go.
+├── index.css      — entry: @layer order + @import every other file
+├── reset.css      — minimal modern reset
+├── tokens.css     — :root design tokens (light + dark vars)
+├── base.css       — html / body / a / .icon / .icon-inline
+├── layout.css     — page chrome (.paper centered column)
+└── components/    — one file per UI component (~28 files); kebab-case
+                     names match the surface (buttons, deck-list,
+                     study-card, transform, trivia-card, …). mobile.css
+                     is imported LAST so its narrow-viewport overrides
+                     win. spinners.css holds shared keyframes
+                     (rise/stamp/pulse/blink) referenced by other
+                     component files.
 ```
 
 **Layer order**: `reset, tokens, base, layout, components,
-utilities, legacy, overrides`. `@layer components` beats `@layer
-legacy`, so a half-finished migration (rules duplicated in both)
-resolves to the new file. Always delete from legacy when migrating
-to keep the source of truth single.
+utilities, overrides`. The pre-overhaul `legacy.css` is gone — every
+rule moved into a component file under `components/`.
 
-**Migration rule**: when a component's surface area becomes painful
-to grep in `legacy.css`, lift its rules into `components/<name>.css`
-in one commit. Don't duplicate. Layer ordering covers the gap during
-a single-PR move.
+**Adding a new component**: create `components/<name>.css`, add an
+`@import "./components/<name>.css" layer(components)` to `index.css`.
+For a narrow-viewport tightening, append rules to `mobile.css`
+instead of inlining a `@media` block in the component file —
+`mobile.css` is imported last and wins by source order.
+
+**Splitting a fat component file**: when a single file (e.g.
+deck-page.css at 622 LOC) covers multiple distinct surfaces, split
+when adding a sibling becomes easier than grep-locating in one. No
+hard cap — readability wins.
 
 **Inline `style="..."` attrs**: smell EXCEPT for CSS custom-prop
 data-binding (e.g. `style="--progress: {{ pct }}%"`). Anything else

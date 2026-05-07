@@ -1,3 +1,177 @@
-/* Buttons. Migrate .btn / .btn-primary / .btn-quiet / .btn-ghost /
- * .btn-async + states from legacy.css when convenient.
+/* Buttons — .btn, .btn-primary, .btn-quiet, .btn-ghost, .btn-async
+ * (with state machine), .btn.is-loading, .btn-disabled, .btn-aside.
+ * Pill chrome (pill-shaped border, italic-friendly serif), with
+ * subtle lift on :hover.
  */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1.3rem;
+  min-height: 2.9rem;
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-weight: 480;
+  font-size: 1rem;
+  letter-spacing: 0.005em;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 200ms ease, background 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btn:active { transform: translateY(0); }
+
+.btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.btn-primary:hover {
+  background: var(--quill);
+  border-color: var(--quill);
+  color: var(--paper);
+}
+
+.btn-quiet {
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--ink-soft);
+}
+.btn-quiet:hover {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+
+.btn-ghost {
+  background: var(--paper);
+  border-color: var(--ink-soft);
+  color: var(--ink-soft);
+}
+.btn-ghost:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+/* Stateful async button. Each `.btn-async-state` is one of
+ * {default, pending, success, error}; exactly one is visible at a
+ * time. Toggled via is-pending / is-success / is-error on the
+ * parent .btn-async. The button's own height stays constant because
+ * each state is the same row pattern.
+ */
+.btn-async {
+  position: relative;
+  transition: background 250ms ease, color 250ms ease, border-color 250ms ease;
+}
+.btn-async-state {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-async > .btn-async-default {
+  display: inline-flex;
+}
+.btn-async.is-pending > .btn-async-default,
+.btn-async.is-success > .btn-async-default,
+.btn-async.is-error   > .btn-async-default {
+  display: none;
+}
+.btn-async.is-pending > .btn-async-pending { display: inline-flex; }
+.btn-async.is-success > .btn-async-success { display: inline-flex; }
+.btn-async.is-error   > .btn-async-error   { display: inline-flex; }
+
+/* Pending state — disabled-feel background, spinning icon. */
+.btn-async.is-pending {
+  pointer-events: none;
+  background: var(--warm);
+  border-color: var(--rule);
+  color: var(--ink-mute);
+}
+.btn-async-spin {
+  animation: btn-async-spin 700ms linear infinite;
+  /* circle-notch is asymmetric — origin needs to be the icon's center. */
+  transform-origin: 50% 50%;
+}
+@keyframes btn-async-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Success state — soft moss flash, fades back via the parent transition. */
+.btn-async.is-success {
+  background: color-mix(in srgb, var(--right) 12%, var(--paper));
+  border-color: color-mix(in srgb, var(--right) 50%, var(--rule));
+  color: var(--right);
+}
+.btn-async.is-success .btn-async-success {
+  animation: btn-async-pop 320ms cubic-bezier(.2,.7,.2,1) both;
+}
+@keyframes btn-async-pop {
+  from { opacity: 0; transform: translateY(2px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);     }
+}
+
+.btn-async.is-error {
+  background: color-mix(in srgb, var(--wrong) 10%, var(--paper));
+  border-color: color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  color: var(--wrong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-async-spin { animation: none; }
+  .btn-async.is-success .btn-async-success { animation: none; }
+}
+
+/* Generic in-flight state for plain .btn — adds a spinning circle
+ * before the (possibly relabelled) text. Lighter than .btn-async,
+ * used wherever a single submit button needs to convey "claude is
+ * thinking" without the full state-machine. The is-loading class
+ * is added/removed by submit-pending.js (or per-page handlers).
+ */
+.btn.is-loading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+.btn.is-loading::before {
+  content: "";
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-async-spin 700ms linear infinite;
+  flex-shrink: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-loading::before { animation: none; }
+}
+
+.btn-disabled,
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--ink-mute);
+  font-style: italic;
+  /* Override the dark-on-cream styling of btn-primary if a primary
+     button is disabled — needs explicit reset since :disabled has
+     lower specificity. */
+  box-shadow: none;
+  transform: none;
+}
+
+.btn-aside {
+  font-style: italic;
+  font-size: 0.85rem;
+  color: inherit;
+  opacity: 0.75;
+  margin-left: 0.4rem;
+}

@@ -1,11 +1,10 @@
 {% extends "base.html" %}
 {% block title %}editor settings · prep{% endblock %}
 {% block page_class %}settings settings-editor{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
 
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
-</nav>
+{{ nav.back("/", "back") }}
 
 <section class="prelude">
   <p class="eyebrow">Editor preferences</p>

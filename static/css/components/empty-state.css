@@ -1,0 +1,35 @@
+/* Empty state — centered "nothing here yet" block used on the index
+ * page when the user has no decks, on study screens with no due
+ * cards, etc. Big serif headline + a muted sub-line.
+ *
+ * The bottom-of-file .empty-state override (smaller, italic,
+ * top-margined) is the variant used inside the notification log when
+ * there are no entries — same class, page-context tightens the
+ * layout.
+ */
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+}
+.empty-headline {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 144, "SOFT" 80;
+  font-size: clamp(2rem, 6vw, 2.6rem);
+  margin: 0;
+  color: var(--ink);
+}
+.empty-headline em {
+  font-style: italic;
+  color: var(--quill);
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+}
+.empty-sub {
+  margin: 0;
+  color: var(--ink-mute);
+  max-width: 22rem;
+}

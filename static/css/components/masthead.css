@@ -1,0 +1,50 @@
+/* Masthead — top-of-page brand row. Brand mark (boxed letterform) +
+ * brand word, baseline-aligned with the user-indicator chip on the
+ * right. Hairline rule below separates it from page content.
+ */
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 2rem;
+}
+
+.masthead-brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--serif);
+}
+
+.brand-mark {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+  font-weight: 600;
+  font-size: 1.6rem;
+  line-height: 1;
+  display: inline-block;
+  width: 1.6rem; height: 1.6rem;
+  text-align: center;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  padding: 0 0.2em;
+  font-style: italic;
+  color: var(--paper);
+  background: var(--ink);
+  transform: translateY(0.05em);
+}
+
+.brand-word {
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.brand-word em {
+  color: var(--ink-mute);
+  font-style: italic;
+}

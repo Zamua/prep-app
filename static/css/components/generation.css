@@ -1,0 +1,114 @@
+/* Generation page — the long-running "claude is making cards"
+ * surface. Big numbered headline, status row (animated dot + topic),
+ * progress bar, hint line. Used by both SRS plan-then-generate and
+ * trivia generation flows.
+ *
+ * The trivia generation polling page is built on top of the
+ * .transform-panel chrome (shared with the deck/card transform
+ * polling page); these rules just style the trivia-specific bits —
+ * progress bar, inline counts span. The status row + refresh link
+ * inherit from .transform-status (see transform.css).
+ */
+
+.generation-panel {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem 1.5rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+  animation: rise 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+.gen-headline {
+  font-size: clamp(2.6rem, 9vw, 4rem);
+  margin: 0.2rem 0 0.5rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.gen-headline .of {
+  color: var(--ink-mute);
+  font-size: 0.5em;
+  font-style: italic;
+}
+.gen-headline em {
+  font-style: italic;
+  color: var(--quill);
+}
+.gen-status {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-style: italic;
+  color: var(--ink-mute);
+  margin: 0 0 1.2rem;
+  font-size: 1rem;
+  flex-wrap: wrap;
+}
+.status-dot {
+  display: inline-block;
+  width: 0.7rem; height: 0.7rem;
+  border-radius: 50%;
+  background: var(--ink-mute);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.status-dot.status-priming    { background: var(--quill); }
+.status-dot.status-generating { background: var(--quill); }
+.status-dot.status-done,
+.status-dot.status-completed  { background: var(--right); animation: none; }
+.status-dot.status-cancelling,
+.status-dot.status-cancelled,
+.status-dot.status-canceled,
+.status-dot.status-failed,
+.status-dot.status-terminated { background: var(--wrong); animation: none; }
+.status-topic { color: var(--ink-soft); font-style: italic; }
+
+.gen-bar {
+  height: 6px;
+  background: var(--warm);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 1.2rem;
+}
+.gen-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--quill), var(--right));
+  transition: width 600ms cubic-bezier(.2,.7,.2,1);
+}
+
+.gen-hint {
+  margin-top: 1.5rem;
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+}
+
+/* Trivia generation polling page —
+ * Drives the plan-then-expand UI: status row, progress bar, plan
+ * review list, replan/accept/reject controls. */
+.trivia-gen-status-counts {
+  margin-left: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--ink-mute);
+  font-feature-settings: "lnum" on;
+}
+
+.trivia-gen-progress {
+  width: 100%;
+  height: 0.6rem;
+  margin-top: 0.5rem;
+  border-radius: 999px;
+  border: none;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+}
+.trivia-gen-progress::-webkit-progress-bar {
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  border-radius: 999px;
+}
+.trivia-gen-progress::-webkit-progress-value {
+  background: var(--quill);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.trivia-gen-progress::-moz-progress-bar { background: var(--quill); }

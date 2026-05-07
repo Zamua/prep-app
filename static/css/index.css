@@ -5,30 +5,50 @@
  *   reset      — minimal element resets
  *   tokens     — :root custom props (colors, type, spacing)
  *   base       — html / body / heading / link / focus defaults
- *   layout     — page chrome (masthead, folio, paper container)
+ *   layout     — page chrome (.paper centered column)
  *   components — one file per component (buttons, forms, prelude, …)
  *   utilities  — single-purpose helpers (.visually-hidden, …)
- *   legacy     — the pre-overhaul style.css contents, wrapped so its
- *                rules lose to anything migrated into a component
- *                file. Migrate component-by-component out of legacy
- *                until it's empty, then delete it.
  *   overrides  — page-scoped exceptions; should stay near-empty
  *
  * Layer order: reset < tokens < base < layout < components <
- * utilities < legacy < overrides. Anything in `components` beats
- * anything in `legacy`, so an in-progress migration never breaks
- * the page during the move.
+ * utilities < overrides. The `legacy` layer that previously held
+ * the pre-overhaul stylesheet is gone — every rule has been
+ * migrated into a component file under ./components/.
  */
 
-@layer reset, tokens, base, layout, components, utilities, legacy, overrides;
+@layer reset, tokens, base, layout, components, utilities, overrides;
 
 @import "./reset.css" layer(reset);
 @import "./tokens.css" layer(tokens);
 @import "./base.css" layer(base);
+@import "./layout.css" layer(layout);
 
 @import "./components/buttons.css" layer(components);
 @import "./components/forms.css" layer(components);
 @import "./components/prelude.css" layer(components);
 @import "./components/prose.css" layer(components);
-
-@import "./legacy.css" layer(legacy);
+@import "./components/masthead.css" layer(components);
+@import "./components/user-indicator.css" layer(components);
+@import "./components/recent-sessions.css" layer(components);
+@import "./components/stale-session.css" layer(components);
+@import "./components/deck-list.css" layer(components);
+@import "./components/deck-page.css" layer(components);
+@import "./components/card-index.css" layer(components);
+@import "./components/study-card.css" layer(components);
+@import "./components/code-editor.css" layer(components);
+@import "./components/result.css" layer(components);
+@import "./components/discuss.css" layer(components);
+@import "./components/mcq.css" layer(components);
+@import "./components/empty-state.css" layer(components);
+@import "./components/colophon.css" layer(components);
+@import "./components/generation.css" layer(components);
+@import "./components/spinners.css" layer(components);
+@import "./components/card-preview.css" layer(components);
+@import "./components/transform.css" layer(components);
+@import "./components/deck-new.css" layer(components);
+@import "./components/error.css" layer(components);
+@import "./components/notify-settings.css" layer(components);
+@import "./components/trivia-card.css" layer(components);
+@import "./components/session-summary.css" layer(components);
+@import "./components/notify-log.css" layer(components);
+@import "./components/mobile.css" layer(components);

@@ -1,0 +1,20 @@
+/* Stale-session banner — surfaces "your answer was graded against
+ * an out-of-date version of this card" mid-card. Wrong-tinted alert
+ * box. The display: flex would otherwise override the UA's [hidden]
+ * rule, so we restore it explicitly.
+ */
+
+.stale-banner {
+  background: color-mix(in srgb, var(--wrong) 8%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  margin: 0 0 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+/* `display: flex` above overrides the browser default for [hidden]. Restore it. */
+.stale-banner[hidden] { display: none; }
+.stale-banner p { margin: 0; font-style: italic; color: var(--wrong); }

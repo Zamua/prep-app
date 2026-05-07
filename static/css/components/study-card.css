@@ -1,0 +1,297 @@
+/* Study card — the SRS card-rendering surface. The card paper itself,
+ * the prompt, the choices grid (mcq / multi), the freetext answer
+ * area (incl. textareas, selects, the trivia-answer single-line
+ * variant), and the bottom action row.
+ */
+
+.study-nav {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  font-size: 0.92rem;
+}
+.card-id {
+  font-style: italic;
+  color: var(--ink-mute);
+  font-feature-settings: "onum" on;
+}
+
+.study-card {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  animation: rise 500ms cubic-bezier(.2,.7,.2,1) both;
+}
+@media (min-width: 640px) {
+  .study-card { padding: 2rem 2.4rem; }
+}
+
+.study-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.1rem;
+}
+
+.study-prompt {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 36, "SOFT" 50;
+  font-size: clamp(1.18rem, 2.4vw, 1.32rem);
+  line-height: 1.5;
+  color: var(--ink);
+  border-left: 3px solid var(--quill);
+  padding: 0.2rem 0 0.2rem 1rem;
+  margin: 0 0 1.5rem;
+}
+/* When the prompt is rendered as markdown (via the markdown filter) the
+   default <p> margins compound with the prompt's own margin. Reset them so
+   single-paragraph prompts read like a single block. */
+.study-prompt.prose > p { margin: 0 0 0.7em; }
+.study-prompt.prose > p:last-child { margin-bottom: 0; }
+
+.study-form { display: flex; flex-direction: column; gap: 1.1rem; }
+
+/* Choices for MCQ / multi */
+.choices {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--paper);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 3rem;
+}
+.choice:hover { border-color: var(--rule); background: var(--warm); }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+
+.choice-marker {
+  /* Bumped from 1.05rem to 1.4rem so the radio/check is visible at a glance,
+     not just a decoration on the row. Border weight also up so the
+     unselected state contrasts against cream. */
+  width: 1.4rem; height: 1.4rem;
+  border-radius: 50%;
+  border: 2px solid var(--ink-mute);
+  display: inline-block;
+  flex-shrink: 0;
+  margin-top: 0.18rem;
+  position: relative;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+.choices-multi .choice-marker { border-radius: 5px; }
+
+.choice input:checked ~ .choice-marker {
+  border-color: var(--quill);
+  background: var(--quill);
+  box-shadow: inset 0 0 0 4px var(--paper);
+}
+.choices-multi .choice input:checked ~ .choice-marker {
+  box-shadow: inset 0 0 0 0 var(--paper);
+}
+.choice-marker-check {
+  /* Phosphor check icon inside the multi-select marker. Hidden by default,
+     revealed when the input is checked. Sized to fit the marker bezel. */
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--paper);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.choices-multi .choice input:checked ~ .choice-marker .choice-marker-check {
+  opacity: 1;
+}
+.choice:has(input:checked) {
+  border-color: var(--quill);
+  background: color-mix(in srgb, var(--quill) 7%, var(--paper));
+}
+.choice-text {
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* Free-text answer */
+.freetext {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.freetext-label {
+  /* Eyebrow style — matches THE QUESTION / FEEDBACK / MODEL ANSWER labels.
+     The placeholder inside the textarea stays italic muted so the two don't
+     read as one continuous label. */
+  font-style: italic;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.freetext-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.freetext-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.freetext-reset {
+  background: none;
+  border: none;
+  padding: 0.4rem 0.5rem;
+  margin: -0.4rem -0.5rem;
+  font: inherit;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  cursor: pointer;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+.freetext-reset:hover { color: var(--quill); text-decoration-color: var(--quill); }
+textarea {
+  width: 100%;
+  min-height: 7rem;
+  padding: 0.95rem 1rem;
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+textarea.code-area {
+  font-family: var(--mono);
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+textarea:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+
+/* Match the textarea chrome on inputs + selects sitting inside a
+   .freetext label so the question-new + question-edit forms read
+   consistently — they used to render with raw browser chrome. */
+.freetext input[type="text"],
+.freetext select {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.freetext select {
+  /* Phosphor caret-down inlined as the dropdown arrow so the chrome
+     doesn't fall back to the browser's native arrow on the right. */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%23676059'><path d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 0.95rem;
+  padding-right: 2.4rem;
+}
+.freetext input[type="text"]:focus-visible,
+.freetext select:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+/* Answer-regex field: kept the inline `style="font-family: var(--mono)"`
+   on question_new + question_edit; reflect that here so it's not stuck
+   at the inherited serif. */
+.freetext input[type="text"][name="answer_regex"] {
+  font-family: var(--mono);
+  font-size: 0.93rem;
+}
+
+/* Trivia free-response input. Single-line analogue of `textarea` —
+   shares the same chrome (border, padding, serif type, focus ring)
+   so the trivia card visually matches the SRS short-answer card.
+   Lives outside the generic `textarea` rule because trivia answers
+   are 1-5 words; a 7rem-tall box would feel oversized. */
+.trivia-answer-input {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.trivia-answer-input::placeholder {
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.trivia-answer-input:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+
+.study-actions {
+  display: flex;
+  /* Explicit row-gap so the wrapped state on mobile gets adequate vertical
+     separation. With both children forced to 100% width on mobile (see
+     media query below), the buttons become two stacked pills; without a
+     visible row-gap they read as a single fused element. 1.1rem reads as
+     intentional spacing on a 430px viewport. */
+  column-gap: 0.7rem;
+  row-gap: 1.1rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+/* Direct children — handle both <a class="btn"> and <form><button class="btn">
+   patterns. The generation/grading panels use forms for cancel/back actions,
+   the study/result pages use anchors and buttons. */
+.study-actions > .btn,
+.study-actions > form { flex: 1; min-width: 10rem; }
+.study-actions > form { display: flex; }
+.study-actions > form > .btn { flex: 1; min-width: 0; }
+
+.next-actions {
+  margin-top: 2rem;
+}
