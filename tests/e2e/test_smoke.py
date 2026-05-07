@@ -138,6 +138,24 @@ def test_claude_regrade_round_trip(http: httpx.Client, test_deck: dict):
     ), "regrade did not surface — route may have failed silently"
 
 
+def test_metrics_exposes_threadpool_gauges(http: httpx.Client):
+    """Prometheus scrape target. Must serve plain-text exposition with
+    the prep-specific metrics. Catches a regression that drops the
+    /metrics route or breaks the registry serialization."""
+    r = http.get("/metrics")
+    assert r.status_code == 200, r.status_code
+    assert r.headers.get("content-type", "").startswith("text/plain"), r.headers
+    body = r.text
+    # Prep-specific signals — order doesn't matter, presence does.
+    assert "prep_anyio_threadpool_capacity" in body
+    assert "prep_anyio_threadpool_borrowed" in body
+    # Histograms surface their _bucket / _count / _sum families. The
+    # claude_grade histogram won't have observations from this test,
+    # but the metric registration alone should produce a TYPE line.
+    assert "prep_claude_grade_duration_seconds" in body
+    assert "prep_http_request_duration_seconds" in body
+
+
 def test_pin_toggle_floats_deck_to_top(http: httpx.Client, test_deck: dict):
     """Toggle pin via POST + assert the index renders the deck under
     the "Pinned" section."""

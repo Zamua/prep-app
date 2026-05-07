@@ -466,6 +466,52 @@ reverse proxy required.
 
 ---
 
+## Observability
+
+prep emits Prometheus metrics + structured logs to the LGTM-stack
+running under `~/Dropbox/workspace/macmini/observability/`.
+
+**Metrics** (`prep/web/metrics.py`, exposed at `GET /metrics`):
+- `prep_anyio_threadpool_borrowed` / `_capacity` — gauge. Sampled
+  just-in-time on every scrape. **The leak/exhaustion canary** for
+  the failure mode that took prod down on 2026-05-07; sustained
+  borrowed≈capacity = sync handlers piling up on the threadpool.
+- `prep_claude_grade_duration_seconds{verdict}` — histogram. Labels:
+  `right`, `wrong`, `unknown`, `fallback_unavailable`, `fallback_bad_json`.
+  Buckets up to 30s so the 12s timeout tail is visible.
+- `prep_http_request_duration_seconds{method, route, status}` —
+  histogram. Route label is the FastAPI template form (`/deck/{name}`)
+  not the raw URL — keeps cardinality bounded.
+
+The `/metrics` endpoint sits on the same port as the FastAPI surface
+(no separate process — single uvicorn = single registry). The HTTP
+middleware in `prep.web.metrics` records request latency before any
+router runs; `/metrics` itself is excluded so scrape calls don't
+pollute the histogram. `claude_grade` calls `observe_claude_grade()`
+directly from `prep.trivia.service`.
+
+**Logs** flow to Loki automatically — Promtail in the obs-stack
+auto-discovers every docker container's stdout/stderr. Query in
+Grafana → Explore with `{compose_project="prod"}` (or `stag`).
+
+The `prep` logger tree is configured in `prep/app.py` with a
+StreamHandler at INFO (override via `PREP_LOG_LEVEL`); use
+`logger = logging.getLogger(__name__)` in any module — info-level
+messages reach stdout (and thus Loki) by default.
+
+**Prometheus scrape config** lives in
+`~/Dropbox/workspace/macmini/observability/prometheus/prometheus.yml`
+under the `prep-prod` and `prep-staging` jobs (`host.docker.internal:8081`
+and `:8082` respectively, `metrics_path: /metrics`). After editing,
+`make reload-prom` from the obs/ dir picks up changes without a restart.
+
+**Traces are NOT emitted yet.** Tempo/Jaeger isn't part of the
+obs-stack today; logs + metrics carry the load. If a future debug
+session needs request-level traces, OTel + Tempo is the canonical
+upgrade — hold off until there's a concrete need.
+
+---
+
 ## Gotchas worth knowing
 
 **`tailscale serve --set-path=/prep` strips the prefix when

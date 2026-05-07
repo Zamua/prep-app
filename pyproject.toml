@@ -27,6 +27,11 @@ dependencies = [
     # depends on it); promoted to runtime when async grading landed. Don't
     # drop without rewiring grading or prep.app boot will crash.
     "httpx==0.27.2",
+    # prometheus_client — exposes /metrics for scraping by the obs-stack
+    # Prometheus running on the same box. Emitted: anyio threadpool
+    # gauge, claude_grade histogram, http request duration.
+    # See prep/web/metrics.py for the registry + middleware.
+    "prometheus-client==0.21.0",
 ]
 
 [tool.uv]

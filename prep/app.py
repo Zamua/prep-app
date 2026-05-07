@@ -137,6 +137,21 @@ templates.env.globals["icon"] = icons.icon
 app = FastAPI(root_path=ROOT_PATH)
 
 
+# Prometheus metrics. Middleware records per-request latency; the
+# /metrics route exposes the registry to the obs-stack scraper.
+# Registered BEFORE the routers so every routed request flows through
+# the timing middleware. See prep/web/metrics.py for the four signals.
+from prep.web import metrics as _metrics  # noqa: E402
+
+app.middleware("http")(_metrics.http_metrics_middleware)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics_endpoint():
+    """Prometheus scrape target. Plain-text exposition format."""
+    return await _metrics.metrics_response()
+
+
 # Versioned ES-module URL space. The importmap in base.html resolves
 # `@/` to `/static/js/v<build>/`, so the URL of every imported module
 # changes on every deploy — the canonical "hashed asset" caching

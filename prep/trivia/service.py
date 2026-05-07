@@ -414,6 +414,9 @@ async def claude_grade(
             elapsed,
             e,
         )
+        from prep.web.metrics import observe_claude_grade
+
+        observe_claude_grade(verdict="fallback_unavailable", duration_s=elapsed)
         return {
             "correct": grade_answer(expected=expected, given=given),
             "feedback": "(graded by string similarity — claude was unreachable)",
@@ -433,6 +436,9 @@ async def claude_grade(
                     proposed, expected_literal=expected, prior_given=given
                 )
         logger.info("claude_grade ok in %.1fs (verdict=%s)", elapsed, verdict)
+        from prep.web.metrics import observe_claude_grade
+
+        observe_claude_grade(verdict=verdict or "unknown", duration_s=elapsed)
         return {"correct": correct, "feedback": feedback, "regex_update": regex_update}
     except (ValueError, json.JSONDecodeError, KeyError) as e:
         logger.warning(
@@ -440,6 +446,9 @@ async def claude_grade(
             elapsed,
             e,
         )
+        from prep.web.metrics import observe_claude_grade
+
+        observe_claude_grade(verdict="fallback_bad_json", duration_s=elapsed)
         return {
             "correct": grade_answer(expected=expected, given=given),
             "feedback": "(graded by string similarity — claude returned malformed JSON)",
