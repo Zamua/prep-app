@@ -244,6 +244,7 @@ in a `<script type="module">` block.
 | `<dialog data-dialog>` | `dialog.js`          | backdrop click closes                 |
 | `<form data-submit-pending>` | `submit-pending.js` | disable + label-swap on submit |
 | `[data-poll-url]`      | `poller.js`          | poll URL on interval, dispatch handler|
+| `[data-details-body]`  | `details-toggle.js`  | mark a sibling popover body so the outside-click handler doesn't close the related details when the body is tapped (use when a `<details>` body must live OUTSIDE the `<details>` element for layout reasons — e.g. trivia card explore body) |
 
 **Per-page inline `<script>` blocks**: still allowed when the page
 has unique logic that doesn't generalize (e.g. card-preview filling,

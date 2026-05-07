@@ -66,15 +66,19 @@
   </div>
 
 
-  {# Native ES module bootstrap. Importmap aliases @/ → /static/js/
-     so app.js can `import "@/modules/poller.js"` cleanly. Always-on
-     behaviors (details toggle, dialog backdrop close, submit-pending)
-     register on load; per-feature modules (poller) lazy-load when a
-     data-* hook on the page asks for them. #}
+  {# Native ES module bootstrap. Importmap aliases @/ → /static/js/v<build>/
+     — the version segment gives every deploy a fresh URL space (handled
+     server-side; see prep/app.py:_versioned_js). This is the canonical
+     way to cache-bust modules referenced through an importmap: there is
+     no spec-compliant way to put a ?v= query on resolved imports, so the
+     version goes in the URL prefix and immutable-caches forever.
+     Always-on behaviors (details toggle, dialog backdrop close,
+     submit-pending) register on load; per-feature modules (poller)
+     lazy-load when a data-* hook on the page asks for them. #}
   <script type="importmap">
   {
     "imports": {
-      "@/": "{{ request.scope.get('root_path','') }}/static/js/"
+      "@/": "{{ request.scope.get('root_path','') }}/static/js/v{{ static_css_mtime|default(0) }}/"
     }
   }
   </script>

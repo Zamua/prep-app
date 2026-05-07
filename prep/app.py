@@ -122,6 +122,41 @@ templates.env.globals["icon"] = icons.icon
 # ---- App + mounts ---------------------------------------------------------
 
 app = FastAPI(root_path=ROOT_PATH)
+
+
+# Versioned ES-module URL space. The importmap in base.html resolves
+# `@/` to `/static/js/v<build>/`, so the URL of every imported module
+# changes on every deploy — the canonical "hashed asset" caching
+# pattern, just with the version applied to the URL prefix instead of
+# per-file. This is what bundlers (webpack/rollup/vite) do via
+# content-hashed filenames; without a bundler we keep the on-disk
+# layout flat and rewrite the URL here. The version segment is
+# discarded — it's only there to produce a fresh URL.
+#
+# Why: ES modules under an importmap have no spec-compliant way to
+# carry a `?v=` cache-buster on resolved imports, so without the
+# versioned URL space, browsers (notably iOS PWA standalone) hold
+# the prior deploy's bytes indefinitely. Versioned URLs + immutable
+# cache headers are the standard solution: every deploy gets a new
+# URL, every URL caches forever.
+@app.get("/static/js/v{build}/{path:path}")
+def _versioned_js(build: str, path: str):
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+
+    target = (BASE_DIR / "static" / "js" / path).resolve()
+    js_root = (BASE_DIR / "static" / "js").resolve()
+    if js_root not in target.parents and target != js_root:
+        raise HTTPException(status_code=404)
+    if not target.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(
+        target,
+        media_type="application/javascript",
+        headers={"cache-control": "public, max-age=31536000, immutable"},
+    )
+
+
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 _errors_mod.register(app)

@@ -168,10 +168,10 @@
             {% endif %}
           </div>
           {% if q.explanation %}
-            <p class="trivia-disc-body trivia-disc-body-explain">{{ q.explanation }}</p>
+            <p class="trivia-disc-body trivia-disc-body-explain" data-details-body>{{ q.explanation }}</p>
           {% endif %}
           {% if handoff_urls %}
-            <div class="trivia-disc-body trivia-disc-body-explore trivia-explore-options">
+            <div class="trivia-disc-body trivia-disc-body-explore trivia-explore-options" data-details-body>
               {% for key in ['claude', 'chatgpt'] %}
                 {% if key in handoff_urls %}
                   <a class="trivia-explore-option"

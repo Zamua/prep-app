@@ -49,9 +49,18 @@ export function init() {
   );
 
   // Outside-pointerup → close open details. Skip when the target is
-  // a summary (the toggler above already handled it).
+  // a summary (the toggler above already handled it). Skip when the
+  // target is inside a [data-details-body] element — those are body
+  // panels rendered as a sibling of the <details> for layout reasons
+  // (see trivia-card.html: explore body lives as a .trivia-discs
+  // child, not a <details> child, so the row of pills can grid
+  // independently of the body's full-width panel). Without this
+  // exemption, tapping a link in the body would close the details
+  // mid-tap and on iOS the synthesized click would never reach the
+  // <a>'s navigation.
   document.addEventListener("pointerup", (e) => {
     if (e.target.closest && e.target.closest("summary")) return;
+    if (e.target.closest && e.target.closest("[data-details-body]")) return;
     document.querySelectorAll("details[open]").forEach((d) => {
       if (!d.contains(e.target)) d.removeAttribute("open");
     });
