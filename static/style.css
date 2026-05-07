@@ -4064,45 +4064,6 @@ body:has(dialog[open]) {
 }
 .trivia-gen-progress::-moz-progress-bar { background: var(--quill); }
 
-.trivia-plan-review {
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--rule);
-}
-
-.trivia-plan-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.trivia-plan-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.6rem 0.8rem;
-  border-radius: 8px;
-  border: 1px solid var(--rule);
-  background: color-mix(in srgb, var(--paper) 50%, transparent);
-}
-
-.trivia-plan-item-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.trivia-plan-item-brief {
-  font-size: 0.88rem;
-  color: var(--ink-mute);
-  line-height: 1.4;
-}
-
-.trivia-feedback-form { margin: 0; }
-
 /* --- Notification log + masthead unseen badge --- */
 
 .notif-unseen-badge {

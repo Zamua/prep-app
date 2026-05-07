@@ -21,11 +21,8 @@ const (
 	SignalPlanReject   = "planReject"
 	QueryPlanProgress  = "getPlanProgress"
 
-	// Signals + queries on TriviaGenerateWorkflow.
-	SignalTriviaFeedback = "triviaFeedback"
-	SignalTriviaAccept   = "triviaAccept"
-	SignalTriviaReject   = "triviaReject"
-	QueryTriviaProgress  = "getTriviaProgress"
+	// Query handler on TriviaGenerateWorkflow.
+	QueryTriviaProgress = "getTriviaProgress"
 )
 
 // ---- TriviaGenerate (notification-driven decks) -------------------------
@@ -46,29 +43,24 @@ type TriviaGenerateInput struct {
 // TriviaGenerateProgress is the live state queried by the polling
 // page. Status walks through:
 //
-//	planning → awaiting_feedback → (replanning → awaiting_feedback)*
-//	  → generating → applying → done
+//	generating → applying → done
 //
-// Or terminates early at `rejected` (user dismissed plan) or `failed`
-// (claude error / no cards expanded). Plan + Round let the UI render
-// the proposed list and number of replans; GeneratedCount/Total drive
-// the per-card progress bar in the expansion phase.
+// Or terminates early at `failed` (claude error / no cards generated).
+// GeneratedCount/Total drive the polling page's progress bar.
 type TriviaGenerateProgress struct {
-	Status         string           `json:"status"`
-	Plan           []TriviaPlanItem `json:"plan,omitempty"`
-	Round          int              `json:"round"`
-	Total          int              `json:"total"`
-	GeneratedCount int              `json:"generated_count"`
-	Inserted       int              `json:"inserted"`
-	SkippedDups    int              `json:"skipped_dups"`
-	SkippedInvalid int              `json:"skipped_invalid"`
-	StartedAt      string           `json:"started_at"`
-	FinishedAt     string           `json:"finished_at,omitempty"`
-	Error          string           `json:"error,omitempty"`
+	Status         string `json:"status"`
+	Total          int    `json:"total"`
+	GeneratedCount int    `json:"generated_count"`
+	Inserted       int    `json:"inserted"`
+	SkippedDups    int    `json:"skipped_dups"`
+	SkippedInvalid int    `json:"skipped_invalid"`
+	StartedAt      string `json:"started_at"`
+	FinishedAt     string `json:"finished_at,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 type TriviaGenerateResult struct {
-	Status         string `json:"status"` // "completed" | "rejected"
+	Status         string `json:"status"` // "completed" | "failed"
 	Inserted       int    `json:"inserted"`
 	SkippedDups    int    `json:"skipped_dups"`
 	SkippedInvalid int    `json:"skipped_invalid"`
@@ -83,53 +75,15 @@ type TriviaPair struct {
 	E string `json:"e,omitempty"`
 }
 
-// TriviaPlanItem is one entry in claude's planning outline: a short
-// title + 1-2 sentence brief describing what the card will ask. The
-// expansion phase turns each item into a full TriviaPair (q+a+e).
-type TriviaPlanItem struct {
-	Title string `json:"title"`
-	Brief string `json:"brief"`
-}
-
-// GenerateTriviaInput is the legacy single-shot batch input. Kept
-// for backwards-compat with workflows still in flight; new code
-// uses PlanTriviaBatchInput + GenerateTriviaCardFromBriefInput.
+// GenerateTriviaInput is the single-shot batch input. The workflow
+// asks the agent for N q/a/e pairs in one call; the activity dedupes
+// against the deck's existing prompts before returning.
 type GenerateTriviaInput struct {
 	UserID    string   `json:"user_id"`
 	DeckID    int      `json:"deck_id"`
 	Topic     string   `json:"topic"`
 	Existing  []string `json:"existing"`
 	BatchSize int      `json:"batch_size"`
-}
-
-// PlanTriviaBatchInput drives the planning activity. The first round
-// has no PriorPlan/Feedback; subsequent rounds carry both so claude
-// can incorporate the user's redirect.
-type PlanTriviaBatchInput struct {
-	UserID    string           `json:"user_id"`
-	DeckID    int              `json:"deck_id"`
-	Topic     string           `json:"topic"`
-	BatchSize int              `json:"batch_size"`
-	Existing  []string         `json:"existing"`
-	PriorPlan []TriviaPlanItem `json:"prior_plan,omitempty"`
-	Feedback  string           `json:"feedback,omitempty"`
-}
-
-// GenerateTriviaCardFromBriefInput drives one parallel expansion. The
-// idempotency key lets the activity skip claude on retry if a previous
-// attempt already produced the pair (kept on disk by question_id +
-// queue_position once InsertTriviaCard runs, but the expansion step
-// itself doesn't write — so the key is workflow-id + index, matching
-// the pattern PlanGenerate uses for SRS cards).
-type GenerateTriviaCardFromBriefInput struct {
-	UserID         string         `json:"user_id"`
-	DeckID         int            `json:"deck_id"`
-	DeckName       string         `json:"deck_name"`
-	Topic          string         `json:"topic"`
-	Item           TriviaPlanItem `json:"item"`
-	Index          int            `json:"index"`
-	Total          int            `json:"total"`
-	IdempotencyKey string         `json:"idempotency_key"`
 }
 
 // InsertTriviaCardInput drives the per-card insert activity.
