@@ -1,11 +1,9 @@
 {% extends "base.html" %}
 {% block title %}edit with claude · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}deck-edit-ai{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
-
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
-</nav>
+{{ nav.back("/deck/" ~ deck_name, deck_name) }}
 
 <section class="prelude">
   <p class="eyebrow">Edit with claude</p>

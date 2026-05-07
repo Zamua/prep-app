@@ -2,11 +2,9 @@
 {% extends "base.html" %}
 {% block title %}new SRS deck · prep{% endblock %}
 {% block page_class %}deck-new{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
-
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/decks/new" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} back</a>
-</nav>
+{{ nav.back("/decks/new", "back") }}
 
 <section class="prelude">
   <p class="eyebrow">A new SRS deck</p>

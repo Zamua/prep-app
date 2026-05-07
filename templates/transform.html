@@ -86,7 +86,7 @@
               </header>
               <ul class="transform-diff-list">
                 {% for d in diffs %}
-                  {% include "_transform_diff_card.html" %}
+                  {% include "partials/transform_diff_card.html" %}
                 {% endfor %}
               </ul>
             </section>
@@ -94,7 +94,7 @@
         {% else %}
           <ul class="transform-diff-list">
             {% for d in modification_diffs %}
-              {% include "_transform_diff_card.html" %}
+              {% include "partials/transform_diff_card.html" %}
             {% endfor %}
           </ul>
         {% endif %}

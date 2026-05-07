@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block title %}reorganize · prep{% endblock %}
 {% block page_class %}reorganize{% endblock %}
+{% import "macros/nav.html" as nav with context %}
 {% block main %}
-<nav class="study-nav">
-  <a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a>
-</nav>
+{{ nav.back("/", "all decks") }}
 
 <section class="prelude">
   <p class="eyebrow accent">Reorganize</p>
