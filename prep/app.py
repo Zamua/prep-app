@@ -50,7 +50,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BASE_DIR = REPO_ROOT
 ROOT_PATH = os.environ.get("ROOT_PATH", "")
 
+# Configure the `prep` logger tree so info-level diagnostics actually
+# reach stdout (uvicorn doesn't auto-attach handlers to app loggers).
+# Targeted to the "prep" namespace so we don't loosen uvicorn's own
+# logging or root-handler config. Each module's `logging.getLogger(__name__)`
+# inherits from this. Format is plain so it composes with goreman's
+# per-process prefix (`[36m18:30:08      app | [m...`).
+_PREP_LOG_LEVEL = os.environ.get("PREP_LOG_LEVEL", "INFO").upper()
 _log = logging.getLogger("prep")
+if not _log.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    _log.addHandler(_h)
+    _log.propagate = False
+_log.setLevel(_PREP_LOG_LEVEL)
 
 # Boot-time agent probe so the templates context_processor + AI-gating
 # route guards share one source of truth.
