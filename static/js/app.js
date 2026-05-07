@@ -11,10 +11,12 @@
 import {init as initDetailsToggle} from "@/modules/details-toggle.js";
 import {attachDeclarative as attachDialogs} from "@/modules/dialog.js";
 import {attachDeclarative as attachSubmitPending} from "@/modules/submit-pending.js";
+import {attachDeclarative as attachSubmitAjax} from "@/modules/submit-ajax.js";
 
 initDetailsToggle();
 attachDialogs();
 attachSubmitPending();
+attachSubmitAjax();
 
 // Lazy-load the poller only when a page asks for it. Keeps the cold
 // boot light for non-polling pages (most of them).

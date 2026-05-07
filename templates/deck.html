@@ -66,7 +66,11 @@
           <p class="notif-popover-eyebrow">notification frequency</p>
           <form method="post"
                 action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/interval"
-                class="notif-preset-row">
+                class="notif-preset-row"
+                data-submit-ajax
+                data-ajax-update=".notif-pill-summary > span"
+                data-ajax-renderer="interval"
+                data-ajax-preset-active-class="notif-preset-active">
             {% for m in _presets %}
               <button type="submit" name="minutes" value="{{ m }}"
                       class="notif-preset {% if m == _interval %}notif-preset-active{% endif %}">
@@ -76,7 +80,10 @@
           </form>
           <form method="post"
                 action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/interval"
-                class="notif-custom">
+                class="notif-custom"
+                data-submit-ajax
+                data-ajax-update=".notif-pill-summary > span"
+                data-ajax-renderer="interval">
             <span class="notif-custom-label">custom (minutes)</span>
             <input type="number" name="minutes" min="1" max="720"
                    placeholder="e.g. 90" class="notif-custom-input"
@@ -90,7 +97,9 @@
           <p class="notif-popover-help">cards per mini-session when you tap a notification</p>
           <form method="post"
                 action="{{ request.scope.get('root_path','') }}/trivia/decks/{{ deck_meta.deck_id }}/session_size"
-                class="notif-preset-row">
+                class="notif-preset-row"
+                data-submit-ajax
+                data-ajax-preset-active-class="notif-preset-active">
             {% for n in _size_presets %}
               <button type="submit" name="size" value="{{ n }}"
                       class="notif-preset {% if n == _session_size %}notif-preset-active{% endif %}">
