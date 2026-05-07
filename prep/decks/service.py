@@ -60,6 +60,30 @@ def delete_deck(repo: DeckRepo, user_id: str, name: str) -> int:
     return repo.delete(user_id, name)
 
 
+def set_notifications_enabled(repo: DeckRepo, user_id: str, deck_id: int, enabled: bool) -> bool:
+    """Toggle the deck's notifications flag. When toggling OFF (the
+    user is "pausing" the deck), also abandon any active study or
+    trivia sessions on the deck — leaving an in-progress session
+    live would let the user resume a deck they explicitly silenced.
+
+    Returns True if the deck row was updated (deck exists, belongs to
+    user_id), False otherwise. Routes can map False → 404."""
+    if not repo.set_notifications_enabled(user_id, deck_id, enabled):
+        return False
+    if enabled:
+        return True
+    # Lazy imports to keep the bounded contexts decoupled — these
+    # repos live in study/ and trivia/, and importing them at
+    # module top-level would couple decks/service.py to those
+    # contexts' module load order.
+    from prep.study.repo import SessionRepo
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    SessionRepo().abandon_all_for_deck(user_id, deck_id)
+    TriviaSessionsRepo().abandon_all_for_deck(user_id, deck_id)
+    return True
+
+
 def list_user_decks(repo: DeckRepo, user_id: str) -> list[DeckSummary]:
     """All decks the user owns, with total + due counts. Used by
     the index / home page."""

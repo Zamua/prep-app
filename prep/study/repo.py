@@ -369,6 +369,20 @@ class SessionRepo:
                 (now(), sid, user_id),
             )
 
+    def abandon_all_for_deck(self, user_id: str, deck_id: int) -> int:
+        """Abandon every active session this user has on the given deck.
+        Returns the row count touched. Called when the deck is paused —
+        leaving an in-progress session behind would let the user resume
+        a deck they've explicitly silenced."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE study_sessions"
+                "   SET status = 'abandoned', last_active = ?, version = version + 1"
+                " WHERE user_id = ? AND deck_id = ? AND status = 'active'",
+                (now(), user_id, deck_id),
+            )
+            return cur.rowcount or 0
+
     # ---- internal --------------------------------------------------
 
     def _pick_next_question(self, user_id: str, deck_id: int, sid: str) -> dict | None:

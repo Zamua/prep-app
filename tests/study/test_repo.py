@@ -130,6 +130,29 @@ def test_abandon_terminates_session(session_repo: SessionRepo, seeded_deck):
     assert s.status is SessionStatus.ABANDONED
 
 
+def test_abandon_all_for_deck(session_repo: SessionRepo, seeded_deck):
+    user, deck_id, _ = seeded_deck
+    sid_a = session_repo.create(user, deck_id, "Mac")
+    sid_b = session_repo.create(user, deck_id, "iPhone")
+    n = session_repo.abandon_all_for_deck(user, deck_id)
+    assert n == 2
+    for sid in (sid_a, sid_b):
+        s = session_repo.get(user, sid)
+        assert s is not None
+        assert s.status is SessionStatus.ABANDONED
+
+
+def test_abandon_all_for_deck_skips_already_abandoned(session_repo: SessionRepo, seeded_deck):
+    user, deck_id, _ = seeded_deck
+    pre_abandoned = session_repo.create(user, deck_id, "Mac")
+    session_repo.abandon(user, pre_abandoned)  # already abandoned
+    active = session_repo.create(user, deck_id, "iPhone")
+    n = session_repo.abandon_all_for_deck(user, deck_id)
+    # Only the still-active session is touched.
+    assert n == 1
+    assert session_repo.get(user, active).status is SessionStatus.ABANDONED
+
+
 def test_device_label_from_ua(session_repo: SessionRepo, initialized_db: str):
     """Light UA sniffing — purely for the recent-sessions list label."""
     assert session_repo.device_label_from_ua(None) == "unknown device"

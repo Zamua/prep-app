@@ -725,13 +725,15 @@ def deck_toggle_notifications(
     """Per-deck notification toggle. SRS decks honor it via the
     digest count (paused decks subtract from the user's due_total
     + drop out of the digest body). Trivia decks honor it via the
-    per-deck scheduler skip. 404 if the deck doesn't belong to the
-    user."""
+    per-deck scheduler skip. Pausing also abandons any in-progress
+    sessions on the deck — see service.set_notifications_enabled.
+    404 if the deck doesn't belong to the user."""
     uid = user["tailscale_login"]
     deck_id = repo.find_id(uid, name)
     if deck_id is None:
         raise HTTPException(404, "deck not found")
-    repo.set_notifications_enabled(uid, deck_id, enabled == "on")
+    if not service.set_notifications_enabled(repo, uid, deck_id, enabled == "on"):
+        raise HTTPException(404, "deck not found")
     return responses.redirect(request, f"/deck/{name}")
 
 

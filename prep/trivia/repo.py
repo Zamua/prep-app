@@ -543,6 +543,19 @@ class TriviaSessionsRepo:
                 (_now_iso(), user_id, deck_id),
             )
 
+    def abandon_all_for_deck(self, user_id: str, deck_id: int) -> int:
+        """Abandon any active mini-session for (user, deck). Used when
+        the user pauses the deck — leaving an in-progress queue behind
+        would let the user resume a deck they've silenced. Returns the
+        row count touched."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE trivia_sessions SET status = 'abandoned', last_active = ?"
+                " WHERE user_id = ? AND deck_id = ? AND status = 'active'",
+                (_now_iso(), user_id, deck_id),
+            )
+            return cur.rowcount or 0
+
 
 def _row_to_trivia_session(row) -> TriviaSession:
     return TriviaSession(

@@ -567,14 +567,19 @@ def trivia_toggle_notifications(
     enabled: str = Form(...),
     user: dict = Depends(current_user),
 ):
-    """Flip the per-deck notification cycle on or off. 404 if the
-    deck doesn't belong to the user. Returns a 303 (no meta-refresh
-    interstitial — the meta-refresh chrome was the source of the
-    white-flash on toggle)."""
+    """Flip the per-deck notification cycle on or off. Pausing also
+    abandons any in-progress sessions on the deck — see
+    decks.service.set_notifications_enabled. 404 if the deck doesn't
+    belong to the user. Returns a 303 (no meta-refresh interstitial —
+    the meta-refresh chrome was the source of the white-flash on
+    toggle)."""
+    from prep.decks import service as decks_service
+
     decks = DeckRepo()
-    if not decks.set_notifications_enabled(user["tailscale_login"], deck_id, enabled == "on"):
+    uid = user["tailscale_login"]
+    if not decks_service.set_notifications_enabled(decks, uid, deck_id, enabled == "on"):
         raise HTTPException(404, "trivia deck not found")
-    deck_name = decks.find_name(user["tailscale_login"], deck_id) or ""
+    deck_name = decks.find_name(uid, deck_id) or ""
     return responses.redirect(request, f"/deck/{deck_name}")
 
 

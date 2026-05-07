@@ -11,7 +11,7 @@ import pytest
 
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
-from prep.trivia.repo import TriviaQueueRepo
+from prep.trivia.repo import TriviaQueueRepo, TriviaSessionsRepo
 
 
 @pytest.fixture
@@ -233,3 +233,37 @@ def test_existing_prompts_returns_all(repos):
     prompts = repos["trivia"].existing_prompts(deck_id)
     assert len(prompts) == 3
     assert all("capital of country" in p for p in prompts)
+
+
+# ---- TriviaSessionsRepo.abandon_all_for_deck --------------------------
+
+
+def test_abandon_all_for_deck_active_session(repos):
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=3)
+    user = repos["user"]
+    sessions = TriviaSessionsRepo()
+    sessions.start_or_resume(user, deck_id, queue=qids, done=[])
+    n = sessions.abandon_all_for_deck(user, deck_id)
+    assert n == 1
+    assert sessions.get_active_for_deck(user, deck_id) is None
+
+
+def test_abandon_all_for_deck_noop_when_none_active(repos):
+    deck_id, _qids = _seed_trivia_deck(repos, n_questions=3)
+    user = repos["user"]
+    sessions = TriviaSessionsRepo()
+    n = sessions.abandon_all_for_deck(user, deck_id)
+    assert n == 0
+
+
+def test_abandon_all_for_deck_scoped_to_user_and_deck(repos):
+    deck_a, qids_a = _seed_trivia_deck(repos, name="alpha", n_questions=2)
+    deck_b, qids_b = _seed_trivia_deck(repos, name="beta", n_questions=2)
+    user = repos["user"]
+    sessions = TriviaSessionsRepo()
+    sessions.start_or_resume(user, deck_a, queue=qids_a, done=[])
+    sessions.start_or_resume(user, deck_b, queue=qids_b, done=[])
+    n = sessions.abandon_all_for_deck(user, deck_a)
+    assert n == 1
+    # Other deck's session is untouched.
+    assert sessions.get_active_for_deck(user, deck_b) is not None
