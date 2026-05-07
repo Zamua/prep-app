@@ -15,6 +15,26 @@
   margin: 0 0 0.8rem;
 }
 
+/* Deck-type caption. Sits above the deck title (page header) or above
+ * the deck name (index card). Read-only metadata by design — lives
+ * OUTSIDE .deck-pill-row so that row reads as a pure controls row
+ * (pin / pause / interval) with no read-only mixed in. Small caps,
+ * italic, accent-tinted for trivia so the type registers at a glance
+ * without competing with the title. */
+.deck-type-eyebrow {
+  display: inline-block;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 0 0 0.4rem;
+}
+.deck-type-eyebrow-trivia {
+  color: color-mix(in srgb, var(--quill) 70%, var(--ink-mute));
+}
+
 .display {
   font-family: var(--serif);
   font-variation-settings: "opsz" 144, "SOFT" 60;

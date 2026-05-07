@@ -4,6 +4,7 @@
 {% block main %}
 <section class="deck-header">
   <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
+  <p class="deck-type-eyebrow">{{ deck_type }}</p>
   <div class="deck-title-row">
     <h1 class="display deck-title">{{ deck_name }}</h1>
     {# Small in-place rename affordance. Pencil → popover with a name
@@ -31,7 +32,6 @@
      beside keeps the title visually dominant and the pills feel like
      metadata rather than competing for attention. #}
   <div class="deck-pill-row">
-    <span class="tag tag-decktype tag-decktype-{{ deck_type }}">{{ deck_type }}</span>
     {# Pin toggle. POSTs to /deck/<name>/pin with `pinned=on|off` —
        on flips pinned_at to now() (deck floats to top of index),
        off clears it. Active state gets a filled pin icon + accent

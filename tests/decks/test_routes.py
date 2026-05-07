@@ -139,20 +139,20 @@ def test_deck_view_lazy_materializes_empty_deck(client: TestClient, initialized_
 
 def test_deck_view_hides_study_button_for_trivia(client: TestClient, initialized_db: str):
     """Trivia decks are notification-driven — the deck page should
-    omit the Begin button entirely. The deck-type tag in the header
-    communicates the type."""
+    omit the Begin button entirely. The deck-type eyebrow in the
+    header communicates the type."""
     DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=30)
     r = client.get("/deck/geo")
     assert r.status_code == 200
     assert "Begin study session" not in r.text
-    assert "tag-decktype-trivia" in r.text
+    assert "deck-type-eyebrow" in r.text
 
 
-def test_deck_view_shows_decktype_tag_for_srs(client: TestClient, initialized_db: str):
+def test_deck_view_shows_decktype_eyebrow_for_srs(client: TestClient, initialized_db: str):
     DeckRepo().create(initialized_db, "regular-srs")
     r = client.get("/deck/regular-srs")
     assert r.status_code == 200
-    assert "tag-decktype-srs" in r.text
+    assert "deck-type-eyebrow" in r.text
 
 
 def test_trivia_deck_renders_mastery_bar_with_breakdown(client: TestClient, initialized_db: str):
@@ -449,14 +449,15 @@ def test_split_404s_for_unknown_source_deck(client: TestClient, initialized_db: 
 
 
 def test_index_decks_carry_decktype(client: TestClient, initialized_db: str):
-    """The index list also shows the type tag — same slot, same chrome,
-    consistent across views."""
+    """The index list shows the deck type as a small caps eyebrow above
+    the deck name — consistent with the deck-page header. Read-only
+    metadata, separated from the row of actionable pills."""
     DeckRepo().create(initialized_db, "an-srs-deck")
     DeckRepo().create_trivia(initialized_db, "a-trivia-deck", topic="x", interval_minutes=30)
     r = client.get("/")
     assert r.status_code == 200
-    assert "tag-decktype-srs" in r.text
-    assert "tag-decktype-trivia" in r.text
+    assert "deck-type-eyebrow-srs" in r.text
+    assert "deck-type-eyebrow-trivia" in r.text
 
 
 def test_index_trivia_deck_shows_mastery_mini_bar(client: TestClient, initialized_db: str):
