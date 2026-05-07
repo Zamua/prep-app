@@ -151,20 +151,18 @@
               </details>
             {% endif %}
             {% if _show_regrade %}
-              <form method="post"
-                    action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/regrade{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/regrade{% endif %}"
-                    class="trivia-regrade-form">
-                <input type="hidden" name="answer" value="{{ result.given }}">
-                {% if session_total %}
-                  <input type="hidden" name="question_id" value="{{ q.id }}">
-                  <input type="hidden" name="cards" value="{{ session_remaining }}">
-                  <input type="hidden" name="done" value="{{ session_done or '' }}">
-                {% endif %}
-                <button type="submit" class="trivia-regrade-btn">
-                  {{ icon('sparkle', class_='icon icon-inline') }}
-                  <span>Re-grade</span>
-                </button>
-              </form>
+              {# Dispute disclosure — collapses the two verdict-action
+                 forms (Re-grade + I-was-right) under a single pill so
+                 the disc row stays at 3 wide. The forms themselves
+                 live in the body (sibling of .trivia-disc-row inside
+                 .trivia-discs), revealed by the :has() selector when
+                 this <details> is open. #}
+              <details class="trivia-disc trivia-disc-dispute">
+                <summary>
+                  <span>Dispute</span>
+                  {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
+                </summary>
+              </details>
             {% endif %}
           </div>
           {% if q.explanation %}
@@ -190,12 +188,56 @@
               </a>
             </div>
           {% endif %}
+          {% if _show_regrade %}
+            {# Dispute body — sibling of .trivia-disc-row, shown via
+               the :has(.trivia-disc-dispute[open]) selector. Two
+               forms side-by-side: ask claude to re-evaluate, or
+               manually flip the verdict. #}
+            <div class="trivia-disc-body trivia-disc-body-dispute" data-details-body>
+              <p class="trivia-dispute-eyebrow">if the grader was harsh</p>
+              <div class="trivia-dispute-grid">
+                <form method="post"
+                      action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/regrade{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/regrade{% endif %}"
+                      class="trivia-regrade-form">
+                  <input type="hidden" name="answer" value="{{ result.given }}">
+                  {% if session_total %}
+                    <input type="hidden" name="question_id" value="{{ q.id }}">
+                    <input type="hidden" name="cards" value="{{ session_remaining }}">
+                    <input type="hidden" name="done" value="{{ session_done or '' }}">
+                  {% endif %}
+                  <button type="submit" class="trivia-regrade-btn">
+                    {{ icon('sparkle', class_='icon icon-inline') }}
+                    <span>Re-grade</span>
+                  </button>
+                </form>
+                <form method="post"
+                      action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/override{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/override{% endif %}"
+                      class="trivia-override-form">
+                  <input type="hidden" name="answer" value="{{ result.given }}">
+                  {% if session_total %}
+                    <input type="hidden" name="question_id" value="{{ q.id }}">
+                    <input type="hidden" name="cards" value="{{ session_remaining }}">
+                    <input type="hidden" name="done" value="{{ session_done or '' }}">
+                  {% endif %}
+                  <button type="submit" class="trivia-override-btn"
+                          title="Flip the verdict to right without consulting claude — for when the grader was simply too harsh">
+                    {{ icon('check', class_='icon icon-inline') }}
+                    <span>I was right</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          {% endif %}
         </div>
       {% endif %}
 
       {% if result.regraded %}
         <p class="trivia-regrade-note">
           <em>re-graded by claude{% if result.regex_updated %} · accepted answers expanded{% endif %}</em>
+        </p>
+      {% elif result.overridden %}
+        <p class="trivia-regrade-note">
+          <em>verdict overridden by you</em>
         </p>
       {% elif result.regex_updated %}
         <p class="trivia-regrade-note">

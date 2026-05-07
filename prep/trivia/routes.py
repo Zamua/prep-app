@@ -486,6 +486,116 @@ async def trivia_regrade(
     )
 
 
+@router.post("/trivia/{question_id}/override", response_class=HTMLResponse)
+def trivia_override(
+    question_id: int,
+    request: Request,
+    answer: str = Form(""),
+    user: dict = Depends(current_user),
+):
+    """Manual verdict override — flip the queue's last verdict to RIGHT
+    without consulting claude. For when the grader was too harsh and
+    the user is sure their answer was correct.
+
+    Distinct from regrade (which asks claude to re-evaluate). Override
+    just sets correct=True. We don't auto-extend the answer_regex —
+    a one-off "I was right" tap shouldn't permanently relax grading
+    for that card. Users who want a permanent rule can edit the
+    question's regex via the card-edit form."""
+    questions = QuestionRepo()
+    decks = DeckRepo()
+    trivia = TriviaQueueRepo()
+
+    q = questions.get(user["tailscale_login"], question_id)
+    if q is None:
+        raise HTTPException(404, "question not found")
+
+    trivia.set_last_correctness(question_id, correct=True)
+    deck_name = decks.find_name(user["tailscale_login"], q.deck_id)
+    return templates.TemplateResponse(
+        request,
+        "trivia/card.html",
+        {
+            "q": q,
+            "deck_name": deck_name,
+            "result": {
+                "correct": True,
+                "given": answer,
+                "expected": q.answer,
+                "feedback": None,
+                "overridden": True,
+            },
+            **build_explore_ctx(
+                deck_name=deck_name or "",
+                q=q,
+                user_answer=answer,
+                correct=True,
+                expected=q.answer,
+            ),
+        },
+    )
+
+
+@router.post("/trivia/session/{deck_name}/override", response_class=HTMLResponse)
+def trivia_session_override(
+    deck_name: str,
+    request: Request,
+    question_id: int = Form(...),
+    cards: str = Form(""),
+    done: str = Form(""),
+    answer: str = Form(""),
+    user: dict = Depends(current_user),
+):
+    """Session variant of the manual verdict override. In addition to
+    flipping the recorded verdict, mutates the `done` chain so the
+    next-card link + the summary view see the corrected verdict for
+    this question — same shape as session_regrade."""
+    uid = user["tailscale_login"]
+    decks = DeckRepo()
+    questions = QuestionRepo()
+    trivia = TriviaQueueRepo()
+    deck_id = decks.find_id(uid, deck_name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    q = questions.get(uid, question_id)
+    if q is None or q.deck_id != deck_id:
+        raise HTTPException(404, "question not found in this deck")
+
+    trivia.set_last_correctness(question_id, correct=True)
+    done_items = parse_done(done)
+    new_done_str = flip_done_verdict(done_items, question_id, True)
+    queue = parse_card_ids(cards)
+    position = max(1, len(done_items))
+    total = len(done_items) + len(queue)
+
+    return templates.TemplateResponse(
+        request,
+        "trivia/card.html",
+        {
+            "q": q,
+            "deck_name": deck_name,
+            "result": {
+                "correct": True,
+                "given": answer,
+                "expected": q.answer,
+                "feedback": None,
+                "overridden": True,
+            },
+            "session_position": position,
+            "session_total": total,
+            "session_remaining": cards,
+            "session_done": new_done_str,
+            **build_explore_ctx(
+                deck_name=deck_name,
+                q=q,
+                user_answer=answer,
+                correct=True,
+                expected=q.answer,
+            ),
+        },
+    )
+
+
 @router.post("/trivia/session/{deck_name}/regrade", response_class=HTMLResponse)
 async def trivia_session_regrade(
     deck_name: str,

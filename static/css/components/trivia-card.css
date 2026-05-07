@@ -88,12 +88,13 @@
   margin: 0 0 0.9rem;
 }
 
-/* Shared outline-pill chrome for .trivia-disc summary + .trivia-regrade-btn:
- * small italic-uppercase outlined pill with optional leading icon. The
- * active state (open / hover) tints with ink-soft so all three pills
- * read as one visual group. */
+/* Shared outline-pill chrome for .trivia-disc summary + .trivia-regrade-btn
+ * + .trivia-override-btn: small italic-uppercase outlined pill with
+ * optional leading icon. The active state (open / hover) tints with
+ * ink-soft so all four pills read as one visual group. */
 .trivia-disc > summary,
-.trivia-regrade-btn {
+.trivia-regrade-btn,
+.trivia-override-btn {
   display: flex; align-items: center; justify-content: center; gap: 0.4rem;
   padding: 0.65rem 0.5rem;
   font-family: inherit; font-style: italic;
@@ -108,7 +109,8 @@
 .trivia-disc > summary::-webkit-details-marker { display: none; }
 .trivia-disc > summary::marker { content: ""; }
 .trivia-disc > summary .icon,
-.trivia-regrade-btn .icon { color: var(--quill); flex-shrink: 0; }
+.trivia-regrade-btn .icon,
+.trivia-override-btn .icon { color: var(--quill); flex-shrink: 0; }
 /* Affordance caret on disclosure pills — points RIGHT when collapsed,
  * rotates to DOWN when open. Same convention as macOS Finder / iOS
  * Files. The label already conveys pill TYPE on the disclosure
@@ -123,7 +125,8 @@
 }
 .trivia-disc[open] > summary .trivia-disc-caret { transform: rotate(0); }
 .trivia-disc[open] > summary,
-.trivia-regrade-btn:hover {
+.trivia-regrade-btn:hover,
+.trivia-override-btn:hover {
   border-color: var(--ink-soft); color: var(--ink);
   background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
 }
@@ -145,6 +148,22 @@
 .trivia-discs:has(.trivia-disc-explore[open]) .trivia-disc-body-explore {
   display: flex; flex-direction: column; gap: 0.3rem;
 }
+.trivia-discs:has(.trivia-disc-dispute[open]) .trivia-disc-body-dispute {
+  display: block;
+}
+.trivia-dispute-eyebrow {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  font-style: italic;
+  color: var(--ink-mute);
+}
+.trivia-dispute-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
 
 .trivia-next-cta {
   width: 100%;
@@ -157,10 +176,14 @@
  * Chrome is shared with .trivia-disc summary above; only the
  * form-specific bits live here. The button itself fills its grid
  * column so all three pills sit at equal width. */
-.trivia-regrade-form { margin: 0; min-width: 0; }
-.trivia-regrade-btn { width: 100%; }
-.trivia-regrade-btn:disabled { opacity: 0.6; cursor: progress; }
-.trivia-regrade-btn .icon { width: 0.95rem; height: 0.95rem; }
+.trivia-regrade-form,
+.trivia-override-form { margin: 0; min-width: 0; }
+.trivia-regrade-btn,
+.trivia-override-btn { width: 100%; }
+.trivia-regrade-btn:disabled,
+.trivia-override-btn:disabled { opacity: 0.6; cursor: progress; }
+.trivia-regrade-btn .icon,
+.trivia-override-btn .icon { width: 0.95rem; height: 0.95rem; }
 /* Loading state: swap the leading sparkle icon for a spinner of the
  * same size so the button width doesn't change. Label stays
  * "Re-grade" — keeping the text constant prevents the inline-flex
