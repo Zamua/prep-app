@@ -29,14 +29,21 @@ DEFAULT_BASE_URL = "https://macmini.trout-chimera.ts.net/prep-staging"
 
 E2E_DECK_NAME = "e2e-test-deck"
 
-# Canonical questions seeded into the throwaway deck. Answers picked
-# so a deterministic grader returns "correct" without needing claude
-# (single-token, lowercase-friendly). The wrong-answer test covers
-# the claude path separately.
+# Canonical questions seeded into the throwaway deck. The first three
+# are short single-token answers that grade through the deterministic
+# path (no claude). The "claude" question has an answer long enough
+# that classify_grading routes it to claude_grade — used by the
+# claude-grading + regrade e2e cases.
 E2E_QUESTIONS = [
     {"prompt": "Capital of France?", "answer": "Paris"},
     {"prompt": "Capital of Japan?", "answer": "Tokyo"},
     {"prompt": "Capital of Egypt?", "answer": "Cairo"},
+    {
+        # Long-enough answer (>3 tokens, with sentence punctuation)
+        # forces claude_grade per prep.trivia.service.classify_grading.
+        "prompt": "Briefly: what is the role of the GIL in CPython?",
+        "answer": "It serializes Python bytecode execution so only one thread runs at a time.",
+    },
 ]
 
 
