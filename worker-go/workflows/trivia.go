@@ -1,24 +1,24 @@
-// TriviaGenerateWorkflow — plan-then-expand generation for a
-// notification-driven trivia deck. Mirrors the SRS PlanGenerate
-// workflow's shape so the UX is consistent.
+// TriviaGenerateWorkflow — straight-shot batch generation for a
+// notification-driven trivia deck. Linear, no plan / iterate gate:
 //
-// Phases:
+//	GENERATING — single claude call returns N {q, a, e} pairs.
+//	APPLYING   — InsertTriviaCard per pair (existing activity, with
+//	             idempotency via deck_id+normalized prompt).
+//	DONE / FAILED — terminal.
 //
-//	PLANNING — claude returns a brief outline ([]TriviaPlanItem,
-//	  title + 1-sentence brief each). Cheap call, ~5s.
-//	AWAITING_FEEDBACK — user reviews; can replan ("more from the
-//	  multiplayer era"), accept, or reject. 24h timer treats walk-
-//	  away as reject.
-//	GENERATING — for each accepted item, parallel claude expansions
-//	  (batched to 4 concurrent — same memory-pressure cap as
-//	  PlanGenerate's expansion). Each call returns a full q/a/e.
-//	APPLYING — InsertTriviaCard per pair (existing activity, with
-//	  idempotency via deck_id+normalized prompt).
-//	DONE / REJECTED / FAILED — terminal.
+// The earlier flow walked the user through a plan-review step (claude
+// sketches an outline; user replans/accepts/rejects) before expanding
+// each item with a per-card claude call. That added latency and a
+// gating UX that wasn't pulling its weight — the user wants to type
+// a topic and get a deck back. The plan/expand activities + the
+// trivia feedback/accept/reject signals are still registered but
+// unused by this workflow; left in place rather than deleted so the
+// signal endpoints don't break for any in-flight workflow runs from
+// the previous shape. They're dead code from this workflow's POV
+// and can be removed in a follow-up.
 //
-// Progress query exposes Status + Plan + Round + GeneratedCount/Total
-// so the polling page can render a real progress bar instead of a
-// three-state spinner.
+// Progress query exposes Status + Total + GeneratedCount + Inserted
+// so the polling page renders a real progress bar.
 package workflows
 
 import (
@@ -31,11 +31,6 @@ import (
 
 	"prep-worker/activities"
 	"prep-worker/shared"
-)
-
-const (
-	triviaSignalTimeout = 24 * time.Hour
-	triviaExpandBatch   = 4 // concurrent claude expansions; same cap as PlanGenerate
 )
 
 func TriviaGenerate(ctx workflow.Context, in shared.TriviaGenerateInput) (shared.TriviaGenerateResult, error) {
@@ -57,8 +52,8 @@ func TriviaGenerate(ctx workflow.Context, in shared.TriviaGenerateInput) (shared
 	}
 
 	progress := shared.TriviaGenerateProgress{
-		Status:    "planning",
-		Round:     1,
+		Status:    "generating",
+		Total:     batchSize,
 		StartedAt: workflow.Now(ctx).UTC().Format(time.RFC3339),
 	}
 	if err := workflow.SetQueryHandler(ctx, shared.QueryTriviaProgress, func() (shared.TriviaGenerateProgress, error) {
@@ -69,168 +64,43 @@ func TriviaGenerate(ctx workflow.Context, in shared.TriviaGenerateInput) (shared
 
 	var a *activities.Activities
 
-	// ---- PLAN ----
-	planOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+	// ---- GENERATING ----
+	genOpts := workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    2 * time.Second,
 			BackoffCoefficient: 2.0,
 			MaximumAttempts:    2,
 			NonRetryableErrorTypes: []string{
-				"BadInput", "BadTriviaPlanJSON", "NoAgent",
+				"BadInput", "BadTriviaJSON", "NoAgent",
 			},
 		},
 	}
-	planCtx := workflow.WithActivityOptions(ctx, planOpts)
+	genCtx := workflow.WithActivityOptions(ctx, genOpts)
 
-	var plan []shared.TriviaPlanItem
-	if err := workflow.ExecuteActivity(planCtx, a.PlanTriviaBatch, shared.PlanTriviaBatchInput{
+	var pairs []shared.TriviaPair
+	if err := workflow.ExecuteActivity(genCtx, a.GenerateTriviaBatch, shared.GenerateTriviaInput{
 		UserID:    in.UserID,
 		DeckID:    in.DeckID,
 		Topic:     in.Topic,
 		BatchSize: batchSize,
-	}).Get(ctx, &plan); err != nil {
+	}).Get(ctx, &pairs); err != nil {
 		progress.Status = "failed"
 		progress.Error = err.Error()
 		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
-		return shared.TriviaGenerateResult{}, fmt.Errorf("initial plan: %w", err)
-	}
-	progress.Plan = plan
-	progress.Total = len(plan)
-	progress.Status = "awaiting_feedback"
-
-	// ---- AWAITING FEEDBACK ----
-	feedbackCh := workflow.GetSignalChannel(ctx, shared.SignalTriviaFeedback)
-	acceptCh := workflow.GetSignalChannel(ctx, shared.SignalTriviaAccept)
-	rejectCh := workflow.GetSignalChannel(ctx, shared.SignalTriviaReject)
-	timeoutTimer := workflow.NewTimer(ctx, triviaSignalTimeout)
-
-	var (
-		accepted bool
-		decided  bool
-	)
-	for !decided {
-		sel := workflow.NewSelector(ctx)
-
-		sel.AddReceive(feedbackCh, func(c workflow.ReceiveChannel, _ bool) {
-			var fb string
-			c.Receive(ctx, &fb)
-			progress.Status = "replanning"
-			var newPlan []shared.TriviaPlanItem
-			err := workflow.ExecuteActivity(planCtx, a.PlanTriviaBatch, shared.PlanTriviaBatchInput{
-				UserID:    in.UserID,
-				DeckID:    in.DeckID,
-				Topic:     in.Topic,
-				BatchSize: batchSize,
-				PriorPlan: plan,
-				Feedback:  fb,
-			}).Get(ctx, &newPlan)
-			if err != nil {
-				// Replan failure: keep the old plan visible, surface
-				// the error so the user can try again or accept what
-				// they have.
-				progress.Error = fmt.Sprintf("replan failed: %v", err)
-				progress.Status = "awaiting_feedback"
-				return
-			}
-			plan = newPlan
-			progress.Plan = plan
-			progress.Total = len(plan)
-			progress.Round++
-			progress.Error = ""
-			progress.Status = "awaiting_feedback"
-		})
-		sel.AddReceive(acceptCh, func(c workflow.ReceiveChannel, _ bool) {
-			var sig struct{}
-			c.Receive(ctx, &sig)
-			accepted = true
-			decided = true
-		})
-		sel.AddReceive(rejectCh, func(c workflow.ReceiveChannel, _ bool) {
-			var sig struct{}
-			c.Receive(ctx, &sig)
-			decided = true
-		})
-		sel.AddFuture(timeoutTimer, func(f workflow.Future) {
-			_ = f.Get(ctx, nil)
-			decided = true
-		})
-
-		sel.Select(ctx)
-	}
-
-	if !accepted {
-		progress.Status = "rejected"
-		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
-		return shared.TriviaGenerateResult{Status: "rejected"}, nil
-	}
-
-	// ---- GENERATING (parallel expansion, batched) ----
-	progress.Status = "generating"
-	progress.GeneratedCount = 0
-
-	expandOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
-		HeartbeatTimeout:    30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    2 * time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    2,
-			NonRetryableErrorTypes: []string{
-				"BadTriviaCardJSON", "NoAgent",
-			},
-		},
-	}
-	exCtx := workflow.WithActivityOptions(ctx, expandOpts)
-
-	wfID := workflow.GetInfo(ctx).WorkflowExecution.ID
-	type expansion struct {
-		index int
-		item  shared.TriviaPlanItem
-		fut   workflow.Future
-	}
-
-	pairs := make([]shared.TriviaPair, 0, len(plan))
-	for batchStart := 0; batchStart < len(plan); batchStart += triviaExpandBatch {
-		batchEnd := batchStart + triviaExpandBatch
-		if batchEnd > len(plan) {
-			batchEnd = len(plan)
-		}
-		batch := make([]expansion, 0, batchEnd-batchStart)
-		for i := batchStart; i < batchEnd; i++ {
-			fut := workflow.ExecuteActivity(exCtx, a.GenerateTriviaCardFromBrief,
-				shared.GenerateTriviaCardFromBriefInput{
-					UserID:         in.UserID,
-					DeckID:         in.DeckID,
-					Topic:          in.Topic,
-					Item:           plan[i],
-					Index:          i,
-					Total:          len(plan),
-					IdempotencyKey: fmt.Sprintf("%s-expand-%d", wfID, i),
-				})
-			batch = append(batch, expansion{index: i, item: plan[i], fut: fut})
-		}
-		for _, e := range batch {
-			var pair shared.TriviaPair
-			if err := e.fut.Get(ctx, &pair); err != nil {
-				workflow.GetLogger(ctx).Warn("trivia expand failed",
-					"index", e.index, "title", e.item.Title, "err", err.Error())
-				progress.SkippedInvalid++
-				continue
-			}
-			pairs = append(pairs, pair)
-			progress.GeneratedCount = len(pairs)
-		}
+		return shared.TriviaGenerateResult{}, fmt.Errorf("generate: %w", err)
 	}
 
 	if len(pairs) == 0 {
 		progress.Status = "failed"
-		progress.Error = "every card expansion failed"
+		progress.Error = "claude returned 0 cards"
 		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
-		return shared.TriviaGenerateResult{}, fmt.Errorf("0 trivia cards expanded")
+		return shared.TriviaGenerateResult{}, fmt.Errorf("0 trivia cards generated")
 	}
+
+	progress.GeneratedCount = len(pairs)
+	progress.Total = len(pairs) // claude may return fewer than requested; reflect actual
 
 	// ---- APPLYING ----
 	progress.Status = "applying"
