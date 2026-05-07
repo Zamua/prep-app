@@ -153,6 +153,150 @@ deploy/{staging,prod}.env    tracked deploy-shape env files for `make deploy-{st
 
 ---
 
+## Frontend architecture
+
+**Philosophy.** Server-rendered HTML + progressive-enhancement JS.
+Server is the source of truth, HTML is the API, JS is sprinkles. No
+SPA framework, no JS bundler, no Tailwind. Pages POST forms; JS adds
+polish. Most actions degrade to plain forms.
+
+### CSS
+
+Single entry stylesheet (`static/css/index.css`) declares native
+`@layer` order and `@import`s the rest:
+
+```
+static/css/
+├── index.css        — entry: @layer order + @import
+├── reset.css        — minimal modern reset
+├── tokens.css       — :root design tokens (light + dark vars)
+├── base.css         — html / body / a / .icon / .icon-inline
+├── components/
+│   ├── buttons.css  — placeholder; migrate .btn family in
+│   ├── forms.css    — placeholder
+│   ├── prelude.css  — placeholder
+│   └── prose.css    — placeholder
+└── legacy.css       — pre-overhaul style.css, wrapped @layer legacy.
+                       Migrate components into components/<name>.css
+                       incrementally, deleting the matching block
+                       from legacy.css as you go.
+```
+
+**Layer order**: `reset, tokens, base, layout, components,
+utilities, legacy, overrides`. `@layer components` beats `@layer
+legacy`, so a half-finished migration (rules duplicated in both)
+resolves to the new file. Always delete from legacy when migrating
+to keep the source of truth single.
+
+**Migration rule**: when a component's surface area becomes painful
+to grep in `legacy.css`, lift its rules into `components/<name>.css`
+in one commit. Don't duplicate. Layer ordering covers the gap during
+a single-PR move.
+
+**Inline `style="..."` attrs**: smell EXCEPT for CSS custom-prop
+data-binding (e.g. `style="--progress: {{ pct }}%"`). Anything else
+belongs in a class.
+
+**Naming**: simple kebab-case component classes (`.deck-card`,
+`.transform-panel`, `.session-card`). BEM (`__elem--mod`) is fine
+inside a component file but not required globally — `@layer`
+handles the specificity discipline BEM was invented for.
+
+### JS
+
+Native ES modules + importmap, no bundler. `templates/base.html`
+declares an importmap aliasing `@/` → `/static/js/` and loads a
+single bootstrap module:
+
+```
+static/js/
+├── app.js                    — bootstrap; initializes always-on
+│                                behaviors + lazy-imports per-feature
+│                                modules when their data-* hooks are
+│                                present on the page.
+└── modules/
+    ├── details-toggle.js     — iOS-26 pointerup-bound <details>
+    │                            toggle + outside-click + Esc close.
+    │                            Always on (registered in app.js).
+    ├── dialog.js             — backdrop-click close for
+    │                            <dialog data-dialog>.
+    ├── submit-pending.js     — disable + label-swap on submit for
+    │                            <form data-submit-pending>.
+    └── poller.js             — workflow polling helper (interval +
+                                 visibilitychange + cache-bust +
+                                 error backoff). Lazy-loaded.
+```
+
+**Convention**: behaviors that always need to run app-wide register
+in `app.js`. Behaviors driven by data-* attrs go through their
+module's `attachDeclarative()` so adding the attribute to a template
+wires the behavior — no per-page boilerplate. Per-page modules with
+custom logic on top of a shared utility import the utility directly
+in a `<script type="module">` block.
+
+**Data-* hooks** (current set; document new ones here when added):
+
+| Attribute              | Module               | Behavior                              |
+| ---------------------- | -------------------- | ------------------------------------- |
+| `<dialog data-dialog>` | `dialog.js`          | backdrop click closes                 |
+| `<form data-submit-pending>` | `submit-pending.js` | disable + label-swap on submit |
+| `[data-poll-url]`      | `poller.js`          | poll URL on interval, dispatch handler|
+
+**Per-page inline `<script>` blocks**: still allowed when the page
+has unique logic that doesn't generalize (e.g. card-preview filling,
+delete-deck-confirm typed-name match). Don't extract just to extract.
+Extract only when the same pattern shows up in 3+ templates.
+
+### Templates
+
+Jinja's macros are the right "component" primitive. No reach for
+django-cotton / django-components — Jinja's macro story is fine.
+
+```
+templates/
+├── base.html         — masthead + footer + importmap + module bootstrap
+├── partials/         — _name.html → name.html, included verbatim
+│                       with {% include "partials/name.html" %}
+├── macros/           — parameterized "components" called as
+│                       {{ ns.foo(args) }} after
+│                       {% import "macros/<file>.html" as ns
+│                          with context %}
+├── trivia/           — bounded-context subfolder (mirrors prep/trivia/)
+├── notify/           — bounded-context subfolder
+└── *.html            — page templates (one per route)
+```
+
+**`with context` is required** when a macro references
+`request.scope.get('root_path','')` or any other Jinja global —
+imported macros are sandboxed by default, `with context` exposes
+the caller's context. Macros that don't touch globals can skip it.
+
+**Partial vs macro**: `{% include "partials/foo.html" %}` for static
+chrome; `{% import "macros/foo.html" as ns with context %}` when the
+component takes arguments. Macros are functions; partials aren't.
+
+**Page extension**: every page extends `base.html` and overrides
+`{% block title %}`, `{% block page_class %}`, `{% block main %}`.
+Don't introduce new top-level blocks unless multiple pages need
+them.
+
+### PWA + service worker
+
+`static/sw.js` handles `push` and `notificationclick` events only —
+no fetch caching. App is on-tailnet with a fast server; an app-shell
+caching layer would mainly create stale-content debugging headaches.
+Add caching only when there's a concrete reason.
+
+iOS gotchas (battle-tested in the codebase):
+- iOS 26 PWA standalone swallows the synthesized `click` event on
+  `<summary>` for the first ~5s after page load. Fix is in
+  `details-toggle.js`: bind to `pointerup`, suppress the late
+  compatibility click within 500ms.
+- `<dialog>` backdrop-click-to-close is not native; wired by
+  `dialog.js` via `data-dialog`.
+
+---
+
 ## How AI work flows
 
 Generation example (the plan-first flow at `/decks/new` action=plan):
