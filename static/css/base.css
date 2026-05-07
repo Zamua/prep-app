@@ -1,0 +1,57 @@
+/* Base element styles — html, body, anchors, icons. The chrome that
+ * sits behind every page before any component-specific rules apply.
+ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-feature-settings: "ss01" on, "kern" on, "liga" on;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  font-size: 18px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Subtle paper grain via two layered radial-gradients (no images) */
+  background-image:
+    radial-gradient(circle at 20% 12%, rgba(180, 140, 90, 0.05), transparent 55%),
+    radial-gradient(circle at 80% 80%, rgba(110, 70, 30, 0.04), transparent 55%);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-image:
+      radial-gradient(circle at 20% 12%, rgba(255, 220, 160, 0.025), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(255, 200, 120, 0.02), transparent 55%);
+  }
+}
+
+a {
+  color: inherit;
+}
+
+/* SVG icons (Phosphor Light). Default sizing: 1em square so the icon
+ * scales with the surrounding text. Inline-block + vertical-align
+ * tweaks because Phosphor's 256x256 viewBox sits a hair below the
+ * baseline at face value.
+ */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  fill: currentColor;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.icon-inline {
+  /* Slight horizontal nudge inside text-flow contexts (back links,
+     button captions) so the glyph doesn't crowd adjacent words. */
+  margin-right: 0.05em;
+}

@@ -44,7 +44,7 @@ def _agent_context(request: Request) -> dict:
 # import (i.e. per app boot, which lines up with each deploy since
 # the container restarts on every `make deploy-stag`).
 try:
-    _STATIC_CSS_MTIME = int((_REPO_ROOT / "static" / "style.css").stat().st_mtime)
+    _STATIC_CSS_MTIME = int((_REPO_ROOT / "static" / "css" / "index.css").stat().st_mtime)
 except OSError:
     _STATIC_CSS_MTIME = 0
 

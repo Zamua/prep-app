@@ -1,0 +1,34 @@
+/* prep — single CSS entry point.
+ *
+ * Architecture (ITCSS-shaped, native @layer for cascade control):
+ *
+ *   reset      — minimal element resets
+ *   tokens     — :root custom props (colors, type, spacing)
+ *   base       — html / body / heading / link / focus defaults
+ *   layout     — page chrome (masthead, folio, paper container)
+ *   components — one file per component (buttons, forms, prelude, …)
+ *   utilities  — single-purpose helpers (.visually-hidden, …)
+ *   legacy     — the pre-overhaul style.css contents, wrapped so its
+ *                rules lose to anything migrated into a component
+ *                file. Migrate component-by-component out of legacy
+ *                until it's empty, then delete it.
+ *   overrides  — page-scoped exceptions; should stay near-empty
+ *
+ * Layer order: reset < tokens < base < layout < components <
+ * utilities < legacy < overrides. Anything in `components` beats
+ * anything in `legacy`, so an in-progress migration never breaks
+ * the page during the move.
+ */
+
+@layer reset, tokens, base, layout, components, utilities, legacy, overrides;
+
+@import "./reset.css" layer(reset);
+@import "./tokens.css" layer(tokens);
+@import "./base.css" layer(base);
+
+@import "./components/buttons.css" layer(components);
+@import "./components/forms.css" layer(components);
+@import "./components/prelude.css" layer(components);
+@import "./components/prose.css" layer(components);
+
+@import "./legacy.css" layer(legacy);

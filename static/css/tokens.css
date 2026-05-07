@@ -1,0 +1,64 @@
+/* Design tokens. Color, type, spacing, motion vars consumed by every
+ * component. Aesthetic direction: literary study notebook — warm cream
+ * paper, ink serif typography, sage and terracotta as functional
+ * accents. Light + dark variants both defined here.
+ */
+
+:root {
+  /* Light: paper */
+  --bg:        #f4ecdc;
+  --paper:    #faf3e3;
+  --ink:       #1d1813;
+  --ink-soft:  #443a30;
+  --ink-mute:  #8a7a66;
+  --rule:      #d6c7ad;
+  --hairline:  #e9ddc4;
+  --tint:      #ebe0c5;
+  --warm:      #f1e6cb;
+
+  /* Functional accents — used sparingly */
+  --right:     #4f6f4a;       /* moss */
+  --right-bg:  #dfe5cf;
+  --wrong:     #a73e2a;       /* terracotta */
+  --wrong-bg:  #efd9cc;
+  --quill:     #6c4a23;       /* burnt umber, used for pull-quotes / verdicts */
+
+  --shadow-sm: 0 1px 0 rgba(45, 30, 18, 0.06), 0 6px 18px -10px rgba(45, 30, 18, 0.18);
+  --shadow-md: 0 1px 0 rgba(45, 30, 18, 0.08), 0 14px 30px -16px rgba(45, 30, 18, 0.28);
+
+  /* Type */
+  --serif: "Fraunces", "Newsreader", "Iowan Old Style", "Apple Garamond", "Georgia", serif;
+  --mono:  "JetBrains Mono", "SFMono-Regular", "Menlo", "Consolas", monospace;
+
+  --measure-tight: 32rem;
+  --measure-wide:  44rem;
+
+  --radius:    14px;
+  --radius-lg: 22px;
+
+  /* Honor the iPhone safe area */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-side:   max(env(safe-area-inset-left, 0px), 1.25rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        #14110d;
+    --paper:    #1d1812;
+    --ink:       #f4ead2;
+    --ink-soft:  #d8c6a4;
+    --ink-mute:  #a08e6e;
+    --rule:      #463a26;
+    --hairline:  #2c2418;
+    --tint:      #251e15;
+    --warm:      #2a2218;
+    --right:     #b8d39c;
+    --right-bg:  #2b3622;
+    --wrong:     #e89880;
+    --wrong-bg:  #3a2519;
+    --quill:     #d3a36d;
+    --shadow-sm: 0 1px 0 rgba(0,0,0,0.4), 0 8px 22px -12px rgba(0,0,0,0.6);
+    --shadow-md: 0 1px 0 rgba(0,0,0,0.45), 0 18px 36px -18px rgba(0,0,0,0.7);
+  }
+}

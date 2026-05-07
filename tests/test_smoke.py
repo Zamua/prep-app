@@ -59,9 +59,12 @@ def test_index_uses_tailscale_header_when_present(env: None, authed_headers):
 
 
 def test_static_assets_served(client: TestClient):
-    r = client.get("/static/style.css")
+    r = client.get("/static/css/index.css")
     assert r.status_code == 200
     assert "text/css" in r.headers["content-type"]
+    # JS module bootstrap should also be reachable.
+    r = client.get("/static/js/app.js")
+    assert r.status_code == 200
 
 
 def test_healthcheck_or_root_responds_quickly(client: TestClient):

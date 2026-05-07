@@ -1,0 +1,8 @@
+/* Markdown-rendered prose: code blocks, inline code, lists, headings,
+ * blockquotes. Used by SRS study prompts, trivia card prompts, and
+ * anywhere the markdown filter renders user-/agent-authored content.
+ *
+ * Migrate .prose / .prose code / .prose pre / .prose pre code /
+ * .prose strong / .prose em / .prose ul / .prose ol / .prose li /
+ * .prose h1..h4 / .prose blockquote from legacy.css when convenient.
+ */
