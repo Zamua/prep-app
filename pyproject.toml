@@ -46,10 +46,20 @@ dev = [
     "pytest-asyncio==0.24.0",
     "httpx==0.27.2",
     "freezegun==1.5.1",
+    # End-to-end tests (tests/e2e/) drive Chromium via Playwright against
+    # the deployed staging instance. `make promote` runs them before
+    # tagging prod, so this stays a dev-time install — production
+    # containers don't ship with playwright.
+    "playwright==1.51.0",
+    "pytest-playwright==0.7.0",
 ]
 
 [tool.pytest.ini_options]
+# `make test` runs the unit + integration suite — tests/ minus
+# tests/e2e/ (which needs a deployed instance and is run separately
+# via `make e2e`).
 testpaths = ["tests"]
+norecursedirs = ["tests/e2e"]
 asyncio_mode = "auto"
 filterwarnings = [
     # FastAPI's TestClient emits a DeprecationWarning about httpx's

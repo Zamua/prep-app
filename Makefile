@@ -23,7 +23,7 @@ export PREP_DEFAULT_USER ?= dev@example.com
 export PREP_DEV ?= 1
 
 .PHONY: help setup tools deps build dev run-app run-worker run-temporal \
-        lint format hooks clean wipe-temporal-state test \
+        lint format hooks clean wipe-temporal-state test e2e ci \
         deploy-stag deploy-prod promote logs-stag logs-prod down-stag down-prod
 
 help:
@@ -34,6 +34,8 @@ help:
 	@echo "  make lint     — ruff check + go vet (read-only)"
 	@echo "  make format   — ruff format + gofmt (writes)"
 	@echo "  make test     — pytest (python unit + integration tests)"
+	@echo "  make e2e      — Playwright/httpx smoke against \$$E2E_BASE_URL (defaults to staging)"
+	@echo "  make ci       — lint + test + e2e. Used by promote; also fine to run by hand."
 	@echo "  make hooks    — install pre-commit hook (idempotent; runs as part of \`make setup\`)"
 	@echo "  make clean    — kill stray dev processes; preserve data"
 	@echo ""
@@ -95,6 +97,32 @@ format: tools
 test: tools
 	$(RUN) .venv/bin/pytest -x
 
+# ----- e2e -----
+# Drives Playwright + an httpx client against a deployed prep instance
+# (staging by default; override target with `E2E_BASE_URL=...`). Each
+# session creates a throwaway `e2e-test-deck` via the app's HTTP routes,
+# runs assertions, then deletes it — so create + delete + cascade are
+# themselves under test. Tests live under tests/e2e/ (excluded from
+# `make test` via pyproject's norecursedirs).
+#
+# Pre-flight: the deployed instance has to be up. We check `/` returns
+# 200 first; bail with a clear error otherwise rather than wasting
+# minutes on per-test timeouts.
+E2E_BASE_URL ?= https://macmini.trout-chimera.ts.net/prep-staging
+
+e2e: tools
+	@echo "→ e2e against $(E2E_BASE_URL)"
+	@code=$$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 $(E2E_BASE_URL)/ 2>/dev/null || echo 000); \
+	  if [ "$$code" != "200" ]; then \
+	    echo "  FAIL: $(E2E_BASE_URL)/ returned $$code (expected 200). bring it up first."; exit 1; fi
+	E2E_BASE_URL=$(E2E_BASE_URL) $(RUN) .venv/bin/pytest -x tests/e2e
+
+# ----- CI bundle -----
+# What `make promote` runs before tagging prod: lint + test (in-process)
+# + e2e (against staging). Each step exits non-zero on failure so promote
+# halts cleanly.
+ci: lint test e2e
+
 # Wire .githooks/ as the git hooks dir for this checkout. Idempotent.
 # Contributors get this for free via `make setup`. To bypass for a
 # single commit, use `git commit --no-verify`.
@@ -155,20 +183,49 @@ promote:
 	@if [ -z "$(v)" ]; then echo "usage: make promote v=v0.X.Y"; exit 1; fi
 	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
 	  echo "tag $(v) doesn't exist — create it first: \`git tag -a $(v) && git push --tags\`"; exit 1; fi
-	@# Run the pre-commit checks BEFORE mutating .prod-version. The pre-commit
-	@# hook re-runs them at commit time anyway; running them here means a
-	@# format/lint/test failure exits cleanly (no half-bumped .prod-version,
-	@# no orphaned tag pointing at the wrong commit). Hit twice on 2026-05-03
-	@# (v0.17.0, v0.17.3 stranded). Don't regress.
-	@echo "→ pre-flight: lint + tests"
+	@# Pre-flight: lint + python tests + e2e against staging. Run BEFORE
+	@# mutating .prod-version so a failure exits cleanly (no half-bumped
+	@# .prod-version, no orphaned tag pointing at the wrong commit). The
+	@# pre-commit hook also runs lint+test at commit time; promote re-runs
+	@# them so a contributor that bypassed the hook doesn't ship a broken
+	@# build. Stranded-tag incidents on 2026-05-03 + a prod outage on
+	@# 2026-05-07 (httpx missing from runtime deps, would've been caught
+	@# by e2e) motivate gating here. Don't regress.
+	@echo "→ pre-flight: redeploy staging from tag $(v) so e2e runs against the same code we'll ship"
+	$(MAKE) deploy-stag-from-tag v=$(v)
+	@echo "→ pre-flight: lint + python tests"
 	$(MAKE) lint
 	$(MAKE) test
+	@echo "→ pre-flight: e2e against staging"
+	$(MAKE) e2e
 	@echo "→ promoting $(v) to prod"
 	@echo "$(v)" > .prod-version
 	git add .prod-version
 	git commit -m "promote $(v) to prod"
 	git push origin main
 	$(MAKE) deploy-prod
+
+# Internal helper: build + bring up staging from a specific tag's
+# commit (rather than the working tree). Used by `make promote` so e2e
+# verifies exactly the bytes we're about to ship to prod, not the
+# tree the contributor happens to have checked out. Mirrors the prod
+# build path (git worktree at the tag, build from there). Cleans up
+# the worktree on success or failure.
+.PHONY: deploy-stag-from-tag
+deploy-stag-from-tag:
+	@if [ -z "$(v)" ]; then echo "usage: make deploy-stag-from-tag v=v0.X.Y"; exit 1; fi
+	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
+	  echo "tag $(v) not found locally"; exit 1; fi
+	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
+	git worktree add --detach $(DEPLOY_BUILD_DIR) $(v)
+	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
+	  docker compose \
+	    -f docker-compose.yml \
+	    --project-directory $(DEPLOY_BUILD_DIR) \
+	    --env-file deploy/staging.env \
+	    -p stag \
+	    up -d --build
+	git worktree remove --force $(DEPLOY_BUILD_DIR)
 
 logs-stag:
 	docker compose -p stag logs -f --tail=200
