@@ -52,6 +52,16 @@ export function attachDeclarative(root = document) {
       if (!submitter) return; // shouldn't happen, but fall through to default
       e.preventDefault();
 
+      // Disable the submitter for the duration of the fetch so a
+      // double-tap doesn't double-submit. Re-enable in finally; without
+      // this, an interaction that combines `data-submit-ajax` with
+      // `data-submit-pending` would leave the button disabled forever
+      // (submit-pending re-enables on `pageshow`, which never fires
+      // when we don't navigate). The fetch is fast enough that the
+      // ~50-200ms disabled window is invisible to a human.
+      submitter.disabled = true;
+      submitter.classList.add("is-loading");
+
       const data = new FormData(form);
       // FormData includes the submitter's name/value automatically when
       // the submit fires, but only if we let the browser handle it. We
@@ -73,9 +83,14 @@ export function attachDeclarative(root = document) {
         // Network / server error → fall back to the regular submit
         // path so the user sees the normal error page rather than a
         // silent failure.
+        submitter.disabled = false;
+        submitter.classList.remove("is-loading");
         form.removeAttribute("data-submit-ajax");
         form.submit();
         return;
+      } finally {
+        submitter.disabled = false;
+        submitter.classList.remove("is-loading");
       }
 
       // Update the in-place text indicator if the form opted in.

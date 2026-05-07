@@ -38,7 +38,6 @@
        color so paused/pinned/etc. read at a glance. #}
     <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
           class="deck-pin-form"
-          data-submit-pending
           data-submit-ajax
           data-ajax-toggle-target=".tag-pin"
           data-ajax-toggle-class="tag-pin-active"
