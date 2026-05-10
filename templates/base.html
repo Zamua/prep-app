@@ -26,6 +26,46 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="prep{% if env_label %} ({{ env_label }}){% endif %}">
+
+  {# Native ES module importmap + bootstrap. MUST be in <head> so that
+     ANY <script type="module"> later in the document — including those
+     inline in {% block main %} — can resolve `@/` bare specifiers. If
+     the importmap lives in <body> after a module script, the spec
+     dictates the importmap is "already used" by then and inline module
+     scripts in main content silently fail at parse time with an
+     unresolved-specifier error. (Hit on audit-fix-6.9 when inline
+     scripts moved out of bottom-of-body IIFEs into per-template module
+     blocks; importmap stayed in <body> and every page with an inline
+     module + import silently broke. Fixed in htmx-1.)
+
+     Importmap aliases `@/` → /static/js/v<build>/ — the version segment
+     gives every deploy a fresh URL space (handled server-side; see
+     prep/app.py:_versioned_js). This is the canonical way to cache-
+     bust modules referenced through an importmap: there is no spec-
+     compliant way to put a ?v= query on resolved imports, so the
+     version goes in the URL prefix and immutable-caches forever.
+     Always-on behaviors (details toggle, dialog backdrop close,
+     submit-pending) register on load; per-feature modules lazy-load
+     when a data-* hook on the page asks for them.
+
+     `defer` on app.js so it doesn't block parsing — modules are
+     deferred by default but the bare `<script type="module">` form
+     waits for the document parse anyway. Explicit is friendlier. #}
+  <script type="importmap">
+  {
+    "imports": {
+      "@/": "{{ root }}/static/js/v{{ static_css_mtime|default(0) }}/"
+    }
+  }
+  </script>
+  <script type="module" src="{{ root }}/static/js/app.js?v={{ static_css_mtime|default(0) }}" defer></script>
+
+  {# htmx — declarative AJAX via attributes (hx-post, hx-target, hx-swap).
+     Routes that detect `HX-Request: true` return just the fragment to
+     swap; otherwise they keep their existing POST→303 behavior so the
+     no-JS fallback still works. Loaded from <head> with `defer` so it
+     wires up before user interaction without blocking parse. #}
+  <script src="{{ root }}/static/js/vendor/htmx-2.0.4.min.js?v={{ static_css_mtime|default(0) }}" defer></script>
 </head>
 <body class="page-{% block page_class %}default{% endblock %}"
       {% if user and user.editor_input_mode %}data-editor-mode="{{ user.editor_input_mode }}"{% endif %}>
@@ -64,30 +104,5 @@
       <span class="colophon-text">set in <em>Fraunces</em> &amp; <em>JetBrains&nbsp;Mono</em></span>
     </footer>
   </div>
-
-
-  {# htmx — declarative AJAX via attributes (hx-post, hx-target, hx-swap).
-     Routes that detect `HX-Request: true` return just the fragment to
-     swap; otherwise they keep their existing POST→303 behavior so the
-     no-JS fallback still works. #}
-  <script src="{{ request.scope.get('root_path','') }}/static/js/vendor/htmx-2.0.4.min.js?v={{ static_css_mtime|default(0) }}" defer></script>
-
-  {# Native ES module bootstrap. Importmap aliases @/ → /static/js/v<build>/
-     — the version segment gives every deploy a fresh URL space (handled
-     server-side; see prep/app.py:_versioned_js). This is the canonical
-     way to cache-bust modules referenced through an importmap: there is
-     no spec-compliant way to put a ?v= query on resolved imports, so the
-     version goes in the URL prefix and immutable-caches forever.
-     Always-on behaviors (details toggle, dialog backdrop close,
-     submit-pending) register on load; per-feature modules (poller)
-     lazy-load when a data-* hook on the page asks for them. #}
-  <script type="importmap">
-  {
-    "imports": {
-      "@/": "{{ request.scope.get('root_path','') }}/static/js/v{{ static_css_mtime|default(0) }}/"
-    }
-  }
-  </script>
-  <script type="module" src="{{ request.scope.get('root_path','') }}/static/js/app.js?v={{ static_css_mtime|default(0) }}"></script>
 </body>
 </html>
