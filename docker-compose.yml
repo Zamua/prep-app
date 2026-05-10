@@ -26,6 +26,17 @@ services:
       - "${PREP_HOST_PORT:-8082}:8082"
     volumes:
       - prep-data:/data
+    # Liveness probe — backs `docker compose up --wait` so the Makefile
+    # deploy targets only return after the FastAPI surface is actually
+    # serving. /healthz is a no-DB 200 endpoint (prep/web/index.py).
+    # start_period gives goreman time to bring up temporal devserver +
+    # uvicorn from cold without spamming failures into `docker inspect`.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:8082/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
     depends_on:
       agent:
         condition: service_started
@@ -72,6 +83,19 @@ services:
     # host (curl /healthz etc).
     volumes:
       - prep-agent-data:/data
+    # Liveness probe for `docker compose up --wait`. The agent-server's
+    # /healthz returns JSON describing claude auth state; we treat any
+    # 200 as "process is up" — the OAuth-token presence check is a
+    # readiness concern surfaced separately via the prep app's
+    # /settings/agent page. curl is installed in Dockerfile.agent
+    # specifically for this probe (node:22-slim has neither curl nor
+    # wget by default).
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "3", "http://127.0.0.1:9999/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
 
 volumes:
   # Volume names are env-driven so the same compose.yml can run as

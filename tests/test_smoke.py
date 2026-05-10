@@ -68,8 +68,9 @@ def test_static_assets_served(client: TestClient):
 
 
 def test_healthcheck_or_root_responds_quickly(client: TestClient):
-    """No /healthz endpoint exists today; we use / as a liveness probe.
-    If a /healthz route is ever added, update this test (and consider
-    making it the canonical liveness target)."""
-    r = client.get("/")
+    """/healthz is the canonical liveness probe (no DB hit, no
+    template render). The docker-compose healthcheck targets it; this
+    test pins the contract."""
+    r = client.get("/healthz")
     assert r.status_code == 200
+    assert r.text == "ok"

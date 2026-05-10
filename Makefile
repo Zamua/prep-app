@@ -168,8 +168,11 @@ deploy-stag:
 	@# (single dash) treats this as "set to empty" → no bypass → real
 	@# Tailscale auth required. Without this, the Makefile's `make dev`
 	@# export of dev@example.com would leak through.
+	@# --wait blocks until both services pass their healthcheck (see
+	@# the `healthcheck:` blocks in docker-compose.yml). Surfaces boot
+	@# failures here instead of in an after-the-fact `make logs-stag`.
 	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
-	  docker compose --env-file deploy/staging.env -p stag up -d --build
+	  docker compose --env-file deploy/staging.env -p stag up -d --build --wait
 
 deploy-prod:
 	@if [ -z "$(DEPLOY_PROD_TAG)" ]; then \
@@ -185,7 +188,7 @@ deploy-prod:
 	    --project-directory $(DEPLOY_BUILD_DIR) \
 	    --env-file deploy/prod.env \
 	    -p prod \
-	    up -d --build
+	    up -d --build --wait
 	git worktree remove --force $(DEPLOY_BUILD_DIR)
 
 promote:
@@ -233,7 +236,7 @@ deploy-stag-from-tag:
 	    --project-directory $(DEPLOY_BUILD_DIR) \
 	    --env-file deploy/staging.env \
 	    -p stag \
-	    up -d --build
+	    up -d --build --wait
 	git worktree remove --force $(DEPLOY_BUILD_DIR)
 
 logs-stag:

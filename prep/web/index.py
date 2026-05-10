@@ -3,12 +3,19 @@
 Cross-cuts the decks and study contexts (lists user's decks alongside
 their recent study sessions), so it lives at the prep/web/ level
 rather than under either context's routes module.
+
+Also hosts the unauthenticated `/healthz` liveness probe used by the
+container healthcheck + `docker compose up --wait`. It deliberately
+does NOT touch the database — a slow / contended sqlite read should
+not look like the app is down. If we later want a readiness probe
+that exercises dependencies (db, agent, temporal), add `/readyz`
+alongside.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from prep.auth import current_user
 from prep.decks.repo import DeckRepo
@@ -18,6 +25,14 @@ from prep.trivia.session_state import format_done
 from prep.web.templates import templates
 
 router = APIRouter()
+
+
+@router.get("/healthz", include_in_schema=False)
+def healthz() -> PlainTextResponse:
+    """Liveness probe. 200 = the uvicorn process is up and the route
+    table loaded; that's intentionally all it asserts. No DB hit, no
+    agent ping — those would be readiness, not liveness."""
+    return PlainTextResponse("ok")
 
 
 @router.get("/", response_class=HTMLResponse)
