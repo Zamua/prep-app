@@ -153,6 +153,15 @@ wipe-temporal-state:
 DEPLOY_PROD_TAG := $(shell test -f .prod-version && tr -d '[:space:]' < .prod-version)
 DEPLOY_BUILD_DIR := /tmp/prep-build
 
+# COMPOSE_BAKE=true switches `docker compose --build` from the legacy
+# serial buildx-classic path to `docker buildx bake`, which builds the
+# images in the compose project in parallel using a single buildkit
+# session. On this two-image project (prep + agent) the parallelism
+# saves a measurable chunk of wall time on every deploy — both images
+# share the same builder-go base layer, so bake can dedup the work.
+# Both deploy-stag and deploy-prod inherit this.
+export COMPOSE_BAKE := true
+
 deploy-stag:
 	@echo "→ deploy-stag (image=prep:staging, project=stag, port=8082)"
 	@# Pass PREP_DEFAULT_USER='' explicitly. compose's ${VAR-guest}
