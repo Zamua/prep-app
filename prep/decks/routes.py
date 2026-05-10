@@ -1084,88 +1084,15 @@ async def transform_view(
     if terminal and progress is None:
         progress = {"status": "done", "result": await temporal_client.get_transform_result(wid)}
 
-    # Recover the deck name for the back link. Card-scope walks
-    # question → deck.
     uid = user["tailscale_login"]
-    deck_name = ""
-    if scope == "deck":
-        deck_name = deck_repo.find_name(uid, target_id) or ""
-    else:
-        q = q_repo.get(uid, target_id)
-        if q is not None:
-            deck_name = deck_repo.find_name(uid, q.deck_id) or ""
-
-    # Build a per-modification diff so the preview shows the user the
-    # OLD state (live from the DB) alongside claude's proposed NEW
-    # state. The plan only carries the new shape; old shape needs
-    # a lookup. Cheap: one fetch per modified card, small N.
-    # For reorganize plans we also resolve each card's source deck
-    # name so the template can group changes by deck.
-    plan = (progress or {}).get("plan") or {}
-    deck_id_to_name: dict[int, str] = {s.id: s.name for s in deck_repo.list_summaries(uid)}
-
-    def _deck_for_qid(qid: int) -> str:
-        q = q_repo.get(uid, qid)
-        return deck_id_to_name.get(q.deck_id, "") if q is not None else ""
-
-    modification_diffs: list[dict] = []
-    for m in plan.get("modifications") or []:
-        qid = m.get("question_id")
-        if not qid:
-            continue
-        old = q_repo.get(uid, qid)
-        if old is None:
-            continue
-        modification_diffs.append(
-            {
-                "question_id": qid,
-                "deck_name": deck_id_to_name.get(old.deck_id, ""),
-                "old": {
-                    "type": old.type.value,
-                    "topic": old.topic or "",
-                    "prompt": old.prompt,
-                    "answer": old.answer,
-                    "rubric": old.rubric or "",
-                    "skeleton": old.skeleton or "",
-                    "language": old.language or "",
-                    "explanation": old.explanation or "",
-                    "answer_regex": old.answer_regex or "",
-                },
-                "new": {
-                    "type": m.get("type") or old.type.value,
-                    "topic": (m.get("topic") or old.topic or "") or "",
-                    "prompt": m.get("prompt") or old.prompt,
-                    "answer": m.get("answer") or old.answer,
-                    "rubric": m.get("rubric")
-                    if m.get("rubric") is not None
-                    else (old.rubric or ""),
-                    "skeleton": m.get("skeleton")
-                    if m.get("skeleton") is not None
-                    else (old.skeleton or ""),
-                    "language": m.get("language")
-                    if m.get("language") is not None
-                    else (old.language or ""),
-                    "explanation": m.get("explanation")
-                    if m.get("explanation") is not None
-                    else (old.explanation or ""),
-                    "answer_regex": m.get("answer_regex")
-                    if m.get("answer_regex") is not None
-                    else (old.answer_regex or ""),
-                },
-            }
-        )
-
-    # For reorganize: pre-resolve deck names for deletions + card_moves
-    # (sources) so the template can group them by deck without doing
-    # per-row lookups in jinja.
-    deletion_decks: dict[int, str] = {
-        qid: _deck_for_qid(qid) for qid in (plan.get("deletions") or [])
-    }
-    move_source_decks: dict[int, str] = {
-        mv.get("question_id"): _deck_for_qid(mv.get("question_id"))
-        for mv in (plan.get("card_moves") or [])
-        if mv.get("question_id")
-    }
+    ctx = service.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=uid,
+        scope=scope,
+        target_id=target_id,
+        progress=progress,
+    )
 
     return templates.TemplateResponse(
         "transform.html",
@@ -1175,14 +1102,14 @@ async def transform_view(
             "wid": wid,
             "scope": scope,
             "target_id": target_id,
-            "deck_name": deck_name,
+            "deck_name": ctx.deck_name,
             "progress": progress or {},
             "desc": desc or {},
             "status": status,
-            "modification_diffs": modification_diffs,
-            "deletion_decks": deletion_decks,
-            "move_source_decks": move_source_decks,
-            "deck_id_to_name": deck_id_to_name,
+            "modification_diffs": ctx.modification_diffs,
+            "deletion_decks": ctx.deletion_decks,
+            "move_source_decks": ctx.move_source_decks,
+            "deck_id_to_name": ctx.deck_id_to_name,
         },
     )
 

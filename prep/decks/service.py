@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel
+
 from prep.decks.entities import (
     DeckCard,
     DeckSummary,
@@ -327,3 +329,149 @@ async def get_transform_progress(client: Any, wid: str) -> dict:
 
 async def get_transform_result(client: Any, wid: str) -> dict:
     return await client.get_transform_result(wid)
+
+
+# ----------------------------------------------------------------------------
+# Transform view rendering context
+# ----------------------------------------------------------------------------
+#
+# `build_transform_view_ctx` composes the dict the transform.html
+# template expects from the already-fetched workflow progress + a few
+# repo lookups. Lifted out of `routes.transform_view` so the diff
+# building / deck-name resolution / move grouping has somewhere to be
+# tested without firing up Temporal.
+
+
+class TransformModificationDiff(BaseModel):
+    """Per-modification before/after pair, used by the transform preview
+    template. Old and new shapes are dict-of-strings so the template
+    can iterate fields uniformly."""
+
+    question_id: int
+    deck_name: str
+    old: dict[str, str]
+    new: dict[str, str]
+
+
+class TransformViewCtx(BaseModel):
+    """Full template context for `transform_view`. Values match the
+    keys the existing template reads, just typed.
+
+    Keep this aligned with `templates/transform.html` field accesses;
+    rename or add fields here when the template changes."""
+
+    deck_name: str
+    modification_diffs: list[TransformModificationDiff]
+    deletion_decks: dict[int, str]
+    move_source_decks: dict[int, str]
+    deck_id_to_name: dict[int, str]
+
+
+def _question_to_diff_dict(q: Question) -> dict[str, str]:
+    """Old-side of a modification diff: every editable field as a
+    string (or empty-string when null)."""
+    return {
+        "type": q.type.value,
+        "topic": q.topic or "",
+        "prompt": q.prompt,
+        "answer": q.answer,
+        "rubric": q.rubric or "",
+        "skeleton": q.skeleton or "",
+        "language": q.language or "",
+        "explanation": q.explanation or "",
+        "answer_regex": q.answer_regex or "",
+    }
+
+
+def _modification_to_new_dict(m: dict, old: Question) -> dict[str, str]:
+    """New-side of a modification diff: claude's proposed value when
+    present, else fall through to the old value. Same keys as the old
+    side so the template can `for k in old` and align."""
+    return {
+        "type": m.get("type") or old.type.value,
+        "topic": (m.get("topic") or old.topic or "") or "",
+        "prompt": m.get("prompt") or old.prompt,
+        "answer": m.get("answer") or old.answer,
+        "rubric": m.get("rubric") if m.get("rubric") is not None else (old.rubric or ""),
+        "skeleton": m.get("skeleton") if m.get("skeleton") is not None else (old.skeleton or ""),
+        "language": m.get("language") if m.get("language") is not None else (old.language or ""),
+        "explanation": m.get("explanation")
+        if m.get("explanation") is not None
+        else (old.explanation or ""),
+        "answer_regex": m.get("answer_regex")
+        if m.get("answer_regex") is not None
+        else (old.answer_regex or ""),
+    }
+
+
+def build_transform_view_ctx(
+    *,
+    deck_repo: DeckRepo,
+    question_repo: QuestionRepo,
+    user_id: str,
+    scope: str,
+    target_id: int,
+    progress: dict | None,
+) -> TransformViewCtx:
+    """Build the context dict for the transform-preview page.
+
+    - Resolve the deck name for the back link (by deck_id for deck
+      scope; via the question's deck for card scope).
+    - Build a per-modification diff (OLD live shape from the DB next
+      to claude's proposed NEW shape).
+    - For reorganize plans, pre-resolve source-deck names for deletions
+      + card_moves so the template can group changes by deck without
+      doing per-row lookups in jinja.
+
+    Pure-ish: depends only on repos, the user_id scope, and the
+    workflow progress dict. The caller (route) handles the temporal
+    fetch + terminal-status fallback.
+    """
+    plan = (progress or {}).get("plan") or {}
+    deck_id_to_name: dict[int, str] = {s.id: s.name for s in deck_repo.list_summaries(user_id)}
+
+    deck_name = ""
+    if scope == "deck":
+        deck_name = deck_repo.find_name(user_id, target_id) or ""
+    else:
+        q = question_repo.get(user_id, target_id)
+        if q is not None:
+            deck_name = deck_repo.find_name(user_id, q.deck_id) or ""
+
+    def _deck_for_qid(qid: int) -> str:
+        q = question_repo.get(user_id, qid)
+        return deck_id_to_name.get(q.deck_id, "") if q is not None else ""
+
+    modification_diffs: list[TransformModificationDiff] = []
+    for m in plan.get("modifications") or []:
+        qid = m.get("question_id")
+        if not qid:
+            continue
+        old = question_repo.get(user_id, qid)
+        if old is None:
+            continue
+        modification_diffs.append(
+            TransformModificationDiff(
+                question_id=qid,
+                deck_name=deck_id_to_name.get(old.deck_id, ""),
+                old=_question_to_diff_dict(old),
+                new=_modification_to_new_dict(m, old),
+            )
+        )
+
+    deletion_decks: dict[int, str] = {
+        qid: _deck_for_qid(qid) for qid in (plan.get("deletions") or [])
+    }
+    move_source_decks: dict[int, str] = {
+        mv.get("question_id"): _deck_for_qid(mv.get("question_id"))
+        for mv in (plan.get("card_moves") or [])
+        if mv.get("question_id")
+    }
+
+    return TransformViewCtx(
+        deck_name=deck_name,
+        modification_diffs=modification_diffs,
+        deletion_decks=deletion_decks,
+        move_source_decks=move_source_decks,
+        deck_id_to_name=deck_id_to_name,
+    )

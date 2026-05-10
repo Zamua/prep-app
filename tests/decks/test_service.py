@@ -221,3 +221,169 @@ async def test_transform_signals_pass_through():
     await svc.reject_transform(client, "wf-2")
     names = [name for name, _ in client.calls]
     assert names == ["signal_apply_transform", "signal_reject_transform"]
+
+
+# ============================================================================
+# build_transform_view_ctx
+# ============================================================================
+
+
+def _seed_simple_deck_with_card(
+    deck_repo: DeckRepo, q_repo: QuestionRepo, user: str
+) -> tuple[int, int]:
+    """Helper: create one deck + one question. Returns (deck_id, qid)."""
+    deck_id = deck_repo.create(user, "scratch", context_prompt=None)
+    qid = q_repo.add(
+        user,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            prompt="Capital of France?",
+            answer="Paris",
+            topic="geo",
+            rubric="must mention Paris",
+        ),
+    )
+    return deck_id, qid
+
+
+def test_build_transform_view_ctx_deck_scope_resolves_deck_name(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Deck-scope: deck_name comes from the target deck id directly."""
+    deck_repo, q_repo = repos
+    user = initialized_db
+    deck_id, _qid = _seed_simple_deck_with_card(deck_repo, q_repo, user)
+    ctx = svc.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=user,
+        scope="deck",
+        target_id=deck_id,
+        progress=None,
+    )
+    assert ctx.deck_name == "scratch"
+    assert ctx.modification_diffs == []
+    assert ctx.deletion_decks == {}
+    assert ctx.move_source_decks == {}
+
+
+def test_build_transform_view_ctx_card_scope_walks_question_to_deck(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Card-scope: deck_name resolves via the question's deck_id."""
+    deck_repo, q_repo = repos
+    user = initialized_db
+    _deck_id, qid = _seed_simple_deck_with_card(deck_repo, q_repo, user)
+    ctx = svc.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=user,
+        scope="card",
+        target_id=qid,
+        progress=None,
+    )
+    assert ctx.deck_name == "scratch"
+
+
+def test_build_transform_view_ctx_modifications_diff_old_vs_new(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Modification diff carries the old DB shape and claude's
+    proposed new shape side-by-side. Fields not present on the
+    modification fall through to the old value."""
+    deck_repo, q_repo = repos
+    user = initialized_db
+    deck_id, qid = _seed_simple_deck_with_card(deck_repo, q_repo, user)
+    progress = {
+        "plan": {
+            "modifications": [
+                {
+                    "question_id": qid,
+                    "prompt": "What's the capital of France?",
+                    # rubric explicitly carried; topic untouched (falls
+                    # through to the old value).
+                    "rubric": "spelled correctly",
+                }
+            ]
+        }
+    }
+    ctx = svc.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=user,
+        scope="deck",
+        target_id=deck_id,
+        progress=progress,
+    )
+    assert len(ctx.modification_diffs) == 1
+    d = ctx.modification_diffs[0]
+    assert d.question_id == qid
+    assert d.deck_name == "scratch"
+    assert d.old["prompt"] == "Capital of France?"
+    assert d.new["prompt"] == "What's the capital of France?"
+    assert d.old["rubric"] == "must mention Paris"
+    assert d.new["rubric"] == "spelled correctly"
+    # Untouched field: new falls through to old (here both = "geo").
+    assert d.new["topic"] == "geo"
+
+
+def test_build_transform_view_ctx_skips_unknown_modification_qid(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Modifications referencing a question that doesn't exist (or
+    belongs to another user) are silently dropped — the diff list
+    only contains rows we can actually preview."""
+    deck_repo, q_repo = repos
+    user = initialized_db
+    deck_id, _qid = _seed_simple_deck_with_card(deck_repo, q_repo, user)
+    progress = {
+        "plan": {
+            "modifications": [
+                {"question_id": 99999, "prompt": "ghost"},  # not owned by user
+                {"question_id": None, "prompt": "no id"},
+            ]
+        }
+    }
+    ctx = svc.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=user,
+        scope="deck",
+        target_id=deck_id,
+        progress=progress,
+    )
+    assert ctx.modification_diffs == []
+
+
+def test_build_transform_view_ctx_resolves_reorganize_groupings(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Reorganize plan: deletion_decks + move_source_decks should
+    pre-resolve each question's source deck name so the template can
+    group by deck without per-row jinja lookups."""
+    deck_repo, q_repo = repos
+    user = initialized_db
+    deck_id, qid_a = _seed_simple_deck_with_card(deck_repo, q_repo, user)
+    qid_b = q_repo.add(
+        user,
+        deck_id,
+        NewQuestion(type=QuestionType.SHORT, prompt="Largest planet?", answer="Jupiter"),
+    )
+    progress = {
+        "plan": {
+            "deletions": [qid_a],
+            "card_moves": [{"question_id": qid_b, "dest_deck_name": "elsewhere"}],
+        }
+    }
+    ctx = svc.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=user,
+        scope="deck",
+        target_id=deck_id,
+        progress=progress,
+    )
+    assert ctx.deletion_decks == {qid_a: "scratch"}
+    assert ctx.move_source_decks == {qid_b: "scratch"}
+    assert ctx.deck_id_to_name == {deck_id: "scratch"}
