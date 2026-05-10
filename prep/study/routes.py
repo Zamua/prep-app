@@ -19,7 +19,6 @@ from prep.auth import current_user
 from prep.decks.entities import DeckType
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.domain import grading
-from prep.infrastructure.db import cursor, now
 from prep.study import service
 from prep.study.entities import SessionState, SessionStatus
 from prep.study.repo import ReviewRepo, SessionRepo, StaleVersionError
@@ -137,6 +136,7 @@ def session_view(
     deck_repo: DeckRepo = Depends(_deck_repo),
     session_repo: SessionRepo = Depends(_session_repo),
     q_repo: QuestionRepo = Depends(_question_repo),
+    review_repo: ReviewRepo = Depends(_review_repo),
 ):
     """Render the session — branches by status + state."""
     uid = user["tailscale_login"]
@@ -167,12 +167,8 @@ def session_view(
         st = s.last_answered_state or {}
         # Pull the most recent user_answer from reviews — single source
         # of truth, no extra column needed.
-        with cursor() as c:
-            r = c.execute(
-                "SELECT user_answer FROM reviews WHERE question_id = ? ORDER BY id DESC LIMIT 1",
-                (qid,),
-            ).fetchone()
-            user_answer = r["user_answer"] if r else ""
+        user_answer = review_repo.get_last_user_answer(qid) if qid else None
+        user_answer = user_answer or ""
         idk = user_answer == ""
         picked_set, correct_set = _picked_correct_sets(q, user_answer)
         return templates.TemplateResponse(
@@ -210,13 +206,7 @@ def session_view(
     # card is left, transition to completed via a synchronous bump.
     q_entity = q_repo.get(uid, s.current_question_id) if s.current_question_id else None
     if q_entity is None:
-        with cursor() as c:
-            c.execute(
-                "UPDATE study_sessions SET status='completed', "
-                "       version = version + 1, last_active = ? "
-                " WHERE id = ? AND user_id = ?",
-                (now(), sid, uid),
-            )
+        session_repo.mark_completed(uid, sid)
         return responses.redirect(request, f"/session/{sid}")
     q = q_entity.model_dump()
     q["choices_list"] = q_entity.choices or []

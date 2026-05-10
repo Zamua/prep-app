@@ -672,24 +672,11 @@ async def trivia_session_regrade(
 
 def _notif_edit_response(request: Request, decks: DeckRepo, uid: str, deck_id: int):
     """Render the notif-edit partial fragment for an htmx swap. Reads
-    the deck's current trivia metadata directly so the fragment matches
-    what the inline render in deck.html produces. Used as the htmx
-    response body for the three trivia-deck settings routes (interval,
-    session_size, notifications)."""
-    from prep.infrastructure.db import cursor
-
-    with cursor() as c:
-        row = c.execute(
-            "SELECT notifications_enabled, notification_interval_minutes, "
-            "trivia_session_size FROM decks WHERE id=? AND user_id=?",
-            (deck_id, uid),
-        ).fetchone()
-    deck_meta = {
-        "deck_id": deck_id,
-        "notifications_enabled": bool(row["notifications_enabled"]) if row else True,
-        "interval_minutes": row["notification_interval_minutes"] if row else None,
-        "session_size": int(row["trivia_session_size"] or 3) if row else 3,
-    }
+    the deck's current trivia metadata via DeckRepo so the fragment
+    matches what the inline render in deck.html produces. Used as the
+    htmx response body for the three trivia-deck settings routes
+    (interval, session_size, notifications)."""
+    deck_meta = decks.get_meta(uid, deck_id)
     return templates.TemplateResponse(request, "partials/notif_edit.html", {"deck_meta": deck_meta})
 
 

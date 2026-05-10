@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -461,33 +460,10 @@ def deck_view(
     cards = q_repo.list_in_deck(uid, deck_id)
     now_ts = db_now()
     deck_type = deck_repo.get_type(uid, deck_id)
-    # Cheap row read for the per-deck notification toggle state.
-    # Both srs and trivia decks expose the toggle now — srs honors
-    # it via the digest count filter; trivia honors it via the
-    # per-deck scheduler skip.
-    from prep.infrastructure.db import cursor
-
-    deck_meta: dict[str, Any] = {
-        "deck_id": deck_id,
-        "notifications_enabled": True,
-        "pinned": False,
-    }
-    with cursor() as c:
-        row = c.execute(
-            "SELECT notifications_enabled, notification_interval_minutes, "
-            "trivia_session_size, context_prompt, pinned_at "
-            "FROM decks WHERE id=? AND user_id=?",
-            (deck_id, uid),
-        ).fetchone()
-    if row:
-        deck_meta = {
-            "deck_id": deck_id,
-            "notifications_enabled": bool(row["notifications_enabled"]),
-            "interval_minutes": row["notification_interval_minutes"],
-            "session_size": int(row["trivia_session_size"] or 3),
-            "context_prompt": row["context_prompt"] or "",
-            "pinned": row["pinned_at"] is not None,
-        }
+    # Both srs and trivia decks expose the per-deck notification toggle
+    # — srs honors it via the digest count filter; trivia honors it via
+    # the per-deck scheduler skip.
+    deck_meta = deck_repo.get_meta(uid, deck_id)
 
     # Trivia-only stats for the mastery-bar header. Cheap one-query
     # group-by; only computed when the deck is actually trivia.

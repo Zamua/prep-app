@@ -192,6 +192,30 @@ class DeckCard(BaseModel):
         return self.choices or []
 
 
+class DeckMeta(BaseModel):
+    """Lightweight projection of deck row fields the deck page + notif
+    popover need. Returned by `DeckRepo.get_meta()` so routes don't
+    have to peek at raw rows. Pydantic for templates — attribute access
+    is jinja-friendly."""
+
+    deck_id: int
+    notifications_enabled: bool = True
+    interval_minutes: int | None = None
+    session_size: int = 3
+    context_prompt: str = ""
+    pinned: bool = False
+
+
+class TriviaSourceMeta(BaseModel):
+    """Slim projection of a trivia deck's split-source fields:
+    the inherited interval + the source's topic prompt. Used by
+    `decks.service.split_deck` when promoting a trivia subset into a
+    new deck."""
+
+    notification_interval_minutes: int | None = None
+    context_prompt: str | None = None
+
+
 class NewQuestion(BaseModel):
     """Request shape for adding a question — what the route handler
     receives from a form / JSON body. Excludes server-set fields

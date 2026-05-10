@@ -360,6 +360,19 @@ class SessionRepo:
                 )
             return new_v
 
+    def mark_completed(self, user_id: str, sid: str) -> None:
+        """Bump a session into status='completed'. Used by the session
+        view route when it lands on a session whose current question
+        was already answered (no due card left) — the route renders
+        result.html for the just-answered card after this stamp."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE study_sessions SET status='completed', "
+                "       version = version + 1, last_active = ? "
+                " WHERE id = ? AND user_id = ?",
+                (now(), sid, user_id),
+            )
+
     def abandon(self, user_id: str, sid: str) -> None:
         with cursor() as c:
             c.execute(
@@ -465,6 +478,19 @@ class ReviewRepo:
                 (new_step, next_due, ts.isoformat(), qid),
             )
         return CardState(step=new_step, next_due=next_due, interval_minutes=interval)
+
+    def get_last_user_answer(self, qid: int) -> str | None:
+        """Most recent user_answer recorded for `qid` across the
+        reviews log. Used by the session-view route when rendering the
+        showing-result page so the result template can echo back what
+        the user typed. Returns None if the question has no reviews
+        yet."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT user_answer FROM reviews WHERE question_id = ? ORDER BY id DESC LIMIT 1",
+                (qid,),
+            ).fetchone()
+        return row["user_answer"] if row else None
 
     def count_due_for_user(self, user_id: str) -> int:
         """Total SRS cards due-now across the user's decks that have

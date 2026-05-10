@@ -16,11 +16,13 @@ import json
 from prep.decks.entities import (
     Deck,
     DeckCard,
+    DeckMeta,
     DeckSummary,
     DeckType,
     NewQuestion,
     Question,
     QuestionType,
+    TriviaSourceMeta,
 )
 from prep.infrastructure.db import cursor, now
 
@@ -76,6 +78,48 @@ class DeckRepo:
         if row is None:
             return None
         return DeckType(row["deck_type"])
+
+    def get_meta(self, user_id: str, deck_id: int) -> DeckMeta:
+        """Lightweight projection of the deck row used by the deck page
+        + the trivia notif-edit popover: notifications toggle, interval,
+        session size, context prompt, pinned-state. Returns a `DeckMeta`
+        with sensible defaults when the row is missing (so the deck
+        page can still render for a freshly-created deck that has no
+        row populated yet)."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT notifications_enabled, notification_interval_minutes, "
+                "trivia_session_size, context_prompt, pinned_at "
+                "FROM decks WHERE id=? AND user_id=?",
+                (deck_id, user_id),
+            ).fetchone()
+        if not row:
+            return DeckMeta(deck_id=deck_id)
+        return DeckMeta(
+            deck_id=deck_id,
+            notifications_enabled=bool(row["notifications_enabled"]),
+            interval_minutes=row["notification_interval_minutes"],
+            session_size=int(row["trivia_session_size"] or 3),
+            context_prompt=row["context_prompt"] or "",
+            pinned=row["pinned_at"] is not None,
+        )
+
+    def get_trivia_source_meta(self, user_id: str, deck_id: int) -> TriviaSourceMeta | None:
+        """Read the trivia split-source projection: inherited interval +
+        source topic prompt. Returns None if the deck doesn't exist or
+        belongs to another user (IDOR guard via user_id)."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT notification_interval_minutes, context_prompt"
+                " FROM decks WHERE id = ? AND user_id = ?",
+                (deck_id, user_id),
+            ).fetchone()
+        if not row:
+            return None
+        return TriviaSourceMeta(
+            notification_interval_minutes=row["notification_interval_minutes"],
+            context_prompt=row["context_prompt"],
+        )
 
     def create(self, user_id: str, name: str, context_prompt: str | None = None) -> int:
         """Insert a new deck row. Caller is responsible for validating
