@@ -124,26 +124,51 @@ RUN curl -fsSL "https://github.com/temporalio/cli/releases/download/v${TEMPORAL_
 
 WORKDIR /app
 
-# Application source. Order matters for layer caching: rarely-changed
-# files first, frequently-changed files last.
-COPY pyproject.toml uv.lock* ./
-COPY --from=builder-py /app/.venv ./.venv
+# Persistent state dirs. mkdir is independent of source — pin it
+# above the source COPYs so a Python/template/CSS edit doesn't
+# invalidate the layer. (Compose mounts a volume here at runtime that
+# shadows these dirs; the build-time mkdir matters mostly so the
+# image is sensible for ad-hoc `docker run` without a volume.)
+RUN mkdir -p /data/prep /data/temporal && chmod 700 /data
 
-# Binaries from the go + bun stages.
+# ---- Layer-cache strategy ---------------------------------------------
+# COPY layers are ordered least-frequently-changed → most-frequently.
+# Each COPY's cache hit/miss is independent (buildkit keys on the
+# content being copied), but ordering still matters for two reasons:
+# (1) `docker history` reads top-down, so reviewing what changed across
+#     versions is easier when the volatile layers are at the bottom; and
+# (2) a future RUN that depends on a copied tree busts every layer below
+#     it — keeping volatile-content COPYs late protects the stable ones.
+# ----------------------------------------------------------------------
+
+# Stable scaffolding: dep metadata + the Procfile that drives goreman.
+COPY pyproject.toml uv.lock* ./
+COPY docker/Procfile.docker ./Procfile.docker
+
+# Pre-built artifacts from sibling stages. These change whenever the
+# source they're built from changes (worker-go/, static/cm/), but they
+# don't churn on every iteration.
+COPY --from=builder-py /app/.venv ./.venv
 COPY --from=builder-go /out/worker ./worker-go/bin/worker
 COPY --from=builder-go /out/goreman /usr/local/bin/goreman
 COPY --from=builder-bun /src/static/cm-bundle.js ./static/cm-bundle.js
 
-# App source. The Procfile.docker (below) is what goreman runs.
-COPY prep/ ./prep/
-COPY templates/ ./templates/
-COPY static/ ./static/
-COPY docker/Procfile.docker ./Procfile.docker
+# Static assets — change on UI work but less often than Python source.
+# Targeted COPYs (not `COPY static/`) intentionally SKIP `static/cm/`
+# (the bundler's source tree, already turned into cm-bundle.js above):
+# shipping it adds ~20KB of inert bytes the runtime never serves.
+COPY static/css/ ./static/css/
+COPY static/icons/ ./static/icons/
+COPY static/js/ ./static/js/
+COPY static/pwa/ ./static/pwa/
+COPY static/sw.js ./static/sw.js
 
-# Persistent state goes here. compose mounts a named volume so the
-# data.sqlite + vapid keys + temporal-data subdirs all survive
-# container recreates.
-RUN mkdir -p /data/prep /data/temporal && chmod 700 /data
+# Templates — Jinja HTML, churns with feature work.
+COPY templates/ ./templates/
+
+# Python source — churns most. Last so a Python-only edit invalidates
+# only this layer + the export.
+COPY prep/ ./prep/
 
 ENV PORT=8082 \
     HOST=0.0.0.0 \
