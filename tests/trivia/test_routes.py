@@ -867,3 +867,107 @@ def test_decks_new_trivia_rejects_empty_topic(monkeypatch, client: TestClient, i
     )
     assert r.status_code == 400
     assert "topic" in r.text.lower()
+
+
+# ---- /trivia/gen/{wid}/fragment ---------------------------------------
+#
+# htmx polling fragment for the trivia-generation workflow. Same shape
+# as the other fragment endpoints: hx-trigger present only when the
+# workflow is mid-flight (`starting`, `generating`, `applying`),
+# omitted on terminal states (`done`, `failed`). Tests stub
+# `prep.temporal_client.get_trivia_progress`.
+
+
+def _afake_value(value):
+    async def fn(*_a, **_kw):
+        return value
+
+    return fn
+
+
+def _seed_trivia_gen_deck(initialized_db: str, deck_name: str = "geo") -> str:
+    """Returns the wid. Workflow id format is `trivia-<deck>-<rand>`."""
+    DeckRepo().create_trivia(initialized_db, deck_name, topic="capitals", interval_minutes=30)
+    return f"trivia-{deck_name}-abc1234567"
+
+
+def test_trivia_gen_fragment_mid_flow_keeps_polling(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """status=generating → hx-trigger present, the in-flight label
+    renders."""
+    from prep import temporal_client
+
+    wid = _seed_trivia_gen_deck(initialized_db)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_trivia_progress",
+        _afake_value({"status": "generating", "total": 25, "generated_count": 4, "inserted": 0}),
+    )
+
+    r = client.get(f"/trivia/gen/{wid}/fragment")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert 'hx-trigger="every' in r.text
+    # In-flight label.
+    assert "asking claude" in r.text
+
+
+def test_trivia_gen_fragment_terminal_done_stops_polling(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """status=done → no hx-trigger; the 'Open deck' link renders so the
+    user can navigate back manually."""
+    from prep import temporal_client
+
+    wid = _seed_trivia_gen_deck(initialized_db)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_trivia_progress",
+        _afake_value({"status": "done", "total": 25, "generated_count": 25, "inserted": 25}),
+    )
+
+    r = client.get(f"/trivia/gen/{wid}/fragment")
+    assert r.status_code == 200
+    assert 'hx-trigger="every' not in r.text
+    assert "Open deck" in r.text
+    assert "/deck/geo" in r.text
+
+
+def test_trivia_gen_fragment_idor_other_user_404(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """bob's deck → 404 for alice (test client user)."""
+    from prep.auth.repo import UserRepo
+    from prep import temporal_client
+
+    UserRepo().upsert("bob@example.com")
+    DeckRepo().create_trivia(
+        "bob@example.com", "bobs-deck", topic="x", interval_minutes=30
+    )
+    wid = "trivia-bobs-deck-abc1234567"
+    monkeypatch.setattr(
+        temporal_client,
+        "get_trivia_progress",
+        _afake_value({"status": "generating", "total": 25, "generated_count": 1, "inserted": 0}),
+    )
+
+    r = client.get(f"/trivia/gen/{wid}/fragment")
+    assert r.status_code == 404
+
+
+def test_trivia_gen_fragment_is_html_not_json(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    from prep import temporal_client
+
+    wid = _seed_trivia_gen_deck(initialized_db)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_trivia_progress",
+        _afake_value({"status": "generating", "total": 25, "generated_count": 1, "inserted": 0}),
+    )
+
+    r = client.get(f"/trivia/gen/{wid}/fragment")
+    assert r.status_code == 200
+    assert not r.headers["content-type"].startswith("application/json")

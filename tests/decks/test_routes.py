@@ -654,3 +654,249 @@ def test_trivia_notifications_toggle_now_works_for_srs_via_unified_setter(
         follow_redirects=False,
     )
     assert r.status_code == 303
+
+
+# ---- htmx fragment endpoints -------------------------------------------
+#
+# The fragment routes return a slice of HTML that swaps in place via
+# hx-swap=outerHTML. The contract the JS depends on: the root element
+# carries `hx-trigger="every Xs"` ONLY while the workflow is still
+# mid-flow. Once a workflow reaches a terminal-from-the-UI-perspective
+# state (awaiting_apply for transform, awaiting_feedback for plan, etc.)
+# the trigger is omitted and htmx stops polling — the server is the
+# loop's owner.
+#
+# Tests below stub `prep.temporal_client.get_*_progress` + describe_workflow
+# with async fakes so we don't need a real Temporal devserver.
+
+
+def _afake(value):
+    """Async fake — coroutine factory that ignores args and resolves to
+    `value`. Mirrors the helper in tests/trivia/test_routes.py."""
+
+    async def fn(*_a, **_kw):
+        return value
+
+    return fn
+
+
+# ---- /transform/{wid}/fragment ----------------------------------------
+
+
+def _seed_transform_wid(initialized_db: str, deck_name: str = "go-systems") -> tuple[int, str]:
+    """Returns (deck_id, wid). Workflow id encodes scope='deck' +
+    deck_id so the route's `_require_owns_transform` finds the deck."""
+    deck_id = DeckRepo().create(initialized_db, deck_name)
+    wid = f"transform-deck-{deck_id}-abc1234567"
+    return deck_id, wid
+
+
+def test_transform_fragment_mid_flow_keeps_polling(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Non-terminal status (computing): partial carries hx-trigger so
+    htmx keeps polling, and the status text is reflected in the body."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db)
+    monkeypatch.setattr(temporal_client, "get_transform_progress", _afake({"status": "computing"}))
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
+
+    r = client.get(f"/transform/{wid}/fragment")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    # hx-trigger means the fragment will continue polling.
+    assert 'hx-trigger="every' in r.text
+    # Headline reflects the computing state.
+    assert "Thinking" in r.text
+
+
+def test_transform_fragment_terminal_stops_polling(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """awaiting_apply: workflow paused waiting for the user. The partial
+    omits hx-trigger AND renders the Apply / Reject buttons."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_transform_progress",
+        _afake({"status": "awaiting_apply", "plan": {"modifications": [], "additions": [], "deletions": []}}),
+    )
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
+
+    r = client.get(f"/transform/{wid}/fragment")
+    assert r.status_code == 200
+    assert 'hx-trigger="every' not in r.text
+    # Terminal-state UI elements appear.
+    assert "Apply changes" in r.text
+    assert "Reject" in r.text
+
+
+def test_transform_fragment_idor_other_user_404(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """A deck belonging to bob → alice (test client) gets 404 from the
+    ownership gate. Same shape as not-found, no leak."""
+    from prep.auth.repo import UserRepo
+    from prep import temporal_client
+
+    UserRepo().upsert("bob@example.com")
+    bob_deck_id = DeckRepo().create("bob@example.com", "bobs-deck")
+    wid = f"transform-deck-{bob_deck_id}-abc1234567"
+    # Even with stubbed temporal, the gate fires first.
+    monkeypatch.setattr(temporal_client, "get_transform_progress", _afake({"status": "computing"}))
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
+
+    r = client.get(f"/transform/{wid}/fragment")
+    assert r.status_code == 404
+
+
+def test_transform_fragment_is_html_not_json(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Future-refactor guard: the fragment endpoint MUST stay HTML.
+    The /status JSON sibling is the legacy endpoint."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db)
+    monkeypatch.setattr(temporal_client, "get_transform_progress", _afake({"status": "computing"}))
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
+
+    r = client.get(f"/transform/{wid}/fragment")
+    assert r.status_code == 200
+    assert not r.headers["content-type"].startswith("application/json")
+
+
+# ---- /plan/{wid}/fragment ---------------------------------------------
+
+
+def _seed_plan_wid(initialized_db: str, deck_name: str = "go-systems") -> str:
+    """Plan workflow ids encode the deck name. The route's owner-check
+    just resolves the deck name → deck_id under the current user."""
+    DeckRepo().create(initialized_db, deck_name)
+    return f"plan-{deck_name}-abc1234567"
+
+
+def test_plan_fragment_mid_flow_keeps_polling(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """status=planning is a polling state → hx-trigger present, headline
+    shows the in-flight verb."""
+    from prep import temporal_client
+
+    wid = _seed_plan_wid(initialized_db)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_plan_progress",
+        _afake({"status": "planning", "plan": [], "total": 0, "generated_count": 0, "round": 1}),
+    )
+
+    r = client.get(f"/plan/{wid}/fragment")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert 'hx-trigger="every' in r.text
+    assert "Planning" in r.text
+
+
+def test_plan_fragment_terminal_awaiting_feedback_stops_polling(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """awaiting_feedback → no hx-trigger; the accept/refine UI renders."""
+    from prep import temporal_client
+
+    wid = _seed_plan_wid(initialized_db)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_plan_progress",
+        _afake({
+            "status": "awaiting_feedback",
+            "plan": [{"title": "Goroutines basics", "brief": "what go's scheduler does"}],
+            "total": 1,
+            "generated_count": 0,
+            "round": 1,
+        }),
+    )
+
+    r = client.get(f"/plan/{wid}/fragment")
+    assert r.status_code == 200
+    assert 'hx-trigger="every' not in r.text
+    # Accept / refine UI markers.
+    assert "Accept" in r.text
+    assert "Send feedback" in r.text
+
+
+def test_plan_fragment_idor_other_user_404(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    from prep.auth.repo import UserRepo
+    from prep import temporal_client
+
+    UserRepo().upsert("bob@example.com")
+    DeckRepo().create("bob@example.com", "bobs-deck")
+    wid = "plan-bobs-deck-abc1234567"
+    monkeypatch.setattr(temporal_client, "get_plan_progress", _afake({"status": "planning"}))
+
+    r = client.get(f"/plan/{wid}/fragment")
+    assert r.status_code == 404
+
+
+def test_plan_fragment_is_html_not_json(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    from prep import temporal_client
+
+    wid = _seed_plan_wid(initialized_db)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_plan_progress",
+        _afake({"status": "planning", "plan": [], "total": 0, "generated_count": 0, "round": 1}),
+    )
+
+    r = client.get(f"/plan/{wid}/fragment")
+    assert r.status_code == 200
+    assert not r.headers["content-type"].startswith("application/json")
+
+
+# ---- end-to-end transform progression ---------------------------------
+
+
+def test_transform_polling_progression(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Drive the fragment route through two states in sequence:
+    first computing (polling continues), then awaiting_apply (polling
+    stops + the accept UI renders). Validates the server-driven loop
+    lifecycle: the client is dumb, the partial drives the loop."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db, "concurrency")
+    # State machine the fake walks through. Each call to the progress
+    # query pops the next reply.
+    states = [
+        {"status": "computing"},
+        {"status": "awaiting_apply", "plan": {"modifications": [], "additions": [], "deletions": []}},
+    ]
+    calls = {"n": 0}
+
+    async def fake_progress(_wid):
+        i = min(calls["n"], len(states) - 1)
+        calls["n"] += 1
+        return states[i]
+
+    monkeypatch.setattr(temporal_client, "get_transform_progress", fake_progress)
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
+
+    # First poll: still computing → polling continues.
+    r1 = client.get(f"/transform/{wid}/fragment")
+    assert r1.status_code == 200
+    assert 'hx-trigger="every' in r1.text
+    assert "Thinking" in r1.text
+
+    # Second poll: awaiting_apply → polling stops + accept UI shows.
+    r2 = client.get(f"/transform/{wid}/fragment")
+    assert r2.status_code == 200
+    assert 'hx-trigger="every' not in r2.text
+    assert "Apply changes" in r2.text
+    assert calls["n"] == 2
