@@ -149,28 +149,22 @@
 }
 
 .notif-pill-form { margin: 0; }
+/* Shared chrome lives in `.pill` (components/pill.css). Here we only
+ * carry the size axis + interactivity bits the multi-selector rule
+ * doesn't include. */
 .notif-pill {
-  display: inline-flex;
-  align-items: center;
   gap: 0.4rem;
   font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
-  font-style: italic;
   padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  background: transparent;
-  color: var(--ink-soft);
   cursor: pointer;
-  font-family: inherit;
-  transition: background 0.12s ease, border-color 0.12s ease;
 }
 .notif-pill:hover {
   background: var(--ink-soft-bg-faint);
 }
 .notif-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
 
+/* `.notif-pill-paused` mirrors `.pill--paused`; kept here so existing
+ * templates don't need a class swap. */
 .notif-pill-paused {
   color: var(--wrong);
   border-color: var(--wrong-overlay);
@@ -190,23 +184,16 @@
  * `justify-content: center` keeps the icon+label centered inside the
  * fixed slot. */
 .deck-pin-form { margin: 0; }
+/* Shared chrome lives in `.pill`. Pin-specific: fixed min-width +
+ * center alignment so toggling pin/pinned doesn't reflow neighbors. */
 .tag-pin {
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
-  gap: 0.4rem;
   min-width: 5.5rem;
   font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
-  font-style: italic;
   padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  background: transparent;
-  color: var(--ink-soft);
   cursor: pointer;
-  font-family: inherit;
+  /* Override the inherited transition to also animate color (the
+   * active-state pill flips from --ink-soft to --quill). */
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .tag-pin:hover {
@@ -325,21 +312,20 @@
   display: flex; flex-wrap: wrap; gap: 0.4rem;
   margin: 0; padding: 0; border: 0;
 }
+/* Shared chrome lives in `.pill`. Preset chips are slightly larger
+ * (0.85rem font, 0.4rem 0.7rem padding) than the rest of the pill
+ * family — sized for tap targets inside the popover. */
 .notif-preset {
   flex: 1 1 auto;
   min-width: 3rem;
-  font-family: inherit; font-style: italic;
   font-size: 0.85rem;
   padding: 0.4rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  background: transparent; color: var(--ink-soft);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
 }
 .notif-preset:hover {
   background: var(--ink-soft-bg-faint);
 }
+/* Active state — accent fill so the chosen preset reads at a glance. */
 .notif-preset-active {
   background: color-mix(in srgb, var(--quill) 14%, transparent);
   border-color: var(--quill);
@@ -393,37 +379,29 @@
 .notif-pause-toggle:hover { color: var(--wrong); }
 .notif-pause-toggle .icon { width: 0.85rem; height: 0.85rem; }
 
-/* Edit pill: same chrome family as notif-pill, lives in the same row.
- * When the panel is open the pill picks up an "active" treatment so
- * the user knows what state things are in. */
+/* Edit pill: same chrome family as `.pill`. Shared chrome lives in
+ * components/pill.css; rules below carry only sizing + state
+ * variants. When the panel is open the pill picks up an "active"
+ * treatment so the user knows what state things are in. */
 .edit-pill {
-  display: inline-flex;
-  align-items: center;
   gap: 0.4rem;
   font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
-  font-style: italic;
   padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  background: transparent;
-  color: var(--ink-soft);
   cursor: pointer;
-  font-family: inherit;
-  transition: background 0.12s ease, border-color 0.12s ease;
 }
 .edit-pill:hover {
   background: var(--ink-soft-bg-faint);
 }
 .edit-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+/* `.edit-pill-open` mirrors `.pill--open`. */
 .edit-pill-open {
   color: var(--ink);
   border-color: var(--ink-soft);
   background: color-mix(in srgb, var(--ink-soft) 10%, transparent);
 }
-/* Danger variant — used for the deck-delete pill. Tinted red so it
- * reads as "destructive" without being loud at rest. */
+/* `.edit-pill-danger` mirrors `.pill--danger` — used for the
+ * deck-delete pill. Tinted red so it reads as "destructive" without
+ * being loud at rest. */
 .edit-pill-danger {
   color: color-mix(in srgb, var(--wrong) 75%, var(--ink-soft));
 }
@@ -670,16 +648,13 @@
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+/* Shared chrome lives in `.pill`. Mastery chips use slightly tighter
+ * padding (0.2rem 0.6rem) than other pills and have tabular-figure
+ * digits for the count display. */
 .deck-mastery-chip {
-  display: inline-flex;
-  align-items: center;
   gap: 0.3rem;
   padding: 0.2rem 0.6rem;
-  border-radius: 999px;
   font-size: 0.78rem;
-  font-style: italic;
-  letter-spacing: 0.05em;
-  border: 1px solid var(--hairline);
   font-feature-settings: "lnum" on, "tnum" on;
 }
 .deck-mastery-chip-unans { color: var(--ink-mute); }

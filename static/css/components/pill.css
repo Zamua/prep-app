@@ -1,0 +1,89 @@
+/* `.pill` — shared chrome for the small italic-uppercase outlined
+ * chips/buttons that appear all over the app: notification pills, the
+ * pin/edit/delete pills on the deck header, the per-card "tag" chips
+ * on the deck index, the trivia-notif preset chips, and the deck
+ * mastery chips.
+ *
+ * Each surface used to copy-paste a near-identical 12-line block.
+ * Rather than add a `pill` class to every template (high blast
+ * radius), we hold a single multi-selector rule for the universal
+ * properties and let per-variant rules in their component files
+ * (deck-page.css, card-index.css) keep only the delta — distinct
+ * padding, font-size, min-width, etc. Modifiers
+ * (.pill--paused / .pill--open / .pill--danger / .pill--mastery)
+ * can be applied directly in templates that already opt in.
+ *
+ * Imported early in the components layer so per-component rules with
+ * the same specificity (single class) can override on the cascade by
+ * source order — preserving the old visual output verbatim.
+ */
+
+.pill,
+.notif-pill,
+.edit-pill,
+.tag,
+.notif-preset,
+.deck-mastery-chip,
+.tag-pin {
+  display: inline-flex;
+  align-items: center;
+  font-style: italic;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+/* Default sizing for `.pill` (matches the predominant flavor on
+ * notif-pill / edit-pill / tag-pin). Per-variant rules in component
+ * files override the size axis where they differ (e.g. .tag uses
+ * 0.75rem font and tighter padding; .notif-preset uses 0.85rem). */
+.pill {
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+}
+.pill:hover {
+  background: var(--ink-soft-bg-faint);
+}
+.pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
+
+/* ---- modifiers --------------------------------------------------- */
+
+/* Paused — terracotta tint signals "notifications are off". */
+.pill--paused {
+  color: var(--wrong);
+  border-color: var(--wrong-overlay);
+  background: var(--wrong-bg-soft);
+}
+.pill--paused:hover {
+  background: color-mix(in srgb, var(--wrong) 14%, transparent);
+}
+
+/* Open — neutral filled treatment for an expanded popover trigger. */
+.pill--open {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink-soft) 10%, transparent);
+}
+
+/* Danger — destructive intent (delete-deck pill). Quiet at rest;
+ * loudens on hover. */
+.pill--danger {
+  color: color-mix(in srgb, var(--wrong) 75%, var(--ink-soft));
+}
+.pill--danger:hover {
+  background: var(--wrong-bg-soft);
+  border-color: var(--wrong-border);
+  color: var(--wrong);
+}
+
+/* Mastery — used by the per-deck breakdown chips on the deck page. */
+.pill--mastery {
+  font-feature-settings: "lnum" on, "tnum" on;
+}

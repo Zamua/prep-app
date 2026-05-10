@@ -60,16 +60,14 @@
   justify-content: flex-end;
 }
 
+/* Shared chrome lives in `.pill` (italic / lowercase / rounded /
+ * outline). `.tag` is the most compact pill flavor: display:inline-block
+ * (not flex), tighter padding/font, and a `--warm` filled background
+ * for the index cards. */
 .tag {
   display: inline-block;
   font-size: 0.75rem;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
-  font-style: italic;
   padding: 0.25rem 0.65rem;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  color: var(--ink-soft);
   background: var(--warm);
   font-variation-settings: "opsz" 14, "SOFT" 80;
   white-space: nowrap;

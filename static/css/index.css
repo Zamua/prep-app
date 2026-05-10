@@ -23,6 +23,7 @@
 @import "./base.css" layer(base);
 @import "./layout.css" layer(layout);
 
+@import "./components/pill.css" layer(components);
 @import "./components/buttons.css" layer(components);
 @import "./components/forms.css" layer(components);
 @import "./components/prelude.css" layer(components);
