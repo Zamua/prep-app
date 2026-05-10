@@ -1,0 +1,301 @@
+{# Transform-progress fragment — rendered both as part of the full
+   transform.html page and as the htmx swap target for live status
+   updates. Driver behavior:
+
+   - While the workflow is mid-flight (`computing`, `applying`, or
+     unknown/empty), the root <div> carries `hx-trigger="every 2s"` so
+     htmx polls the fragment URL and swaps the whole div in place.
+   - When the workflow reaches a user-facing terminal state
+     (`awaiting_apply` for deck/reorganize transforms, or `done` /
+     `rejected` / `failed`), the fragment renders WITHOUT the
+     hx-trigger attribute. htmx sees no trigger and stops polling —
+     the server controls the loop's lifetime, the client is dumb.
+   - `awaiting_apply` is "terminal" from the polling-loop perspective
+     because the user has to make an accept/reject decision; we don't
+     want to keep banging the server while they read the plan.
+
+   Inputs (set by the route):
+     wid, scope, progress, deck_name, modification_diffs,
+     deletion_decks, move_source_decks, deck_id_to_name #}
+{%- set _status = progress.status or '' -%}
+{%- set _polling_states = ('computing', 'applying', '') -%}
+{%- set _root = request.scope.get('root_path','') -%}
+<div id="transform-progress"
+     {% if _status in _polling_states %}
+     hx-get="{{ _root }}/transform/{{ wid }}/fragment"
+     hx-trigger="every 2s"
+     hx-target="this"
+     hx-swap="outerHTML"
+     {% endif %}
+>
+  <section class="prelude">
+    <p class="eyebrow">{% if scope == 'card' %}Card · improve{% elif scope == 'reorganize' %}Reorganize · across decks{% else %}Deck · transform{% endif %}</p>
+    <h1 class="display" id="display-headline">
+      {% if progress.status == 'computing' %}
+        <em>Thinking</em><span class="ellipsis"></span>
+      {% elif progress.status == 'awaiting_apply' %}
+        <em>Review</em> the plan.
+      {% elif progress.status == 'applying' %}
+        <em>Applying</em><span class="ellipsis"></span>
+      {% elif progress.status == 'done' %}
+        Done.
+      {% elif progress.status == 'rejected' %}
+        Cancelled.
+      {% elif progress.status == 'failed' %}
+        Failed.
+      {% else %}
+        <em>Working</em><span class="ellipsis"></span>
+      {% endif %}
+    </h1>
+  </section>
+
+  <div class="transform-panel">
+    <p class="transform-status" id="t-status" data-status="{{ progress.status or '' }}">
+      {{ progress.status or 'starting…' }}
+      {% if progress.status in ('computing', 'awaiting_apply', 'applying', '') %}
+        {# Plain anchor — no JS needed. Re-requests the full page;
+           server returns the current state. Cheap and predictable. #}
+        <a href="{{ _root }}/transform/{{ wid }}" class="transform-refresh">refresh now</a>
+      {% endif %}
+    </p>
+
+    {% if progress.plan %}
+      {# Go's json marshaller emits null for unset slices, so default to []
+         in jinja before any |length / iteration. #}
+      {% set plan = progress.plan %}
+      {% set mods = plan.modifications or [] %}
+      {% set adds = plan.additions or [] %}
+      {% set dels = plan.deletions or [] %}
+      {# Always-shown plan body. Was a <details open> for a brief
+         moment but iOS Safari intermittently rendered it collapsed
+         with no marker visible — the user thought the plan was empty.
+         The collapse affordance wasn't earning its keep on a review-
+         and-confirm page; the user wants to see everything. #}
+      <section class="transform-plan">
+        <p class="transform-plan-head">The plan</p>
+        {% if plan.notes %}
+          <p class="transform-notes"><em>{{ plan.notes }}</em></p>
+        {% endif %}
+        <ul class="transform-counts">
+          <li><strong>{{ mods|length }}</strong> modification{{ '' if mods|length == 1 else 's' }}</li>
+          <li><strong>{{ adds|length }}</strong> addition{{ '' if adds|length == 1 else 's' }}</li>
+          <li><strong>{{ dels|length }}</strong> deletion{{ '' if dels|length == 1 else 's' }}</li>
+        </ul>
+
+        {# In single-deck transforms every change belongs to the same
+           deck, so per-deck grouping is just noise. For reorganize we
+           group every section by deck to make the cross-deck shape of
+           the plan obvious. #}
+        {% set group_by_deck = scope == 'reorganize' %}
+
+        {% if mods %}
+          <p class="section-eyebrow"><span>Modifications ({{ mods|length }})</span><span class="rule"></span></p>
+          {% if group_by_deck %}
+            {% set mods_by_deck = {} %}
+            {% for d in modification_diffs %}
+              {% set _k = d.deck_name or '(unknown)' %}
+              {% if mods_by_deck.update({_k: (mods_by_deck.get(_k) or []) + [d]}) %}{% endif %}
+            {% endfor %}
+            {% for deck_label, diffs in mods_by_deck.items() %}
+              <section class="transform-bucket">
+                <header class="transform-bucket-head">
+                  <span class="transform-bucket-prep">in</span>
+                  <span class="transform-bucket-deck">{{ deck_label }}</span>
+                  <span class="transform-bucket-count">({{ diffs|length }})</span>
+                </header>
+                <ul class="transform-diff-list">
+                  {% for d in diffs %}
+                    {% include "partials/transform_diff_card.html" %}
+                  {% endfor %}
+                </ul>
+              </section>
+            {% endfor %}
+          {% else %}
+            <ul class="transform-diff-list">
+              {% for d in modification_diffs %}
+                {% include "partials/transform_diff_card.html" %}
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endif %}
+
+        {% if adds %}
+          <p class="section-eyebrow"><span>{% if group_by_deck %}Additions ({{ adds|length }}){% else %}Sample additions{% endif %}</span><span class="rule"></span></p>
+          {% if group_by_deck %}
+            {% set adds_by_deck = {} %}
+            {% for a in adds %}
+              {% set _k = a.dest_deck or '(unknown)' %}
+              {% if adds_by_deck.update({_k: (adds_by_deck.get(_k) or []) + [a]}) %}{% endif %}
+            {% endfor %}
+            {% for deck_label, items in adds_by_deck.items() %}
+              <section class="transform-bucket">
+                <header class="transform-bucket-head">
+                  <span class="transform-bucket-prep">to</span>
+                  <span class="transform-bucket-deck">{{ deck_label }}</span>
+                  <span class="transform-bucket-count">({{ items|length }})</span>
+                </header>
+                <ul class="transform-list">
+                  {% for a in items[:6] %}
+                    <li class="transform-list-item">
+                      <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
+                      <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
+                    </li>
+                  {% endfor %}
+                  {% if items|length > 6 %}<li class="transform-list-more">+ {{ items|length - 6 }} more</li>{% endif %}
+                </ul>
+              </section>
+            {% endfor %}
+          {% else %}
+            <ul class="transform-list">
+              {% for a in adds[:3] %}
+                <li class="transform-list-item">
+                  <span class="tag tag-type tag-{{ a.type }}">{{ a.type }}</span>
+                  <span class="transform-list-prompt">{{ a.prompt[:160] }}{% if a.prompt|length > 160 %}…{% endif %}</span>
+                </li>
+              {% endfor %}
+              {% if adds|length > 3 %}<li class="transform-list-more">+ {{ adds|length - 3 }} more</li>{% endif %}
+            </ul>
+          {% endif %}
+        {% endif %}
+
+        {% if dels %}
+          <p class="section-eyebrow"><span>Card deletions ({{ dels|length }})</span><span class="rule"></span></p>
+          {% if group_by_deck %}
+            {% set dels_by_deck = {} %}
+            {% for qid in dels %}
+              {% set _k = deletion_decks.get(qid) or '(unknown)' %}
+              {% if dels_by_deck.update({_k: (dels_by_deck.get(_k) or []) + [qid]}) %}{% endif %}
+            {% endfor %}
+            {% for deck_label, qids in dels_by_deck.items() %}
+              <section class="transform-bucket">
+                <header class="transform-bucket-head">
+                  <span class="transform-bucket-prep">from</span>
+                  <span class="transform-bucket-deck">{{ deck_label }}</span>
+                  <span class="transform-bucket-count">({{ qids|length }})</span>
+                </header>
+                <ul class="transform-list">
+                  {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+                  {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
+                </ul>
+              </section>
+            {% endfor %}
+          {% else %}
+            <ul class="transform-list">
+              {% for qid in dels[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+              {% if dels|length > 6 %}<li class="transform-list-more">+ {{ dels|length - 6 }} more</li>{% endif %}
+            </ul>
+          {% endif %}
+        {% endif %}
+
+        {# Cross-deck operations — only present for scope=reorganize plans #}
+        {% set new_decks = plan.new_decks or [] %}
+        {% set card_moves = plan.card_moves or [] %}
+        {% set deck_renames = plan.deck_renames or [] %}
+        {% set deck_dels = plan.deck_deletions or [] %}
+
+        {% if new_decks %}
+          <p class="section-eyebrow"><span>New decks ({{ new_decks|length }})</span><span class="rule"></span></p>
+          <ul class="transform-list">
+            {% for d in new_decks %}
+              <li class="transform-list-item">
+                <span class="tag tag-decktype tag-decktype-{{ d.deck_type or 'srs' }}">{{ d.deck_type or 'srs' }}</span>
+                <span class="transform-list-prompt"><strong>{{ d.name }}</strong>{% if d.topic %} · {{ d.topic[:100] }}{% if d.topic|length > 100 %}…{% endif %}{% endif %}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if deck_renames %}
+          <p class="section-eyebrow"><span>Renames ({{ deck_renames|length }})</span><span class="rule"></span></p>
+          <ul class="transform-list">
+            {% for r in deck_renames %}
+              <li class="transform-list-item">
+                <span class="transform-list-prompt">deck № {{ r.deck_id }} → <strong>{{ r.new_name }}</strong></span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if card_moves %}
+          <p class="section-eyebrow"><span>Card moves ({{ card_moves|length }})</span><span class="rule"></span></p>
+          {# Group moves by (source → destination) so the user sees clear
+             per-pair buckets — "from X to Y: …". #}
+          {% set move_groups = {} %}
+          {% for mv in card_moves %}
+            {% set _src = move_source_decks.get(mv.question_id) or '(unknown)' %}
+            {% set _key = _src ~ ' → ' ~ mv.dest_deck %}
+            {% if move_groups.update({_key: (move_groups.get(_key) or []) + [mv.question_id]}) %}{% endif %}
+          {% endfor %}
+          {% for label, qids in move_groups.items() %}
+            <section class="transform-bucket">
+              <header class="transform-bucket-head">
+                <span class="transform-bucket-prep">from</span>
+                <span class="transform-bucket-deck">{{ label.split(' → ')[0] }}</span>
+                <span class="transform-bucket-prep">to</span>
+                <span class="transform-bucket-deck">{{ label.split(' → ')[1] }}</span>
+                <span class="transform-bucket-count">({{ qids|length }})</span>
+              </header>
+              <ul class="transform-list">
+                {% for qid in qids[:6] %}<li class="transform-list-item"><span class="transform-list-id">№ {{ qid }}</span></li>{% endfor %}
+                {% if qids|length > 6 %}<li class="transform-list-more">+ {{ qids|length - 6 }} more</li>{% endif %}
+              </ul>
+            </section>
+          {% endfor %}
+        {% endif %}
+
+        {% if deck_dels %}
+          <p class="section-eyebrow"><span>Deck deletions ({{ deck_dels|length }})</span><span class="rule"></span></p>
+          <p class="transform-warning">
+            {{ icon('warning-circle', class_='icon icon-inline') }}
+            The deck and ALL its remaining cards will be removed.
+          </p>
+          <ul class="transform-list">
+            {% for did in deck_dels %}
+              <li class="transform-list-item">
+                <span class="transform-list-id">{{ deck_id_to_name.get(did) or ('deck № ' ~ did) }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {% if progress.result %}
+      {% set rmods = progress.result.modified_ids or [] %}
+      {% set radds = progress.result.added_ids or [] %}
+      {% set rdels = progress.result.deleted_ids or [] %}
+      <p class="transform-applied">
+        Applied — modified {{ rmods|length }},
+        added {{ radds|length }},
+        deleted {{ rdels|length }}.
+      </p>
+    {% endif %}
+
+    {# Action row depends on the workflow's status. #}
+    <div class="study-actions transform-actions">
+      {% if scope in ('deck', 'reorganize') and progress.status == 'awaiting_apply' %}
+        <form method="post" action="{{ _root }}/transform/{{ wid }}/apply" style="flex:1;min-width:10rem">
+          <button class="btn btn-primary" type="submit" style="width:100%">Apply changes</button>
+        </form>
+        <form method="post" action="{{ _root }}/transform/{{ wid }}/reject" style="flex:1;min-width:10rem">
+          <button class="btn btn-quiet" type="submit" style="width:100%">Reject</button>
+        </form>
+      {% elif progress.status == 'done' %}
+        {% if deck_name %}
+          <a class="btn btn-primary" href="{{ _root }}/deck/{{ deck_name }}">Back to deck</a>
+        {% else %}
+          <a class="btn btn-primary" href="{{ _root }}/">Back home</a>
+        {% endif %}
+      {% elif progress.status in ('failed', 'rejected') %}
+        {% if deck_name %}
+          <a class="btn btn-quiet" href="{{ _root }}/deck/{{ deck_name }}">Back to deck</a>
+        {% else %}
+          <a class="btn btn-quiet" href="{{ _root }}/">Back home</a>
+        {% endif %}
+      {% endif %}
+    </div>
+    {% if progress.error %}
+      <p class="form-error" style="margin-top:1rem">{{ progress.error }}</p>
+    {% endif %}
+  </div>
+</div>

@@ -1129,6 +1129,67 @@ async def transform_status(
     return JSONResponse({"progress": progress, "desc": desc})
 
 
+@router.get("/transform/{wid}/fragment", response_class=HTMLResponse)
+async def transform_fragment(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """htmx polling endpoint — returns just the #transform-progress
+    fragment that swaps in place via hx-swap=outerHTML. The partial
+    embeds its own hx-trigger ONLY when the workflow is still mid-flight,
+    so when the server returns a terminal-state fragment the client
+    stops polling automatically (no JS state machine, no separate
+    /status call). Shares the same auth/ctx builder as transform_view."""
+    scope, target_id = _require_owns_transform(user, wid, deck_repo, q_repo)
+    from prep import temporal_client
+
+    progress = await temporal_client.get_transform_progress(wid)
+    desc = await temporal_client.describe_workflow(wid)
+    status = (progress or {}).get("status") or (desc or {}).get("status") or "unknown"
+
+    terminal = status in {
+        "done",
+        "failed",
+        "rejected",
+        "COMPLETED",
+        "FAILED",
+        "TERMINATED",
+        "CANCELED",
+    }
+    if terminal and progress is None:
+        progress = {"status": "done", "result": await temporal_client.get_transform_result(wid)}
+
+    uid = user["tailscale_login"]
+    ctx = service.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=uid,
+        scope=scope,
+        target_id=target_id,
+        progress=progress,
+    )
+
+    return templates.TemplateResponse(
+        "partials/transform_progress.html",
+        {
+            "request": request,
+            "user": user,
+            "wid": wid,
+            "scope": scope,
+            "target_id": target_id,
+            "deck_name": ctx.deck_name,
+            "progress": progress or {},
+            "modification_diffs": ctx.modification_diffs,
+            "deletion_decks": ctx.deletion_decks,
+            "move_source_decks": ctx.move_source_decks,
+            "deck_id_to_name": ctx.deck_id_to_name,
+        },
+    )
+
+
 @router.post("/transform/{wid}/apply")
 async def transform_apply(
     request: Request,
