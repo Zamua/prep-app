@@ -1,0 +1,27 @@
+{# Mastery bar macro — green/red/empty progress track. Used in two
+   places: the deck page header (lg variant, default) and the index
+   deck card (mini variant). Same markup; size + fill alpha differ
+   via the `--mini` modifier on .mastery-bar.
+
+   Parameters:
+   - mastered: int — count of mastered cards
+   - wrong:    int — count of cards last answered wrong
+   - total:    int — total cards in the deck
+   - mini:     bool — apply the mini-size modifier (smaller height, softer fills)
+#}
+
+{% macro bar(mastered, wrong, total, mini=False) %}
+{%- set _t = total or 1 -%}
+{%- set _mp = (100 * mastered / _t) -%}
+{%- set _wp = (100 * wrong / _t) -%}
+<span class="mastery-bar{% if mini %} mastery-bar--mini{% endif %}"
+      role="progressbar"
+      aria-valuenow="{{ _mp | round | int }}"
+      aria-valuemin="0"
+      aria-valuemax="100">
+  <span class="mastery-bar__fill mastery-bar__fill--right"
+        style="width: {{ _mp | round(2) }}%"></span>
+  <span class="mastery-bar__fill mastery-bar__fill--wrong"
+        style="left: {{ _mp | round(2) }}%; width: {{ _wp | round(2) }}%"></span>
+</span>
+{% endmacro %}

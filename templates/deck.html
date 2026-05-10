@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ deck_name }} · prep{% endblock %}
 {% block page_class %}deck{% endblock %}
+{% import "macros/mastery.html" as mastery with context %}
 {% block main %}
 <section class="deck-header">
   <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
@@ -106,10 +107,7 @@
         <span class="deck-mastery-label">{{ trivia_stats.mastered }} of {{ trivia_stats.total }} mastered</span>
         <span class="deck-mastery-pct">{{ _pct }}%</span>
       </div>
-      <div class="deck-mastery-bar" role="progressbar" aria-valuenow="{{ _pct }}" aria-valuemin="0" aria-valuemax="100">
-        <div class="deck-mastery-fill deck-mastery-fill-right" style="width: {{ (100 * trivia_stats.mastered / _t) | round(2) }}%"></div>
-        <div class="deck-mastery-fill deck-mastery-fill-wrong" style="width: {{ (100 * trivia_stats.wrong / _t) | round(2) }}%"></div>
-      </div>
+      {{ mastery.bar(trivia_stats.mastered, trivia_stats.wrong, trivia_stats.total) }}
       <div class="deck-mastery-chips">
         <span class="deck-mastery-chip deck-mastery-chip-unans">{{ trivia_stats.unanswered }} unanswered</span>
         {% if trivia_stats.wrong %}

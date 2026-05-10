@@ -24,6 +24,7 @@
 @import "./layout.css" layer(layout);
 
 @import "./components/pill.css" layer(components);
+@import "./components/mastery-bar.css" layer(components);
 @import "./components/buttons.css" layer(components);
 @import "./components/forms.css" layer(components);
 @import "./components/prelude.css" layer(components);

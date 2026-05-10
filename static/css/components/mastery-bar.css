@@ -1,0 +1,51 @@
+/* `.mastery-bar` — the green/red/empty progress track used in two
+ * spots: the deck page header (lg variant, in a column with a
+ * label + percentage row + breakdown chips) and the index card
+ * (mini variant, sitting in the deck-list row).
+ *
+ * Two prior implementations (.deck-mastery-bar + .deck-mastery-mini-bar)
+ * differed in track height + fill stacking strategy + fill opacity.
+ * Normalized here on absolute-positioned fills so a single ruleset
+ * handles both — the mini variant just flips a `--track-h` var and
+ * tweaks the fill alpha.
+ */
+
+.mastery-bar {
+  --track-h: 0.6rem;
+  --right-fill: var(--right);
+  --wrong-fill: color-mix(in srgb, var(--wrong) 70%, transparent);
+  --track-bg: var(--ink-soft-bg);
+  position: relative;
+  display: block;
+  height: var(--track-h);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--track-bg);
+}
+
+.mastery-bar__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.mastery-bar__fill--right {
+  left: 0;
+  background: var(--right-fill);
+}
+
+.mastery-bar__fill--wrong {
+  /* `left:` is set inline by the template macro so the wrong fill
+   * stacks immediately after the right fill (whose width is also
+   * inline). */
+  background: var(--wrong-fill);
+}
+
+/* Mini variant — used in the index deck list. Thinner track + softer
+ * fills so the bar reads as a hint rather than a primary stat. */
+.mastery-bar--mini {
+  --track-h: 6px;
+  --right-fill: color-mix(in srgb, var(--right) 80%, transparent);
+  --wrong-fill: color-mix(in srgb, var(--wrong) 75%, transparent);
+  --track-bg: color-mix(in srgb, var(--ink-soft) 16%, transparent);
+}

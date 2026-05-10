@@ -3,6 +3,8 @@
    of the user's decks. The roman-numeral tag uses the (1-based)
    `index` parameter directly so each section's numerals start at I. #}
 
+{% import "macros/mastery.html" as mastery with context %}
+
 {% macro card(d, index) %}
 {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][index - 1] %}
 <li class="deck-card{% if d.pinned %} deck-card-pinned{% endif %}" style="--i: {{ index }}">
@@ -17,16 +19,8 @@
         {% endif %}
       </span>
       {% if d.deck_type == 'trivia' and d.trivia_stats %}
-        {% set _t = d.trivia_stats.total or 1 %}
-        {% set _mp = (100 * d.trivia_stats.mastered / _t) %}
-        {% set _wp = (100 * d.trivia_stats.wrong / _t) %}
         <span class="deck-mastery-mini">
-          <span class="deck-mastery-mini-bar" role="progressbar"
-                aria-valuenow="{{ _mp | round | int }}" aria-valuemin="0" aria-valuemax="100">
-            <span class="deck-mastery-mini-fill deck-mastery-mini-fill-right" style="width: {{ _mp | round(2) }}%"></span>
-            <span class="deck-mastery-mini-fill deck-mastery-mini-fill-wrong"
-                  style="left: {{ _mp | round(2) }}%; width: {{ _wp | round(2) }}%"></span>
-          </span>
+          {{ mastery.bar(d.trivia_stats.mastered, d.trivia_stats.wrong, d.trivia_stats.total, mini=True) }}
           <span class="deck-mastery-mini-label">
             <span class="stat-value">{{ d.trivia_stats.mastered }}</span><span class="stat-label">/{{ d.trivia_stats.total }} mastered</span>
           </span>

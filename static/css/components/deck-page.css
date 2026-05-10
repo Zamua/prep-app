@@ -633,16 +633,9 @@
   font-weight: 500;
   font-variation-settings: "opsz" 144, "SOFT" 50;
 }
-.deck-mastery-bar {
-  display: flex;
-  height: 0.6rem;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--ink-soft-bg);
-}
-.deck-mastery-fill { height: 100%; }
-.deck-mastery-fill-right { background: var(--right); }
-.deck-mastery-fill-wrong { background: var(--wrong); opacity: 0.7; }
+/* Bar markup + styling moved to components/mastery-bar.css. The
+ * mastery.html macro renders both the lg variant (here, default) and
+ * the mini variant (deck_card.html, with mini=True). */
 .deck-mastery-chips {
   display: flex;
   gap: 0.5rem;

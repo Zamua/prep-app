@@ -126,31 +126,14 @@
  * showing mastered (green) + wrong (red) + the unanswered remainder
  * as the unfilled tail, plus a "N / M mastered" caption. Mirrors the
  * deck-page mastery bar but compact enough for a list row. */
+/* The mini-variant bar markup + styling moved to
+ * components/mastery-bar.css. `.deck-mastery-mini` is just the column
+ * wrapper; bar + caption live inside via macros/mastery.html. */
 .deck-mastery-mini {
   display: flex; flex-direction: column;
   gap: 0.4rem;
   color: var(--ink-mute);
   font-size: 0.92rem;
-}
-.deck-mastery-mini-bar {
-  position: relative;
-  display: block;
-  height: 6px;
-  background: color-mix(in srgb, var(--ink-soft) 16%, transparent);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.deck-mastery-mini-fill {
-  position: absolute; top: 0; bottom: 0;
-  display: block;
-}
-.deck-mastery-mini-fill-right {
-  left: 0;
-  background: color-mix(in srgb, var(--right) 80%, transparent);
-}
-.deck-mastery-mini-fill-wrong {
-  /* `left:` set inline so it stacks immediately after the right fill. */
-  background: color-mix(in srgb, var(--wrong) 75%, transparent);
 }
 .deck-mastery-mini-label {
   display: inline-flex; align-items: baseline; gap: 0.2em;

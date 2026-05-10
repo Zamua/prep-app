@@ -182,7 +182,7 @@ def test_trivia_deck_renders_mastery_bar_with_breakdown(client: TestClient, init
     # SRS-style "due now" line is omitted for trivia decks.
     assert "due now" not in r.text
     # Mastery bar markup present, with computed counts in the labels.
-    assert "deck-mastery-bar" in r.text
+    assert "mastery-bar" in r.text
     assert "1 of 4 mastered" in r.text
     assert "25%" in r.text  # 1/4 → 25%
     assert "2 unanswered" in r.text
