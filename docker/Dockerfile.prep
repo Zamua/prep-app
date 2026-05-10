@@ -91,7 +91,7 @@ COPY pyproject.toml uv.lock* ./
 # build-perf plan is therefore implicitly satisfied; this commit lands
 # the marginal `--compile-bytecode` win that complements item #1.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --compile-bytecode
+    uv sync --frozen --no-dev
 
 # ---- runtime --------------------------------------------------------
 FROM python:3.11-slim AS runtime
