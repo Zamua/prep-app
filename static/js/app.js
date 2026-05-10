@@ -16,8 +16,7 @@ initDetailsToggle();
 attachDialogs();
 attachSubmitPending();
 
-// Lazy-load the poller only when a page asks for it. Keeps the cold
-// boot light for non-polling pages (most of them).
-if (document.querySelector("[data-poll-url]")) {
-  import("@/modules/poller.js").then(({attachDeclarative}) => attachDeclarative());
-}
+// Workflow polling pages (transform, plan, grading, trivia gen) now
+// drive their polling via htmx's `hx-trigger="every Ns"` on a fragment
+// route — see partials/*_progress.html. The old `[data-poll-url]` hook
+// + poller.js module are gone (deleted in htmx-7).
