@@ -412,6 +412,26 @@
   </form>
 </dialog>
 
+{# The four modules below are legitimately client-imperative — not
+   htmx-shaped. Evaluated in htmx-5 and kept as JS:
+
+   - card-preview: clones a pre-rendered <template> into the dialog body
+     on click. Pure client side; no server roundtrip needed. htmx-ifying
+     would add an unnecessary GET per preview tap.
+   - improve-dialog: composes a form action + opens dialog + focuses
+     the prompt input for iOS keyboard. The synchronous focus inside
+     the user-gesture window has the same iOS keyboard-focus rationale
+     as trivia-card.js (htmx introduces an async boundary that breaks
+     focus).
+   - qcard-suspend: optimistic CSS class toggle + POST + fallback to
+     native form submit on error. Could be `hx-post` + `hx-on::*`, but
+     the error-fallback path is awkward in htmx and the optimistic
+     toggle is one line. Not worth the ceremony.
+   - delete-deck-dialog: typed-name match for destructive confirmation
+     is client-only validation, no server involved.
+
+   With the importmap now in <head> (htmx-1), these all resolve their
+   `@/` imports correctly and work as intended. #}
 <script type="module">
   import {init as initCardPreview}    from "@/modules/card-preview.js";
   import {init as initImproveDialog}  from "@/modules/improve-dialog.js";
