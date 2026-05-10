@@ -1,9 +1,14 @@
 {# Polling page for TriviaGenerateWorkflow. Linear: generating →
    applying → done. Mirrors transform.html chrome (.prelude +
    .transform-panel + .study-actions) so the workflow-tracking
-   pages feel like one surface. JS-driven body content because
-   the workflow exposes per-card progress (generated_count / total
-   / inserted) more granularly than the deck transform. #}
+   pages feel like one surface.
+
+   htmx swaps GET /trivia/gen/{wid}/fragment in place every 1.5s.
+   The fragment stops emitting hx-trigger once status is `done` or
+   `failed`. On `done`, the user clicks the "Open deck" CTA to land
+   on the deck page; the old auto-redirect after 700ms behavior is
+   gone (browser noise on a 1.5s poll loop already gets the user
+   most of the way there). #}
 {% extends "base.html" %}
 {% block title %}generating · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}trivia-generating transform{% endblock %}
@@ -12,113 +17,6 @@
 
 {{ nav.back("/deck/" ~ deck_name, deck_name) }}
 
-<section class="prelude">
-  <p class="eyebrow">{{ deck_name }} · generating</p>
-  <h1 class="display" id="display-headline">
-    <em>Generating</em><span class="ellipsis"></span>
-  </h1>
-</section>
-
-<div class="transform-panel" data-wid="{{ wid }}" data-deck-name="{{ deck_name }}" id="trivia-gen-panel">
-  <p class="transform-status" id="trivia-gen-status" data-status="">
-    <span id="trivia-gen-label">starting…</span>
-    <span class="trivia-gen-status-counts" id="trivia-gen-counts"></span>
-    <a href="#" id="trivia-gen-refresh" class="transform-refresh">refresh now</a>
-  </p>
-
-  <progress class="trivia-gen-progress" id="trivia-gen-progress" value="0" max="100"></progress>
-  <p class="form-error" id="trivia-gen-error" hidden></p>
-
-  <div class="study-actions transform-actions" id="trivia-gen-done-actions" hidden>
-    <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Open deck</a>
-  </div>
-</div>
-
-<script type="module">
-  import {startPoller} from "@/modules/poller.js";
-
-  const panel = document.getElementById('trivia-gen-panel');
-  const wid = panel.dataset.wid;
-  const deck = panel.dataset.deckName;
-  const rootPath = "{{ request.scope.get('root_path','') }}";
-
-  const headline = document.getElementById('display-headline');
-  const statusRow = document.getElementById('trivia-gen-status');
-  const label = document.getElementById('trivia-gen-label');
-  const counts = document.getElementById('trivia-gen-counts');
-  const bar = document.getElementById('trivia-gen-progress');
-  const err = document.getElementById('trivia-gen-error');
-  const doneRow = document.getElementById('trivia-gen-done-actions');
-  const refreshLink = document.getElementById('trivia-gen-refresh');
-
-  // Status → user-facing label + display headline. The headline
-  // mirrors transform.html (italic verb + animated dots / final-state
-  // title) so the two workflow pages read alike.
-  const STATE = {
-    starting:   {label: 'starting…',         h: '<em>Generating</em><span class="ellipsis"></span>'},
-    generating: {label: 'asking claude',     h: '<em>Generating</em><span class="ellipsis"></span>'},
-    applying:   {label: 'saving cards',      h: '<em>Saving</em><span class="ellipsis"></span>'},
-    done:       {label: 'done',              h: 'Done.'},
-    failed:     {label: 'generation failed', h: 'Failed.'},
-  };
-
-  const TERMINAL = new Set(['done', 'failed']);
-
-  startPoller({
-    url: rootPath + '/trivia/gen/' + wid + '/status',
-    intervalMs: 1500,
-    stopWhen: (p) => TERMINAL.has(p.status || ''),
-    onTick: (p) => {
-      const status = p.status || 'starting';
-      const s = STATE[status] || {label: status, h: '<em>' + status + '</em>'};
-      label.textContent = s.label;
-      headline.innerHTML = s.h;
-      statusRow.dataset.status = status;
-
-      if (p.error) { err.textContent = p.error; err.hidden = false; }
-      else { err.hidden = true; }
-
-      const total = p.total || 0;
-      const generated = p.generated_count || 0;
-      const inserted = p.inserted || 0;
-
-      if (status === 'generating') {
-        doneRow.hidden = true;
-        bar.removeAttribute('value');
-        counts.textContent = total ? ('asking for ' + total) : '';
-      } else if (status === 'applying') {
-        doneRow.hidden = true;
-        if (total > 0) {
-          bar.value = Math.round(100 * (inserted || generated) / total);
-          bar.max = 100;
-          counts.textContent = (inserted || generated) + ' / ' + total;
-        } else {
-          bar.removeAttribute('value');
-          counts.textContent = '';
-        }
-      } else if (status === 'done') {
-        bar.value = 100; bar.max = 100;
-        counts.textContent = inserted + ' inserted';
-        doneRow.hidden = false;
-        // Brief beat so the final state is visible, then redirect.
-        setTimeout(() => {
-          window.location.href = rootPath + '/deck/' + (p.deck_name || deck);
-        }, 700);
-      } else if (status === 'failed') {
-        doneRow.hidden = false;
-        bar.removeAttribute('value');
-      } else {
-        doneRow.hidden = true;
-        bar.removeAttribute('value');
-        counts.textContent = '';
-      }
-    },
-  });
-
-  refreshLink.addEventListener('click', (ev) => {
-    ev.preventDefault();
-    location.reload();
-  });
-</script>
+{% include "partials/trivia_generating_progress.html" %}
 
 {% endblock %}

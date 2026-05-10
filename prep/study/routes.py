@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from prep import chat_handoff
@@ -681,6 +681,58 @@ async def grading_status(
     progress = await temporal_client.get_grade_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
     return JSONResponse({"progress": progress, "desc": desc})
+
+
+@router.get("/grading/{wid}/fragment", response_class=HTMLResponse)
+async def grading_fragment(
+    request: Request,
+    wid: str,
+    sid: str = "",
+    user: dict = Depends(current_user),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """htmx polling endpoint — returns the #grade-panel fragment with
+    hx-trigger on non-terminal states, and sets HX-Redirect to the
+    canonical /grading/{wid} URL once the workflow terminates so htmx
+    navigates the browser to result.html (or back into the session). The
+    redirect target re-uses the existing grading_view's terminal-path
+    code (session reconciliation + result render) — no logic duplicated."""
+    parsed = _parse_grading_wid(wid)
+    if not parsed:
+        raise HTTPException(400, "malformed workflow id")
+    deck_name, qid = parsed
+    uid = user["tailscale_login"]
+    if q_repo.get(uid, qid) is None:
+        raise HTTPException(404, "question not found")
+    from prep import temporal_client
+
+    progress = await temporal_client.get_grade_progress(wid)
+    desc = await temporal_client.describe_workflow(wid)
+    status = (progress or {}).get("status") or (desc or {}).get("status") or "unknown"
+
+    terminal = status in {"done", "failed", "COMPLETED", "FAILED", "CANCELED", "TERMINATED"}
+    if terminal:
+        # HX-Redirect tells htmx to do a full-page navigation. We send
+        # the user back to the canonical grading URL, which then handles
+        # the session-reconcile / result-render fork.
+        target = f"{request.scope.get('root_path', '')}/grading/{wid}"
+        if sid:
+            target = f"{target}?sid={sid}"
+        return Response(status_code=200, headers={"HX-Redirect": target})
+
+    return templates.TemplateResponse(
+        "partials/grading_progress.html",
+        {
+            "request": request,
+            "user": user,
+            "wid": wid,
+            "deck_name": deck_name,
+            "progress": progress,
+            "desc": desc,
+            "failed": False,
+            "sid": sid,
+        },
+    )
 
 
 # ---- self-grade (sync grading for code/short when no agent) -----------

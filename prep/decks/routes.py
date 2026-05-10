@@ -1287,6 +1287,37 @@ async def plan_status(
     return JSONResponse(progress)
 
 
+@router.get("/plan/{wid}/fragment", response_class=HTMLResponse)
+async def plan_fragment(
+    request: Request,
+    wid: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """htmx polling endpoint — returns just the #plan-progress fragment.
+    The partial embeds hx-trigger only for non-terminal states; once the
+    workflow hits awaiting_feedback / done / rejected / failed / gone,
+    the trigger is omitted and htmx stops polling. Server-driven loop
+    lifecycle — no JS state machine."""
+    deck_name, _ = _require_owns_plan(user, wid, deck_repo)
+    from prep import temporal_client
+
+    progress = await service.get_plan_progress(temporal_client, wid)
+    if progress is None:
+        progress = {"status": "gone"}
+
+    return templates.TemplateResponse(
+        "partials/plan_progress.html",
+        {
+            "request": request,
+            "user": user,
+            "wid": wid,
+            "deck_name": deck_name,
+            "progress": progress,
+        },
+    )
+
+
 @router.post("/plan/{wid}/feedback")
 async def plan_feedback(
     request: Request,

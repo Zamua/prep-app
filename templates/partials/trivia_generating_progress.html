@@ -1,0 +1,76 @@
+{# Trivia-generating fragment — embedded in trivia/generating.html and
+   returned standalone by GET /trivia/gen/{wid}/fragment for htmx swaps
+   every 1.5s. On `done`, sets HX-Redirect to the deck page so the user
+   lands back where the cards now live. On `failed`, renders the failed
+   state with no trigger (polling stops, user sees the message).
+
+   Inputs: wid, deck_name, progress (dict with status, generated_count,
+   total, inserted, error). #}
+{%- set _status = progress.status or 'starting' -%}
+{%- set _terminal = _status in ('done', 'failed') -%}
+{%- set _root = request.scope.get('root_path','') -%}
+{%- set _total = progress.total or 0 -%}
+{%- set _generated = progress.generated_count or 0 -%}
+{%- set _inserted = progress.inserted or 0 -%}
+{# Status → user-facing label + display headline. The headline mirrors
+   transform.html (italic verb + animated dots / final-state title) so
+   the workflow-tracking pages read alike. #}
+{%- set _labels = {
+  'starting':   ('starting…',         '<em>Generating</em><span class="ellipsis"></span>'),
+  'generating': ('asking claude',     '<em>Generating</em><span class="ellipsis"></span>'),
+  'applying':   ('saving cards',      '<em>Saving</em><span class="ellipsis"></span>'),
+  'done':       ('done',              'Done.'),
+  'failed':     ('generation failed', 'Failed.'),
+} -%}
+{%- set _label, _headline = _labels.get(_status, (_status, '<em>' ~ _status ~ '</em>')) -%}
+<div id="trivia-gen-progress"
+     {% if not _terminal %}
+     hx-get="{{ _root }}/trivia/gen/{{ wid }}/fragment"
+     hx-trigger="every 1.5s"
+     hx-target="this"
+     hx-swap="outerHTML"
+     {% endif %}>
+  <section class="prelude">
+    <p class="eyebrow">{{ deck_name }} · generating</p>
+    <h1 class="display" id="display-headline">
+      {{ _headline|safe }}
+    </h1>
+  </section>
+
+  <div class="transform-panel" data-wid="{{ wid }}" data-deck-name="{{ deck_name }}" id="trivia-gen-panel">
+    <p class="transform-status" id="trivia-gen-status" data-status="{{ _status }}">
+      <span id="trivia-gen-label">{{ _label }}</span>
+      <span class="trivia-gen-status-counts" id="trivia-gen-counts">
+        {%- if _status == 'generating' and _total -%}
+          asking for {{ _total }}
+        {%- elif _status == 'applying' and _total -%}
+          {{ _inserted or _generated }} / {{ _total }}
+        {%- elif _status == 'done' -%}
+          {{ _inserted }} inserted
+        {%- endif -%}
+      </span>
+      <a href="{{ _root }}/trivia/gen/{{ wid }}" class="transform-refresh">refresh now</a>
+    </p>
+
+    {# `value`/`max` together drive determinate progress; omit `value`
+       for indeterminate (in-flight without per-card progress data). #}
+    {% if _status == 'applying' and _total > 0 %}
+      <progress class="trivia-gen-progress" id="trivia-gen-progress-bar"
+                value="{{ ((100 * (_inserted or _generated) / _total)|round)|int }}" max="100"></progress>
+    {% elif _status == 'done' %}
+      <progress class="trivia-gen-progress" id="trivia-gen-progress-bar" value="100" max="100"></progress>
+    {% else %}
+      <progress class="trivia-gen-progress" id="trivia-gen-progress-bar" max="100"></progress>
+    {% endif %}
+
+    {% if progress.error %}
+      <p class="form-error" id="trivia-gen-error">{{ progress.error }}</p>
+    {% endif %}
+
+    {% if _terminal %}
+      <div class="study-actions transform-actions" id="trivia-gen-done-actions">
+        <a class="btn btn-primary" href="{{ _root }}/deck/{{ deck_name }}">Open deck</a>
+      </div>
+    {% endif %}
+  </div>
+</div>

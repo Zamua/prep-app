@@ -1,0 +1,53 @@
+{# Grading-progress fragment — embedded in grading.html and returned
+   standalone by GET /grading/{wid}/fragment for htmx swaps. Polls at
+   1.5s (matches the old setInterval value).
+
+   Distinct from transform/plan: on terminal status, the grading view
+   redirects to either result.html (no session) or /session/{sid}
+   (in-session grading). So the polling-terminal behavior here is "page
+   transition," not "stop polling and show terminal UI inline." We
+   accomplish that with an HX-Redirect header set by the route when the
+   workflow has finished — htmx follows it and does a full navigation.
+
+   For the in-flight states (everything that isn't terminal), the
+   partial keeps hx-trigger="every 1.5s" so the spinner stays animated.
+
+   Inputs: wid, deck_name, progress, desc, failed. #}
+{%- set _status = (progress and progress.status) or (desc and desc.status) or 'starting' -%}
+{%- set _terminal_set = ['done', 'failed', 'COMPLETED', 'FAILED', 'CANCELED', 'TERMINATED'] -%}
+{%- set _polling = (not failed) and (_status not in _terminal_set) -%}
+{%- set _root = request.scope.get('root_path','') -%}
+<section class="grading-panel" id="grade-panel"
+         {% if _polling %}
+         hx-get="{{ _root }}/grading/{{ wid }}/fragment{% if sid %}?sid={{ sid }}{% endif %}"
+         hx-trigger="every 1.5s"
+         hx-target="this"
+         hx-swap="outerHTML"
+         {% endif %}>
+  <p class="section-eyebrow">
+    <span>Grading</span>
+    <span class="rule"></span>
+  </p>
+  <h1 class="display gen-headline">
+    <em>Reading your answer.</em>
+  </h1>
+
+  <p class="gen-status">
+    <span class="status-dot status-{{ _status|lower }}" id="grade-dot"></span>
+    <span id="grade-status-text">{{ _status }}</span>
+    <span class="grading-spinner" aria-hidden="true"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span></span>
+  </p>
+
+  {% if failed %}
+  <p class="gen-hint">
+    <em>The workflow finished but the result couldn't be retrieved (probably failed).
+    Go back to the deck and try the card again.</em>
+  </p>
+  <a class="btn btn-quiet" href="{{ _root }}/deck/{{ deck_name }}">Back to deck</a>
+  {% else %}
+  <p class="gen-hint">
+    <em>Usually 5–20 seconds. The workflow runs durably on Temporal — even if you close this tab
+    it keeps grading. Refresh later to see the result.</em>
+  </p>
+  {% endif %}
+</section>

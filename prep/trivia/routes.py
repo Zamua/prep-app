@@ -64,44 +64,63 @@ def _parse_trivia_wid(wid: str) -> str | None:
     return name
 
 
-@router.get("/trivia/gen/{wid}", response_class=HTMLResponse)
-def trivia_generating(wid: str, request: Request, user: dict = Depends(current_user)):
-    """Polling page that watches the TriviaGenerateWorkflow. Shows
-    progress (asking_claude → inserting → done), then redirects to
-    the deck page when the workflow's `done`. The deck row was
-    already created sync in /decks/new/trivia."""
-    deck_name = _parse_trivia_wid(wid)
-    if not deck_name:
-        raise HTTPException(400, "malformed trivia workflow id")
-    # IDOR guard — confirm the deck belongs to this user.
-    decks = DeckRepo()
-    if decks.find_id(user["tailscale_login"], deck_name) is None:
-        raise HTTPException(404, "deck not found")
-    return templates.TemplateResponse(
-        request,
-        "trivia/generating.html",
-        {"wid": wid, "deck_name": deck_name},
-    )
-
-
-@router.get("/trivia/gen/{wid}/status")
-async def trivia_generating_status(wid: str, user: dict = Depends(current_user)):
-    """JSON poll endpoint. Returns the workflow's TriviaGenerateProgress.
-    On `done`, surfaces the deck_name so the JS poller knows where to
-    redirect."""
+async def _trivia_gen_progress(wid: str, user_login: str) -> tuple[str, dict]:
+    """Shared loader for the trivia-generating page + htmx fragment.
+    Returns (deck_name, progress_dict). Raises HTTPException on bad wid
+    or IDOR. `progress` is always a dict; if the workflow's query handler
+    is gone, returns {"status": "done"}."""
     from prep import temporal_client
 
     deck_name = _parse_trivia_wid(wid)
     if not deck_name:
-        raise HTTPException(400, "malformed workflow id")
-    if DeckRepo().find_id(user["tailscale_login"], deck_name) is None:
+        raise HTTPException(400, "malformed trivia workflow id")
+    if DeckRepo().find_id(user_login, deck_name) is None:
         raise HTTPException(404, "deck not found")
     progress = await temporal_client.get_trivia_progress(wid)
     if progress is None:
         # Workflow finished + dropped its query handler. Treat as done.
         progress = {"status": "done"}
     progress["deck_name"] = deck_name
+    return deck_name, progress
+
+
+@router.get("/trivia/gen/{wid}", response_class=HTMLResponse)
+async def trivia_generating(wid: str, request: Request, user: dict = Depends(current_user)):
+    """Polling page that watches the TriviaGenerateWorkflow. Shows
+    progress (asking_claude → inserting → done). htmx polls the
+    fragment route below every 1.5s; on terminal status the trigger
+    is omitted and the user clicks "Open deck" to finish. The deck
+    row was already created sync in /decks/new/trivia."""
+    deck_name, progress = await _trivia_gen_progress(wid, user["tailscale_login"])
+    return templates.TemplateResponse(
+        request,
+        "trivia/generating.html",
+        {"wid": wid, "deck_name": deck_name, "progress": progress},
+    )
+
+
+@router.get("/trivia/gen/{wid}/status")
+async def trivia_generating_status(wid: str, user: dict = Depends(current_user)):
+    """JSON poll endpoint. Returns the workflow's TriviaGenerateProgress.
+    Kept for backward compatibility; the live UI now uses the
+    /fragment endpoint below for htmx swaps."""
+    _, progress = await _trivia_gen_progress(wid, user["tailscale_login"])
     return JSONResponse(progress)
+
+
+@router.get("/trivia/gen/{wid}/fragment", response_class=HTMLResponse)
+async def trivia_generating_fragment(
+    wid: str, request: Request, user: dict = Depends(current_user)
+):
+    """htmx polling endpoint — returns just the #trivia-gen-progress
+    fragment. The partial omits hx-trigger on terminal states (done /
+    failed) so polling stops without any client-side state."""
+    deck_name, progress = await _trivia_gen_progress(wid, user["tailscale_login"])
+    return templates.TemplateResponse(
+        request,
+        "partials/trivia_generating_progress.html",
+        {"wid": wid, "deck_name": deck_name, "progress": progress},
+    )
 
 
 # ---- mini-session (notification target) -------------------------------
