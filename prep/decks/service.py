@@ -159,18 +159,11 @@ def split_deck(
     if source_type.value == "trivia":
         # Pull source's interval to inherit (sensible default; user
         # can adjust on the new deck after).
-        from prep.infrastructure.db import cursor
-
-        with cursor() as c:
-            row = c.execute(
-                "SELECT notification_interval_minutes, context_prompt"
-                " FROM decks WHERE id = ? AND user_id = ?",
-                (source_deck_id, user_id),
-            ).fetchone()
-        interval = (row["notification_interval_minutes"] or 30) if row else 30
+        src_meta = deck_repo.get_trivia_source_meta(user_id, source_deck_id)
+        interval = (src_meta.notification_interval_minutes or 30) if src_meta else 30
         topic = (
             (new_topic_prompt or "").strip()
-            or (row["context_prompt"] if row else None)
+            or (src_meta.context_prompt if src_meta else None)
             or cleaned_name
         )
         new_id = deck_repo.create_trivia(
