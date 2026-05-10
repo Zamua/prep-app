@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Dockerfile.prep — the FastAPI app, the Go temporal worker, the
 # embedded temporal devserver, and the cm-bundle, all packaged into
 # one image. goreman runs the three processes inside the container
@@ -29,12 +30,21 @@ FROM golang:1.26-alpine AS builder-go
 
 WORKDIR /src
 COPY worker-go/go.mod worker-go/go.sum ./
-RUN go mod download
+# Cache /root/.cache/go-build and /go/pkg/mod across builds so a source-only
+# change re-uses the compiled stdlib + downloaded modules. Massive win on
+# the warm path.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY worker-go/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/worker .
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux go build -o /out/worker .
 # Pin goreman to match .tool-versions on the dev side (consistency
 # across local-dev and container-built images).
-RUN CGO_ENABLED=0 GOOS=linux go install github.com/mattn/goreman@v0.3.17 \
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux go install github.com/mattn/goreman@v0.3.17 \
     && cp /go/bin/goreman /out/goreman
 
 # ---- builder-bun ----------------------------------------------------
@@ -50,7 +60,9 @@ COPY static/cm/package.json static/cm/bun.lock ./
 # platform-specific resolution that doesn't round-trip from
 # darwin-arm64 (dev) to linux-arm64 (container). The build is still
 # deterministic per package.json + the cm/ source we COPY in next.
-RUN bun install
+# Cache bun's global install dir across builds.
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install
 COPY static/cm/ ./
 RUN bun run build
 # Output is at /src/static/cm-bundle.js (../cm-bundle.js per the build script).
@@ -64,8 +76,11 @@ COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
 WORKDIR /app
 COPY pyproject.toml uv.lock* ./
 # `uv sync` creates .venv with the locked deps. --frozen ensures we don't
-# silently update the lockfile during the image build.
-RUN uv sync --frozen --no-dev
+# silently update the lockfile during the image build. uv's download cache
+# at /root/.cache/uv is mounted as a buildkit cache so wheels persist
+# across builds.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 # ---- runtime --------------------------------------------------------
 FROM python:3.11-slim AS runtime
@@ -76,7 +91,15 @@ ARG TARGETARCH
 # goreman → child processes). curl for healthcheck. ca-certificates for
 # https outbound to the agent + temporal services. tar/gzip to unpack
 # the temporal release tarball below.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+#
+# Cache /var/cache/apt + /var/lib/apt/lists across builds via buildkit
+# cache mounts so apt-get update doesn't re-download the index every time.
+# The rm at the end (and `sharing=locked`) keeps the final image layer
+# small — only the build cache persists.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl tini tar gzip \
     && rm -rf /var/lib/apt/lists/*
 

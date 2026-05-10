@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Dockerfile.agent — agent-server + claude CLI in one image.
 #
 # What it does:
@@ -15,28 +16,41 @@ FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 # Copy go.mod first so the module-download layer is cacheable across
-# source changes that don't touch deps.
+# source changes that don't touch deps. Buildkit cache mounts persist
+# the go module cache + build cache across image builds — keeps the
+# warm-path agent rebuild near-instant.
 COPY worker-go/go.mod worker-go/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY worker-go/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/agent-server ./cmd/agent-server
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux go build -o /out/agent-server ./cmd/agent-server
 
 # ---- runtime: node + claude CLI + the binary -----------------------
 FROM node:22-slim
 
 # Tini for PID-1 signal handling (so SIGTERM in `docker stop` propagates
 # cleanly to the agent-server and any child claude processes).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Buildkit cache mounts on the apt dirs avoid re-fetching the index
+# every build; rm at the end keeps the image layer slim.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code CLI. Pinning exact versions is brittle (the package
 # updates frequently with security/feature fixes); we grab the latest
 # at image build time. CI / `docker compose build` is the rebuild
-# trigger — we don't auto-update at runtime.
-RUN npm install -g @anthropic-ai/claude-code \
-    && npm cache clean --force \
+# trigger — we don't auto-update at runtime. npm's cache is mounted as
+# a buildkit cache; the explicit `npm cache clean` is no longer needed
+# now that the cache is build-time-only (it doesn't bake into a layer).
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g @anthropic-ai/claude-code \
     && claude --version
 
 # Persistent data dir for the OAuth token. Mount a volume here in
