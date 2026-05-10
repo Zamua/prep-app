@@ -5,24 +5,41 @@
 # Version control / IDE / OS noise
 .git
 .gitignore
+.githooks
 .idea
 .vscode
 **/.DS_Store
 **/*.swp
+**/*.swo
+
+# Agent / harness state (Claude Code worktrees + local task scratch)
+.claude
 
 # Python local state — runtime venv is built inside the image
 .venv
 **/__pycache__
 **/*.pyc
 **/*.pyo
+.pytest_cache
+**/.pytest_cache
+.ruff_cache
+**/.ruff_cache
+.mypy_cache
+**/.mypy_cache
 
 # Go build artifacts — image rebuilds these from source
 worker-go/bin
 
-# CodeMirror node_modules — image rebuilds via bun
+# CodeMirror node_modules — image rebuilds via bun. Defensive **/* glob
+# covers any future package.json under static/ or worker-go/ tooling.
 static/cm/node_modules
+**/node_modules
 
-# Local SQLite + WAL — never into images, container mounts a volume
+# Local SQLite + WAL — never into images, container mounts a volume.
+# `data/` is where local dev keeps the live sqlite + vapid keys;
+# explicitly excluded so a contributor's local data can never bake into
+# a published image.
+data
 **/*.sqlite
 **/*.sqlite-shm
 **/*.sqlite-wal
@@ -37,18 +54,31 @@ push-subscriptions.json.archived-*
 # Local Temporal devserver state
 temporal-data
 
-# Per-deploy env file — secret-bearing, must not bake into images
+# Per-deploy env file — secret-bearing, must not bake into images.
+# deploy/*.env are tracked (per-deploy shape, no secrets) and consumed
+# by `docker compose --env-file`; they don't need to ship in the image.
 .env
+deploy/*.env
 
 # UI screenshot tooling — local-only
 ui-screenshots
-ui-tools/.venv
+ui-tools
 
-# Top-level docs aren't needed at runtime
+# Tests + dev fixtures aren't needed at runtime. The runtime image
+# doesn't run pytest; e2e runs from the host against the deployed
+# instance.
+tests
+
+# Docs aren't served by the app — they're for humans reading the repo.
+docs
 README.md
 CLAUDE.md
 CONTRIBUTING.md
 LICENSE
+
+# Logs — defensive; should never live at the repo root anyway.
+*.log
+**/*.log
 
 # tmp / build artifacts
 .dockerignore.bak
