@@ -143,12 +143,24 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 		sel.AddReceive(acceptCh, func(c workflow.ReceiveChannel, _ bool) {
 			var sig struct{}
 			c.Receive(ctx, &sig)
+			// Transient state: flip to "accepting" the instant the signal
+			// arrives, so a query racing the next status set ("generating")
+			// sees a fresh non-awaiting status. Without this, the HTTP
+			// route that returns the fragment immediately after signalling
+			// would still see "awaiting_feedback" and re-render the
+			// accept/refine UI under the user.
+			progress.Status = "accepting"
 			accepted = true
 			decided = true
 		})
 		sel.AddReceive(rejectCh, func(c workflow.ReceiveChannel, _ bool) {
 			var sig struct{}
 			c.Receive(ctx, &sig)
+			// Transient state: see the "accepting" comment above. Reject
+			// has no cleanup work today; the brief Sleep below gives the
+			// query handler a chance to observe "rejecting" before the
+			// workflow closes.
+			progress.Status = "rejecting"
 			decided = true
 		})
 		sel.AddFuture(timeoutTimer, func(f workflow.Future) {
@@ -160,6 +172,12 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 	}
 
 	if !accepted {
+		// Yield so a query observing the workflow between the signal-
+		// receive (which set Status="rejecting") and this point sees
+		// the transient state. Without the yield, "rejecting" is set
+		// and overwritten in the same workflow task — invisible to any
+		// client query.
+		_ = workflow.Sleep(ctx, time.Millisecond)
 		progress.Status = "rejected"
 		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
 		res := &shared.PlanGenerateResult{Status: "rejected"}

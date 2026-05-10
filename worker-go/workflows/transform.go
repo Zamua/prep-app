@@ -123,16 +123,41 @@ func Transform(ctx workflow.Context, in shared.TransformInput) (shared.Transform
 	sel.Select(ctx)
 
 	if !doApply {
+		// Transient state: the moment we receive the reject signal we
+		// flip to "rejecting" so the HTTP layer (which renders the
+		// fragment immediately after sending the signal) sees the truth
+		// of the workflow rather than reading a stale "awaiting_apply"
+		// or having to long-poll for terminal completion. Even though
+		// reject has no cleanup work today, the transient state gives
+		// future cleanup a place to live and gives the UI a moment of
+		// honest "we're processing your decision" feedback.
+		//
+		// A 1ms timer yields control back to the worker so queries can
+		// observe the "rejecting" status before the workflow closes;
+		// without a yield, this state is set and overwritten within a
+		// single workflow task and no query can ever see it.
+		progress.Status = "rejecting"
+		_ = workflow.Sleep(ctx, time.Millisecond)
 		progress.Status = "rejected"
 		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
 		return shared.TransformResult{}, nil
 	}
 
+	// Transient state: flip to "applying" the instant the apply signal
+	// arrives, BEFORE applyAndFinish kicks off its activity. Without
+	// this, a query racing between signal-receipt and applyAndFinish's
+	// own status set would see the stale "awaiting_apply" and the UI
+	// would render the accept/reject buttons twice.
+	progress.Status = "applying"
 	return applyAndFinish(ctx, &progress, in.UserID, deckID, plan)
 }
 
 func applyAndFinish(ctx workflow.Context, progress *shared.TransformProgress,
 	userID string, deckID int, plan shared.TransformPlan) (shared.TransformResult, error) {
+	// Idempotent: caller may have already set this to "applying" before
+	// invoking us (deck scope, post-signal). Card scope falls through
+	// directly without going via the signal path, so it needs the set
+	// here too.
 	progress.Status = "applying"
 	applyOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
