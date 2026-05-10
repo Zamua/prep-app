@@ -41,7 +41,8 @@
     <form method="post"
           action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/answer{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/answer{% endif %}"
           class="trivia-answer-form"
-          autocomplete="off">
+          autocomplete="off"
+          data-submit-pending>
       {% if session_total %}
         <input type="hidden" name="cards" value="{{ session_remaining }}">
         <input type="hidden" name="done" value="{{ session_done or '' }}">
@@ -198,7 +199,8 @@
               <div class="trivia-dispute-grid">
                 <form method="post"
                       action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/regrade{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/regrade{% endif %}"
-                      class="trivia-regrade-form">
+                      class="trivia-regrade-form"
+                      data-submit-pending>
                   <input type="hidden" name="answer" value="{{ result.given }}">
                   {% if session_total %}
                     <input type="hidden" name="question_id" value="{{ q.id }}">

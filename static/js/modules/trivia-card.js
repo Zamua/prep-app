@@ -1,56 +1,27 @@
 // trivia-card — behaviors on the trivia card page (standalone +
-// session). One consolidated entry point that binds on initial page
-// load AND re-binds after an in-place session-card swap (since
-// innerHTML doesn't execute embedded scripts).
+// session). What remains here is the genuinely-imperative work that
+// htmx / the shared submit-pending module can't do declaratively:
 //
-// Highlights:
-// - Submit-pending state on answer + regrade buttons.
-// - Pre-fetch the next session card's HTML in the background while
-//   the user reads the result panel.
-// - On Next-card tap, synchronously swap the DOM and .focus() the
-//   new input — staying inside the user-gesture window so iOS shows
-//   the keyboard automatically (otherwise iOS swallows .focus calls
-//   that follow async work).
-// - Standalone /trivia/<qid> deep links use the default navigation;
-//   no Next-card / keyboard concern there.
+//   - autoFocusInput on (re-)bind so the textbox is selected without a
+//     manual tap.
+//   - Pre-fetch the next session card's HTML while the user reads the
+//     result panel, so on tap we can swap the DOM synchronously inside
+//     the user-gesture window and .focus() the new input — that's what
+//     makes iOS show the keyboard automatically. Async focus calls (or
+//     navigation-based focus) get swallowed by iOS's input-mode
+//     restrictions.
+//
+// Submit-pending state on the answer + regrade buttons is handled by
+// the shared submit-pending module (auto-attached in app.js) via the
+// `data-submit-pending` attribute on the forms — no per-page binding.
+//
+// Standalone /trivia/<qid> deep links use the default navigation;
+// no Next-card / keyboard concern there.
 
 let prefetchedHtml = null;
 let prefetchedUrl = null;
 
-function bindSubmitPending() {
-  const btn = document.getElementById("trivia-submit-btn");
-  if (!btn || btn.dataset.boundPending) return;
-  btn.dataset.boundPending = "1";
-  const orig = btn.textContent.trim();
-  const pending = btn.dataset.pendingLabel || "Working…";
-  btn.form.addEventListener("submit", () => {
-    btn.disabled = true;
-    btn.textContent = pending;
-    btn.classList.add("is-loading");
-  });
-  window.addEventListener("pageshow", () => {
-    btn.disabled = false;
-    btn.textContent = orig;
-    btn.classList.remove("is-loading");
-  });
-}
-
-function bindRegradePending() {
-  const btn = document.querySelector(".trivia-regrade-btn");
-  if (!btn || btn.dataset.boundPending) return;
-  btn.dataset.boundPending = "1";
-  btn.form.addEventListener("submit", () => {
-    btn.disabled = true;
-    btn.classList.add("is-loading");
-  });
-}
-
 function autoFocusInput() {
-  // Mid-session input — focus on (re-)bind so the cursor lands
-  // there without a manual tap. iOS keyboard appears only when
-  // .focus() is called inside a live user-gesture (handled in
-  // bindNextCardSwap below); this autofocus path covers desktop /
-  // Android and is harmless on iOS.
   const input = document.querySelector(".trivia-answer-input");
   if (input) {
     try {
@@ -123,8 +94,6 @@ function onPopState() {
 }
 
 function bindAll() {
-  bindSubmitPending();
-  bindRegradePending();
   bindNextCardSwap();
   prefetchNextCard();
   autoFocusInput();
