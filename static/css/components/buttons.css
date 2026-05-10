@@ -106,7 +106,7 @@
 /* Success state — soft moss flash, fades back via the parent transition. */
 .btn-async.is-success {
   background: color-mix(in srgb, var(--right) 12%, var(--paper));
-  border-color: color-mix(in srgb, var(--right) 50%, var(--rule));
+  border-color: var(--right-border-strong);
   color: var(--right);
 }
 .btn-async.is-success .btn-async-success {
@@ -119,7 +119,7 @@
 
 .btn-async.is-error {
   background: color-mix(in srgb, var(--wrong) 10%, var(--paper));
-  border-color: color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  border-color: var(--wrong-border-strong);
   color: var(--wrong);
 }
 

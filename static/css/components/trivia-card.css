@@ -22,12 +22,12 @@
 .tvp-right {
   background: color-mix(in srgb, var(--right) 14%, transparent);
   color: var(--right);
-  border: 1px solid color-mix(in srgb, var(--right) 50%, transparent);
+  border: 1px solid var(--right-overlay);
 }
 .tvp-wrong {
   background: color-mix(in srgb, var(--wrong) 12%, transparent);
   color: var(--wrong);
-  border: 1px solid color-mix(in srgb, var(--wrong) 50%, transparent);
+  border: 1px solid var(--wrong-overlay);
 }
 
 .trivia-answers {
@@ -37,17 +37,17 @@
 .trivia-answer-block {
   padding: 0.7rem 0.9rem;
   border-radius: 10px; border: 1px solid var(--rule);
-  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  background: var(--paper-overlay);
 }
 /* Correct-answer card tints with the verdict color so a wrong
  * answer reads red and a right answer reads green (subtle). */
 .trivia-result-right .trivia-answer-correct {
-  background: color-mix(in srgb, var(--right) 6%, transparent);
-  border-color: color-mix(in srgb, var(--right) 30%, transparent);
+  background: var(--right-bg-soft);
+  border-color: var(--right-bg-strong);
 }
 .trivia-result-wrong .trivia-answer-correct {
-  background: color-mix(in srgb, var(--wrong) 6%, transparent);
-  border-color: color-mix(in srgb, var(--wrong) 30%, transparent);
+  background: var(--wrong-bg-soft);
+  border-color: var(--wrong-bg-strong);
 }
 .trivia-answer-eyebrow {
   margin: 0 0 0.3rem; font-size: 0.72rem;
@@ -101,7 +101,7 @@
   font-size: 0.85rem; color: var(--ink-soft);
   letter-spacing: 0.05em; text-transform: uppercase;
   border: 1px solid var(--rule); border-radius: 999px;
-  background: color-mix(in srgb, var(--paper) 50%, transparent);
+  background: var(--paper-overlay-soft);
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
@@ -128,7 +128,7 @@
 .trivia-regrade-btn:hover,
 .trivia-override-btn:hover {
   border-color: var(--ink-soft); color: var(--ink);
-  background: color-mix(in srgb, var(--ink-soft) 8%, transparent);
+  background: var(--ink-soft-bg-faint);
 }
 /* Bodies live as siblings of .trivia-disc-row inside .trivia-discs.
  * Hidden by default; the matching :has() rule below shows the body
@@ -246,7 +246,7 @@
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 .trivia-explore-option:hover {
-  background: color-mix(in srgb, var(--ink-soft) 5%, transparent);
+  background: var(--ink-soft-bg-faint);
   border-color: var(--ink-soft);
 }
 .trivia-explore-option .icon { flex-shrink: 0; opacity: 0.7; }

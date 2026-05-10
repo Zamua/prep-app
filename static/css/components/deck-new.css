@@ -55,7 +55,7 @@
 .form-error {
   margin: 1rem 0 0;
   padding: 0.7rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  border: 1px solid var(--wrong-border-strong);
   background: color-mix(in srgb, var(--wrong) 8%, var(--paper));
   border-radius: var(--radius);
   color: var(--wrong);

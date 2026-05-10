@@ -29,16 +29,16 @@
 .ts-card {
   border: 1px solid var(--rule);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  background: var(--paper-overlay);
   overflow: hidden;
 }
 .ts-card-right {
-  background: color-mix(in srgb, var(--right) 6%, transparent);
-  border-color: color-mix(in srgb, var(--right) 30%, transparent);
+  background: var(--right-bg-soft);
+  border-color: var(--right-bg-strong);
 }
 .ts-card-wrong {
-  background: color-mix(in srgb, var(--wrong) 6%, transparent);
-  border-color: color-mix(in srgb, var(--wrong) 30%, transparent);
+  background: var(--wrong-bg-soft);
+  border-color: var(--wrong-bg-strong);
 }
 
 .ts-card-summary {

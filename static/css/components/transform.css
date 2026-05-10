@@ -203,7 +203,7 @@
   border: 1px solid var(--hairline);
   border-left: 3px solid var(--quill);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--paper) 50%, transparent);
+  background: var(--paper-overlay-soft);
 }
 .transform-bucket-head {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem;
@@ -240,7 +240,7 @@
   display: flex; align-items: center; gap: 0.5rem;
   margin: 0.4rem 0 0.6rem;
   padding: 0.5rem 0.7rem;
-  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  background: var(--wrong-bg-soft);
   border-left: 3px solid color-mix(in srgb, var(--wrong) 60%, transparent);
   border-radius: 6px;
   font-size: 0.88rem;
@@ -267,7 +267,7 @@
   padding: 0.8rem 0.95rem;
   border: 1px solid var(--rule);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  background: var(--paper-overlay);
 }
 .transform-diff-header {
   margin: 0 0 0.5rem;

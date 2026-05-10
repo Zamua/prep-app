@@ -103,13 +103,13 @@
 }
 .tag-suspended {
   color: var(--wrong);
-  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
-  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  border-color: var(--wrong-overlay);
+  background: var(--wrong-bg-soft);
   flex-shrink: 0;
 }
-.tag-code  { color: var(--quill); border-color: color-mix(in srgb, var(--quill) 50%, transparent); }
-.tag-mcq   { color: var(--right); border-color: color-mix(in srgb, var(--right) 50%, transparent); }
-.tag-multi { color: var(--right); border-color: color-mix(in srgb, var(--right) 50%, transparent); }
+.tag-code  { color: var(--quill); border-color: var(--quill-overlay); }
+.tag-mcq   { color: var(--right); border-color: var(--right-overlay); }
+.tag-multi { color: var(--right); border-color: var(--right-overlay); }
 .tag-short { color: var(--ink-soft); }
 
 /* Deck-type tag — used in the deck header + the index list. Subtle
@@ -120,7 +120,7 @@
   flex-shrink: 0;
 }
 .tag-decktype-srs    { color: var(--ink-mute); border-color: var(--hairline); }
-.tag-decktype-trivia { color: var(--quill); border-color: color-mix(in srgb, var(--quill) 50%, transparent); }
+.tag-decktype-trivia { color: var(--quill); border-color: var(--quill-overlay); }
 
 .qcard-prompt {
   margin: 0;

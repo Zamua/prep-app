@@ -6,7 +6,7 @@
 
 .stale-banner {
   background: color-mix(in srgb, var(--wrong) 8%, var(--paper));
-  border: 1px solid color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  border: 1px solid var(--wrong-border);
   border-radius: var(--radius);
   padding: 0.8rem 1rem;
   margin: 0 0 1.2rem;

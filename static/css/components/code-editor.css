@@ -93,12 +93,12 @@
  * .btn-async-state machinery from the discuss popover. */
 .code-action.is-success {
   background: color-mix(in srgb, var(--right) 12%, var(--paper));
-  border-color: color-mix(in srgb, var(--right) 50%, var(--rule));
+  border-color: var(--right-border-strong);
   color: var(--right);
 }
 .code-action.is-error {
   background: color-mix(in srgb, var(--wrong) 10%, var(--paper));
-  border-color: color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  border-color: var(--wrong-border-strong);
   color: var(--wrong);
 }
 .lang-tag {

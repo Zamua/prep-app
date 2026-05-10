@@ -64,7 +64,7 @@
 /* State styling */
 .state-correct-picked {
   background: color-mix(in srgb, var(--right) 9%, var(--paper));
-  border-color: color-mix(in srgb, var(--right) 35%, var(--hairline));
+  border-color: var(--right-border);
 }
 .state-correct-picked .answer-marker {
   background: var(--right);
@@ -74,13 +74,13 @@
 .state-correct-picked .tag-correct,
 .state-correct-picked .tag-pick {
   background: color-mix(in srgb, var(--right) 18%, transparent);
-  border-color: color-mix(in srgb, var(--right) 50%, transparent);
+  border-color: var(--right-overlay);
   color: var(--right);
 }
 
 .state-wrong-picked {
   background: color-mix(in srgb, var(--wrong) 9%, var(--paper));
-  border-color: color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  border-color: var(--wrong-border);
 }
 .state-wrong-picked .answer-marker {
   background: var(--wrong);
@@ -89,13 +89,13 @@
 }
 .state-wrong-picked .tag-pick {
   background: color-mix(in srgb, var(--wrong) 18%, transparent);
-  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+  border-color: var(--wrong-overlay);
   color: var(--wrong);
 }
 
 .state-correct-missed {
   background: color-mix(in srgb, var(--right) 4%, var(--paper));
-  border-color: color-mix(in srgb, var(--right) 35%, var(--hairline));
+  border-color: var(--right-border);
   border-style: dashed;
 }
 .state-correct-missed .answer-marker {
@@ -104,7 +104,7 @@
   background: var(--paper);
 }
 .state-correct-missed .tag-correct {
-  border-color: color-mix(in srgb, var(--right) 50%, transparent);
+  border-color: var(--right-overlay);
   color: var(--right);
   background: transparent;
 }

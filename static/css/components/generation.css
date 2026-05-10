@@ -100,10 +100,10 @@
   border-radius: 999px;
   border: none;
   overflow: hidden;
-  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  background: var(--ink-soft-bg);
 }
 .trivia-gen-progress::-webkit-progress-bar {
-  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  background: var(--ink-soft-bg);
   border-radius: 999px;
 }
 .trivia-gen-progress::-webkit-progress-value {

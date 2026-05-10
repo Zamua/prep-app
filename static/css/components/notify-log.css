@@ -43,7 +43,7 @@
   text-decoration: none;
   transition: background 0.12s ease;
 }
-.notif-log-link:hover { background: color-mix(in srgb, var(--ink-soft) 5%, transparent); }
+.notif-log-link:hover { background: var(--ink-soft-bg-faint); }
 
 .notif-log-head {
   display: flex;

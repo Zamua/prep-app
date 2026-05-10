@@ -40,6 +40,40 @@
   --safe-top:    env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-side:   max(env(safe-area-inset-left, 0px), 1.25rem);
+
+  /* Semantic tints — derived from --right / --wrong / --ink-soft via
+   * color-mix. Defined here so callsites read intent (`--right-bg-soft`)
+   * instead of mechanics (`color-mix(in srgb, var(--right) 6%, transparent)`).
+   * Derivation cascades to dark mode automatically because the inputs
+   * (--right, --wrong, --ink-soft) flip there. */
+
+  /* `right` (moss / success) tints */
+  --right-bg-soft:      color-mix(in srgb, var(--right) 6%, transparent);
+  --right-bg-strong:    color-mix(in srgb, var(--right) 30%, transparent);
+  --right-overlay:      color-mix(in srgb, var(--right) 50%, transparent);
+  --right-border:       color-mix(in srgb, var(--right) 35%, var(--hairline));
+  --right-border-strong: color-mix(in srgb, var(--right) 50%, var(--rule));
+  --right-fg-soft:      color-mix(in srgb, var(--right) 80%, var(--ink));
+
+  /* `wrong` (terracotta / error) tints */
+  --wrong-bg-soft:      color-mix(in srgb, var(--wrong) 8%, transparent);
+  --wrong-bg-strong:    color-mix(in srgb, var(--wrong) 30%, transparent);
+  --wrong-overlay:      color-mix(in srgb, var(--wrong) 50%, transparent);
+  --wrong-border:       color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  --wrong-border-strong: color-mix(in srgb, var(--wrong) 50%, var(--rule));
+  --wrong-fg-soft:      color-mix(in srgb, var(--wrong) 80%, var(--ink));
+
+  /* `ink-soft` (neutral muted) tints — used widely for hover bgs,
+   * subtle dividers, secondary surfaces. */
+  --ink-soft-bg-faint:  color-mix(in srgb, var(--ink-soft) 6%, transparent);
+  --ink-soft-bg:        color-mix(in srgb, var(--ink-soft) 12%, transparent);
+
+  /* `paper` and `quill` semitransparent variants — paper for layered
+   * surfaces over dark backgrounds, quill for the verdict / pull-quote
+   * accent. Tokenizing the most common opacities. */
+  --paper-overlay-soft: color-mix(in srgb, var(--paper) 50%, transparent);
+  --paper-overlay:      color-mix(in srgb, var(--paper) 60%, transparent);
+  --quill-overlay:      color-mix(in srgb, var(--quill) 50%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {

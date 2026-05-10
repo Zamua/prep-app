@@ -49,7 +49,7 @@
 .deck-rename > summary::marker { content: ""; }
 .deck-rename > summary:hover { color: var(--ink); }
 .deck-rename > summary .icon { width: 1rem; height: 1rem; }
-.deck-rename[open] > summary { background: color-mix(in srgb, var(--ink-soft) 8%, transparent); }
+.deck-rename[open] > summary { background: var(--ink-soft-bg-faint); }
 .deck-rename-form {
   position: absolute; left: 0; top: 100%;
   z-index: 60;
@@ -87,7 +87,7 @@
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--paper) 60%, transparent);
+  background: var(--paper-overlay);
   -webkit-tap-highlight-color: transparent;
 }
 .deck-topic-summary::-webkit-details-marker { display: none; }
@@ -167,14 +167,14 @@
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 .notif-pill:hover {
-  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+  background: var(--ink-soft-bg-faint);
 }
 .notif-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
 
 .notif-pill-paused {
   color: var(--wrong);
-  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
-  background: color-mix(in srgb, var(--wrong) 8%, transparent);
+  border-color: var(--wrong-overlay);
+  background: var(--wrong-bg-soft);
 }
 .notif-pill-paused:hover {
   background: color-mix(in srgb, var(--wrong) 14%, transparent);
@@ -210,12 +210,12 @@
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .tag-pin:hover {
-  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+  background: var(--ink-soft-bg-faint);
 }
 .tag-pin .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
 .tag-pin-active {
   color: var(--quill);
-  border-color: color-mix(in srgb, var(--quill) 50%, transparent);
+  border-color: var(--quill-overlay);
   background: color-mix(in srgb, var(--quill) 8%, transparent);
 }
 .tag-pin-active:hover {
@@ -338,7 +338,7 @@
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 .notif-preset:hover {
-  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+  background: var(--ink-soft-bg-faint);
 }
 .notif-preset-active {
   background: color-mix(in srgb, var(--quill) 14%, transparent);
@@ -414,7 +414,7 @@
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 .edit-pill:hover {
-  background: color-mix(in srgb, var(--ink-soft) 6%, transparent);
+  background: var(--ink-soft-bg-faint);
 }
 .edit-pill .icon { width: 0.85rem; height: 0.85rem; flex-shrink: 0; }
 .edit-pill-open {
@@ -428,8 +428,8 @@
   color: color-mix(in srgb, var(--wrong) 75%, var(--ink-soft));
 }
 .edit-pill-danger:hover {
-  background: color-mix(in srgb, var(--wrong) 8%, transparent);
-  border-color: color-mix(in srgb, var(--wrong) 35%, var(--hairline));
+  background: var(--wrong-bg-soft);
+  border-color: var(--wrong-border);
   color: var(--wrong);
 }
 
@@ -546,8 +546,8 @@
   border-color: var(--wrong);
 }
 .danger-link:active {
-  background: color-mix(in srgb, var(--wrong) 85%, var(--ink));
-  border-color: color-mix(in srgb, var(--wrong) 85%, var(--ink));
+  background: var(--wrong-fg-soft);
+  border-color: var(--wrong-fg-soft);
 }
 
 /* Delete-confirm dialog. Uses the same .card-preview chrome (centered
@@ -597,7 +597,7 @@
 .delete-warn code {
   font-family: var(--mono);
   background: color-mix(in srgb, var(--wrong) 8%, var(--warm));
-  border: 1px solid color-mix(in srgb, var(--wrong) 30%, var(--hairline));
+  border: 1px solid var(--wrong-border);
   border-radius: 4px;
   padding: 0.05em 0.35em;
   font-size: 0.92em;
@@ -616,8 +616,8 @@
   color: var(--paper);
 }
 .delete-button:hover {
-  background: color-mix(in srgb, var(--wrong) 80%, var(--ink));
-  border-color: color-mix(in srgb, var(--wrong) 80%, var(--ink));
+  background: var(--wrong-fg-soft);
+  border-color: var(--wrong-fg-soft);
   color: var(--paper);
 }
 .delete-button:disabled {
@@ -660,7 +660,7 @@
   height: 0.6rem;
   border-radius: 999px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  background: var(--ink-soft-bg);
 }
 .deck-mastery-fill { height: 100%; }
 .deck-mastery-fill-right { background: var(--right); }
@@ -685,5 +685,5 @@
 .deck-mastery-chip-unans { color: var(--ink-mute); }
 .deck-mastery-chip-wrong {
   color: var(--wrong);
-  border-color: color-mix(in srgb, var(--wrong) 50%, transparent);
+  border-color: var(--wrong-overlay);
 }

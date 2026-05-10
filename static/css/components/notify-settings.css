@@ -229,4 +229,4 @@
   font-size: 0.95rem;
 }
 .notify-status[data-kind="ok"]    { color: var(--right); border-color: color-mix(in srgb, var(--right) 30%, var(--hairline)); }
-.notify-status[data-kind="error"] { color: var(--wrong); border-color: color-mix(in srgb, var(--wrong) 30%, var(--hairline)); }
+.notify-status[data-kind="error"] { color: var(--wrong); border-color: var(--wrong-border); }
