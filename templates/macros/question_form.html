@@ -1,0 +1,94 @@
+{# question_form macro
+
+   The card-edit / card-add form lives in two templates (question_new
+   + question_edit) that diverge on three things: action URL, submit
+   button label, and whether the answer-regex field renders. Everything
+   else — type select, topic, prompt, choices, answer, rubric,
+   language, skeleton, cancel link — is identical.
+
+   Parameters:
+   - action:            POST URL the form submits to
+   - submit_label:      label on the primary submit button
+   - form:              dict with the prior values (.type / .topic /
+                        .prompt / .choices / .answer / .rubric /
+                        .language / .skeleton / .answer_regex)
+   - cancel_href:       where the Cancel link goes (typically the
+                        deck page)
+   - show_answer_regex: whether to render the answer_regex field
+                        (default False — only the edit flow surfaces it)
+   - rubric_hint:       optional override for the rubric field's hint
+                        text (the new-card form expands it slightly)
+#}
+
+{% macro form(action, submit_label, form, cancel_href, show_answer_regex=False, rubric_hint="") %}
+<form method="post" action="{{ action }}" class="deck-new-form">
+  <label class="freetext">
+    <span class="freetext-label">Type</span>
+    <select name="type" required>
+      <option value="">—</option>
+      {% for t in ['mcq', 'multi', 'short', 'code'] %}
+        <option value="{{ t }}" {% if form.type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="freetext">
+    <span class="freetext-label">Topic <small>(optional)</small></span>
+    <input type="text" name="topic" maxlength="120" value="{{ form.topic or '' }}">
+  </label>
+
+  <label class="freetext">
+    <span class="freetext-label">Prompt</span>
+    <textarea name="prompt" rows="6" required maxlength="8000">{{ form.prompt or '' }}</textarea>
+    <span class="freetext-hint">Markdown ok.</span>
+  </label>
+
+  <label class="freetext">
+    <span class="freetext-label">Choices <small>(mcq / multi only — one per line)</small></span>
+    <textarea name="choices" rows="4" maxlength="2000">{{ form.choices or '' }}</textarea>
+  </label>
+
+  <label class="freetext">
+    <span class="freetext-label">Answer</span>
+    <textarea name="answer" rows="4" required maxlength="8000">{{ form.answer or '' }}</textarea>
+    <span class="freetext-hint">For mcq: the exact correct choice. For multi: one correct choice per line, or a JSON array. For short/code: the canonical answer.</span>
+  </label>
+
+  <label class="freetext">
+    <span class="freetext-label">Rubric <small>(optional)</small></span>
+    <textarea name="rubric" rows="3" maxlength="2000">{{ form.rubric or '' }}</textarea>
+    <span class="freetext-hint">{{ rubric_hint or "2-4 bullets describing what a correct answer must demonstrate." }}</span>
+  </label>
+
+  {% if show_answer_regex %}
+    <label class="freetext">
+      <span class="freetext-label">Answer regex <small>(short trivia only — optional)</small></span>
+      <input type="text" name="answer_regex" maxlength="500"
+             value="{{ form.answer_regex or '' }}"
+             spellcheck="false" autocomplete="off"
+             style="font-family: var(--mono);">
+      <span class="freetext-hint">Case-insensitive regex used as the first grading pass. Auto-evolved by claude on re-grade. Leave blank to fall back to the deterministic + claude grader.</span>
+    </label>
+  {% endif %}
+
+  <label class="freetext">
+    <span class="freetext-label">Language <small>(code only)</small></span>
+    <select name="language">
+      <option value="">—</option>
+      {% for L in ['go', 'java', 'python', 'javascript', 'typescript', 'rust', 'cpp'] %}
+        <option value="{{ L }}" {% if form.language == L %}selected{% endif %}>{{ L }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="freetext">
+    <span class="freetext-label">Skeleton <small>(code only — starter scaffold the user fills in)</small></span>
+    <textarea name="skeleton" rows="6" maxlength="4000" spellcheck="false">{{ form.skeleton or '' }}</textarea>
+  </label>
+
+  <div class="deck-new-actions">
+    <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+    <a class="btn btn-quiet" href="{{ cancel_href }}">Cancel</a>
+  </div>
+</form>
+{% endmacro %}
