@@ -173,3 +173,97 @@ grew 314 → 378 (+64 tests across the per-context test scaffolding).
   No callsite uses the entity-shaped form today (the push sender
   uses `list_for_user_raw`). Worth a one-line SELECT fix in a
   future pass.
+
+---
+
+## htmx polling migration (htmx-1 → htmx-8)
+
+Why this happened: `audit-fix-6.9` moved per-page inline scripts from
+bottom-of-body IIFEs into per-template `<script type="module">` blocks
+INSIDE `{% block main %}`, but the `<script type="importmap">` block
+stayed at the bottom of `<body>`. Inline module scripts inside main
+content parse BEFORE the importmap → bare specifiers like
+`@/modules/poller.js` are unresolvable → the scripts silently die at
+parse time. Verified via playwright that `poller.js` was never fetched
+on transform.html in staging — polling never fired, "refresh now" link
+did nothing.
+
+Decided against a localized hack (moving importmap above each per-page
+script). Instead went all-in on canonical htmx for the polling pages
+and put the importmap in `<head>` where the spec wants it.
+
+- **htmx-1: move importmap + bootstrap to `<head>`.** Both the
+  importmap and app.js (with `defer`) are now in `<head>`. Any module
+  script anywhere in the document — inline or external — can resolve
+  `@/` aliases. htmx itself also moved to `<head>` with defer for the
+  same parse-order reason. Documented inline in base.html so the next
+  refactor doesn't regress.
+- **htmx-2..3: migrate transform / plan / grading / trivia-gen polling
+  to htmx fragments.** Each page now `{% include %}`s a partial that
+  carries `hx-get="/<resource>/{wid}/fragment" hx-trigger="every Ns"`.
+  The partial conditionally emits the trigger only on non-terminal
+  status — server controls the polling loop lifetime, no client state
+  machine. Grading uses HX-Redirect on terminal to bounce back to the
+  canonical /grading/{wid} URL (re-uses the existing terminal-path
+  code).
+- **htmx-4: trivia/card.html.** Submit-pending state migrated to the
+  shared `data-submit-pending` declarative hook. The prefetch+swap +
+  iOS-keyboard-focus dance kept as JS — synchronous focus inside the
+  user-gesture window is the load-bearing piece for iOS and htmx adds
+  an async boundary that would break it.
+- **htmx-5: deck.html inline modules.** Evaluated card-preview,
+  improve-dialog, qcard-suspend, delete-deck-dialog. None are
+  htmx-shaped (client-only state, iOS focus, optimistic toggles
+  with native-form fallback). Kept as JS — they all work correctly
+  now thanks to htmx-1.
+- **htmx-6: notify_settings.html.** Skipped. The push-subscribe state
+  machine needs `navigator.serviceWorker` + Web Crypto — not htmx
+  territory. Even the test-push button is tightly coupled to local
+  subscription state. Nothing to migrate.
+- **htmx-7: delete poller.js + the [data-poll-url] hook.** 104 LOC
+  of JS gone; the htmx hx-trigger primitive replaces all of it
+  (visibility-pause, no-cache, error backoff are all native to htmx).
+
+### htmx migration completeness audit (htmx-8)
+
+Swept templates for remaining JS patterns and categorized each one.
+
+**Remaining `setTimeout` / `setInterval` (6 callsites)** — all
+legitimately JS, none related to polling:
+- `templates/index.html:97` — 200ms fade-out before DOM removal on
+  pin-toggle (CSS transition pacing).
+- `templates/settings_agent.html:118` — 1400ms "copied" label revert
+  on the copy-token button.
+- `templates/result.html:203` — same 1400ms label revert pattern on
+  the "Discuss with claude" copy button.
+- `templates/study.html:241` + `session.html:258` — 1400ms class
+  reset on the CodeMirror copy-code button.
+- `templates/session.html:170` — 1000ms debounce on draft autosave
+  (CodeMirror change handler).
+
+**Remaining inline `<script type="module">` blocks (5 templates)** —
+all legitimately JS:
+- `notify_settings.html` — push subscription + VAPID + send-test
+  state machine. Not htmx territory.
+- `deck.html` — four lazy module imports for dialogs + optimistic
+  qcard suspend. Evaluated in htmx-5 and kept (see above).
+- `study.html` + `session.html` — CodeMirror mount + draft autosave
+  + mod-tap keyboard state machine. Pure client; no server affinity.
+- `trivia/card.html` — prefetch+swap + iOS keyboard focus. Kept in
+  htmx-4 for the iOS gesture-window constraint.
+
+**Remaining `addEventListener('click', ...)` (6 callsites)** — all
+inside the legitimate JS blocks above. No imperative click handlers
+on shapes that would benefit from `hx-on:click` or htmx-driven
+swaps.
+
+### Follow-ups (NOT addressed in this branch)
+
+- The JSON `/<resource>/{wid}/status` endpoints (transform, plan,
+  grading, trivia gen) are no longer consumed by any template after
+  htmx-3 + htmx-7. They're cheap and could be useful for external
+  monitoring or future debugging — left in place. Consider deleting
+  in a future pass if confirmed unused externally.
+- `templates/study.html` and `templates/session.html` duplicate the
+  CodeMirror Esc mod-tap state machine. Could DRY into a shared
+  `static/js/modules/codemirror-mount.js` if it earns its keep.
