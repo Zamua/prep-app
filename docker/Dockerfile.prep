@@ -79,8 +79,19 @@ COPY pyproject.toml uv.lock* ./
 # silently update the lockfile during the image build. uv's download cache
 # at /root/.cache/uv is mounted as a buildkit cache so wheels persist
 # across builds.
+#
+# --compile-bytecode pre-compiles .pyc files at install time so the
+# container doesn't pay the cold-start penalty of compiling on first
+# import. Trades a few extra seconds at build time (cheap with the
+# cache mount on warm builds) for snappier container startup.
+#
+# Note: the Dockerfile is already pip-free — uv with a lockfile is what
+# the user-facing build uses (no `pip install` step exists), and item #1
+# already wired the uv cache mount. The "switch pip → uv" goal from the
+# build-perf plan is therefore implicitly satisfied; this commit lands
+# the marginal `--compile-bytecode` win that complements item #1.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --compile-bytecode
 
 # ---- runtime --------------------------------------------------------
 FROM python:3.11-slim AS runtime
