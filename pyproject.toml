@@ -71,6 +71,14 @@ filterwarnings = [
     # deprecated kwarg. Suppress until upstream catches up.
     "ignore::DeprecationWarning:starlette.*",
 ]
+# Markers for the e2e suite. `slow` flags tests that make real claude
+# calls (transform / plan / trivia generation) — each runs ~30-90s.
+# `make e2e` includes them by default (they're the gate the promote
+# flow leans on); skip locally for fast iteration via
+# `pytest -m "not slow" tests/e2e`.
+markers = [
+    "slow: real-claude-driven AI workflow tests (~30-90s each); included in `make e2e`, skip with -m 'not slow'",
+]
 
 [tool.ruff]
 # Codebase house style: 4-space indent, conservative line length.
