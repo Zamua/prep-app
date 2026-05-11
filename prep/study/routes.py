@@ -8,6 +8,7 @@ Depends, and call into prep.study.service for orchestration.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -579,7 +580,19 @@ async def grading_view(
 
     terminal = status in {"done", "failed", "COMPLETED", "FAILED", "CANCELED", "TERMINATED"}
     if terminal:
-        result = await temporal_client.get_grade_result(wid)
+        # Bounded wait: the workflow is supposedly terminal, so
+        # handle.result() should resolve immediately. If it doesn't
+        # (race between the describe-status and the result actually
+        # being available, or a transient temporal hiccup), we time
+        # out at 500ms and render the failed-grade template instead
+        # of hanging the user's browser. The polling fragment will
+        # eventually catch up if the result lands later.
+        try:
+            result = await asyncio.wait_for(
+                temporal_client.get_grade_result(wid), timeout=0.5
+            )
+        except asyncio.TimeoutError:
+            result = None
         if result is None:
             return templates.TemplateResponse(
                 "grading.html",

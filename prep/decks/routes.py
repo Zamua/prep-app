@@ -1082,7 +1082,19 @@ async def transform_view(
         "CANCELED",
     }
     if terminal and progress is None:
-        progress = {"status": "done", "result": await temporal_client.get_transform_result(wid)}
+        # Workflow's query handler is gone (workflow closed). Map the
+        # describe-status into the same shape the partial expects.
+        # We deliberately do NOT call get_transform_result(wid) here:
+        # that's a blocking long-poll on handle.result() and was the
+        # source of the 1-5s button hang this refactor removes. The
+        # progress.result field is only used to render the
+        # `Applied — modified N…` summary, which we can live without
+        # in the rare edge where the user lands on this URL after the
+        # workflow closed AND the in-memory query handler aged out.
+        if status == "COMPLETED":
+            progress = {"status": "done"}
+        else:
+            progress = {"status": "gone"}
 
     uid = user["tailscale_login"]
     ctx = service.build_transform_view_ctx(
@@ -1160,7 +1172,19 @@ async def transform_fragment(
         "CANCELED",
     }
     if terminal and progress is None:
-        progress = {"status": "done", "result": await temporal_client.get_transform_result(wid)}
+        # Workflow's query handler is gone (workflow closed). Map the
+        # describe-status into the same shape the partial expects.
+        # We deliberately do NOT call get_transform_result(wid) here:
+        # that's a blocking long-poll on handle.result() and was the
+        # source of the 1-5s button hang this refactor removes. The
+        # progress.result field is only used to render the
+        # `Applied — modified N…` summary, which we can live without
+        # in the rare edge where the user lands on this URL after the
+        # workflow closed AND the in-memory query handler aged out.
+        if status == "COMPLETED":
+            progress = {"status": "done"}
+        else:
+            progress = {"status": "gone"}
 
     uid = user["tailscale_login"]
     ctx = service.build_transform_view_ctx(
