@@ -900,3 +900,287 @@ def test_transform_polling_progression(
     assert 'hx-trigger="every' not in r2.text
     assert "Apply changes" in r2.text
     assert calls["n"] == 2
+
+
+# ---- POST apply/reject return fragments, never block -------------------
+#
+# These tests pin the post-refactor contract: the apply/reject routes
+# send the temporal signal, query the workflow for its fresh status
+# (which the new transient `applying`/`rejecting` workflow states make
+# meaningful immediately), and return the rendered partial. They MUST
+# NOT call get_transform_result / get_grade_result / handle.result(),
+# because those long-poll on workflow completion and were the source
+# of the 1-5s "hung button" UX bug.
+
+
+def test_transform_apply_returns_fragment_with_applying_status(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """POST /transform/{wid}/apply: signal goes through, the response is
+    the partial fragment with status=applying rendered, and the polling
+    loop continues (hx-trigger present)."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db, "concurrency")
+    signals: list[str] = []
+
+    async def fake_signal(_wid):
+        signals.append(_wid)
+
+    monkeypatch.setattr(temporal_client, "signal_apply_transform", fake_signal)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_transform_progress",
+        _afake({"status": "applying"}),
+    )
+
+    r = client.post(f"/transform/{wid}/apply", follow_redirects=False)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    # Signal was sent.
+    assert signals == [wid]
+    # Fragment has the applying-state UI and continues polling.
+    assert "Applying" in r.text
+    assert 'hx-trigger="every' in r.text
+
+
+def test_transform_reject_returns_fragment_with_rejecting_status(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """POST /transform/{wid}/reject: same shape — signal + partial
+    response. Status is `rejecting` (the new transient state). Polling
+    continues briefly so the partial picks up the eventual `rejected`
+    or `gone` terminal state without the user refreshing."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db, "concurrency")
+    signals: list[str] = []
+
+    async def fake_signal(_wid):
+        signals.append(_wid)
+
+    monkeypatch.setattr(temporal_client, "signal_reject_transform", fake_signal)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_transform_progress",
+        _afake({"status": "rejecting"}),
+    )
+
+    r = client.post(f"/transform/{wid}/reject", follow_redirects=False)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert signals == [wid]
+    assert "Cancelling" in r.text
+    # rejecting is in _polling_states so the partial keeps polling
+    # until the workflow flips to rejected/gone.
+    assert 'hx-trigger="every' in r.text
+
+
+def test_transform_apply_does_not_call_get_transform_result(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Sentinel guard: if anyone re-introduces a blocking
+    handle.result() call in the apply route, this test trips. We
+    monkeypatch get_transform_result to raise an unmistakable error
+    if invoked, then exercise the route and assert success."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db, "concurrency")
+
+    async def boom(_wid):
+        raise AssertionError("get_transform_result must not be called from apply route")
+
+    async def noop_signal(_wid):
+        pass
+
+    monkeypatch.setattr(temporal_client, "signal_apply_transform", noop_signal)
+    monkeypatch.setattr(temporal_client, "get_transform_result", boom)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_transform_progress",
+        _afake({"status": "applying"}),
+    )
+
+    r = client.post(f"/transform/{wid}/apply", follow_redirects=False)
+    assert r.status_code == 200
+
+
+def test_transform_reject_does_not_call_get_transform_result(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Same guard for the reject route."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db, "concurrency")
+
+    async def boom(_wid):
+        raise AssertionError("get_transform_result must not be called from reject route")
+
+    async def noop_signal(_wid):
+        pass
+
+    monkeypatch.setattr(temporal_client, "signal_reject_transform", noop_signal)
+    monkeypatch.setattr(temporal_client, "get_transform_result", boom)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_transform_progress",
+        _afake({"status": "rejecting"}),
+    )
+
+    r = client.post(f"/transform/{wid}/reject", follow_redirects=False)
+    assert r.status_code == 200
+
+
+def test_transform_reject_handles_workflow_already_gone(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Edge case: signal arrives, workflow processes + closes faster
+    than the route can query. progress=None falls through to a
+    describe-status fallback (NOT a blocking result() call). The
+    fragment renders with status=gone and the polling stops."""
+    from prep import temporal_client
+
+    _, wid = _seed_transform_wid(initialized_db, "concurrency")
+
+    async def noop_signal(_wid):
+        pass
+
+    async def boom(_wid):
+        raise AssertionError("get_transform_result must not be called when progress is None")
+
+    monkeypatch.setattr(temporal_client, "signal_reject_transform", noop_signal)
+    monkeypatch.setattr(temporal_client, "get_transform_result", boom)
+    monkeypatch.setattr(temporal_client, "get_transform_progress", _afake(None))
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "CANCELED"}))
+
+    r = client.post(f"/transform/{wid}/reject", follow_redirects=False)
+    assert r.status_code == 200
+    assert "Cancelled" in r.text
+    # `gone` is a terminal state from the polling perspective.
+    assert 'hx-trigger="every' not in r.text
+
+
+# ---- POST plan accept/reject/feedback return fragments -----------------
+
+
+def test_plan_accept_returns_fragment_with_accepting_status(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """POST /plan/{wid}/accept: signal sent, fragment returned with
+    status=accepting (the new transient state). Polling continues."""
+    from prep import temporal_client
+
+    wid = _seed_plan_wid(initialized_db)
+    signals: list[str] = []
+
+    async def fake_signal(_wid):
+        signals.append(_wid)
+
+    monkeypatch.setattr(temporal_client, "signal_plan_accept", fake_signal)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_plan_progress",
+        _afake({"status": "accepting", "plan": [], "total": 0, "generated_count": 0, "round": 1}),
+    )
+
+    r = client.post(f"/plan/{wid}/accept", follow_redirects=False)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert signals == [wid]
+    assert "Accepting" in r.text
+    assert 'hx-trigger="every' in r.text
+
+
+def test_plan_reject_returns_fragment_with_rejecting_status(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """POST /plan/{wid}/reject: signal sent, fragment returned with
+    status=rejecting. Polls briefly so the partial picks up the
+    rejected/gone terminal state."""
+    from prep import temporal_client
+
+    wid = _seed_plan_wid(initialized_db)
+    signals: list[str] = []
+
+    async def fake_signal(_wid):
+        signals.append(_wid)
+
+    monkeypatch.setattr(temporal_client, "signal_plan_reject", fake_signal)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_plan_progress",
+        _afake({"status": "rejecting", "plan": [], "total": 0, "generated_count": 0, "round": 1}),
+    )
+
+    r = client.post(f"/plan/{wid}/reject", follow_redirects=False)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert signals == [wid]
+    assert "Cancelling" in r.text
+    assert 'hx-trigger="every' in r.text
+
+
+def test_plan_feedback_returns_fragment(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """POST /plan/{wid}/feedback: signal sent with the feedback string,
+    fragment returned. Server moves the workflow to replanning; the
+    response reflects whatever progress query says (here: replanning)
+    and continues polling."""
+    from prep import temporal_client
+
+    wid = _seed_plan_wid(initialized_db)
+    signals: list[tuple[str, str]] = []
+
+    async def fake_signal(_wid, fb):
+        signals.append((_wid, fb))
+
+    monkeypatch.setattr(temporal_client, "signal_plan_feedback", fake_signal)
+    monkeypatch.setattr(
+        temporal_client,
+        "get_plan_progress",
+        _afake({
+            "status": "replanning",
+            "plan": [{"title": "old", "brief": "..."}],
+            "total": 1,
+            "generated_count": 0,
+            "round": 2,
+        }),
+    )
+
+    r = client.post(
+        f"/plan/{wid}/feedback",
+        data={"feedback": "add 2 more on goroutines"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert signals == [(wid, "add 2 more on goroutines")]
+    assert "Refining" in r.text
+    assert 'hx-trigger="every' in r.text
+
+
+def test_plan_accept_idor_other_user_404(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Ownership gate fires before the signal — alice can't accept
+    bob's plan even with a guessed wid."""
+    from prep.auth.repo import UserRepo
+    from prep import temporal_client
+
+    UserRepo().upsert("bob@example.com")
+    DeckRepo().create("bob@example.com", "bobs-deck")
+    wid = "plan-bobs-deck-abc1234567"
+
+    called = {"signal": False}
+
+    async def fake_signal(_wid):
+        called["signal"] = True
+
+    monkeypatch.setattr(temporal_client, "signal_plan_accept", fake_signal)
+
+    r = client.post(f"/plan/{wid}/accept", follow_redirects=False)
+    assert r.status_code == 404
+    # Critical: no signal sent — owner check gates upstream of the
+    # temporal call so cross-user pokes don't even touch the workflow.
+    assert called["signal"] is False
