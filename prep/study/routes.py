@@ -588,9 +588,7 @@ async def grading_view(
         # of hanging the user's browser. The polling fragment will
         # eventually catch up if the result lands later.
         try:
-            result = await asyncio.wait_for(
-                temporal_client.get_grade_result(wid), timeout=0.5
-            )
+            result = await asyncio.wait_for(temporal_client.get_grade_result(wid), timeout=0.5)
         except asyncio.TimeoutError:
             result = None
         if result is None:

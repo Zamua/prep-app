@@ -722,7 +722,12 @@ def test_transform_fragment_terminal_stops_polling(
     monkeypatch.setattr(
         temporal_client,
         "get_transform_progress",
-        _afake({"status": "awaiting_apply", "plan": {"modifications": [], "additions": [], "deletions": []}}),
+        _afake(
+            {
+                "status": "awaiting_apply",
+                "plan": {"modifications": [], "additions": [], "deletions": []},
+            }
+        ),
     )
     monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
 
@@ -753,9 +758,7 @@ def test_transform_fragment_idor_other_user_404(
     assert r.status_code == 404
 
 
-def test_transform_fragment_is_html_not_json(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_transform_fragment_is_html_not_json(monkeypatch, client: TestClient, initialized_db: str):
     """Future-refactor guard: the fragment endpoint MUST stay HTML.
     The /status JSON sibling is the legacy endpoint."""
     from prep import temporal_client
@@ -779,9 +782,7 @@ def _seed_plan_wid(initialized_db: str, deck_name: str = "go-systems") -> str:
     return f"plan-{deck_name}-abc1234567"
 
 
-def test_plan_fragment_mid_flow_keeps_polling(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_plan_fragment_mid_flow_keeps_polling(monkeypatch, client: TestClient, initialized_db: str):
     """status=planning is a polling state → hx-trigger present, headline
     shows the in-flight verb."""
     from prep import temporal_client
@@ -810,13 +811,15 @@ def test_plan_fragment_terminal_awaiting_feedback_stops_polling(
     monkeypatch.setattr(
         temporal_client,
         "get_plan_progress",
-        _afake({
-            "status": "awaiting_feedback",
-            "plan": [{"title": "Goroutines basics", "brief": "what go's scheduler does"}],
-            "total": 1,
-            "generated_count": 0,
-            "round": 1,
-        }),
+        _afake(
+            {
+                "status": "awaiting_feedback",
+                "plan": [{"title": "Goroutines basics", "brief": "what go's scheduler does"}],
+                "total": 1,
+                "generated_count": 0,
+                "round": 1,
+            }
+        ),
     )
 
     r = client.get(f"/plan/{wid}/fragment")
@@ -827,9 +830,7 @@ def test_plan_fragment_terminal_awaiting_feedback_stops_polling(
     assert "Send feedback" in r.text
 
 
-def test_plan_fragment_idor_other_user_404(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_plan_fragment_idor_other_user_404(monkeypatch, client: TestClient, initialized_db: str):
     from prep.auth.repo import UserRepo
     from prep import temporal_client
 
@@ -842,9 +843,7 @@ def test_plan_fragment_idor_other_user_404(
     assert r.status_code == 404
 
 
-def test_plan_fragment_is_html_not_json(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_plan_fragment_is_html_not_json(monkeypatch, client: TestClient, initialized_db: str):
     from prep import temporal_client
 
     wid = _seed_plan_wid(initialized_db)
@@ -862,9 +861,7 @@ def test_plan_fragment_is_html_not_json(
 # ---- end-to-end transform progression ---------------------------------
 
 
-def test_transform_polling_progression(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_transform_polling_progression(monkeypatch, client: TestClient, initialized_db: str):
     """Drive the fragment route through two states in sequence:
     first computing (polling continues), then awaiting_apply (polling
     stops + the accept UI renders). Validates the server-driven loop
@@ -876,7 +873,10 @@ def test_transform_polling_progression(
     # query pops the next reply.
     states = [
         {"status": "computing"},
-        {"status": "awaiting_apply", "plan": {"modifications": [], "additions": [], "deletions": []}},
+        {
+            "status": "awaiting_apply",
+            "plan": {"modifications": [], "additions": [], "deletions": []},
+        },
     ]
     calls = {"n": 0}
 
@@ -1120,9 +1120,7 @@ def test_plan_reject_returns_fragment_with_rejecting_status(
     assert 'hx-trigger="every' in r.text
 
 
-def test_plan_feedback_returns_fragment(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_plan_feedback_returns_fragment(monkeypatch, client: TestClient, initialized_db: str):
     """POST /plan/{wid}/feedback: signal sent with the feedback string,
     fragment returned. Server moves the workflow to replanning; the
     response reflects whatever progress query says (here: replanning)
@@ -1139,13 +1137,15 @@ def test_plan_feedback_returns_fragment(
     monkeypatch.setattr(
         temporal_client,
         "get_plan_progress",
-        _afake({
-            "status": "replanning",
-            "plan": [{"title": "old", "brief": "..."}],
-            "total": 1,
-            "generated_count": 0,
-            "round": 2,
-        }),
+        _afake(
+            {
+                "status": "replanning",
+                "plan": [{"title": "old", "brief": "..."}],
+                "total": 1,
+                "generated_count": 0,
+                "round": 2,
+            }
+        ),
     )
 
     r = client.post(
@@ -1160,9 +1160,7 @@ def test_plan_feedback_returns_fragment(
     assert 'hx-trigger="every' in r.text
 
 
-def test_plan_accept_idor_other_user_404(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_plan_accept_idor_other_user_404(monkeypatch, client: TestClient, initialized_db: str):
     """Ownership gate fires before the signal — alice can't accept
     bob's plan even with a guessed wid."""
     from prep.auth.repo import UserRepo

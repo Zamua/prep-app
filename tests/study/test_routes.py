@@ -228,9 +228,7 @@ def test_grading_fragment_terminal_with_sid_preserves_query_param(
     assert f"/grading/{wid}?sid=sess-xyz" in target
 
 
-def test_grading_fragment_idor_other_user_404(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_grading_fragment_idor_other_user_404(monkeypatch, client: TestClient, initialized_db: str):
     """A grade wid for bob's question → 404 for alice (the test
     client user). The route's `q_repo.get(uid, qid)` check fires
     before any temporal call."""
@@ -251,9 +249,7 @@ def test_grading_fragment_idor_other_user_404(
     assert r.status_code == 404
 
 
-def test_grading_fragment_is_html_not_json(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_grading_fragment_is_html_not_json(monkeypatch, client: TestClient, initialized_db: str):
     """Future-refactor guard: mid-flow body must stay HTML."""
     from prep import temporal_client
 

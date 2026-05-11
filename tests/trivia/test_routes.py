@@ -942,9 +942,7 @@ def test_trivia_gen_fragment_idor_other_user_404(
     from prep import temporal_client
 
     UserRepo().upsert("bob@example.com")
-    DeckRepo().create_trivia(
-        "bob@example.com", "bobs-deck", topic="x", interval_minutes=30
-    )
+    DeckRepo().create_trivia("bob@example.com", "bobs-deck", topic="x", interval_minutes=30)
     wid = "trivia-bobs-deck-abc1234567"
     monkeypatch.setattr(
         temporal_client,
@@ -956,9 +954,7 @@ def test_trivia_gen_fragment_idor_other_user_404(
     assert r.status_code == 404
 
 
-def test_trivia_gen_fragment_is_html_not_json(
-    monkeypatch, client: TestClient, initialized_db: str
-):
+def test_trivia_gen_fragment_is_html_not_json(monkeypatch, client: TestClient, initialized_db: str):
     from prep import temporal_client
 
     wid = _seed_trivia_gen_deck(initialized_db)

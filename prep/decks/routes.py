@@ -1304,9 +1304,7 @@ async def transform_apply(
         await service.apply_transform(temporal_client, wid)
     except Exception as e:
         raise HTTPException(500, f"signal failed: {e}")
-    return await _render_transform_fragment(
-        request, wid, scope, target_id, user, deck_repo, q_repo
-    )
+    return await _render_transform_fragment(request, wid, scope, target_id, user, deck_repo, q_repo)
 
 
 @router.post("/transform/{wid}/reject")
@@ -1326,9 +1324,7 @@ async def transform_reject(
         await service.reject_transform(temporal_client, wid)
     except Exception as e:
         raise HTTPException(500, f"signal failed: {e}")
-    return await _render_transform_fragment(
-        request, wid, scope, target_id, user, deck_repo, q_repo
-    )
+    return await _render_transform_fragment(request, wid, scope, target_id, user, deck_repo, q_repo)
 
 
 # ---- plan-first generation: signals + status ---------------------------
