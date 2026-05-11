@@ -744,8 +744,8 @@ def test_transform_fragment_idor_other_user_404(
 ):
     """A deck belonging to bob → alice (test client) gets 404 from the
     ownership gate. Same shape as not-found, no leak."""
-    from prep.auth.repo import UserRepo
     from prep import temporal_client
+    from prep.auth.repo import UserRepo
 
     UserRepo().upsert("bob@example.com")
     bob_deck_id = DeckRepo().create("bob@example.com", "bobs-deck")
@@ -831,8 +831,8 @@ def test_plan_fragment_terminal_awaiting_feedback_stops_polling(
 
 
 def test_plan_fragment_idor_other_user_404(monkeypatch, client: TestClient, initialized_db: str):
-    from prep.auth.repo import UserRepo
     from prep import temporal_client
+    from prep.auth.repo import UserRepo
 
     UserRepo().upsert("bob@example.com")
     DeckRepo().create("bob@example.com", "bobs-deck")
@@ -1163,8 +1163,8 @@ def test_plan_feedback_returns_fragment(monkeypatch, client: TestClient, initial
 def test_plan_accept_idor_other_user_404(monkeypatch, client: TestClient, initialized_db: str):
     """Ownership gate fires before the signal — alice can't accept
     bob's plan even with a guessed wid."""
-    from prep.auth.repo import UserRepo
     from prep import temporal_client
+    from prep.auth.repo import UserRepo
 
     UserRepo().upsert("bob@example.com")
     DeckRepo().create("bob@example.com", "bobs-deck")

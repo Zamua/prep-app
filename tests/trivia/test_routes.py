@@ -938,8 +938,8 @@ def test_trivia_gen_fragment_idor_other_user_404(
     monkeypatch, client: TestClient, initialized_db: str
 ):
     """bob's deck → 404 for alice (test client user)."""
-    from prep.auth.repo import UserRepo
     from prep import temporal_client
+    from prep.auth.repo import UserRepo
 
     UserRepo().upsert("bob@example.com")
     DeckRepo().create_trivia("bob@example.com", "bobs-deck", topic="x", interval_minutes=30)

@@ -232,8 +232,8 @@ def test_grading_fragment_idor_other_user_404(monkeypatch, client: TestClient, i
     """A grade wid for bob's question → 404 for alice (the test
     client user). The route's `q_repo.get(uid, qid)` check fires
     before any temporal call."""
-    from prep.auth.repo import UserRepo
     from prep import temporal_client
+    from prep.auth.repo import UserRepo
 
     UserRepo().upsert("bob@example.com")
     bob_deck_id = DeckRepo().create("bob@example.com", "bobs-deck")
