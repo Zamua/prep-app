@@ -552,6 +552,119 @@ apps** (Feb 2026 policy). prep uses `claude setup-token` (officially
 blessed) instead — user generates the token on a machine they
 control, pastes into the UI. Don't try to wrap `claude auth login`.
 
+**Importmap MUST appear in `<head>`, before any module script.**
+The HTML spec requires the importmap to be parsed before the first
+`<script type="module">` that uses one of its bare specifiers. If
+the importmap is at the bottom of `<body>` (legacy layout) and a
+page renders an inline module script higher in the body via
+`{% block main %}`, the inline script's `import "@/..."` silently
+dies at parse time — taking every behavior wired up in that block
+with it (polling, click handlers, …). 2026-05-10 outage: htmx
+polling + refresh-link in transform.html stopped working because of
+exactly this. Fix: keep importmap in `<head>` always.
+
+**Polling pattern is htmx, not JS modules.** `templates/transform.html`,
+`plan.html`, `grading.html`, `trivia/generating.html` use
+`hx-get="/<resource>/{wid}/fragment" hx-trigger="every 2s"` to poll
+status fragments. Server controls polling lifecycle: a non-terminal
+fragment includes `hx-trigger="every 2s"`, a terminal fragment omits
+it → htmx auto-stops. No client state machine. The dead pattern (a
+JS `startPoller` module + `setInterval` + `visibilitychange`) is gone
+as of 2026-05-10. If you add a new "wait for backend → swap UI"
+flow, follow the htmx pattern; don't reach for `setInterval`.
+
+**Don't block HTTP routes on `await handle.result()`.** Temporal's
+`handle.result()` long-polls for workflow completion. Calling it
+from a request handler hangs the user's button-press until the
+workflow fully winds down (seconds, sometimes longer). Especially
+in apply/reject style routes: signal the workflow, then return the
+status fragment immediately (htmx swaps it in). The workflow
+exposes intermediate states (`applying`, `rejecting`) precisely so
+the UI shows truth-of-state without lying or blocking. If you need
+the result, query a stored row via the repo, not the live workflow.
+
+**Worker capacity starves under panic-loops.** A workflow whose
+definition changed in a non-deterministic way (e.g. you renamed a
+timer ID, reordered activities) will panic on replay and the SDK
+retries forever (attempt 500+, log spam). Each such workflow
+consumes a worker slot every retry. Two such workflows can starve
+the prep-generation task queue completely — new transforms sit in
+`ActivityTaskScheduled` for minutes. **Before you change workflow
+code that affects already-in-flight workflows: terminate them, or
+cordon the deploy until they finish.** `temporal -n <ns> workflow
+list` to see what's in flight; `temporal workflow terminate -w …`
+to clean up.
+
+**The agent's `/healthz` lies about claude login state.** It
+returns `{"ok":true,"logged_in":true}` if a token *file* exists on
+disk, regardless of whether the token actually works. To probe real
+auth, you have to run `claude -p "test"` inside the agent
+container. Plan to fix /healthz to do a real auth probe; for now,
+don't trust its `logged_in` field.
+
+---
+
+## Testing + promote gates
+
+**3-layer pyramid (in order of fastness, run by `make ci`):**
+
+1. **`make lint`** — `ruff format --check`, `ruff check`, `go vet`,
+   `gofmt -l`. <2s, no infra.
+2. **`make test`** — `pytest -x` against in-process FastAPI with
+   mocked temporal/claude. ~10s. The 396-test characterization +
+   route + service + repo + entity suite. **Catches**: shape
+   regressions, IDOR, contract drift between route + service. Does
+   NOT catch: anything requiring a real worker, real claude, real
+   browser JS execution.
+3. **`make e2e`** — `pytest tests/e2e/` against deployed staging.
+   Two flavors live side-by-side under `tests/e2e/`:
+   - **httpx tests** (test_smoke.py, test_ai_flows.py): full HTTP
+     round-trip — create-deck → study a card → grade → drive a
+     transform/plan to terminal. **Catches**: route-template-
+     temporal-claude integration, IDOR, redirect shape, htmx-trigger
+     leaks (server-side polling lifecycle).
+   - **browser tests** (test_browser_smoke.py, marked `slow` +
+     `browser`): drive Chromium via Playwright at iPhone-15-Pro
+     viewport. **Catches**: inline `<script type="module">` parse +
+     execute (the 2026-05-10 importmap-ordering bug class), htmx
+     polling actually firing client-side, in-place fragment swaps
+     (no navigation on accept/reject), `HX-Redirect` followed by the
+     browser. Without these, the server returning the right HTML is
+     a green light even when every page's JS is dead.
+
+**`make promote v=v0.X.Y`** chains: `deploy-stag-from-tag` →
+`make lint test e2e` → write `.prod-version` + commit + push →
+`make deploy-prod`. Any step failing aborts before mutating prod.
+The lint+test+e2e tail is also `make ci`.
+
+**Browser test prerequisites.** Playwright + chromium binary live
+in the dev venv (`uv sync --group dev` installs the python package;
+the chromium binary needs an explicit `uv run playwright install
+chromium` after install — it lives under `~/Library/Caches/ms-
+playwright/`). `make e2e` warns if either is missing. In CI / on
+the mac mini box both are already present. Browser tests can be
+skipped during fast iteration via `pytest -m "not browser"
+tests/e2e/`. Total wall time: 6 browser tests in ~36s on a warm
+mac mini against staging.
+
+**Browser-test fixture gotcha.** The `page` fixture in
+`tests/e2e/conftest.py` injects the `Tailscale-User-Login` header
+via `ctx.route()` rather than `extra_http_headers`. The latter
+applies to every request, including cross-origin asset fetches
+(Google Fonts etc.), which trip CORS preflight rejections because
+the upstream doesn't whitelist the header in
+`Access-Control-Allow-Headers`. Those preflight failures show up
+as `console error: Failed to load resource: net::ERR_FAILED` and
+trigger false positives in the inline-module-script test. Route-
+based injection scopes the header to the prep app's origin; don't
+revert that without a reason.
+
+**TDD invariant.** New routes get tests in the same commit. Tests
+go in the matching `tests/<bounded-context>/test_routes.py` (or
+`test_service.py`). E2e gets one test per user-visible flow in
+`tests/e2e/test_smoke.py`. If you add a status-bearing workflow,
+add an e2e that drives it to terminal — don't ship blind.
+
 ---
 
 ## What's intentionally NOT here

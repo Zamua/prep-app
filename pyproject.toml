@@ -78,6 +78,7 @@ filterwarnings = [
 # `pytest -m "not slow" tests/e2e`.
 markers = [
     "slow: real-claude-driven AI workflow tests (~30-90s each); included in `make e2e`, skip with -m 'not slow'",
+    "browser: requires playwright + chromium; included in `make e2e`, skip with -m 'not browser' for fast iteration",
 ]
 
 [tool.ruff]

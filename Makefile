@@ -115,6 +115,17 @@ e2e: tools
 	@code=$$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 $(E2E_BASE_URL)/ 2>/dev/null || echo 000); \
 	  if [ "$$code" != "200" ]; then \
 	    echo "  FAIL: $(E2E_BASE_URL)/ returned $$code (expected 200). bring it up first."; exit 1; fi
+	@# Pre-flight: playwright + chromium binary must be installed for the
+	@# browser tests in test_browser_smoke.py. The python package alone
+	@# isn't enough — the headless chromium binary lives under
+	@# ~/Library/Caches/ms-playwright and needs an explicit
+	@# `playwright install chromium` to download. We surface a friendly
+	@# hint here instead of letting tests skip silently via the
+	@# pytest.skip() wired into conftest.
+	@if ! $(RUN) .venv/bin/python -c "import playwright" 2>/dev/null; then \
+	  echo "  WARN: playwright not installed in venv — \`make setup\` (or \`uv sync --group dev\`)"; \
+	  echo "        browser tests will skip"; \
+	fi
 	E2E_BASE_URL=$(E2E_BASE_URL) $(RUN) .venv/bin/pytest -x tests/e2e
 
 # ----- CI bundle -----
