@@ -13,6 +13,9 @@
 {%- set _generated = progress.generated_count or 0 -%}
 {%- set _status = progress.status or 'starting' -%}
 {%- set _round = progress.round or 1 -%}
+{# Polling continues for any non-terminal state. accepting/rejecting are
+   transient post-signal states; the partial re-polls so the user sees
+   the workflow tick into generating/rejected without having to refresh. #}
 {%- set _polling = _status not in ('awaiting_feedback', 'done', 'rejected', 'failed', 'gone') -%}
 {%- set _root = request.scope.get('root_path','') -%}
 <div id="plan-progress"
@@ -29,10 +32,12 @@
       {% if _status == 'planning' %}<em>Planning</em><span class="ellipsis"></span>
       {% elif _status == 'replanning' %}<em>Refining</em><span class="ellipsis"></span>
       {% elif _status == 'awaiting_feedback' %}{{ _plan|length }} card{{ '' if _plan|length == 1 else 's' }}.
+      {% elif _status == 'accepting' %}<em>Accepting</em><span class="ellipsis"></span>
       {% elif _status == 'generating' %}<em>Writing cards</em><span class="ellipsis"></span>
       {% elif _status == 'applying' %}<em>Saving</em><span class="ellipsis"></span>
+      {% elif _status == 'rejecting' %}<em>Cancelling</em><span class="ellipsis"></span>
       {% elif _status == 'done' %}Done.
-      {% elif _status == 'rejected' %}Cancelled.
+      {% elif _status in ('rejected', 'gone') %}Cancelled.
       {% elif _status == 'failed' %}Failed.
       {% else %}<em>Starting</em><span class="ellipsis"></span>{% endif %}
     </h1>
@@ -93,7 +98,15 @@
     {% endif %}
 
     {% if _status == 'awaiting_feedback' %}
-      <form method="post" action="{{ _root }}/plan/{{ wid }}/feedback" class="plan-feedback-form">
+      {# All three forms swap the same #plan-progress fragment so the
+         response (a fresh fragment with status=replanning, accepting, or
+         rejecting) replaces this card in place — no page navigation,
+         no handle.result() blocking on the server. #}
+      <form method="post" action="{{ _root }}/plan/{{ wid }}/feedback"
+            hx-post="{{ _root }}/plan/{{ wid }}/feedback"
+            hx-target="#plan-progress"
+            hx-swap="outerHTML"
+            class="plan-feedback-form">
         <label class="freetext">
           <span class="freetext-label">Refine the plan</span>
           <textarea name="feedback" rows="3" maxlength="2000"
@@ -106,10 +119,18 @@
       </form>
 
       <div class="plan-decide">
-        <form method="post" action="{{ _root }}/plan/{{ wid }}/accept" style="flex:1;min-width:10rem">
+        <form method="post" action="{{ _root }}/plan/{{ wid }}/accept"
+              hx-post="{{ _root }}/plan/{{ wid }}/accept"
+              hx-target="#plan-progress"
+              hx-swap="outerHTML"
+              style="flex:1;min-width:10rem">
           <button class="btn btn-primary" type="submit" style="width:100%">Accept &amp; generate {{ _plan|length }} cards</button>
         </form>
-        <form method="post" action="{{ _root }}/plan/{{ wid }}/reject" style="flex:1;min-width:8rem">
+        <form method="post" action="{{ _root }}/plan/{{ wid }}/reject"
+              hx-post="{{ _root }}/plan/{{ wid }}/reject"
+              hx-target="#plan-progress"
+              hx-swap="outerHTML"
+              style="flex:1;min-width:8rem">
           <button class="btn btn-quiet" type="submit" style="width:100%">Cancel</button>
         </form>
       </div>
@@ -120,7 +141,7 @@
       <div class="study-actions">
         <a class="btn btn-primary" href="{{ _root }}/deck/{{ deck_name }}">Open deck</a>
       </div>
-    {% elif _status in ('rejected', 'failed') %}
+    {% elif _status in ('rejected', 'failed', 'gone') %}
       <div class="study-actions">
         <a class="btn btn-quiet" href="{{ _root }}/deck/{{ deck_name }}">Back to deck</a>
       </div>

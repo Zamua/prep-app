@@ -1190,6 +1190,73 @@ async def transform_fragment(
     )
 
 
+async def _render_transform_fragment(
+    request: Request,
+    wid: str,
+    scope: str,
+    target_id: int,
+    user: dict,
+    deck_repo: DeckRepo,
+    q_repo: QuestionRepo,
+):
+    """Shared body for apply/reject routes (and transform_fragment).
+
+    Queries the workflow for fresh progress and renders the
+    transform_progress partial. Critically, this NEVER blocks on
+    handle.result() — if the query handler is gone (workflow already
+    closed), we report status="gone" and let the partial render a
+    benign terminal state. The htmx fragment polling loop continues
+    via /transform/{wid}/fragment if the user wants to refresh."""
+    from prep import temporal_client
+
+    progress = await temporal_client.get_transform_progress(wid)
+    if progress is None:
+        # Workflow closed before the query landed (e.g. reject path
+        # exited fast). Pull the workflow's terminal status via
+        # describe — that's a metadata fetch, not a long-poll on
+        # the result, so it's cheap and non-blocking. If the
+        # workflow COMPLETED we render `done`; if anything else
+        # (FAILED/CANCELED/TERMINATED) we fall through to `gone`
+        # which the template treats as a benign cancelled state.
+        # We deliberately do NOT call get_transform_result() here:
+        # that's a blocking long-poll and is exactly the
+        # anti-pattern this refactor is removing.
+        try:
+            desc = await temporal_client.describe_workflow(wid)
+        except Exception:
+            desc = {}
+        if desc.get("status") == "COMPLETED":
+            progress = {"status": "done"}
+        else:
+            progress = {"status": "gone"}
+
+    uid = user["tailscale_login"]
+    ctx = service.build_transform_view_ctx(
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=uid,
+        scope=scope,
+        target_id=target_id,
+        progress=progress,
+    )
+    return templates.TemplateResponse(
+        "partials/transform_progress.html",
+        {
+            "request": request,
+            "user": user,
+            "wid": wid,
+            "scope": scope,
+            "target_id": target_id,
+            "deck_name": ctx.deck_name,
+            "progress": progress or {},
+            "modification_diffs": ctx.modification_diffs,
+            "deletion_decks": ctx.deletion_decks,
+            "move_source_decks": ctx.move_source_decks,
+            "deck_id_to_name": ctx.deck_id_to_name,
+        },
+    )
+
+
 @router.post("/transform/{wid}/apply")
 async def transform_apply(
     request: Request,
@@ -1198,14 +1265,24 @@ async def transform_apply(
     deck_repo: DeckRepo = Depends(_deck_repo),
     q_repo: QuestionRepo = Depends(_question_repo),
 ):
-    _require_owns_transform(user, wid, deck_repo, q_repo)
+    """Send the apply signal and immediately render the partial.
+
+    Was: signal → 303 redirect → transform_view → blocked on
+    get_transform_result if the workflow had closed (1-5s hang).
+    Now: signal → query → render partial. The htmx-targeted swap
+    replaces #transform-progress in place; the partial's own
+    hx-trigger continues the polling loop if status is non-terminal.
+    No blocking calls."""
+    scope, target_id = _require_owns_transform(user, wid, deck_repo, q_repo)
     from prep import temporal_client
 
     try:
         await service.apply_transform(temporal_client, wid)
     except Exception as e:
         raise HTTPException(500, f"signal failed: {e}")
-    return responses.redirect(request, f"/transform/{wid}")
+    return await _render_transform_fragment(
+        request, wid, scope, target_id, user, deck_repo, q_repo
+    )
 
 
 @router.post("/transform/{wid}/reject")
@@ -1216,14 +1293,18 @@ async def transform_reject(
     deck_repo: DeckRepo = Depends(_deck_repo),
     q_repo: QuestionRepo = Depends(_question_repo),
 ):
-    _require_owns_transform(user, wid, deck_repo, q_repo)
+    """Send the reject signal and immediately render the partial.
+    See transform_apply for the rationale."""
+    scope, target_id = _require_owns_transform(user, wid, deck_repo, q_repo)
     from prep import temporal_client
 
     try:
         await service.reject_transform(temporal_client, wid)
     except Exception as e:
         raise HTTPException(500, f"signal failed: {e}")
-    return responses.redirect(request, f"/transform/{wid}")
+    return await _render_transform_fragment(
+        request, wid, scope, target_id, user, deck_repo, q_repo
+    )
 
 
 # ---- plan-first generation: signals + status ---------------------------
@@ -1318,6 +1399,33 @@ async def plan_fragment(
     )
 
 
+async def _render_plan_fragment(
+    request: Request,
+    wid: str,
+    deck_name: str,
+    user: dict,
+):
+    """Shared body for plan accept/reject/feedback routes (and
+    plan_fragment). Queries the workflow for fresh progress and
+    renders the plan_progress partial. Never blocks on
+    handle.result()."""
+    from prep import temporal_client
+
+    progress = await service.get_plan_progress(temporal_client, wid)
+    if progress is None:
+        progress = {"status": "gone"}
+    return templates.TemplateResponse(
+        "partials/plan_progress.html",
+        {
+            "request": request,
+            "user": user,
+            "wid": wid,
+            "deck_name": deck_name,
+            "progress": progress,
+        },
+    )
+
+
 @router.post("/plan/{wid}/feedback")
 async def plan_feedback(
     request: Request,
@@ -1326,13 +1434,16 @@ async def plan_feedback(
     user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
 ):
-    _require_owns_plan(user, wid, deck_repo)
+    """Send feedback signal and render the partial fragment.
+    Was: signal → 303 redirect → full page re-render. Now: signal →
+    query → partial. htmx swaps #plan-progress in place."""
+    deck_name, _ = _require_owns_plan(user, wid, deck_repo)
     if not feedback.strip():
         raise HTTPException(400, "empty feedback")
     from prep import temporal_client
 
     await service.submit_plan_feedback(temporal_client, wid, feedback.strip())
-    return responses.redirect(request, f"/plan/{wid}")
+    return await _render_plan_fragment(request, wid, deck_name, user)
 
 
 @router.post("/plan/{wid}/accept")
@@ -1342,11 +1453,14 @@ async def plan_accept(
     user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
 ):
-    _require_owns_plan(user, wid, deck_repo)
+    """Send accept signal and render the partial fragment. Status
+    will be `accepting` post-signal (transient state added in
+    plan.go)."""
+    deck_name, _ = _require_owns_plan(user, wid, deck_repo)
     from prep import temporal_client
 
     await service.accept_plan(temporal_client, wid)
-    return responses.redirect(request, f"/plan/{wid}")
+    return await _render_plan_fragment(request, wid, deck_name, user)
 
 
 @router.post("/plan/{wid}/reject")
@@ -1356,10 +1470,11 @@ async def plan_reject(
     user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
 ):
-    name, _ = _require_owns_plan(user, wid, deck_repo)
+    """Send reject signal and render the partial fragment. Status
+    will be `rejecting` post-signal (transient state added in
+    plan.go)."""
+    deck_name, _ = _require_owns_plan(user, wid, deck_repo)
     from prep import temporal_client
 
     await service.reject_plan(temporal_client, wid)
-    # On reject, return to the deck view rather than the plan page —
-    # the plan workflow is being torn down, no use polling it.
-    return responses.redirect(request, f"/deck/{name}")
+    return await _render_plan_fragment(request, wid, deck_name, user)

@@ -18,7 +18,11 @@
      wid, scope, progress, deck_name, modification_diffs,
      deletion_decks, move_source_decks, deck_id_to_name #}
 {%- set _status = progress.status or '' -%}
-{%- set _polling_states = ('computing', 'applying', '') -%}
+{# Polling states: workflow is mid-flight, fragment polls the server.
+   Transient `rejecting` is included so the brief window before the
+   workflow exits is visible (the partial polls once more and lands
+   on the terminal `rejected` / `gone` fragment). #}
+{%- set _polling_states = ('computing', 'applying', 'rejecting', '') -%}
 {%- set _root = request.scope.get('root_path','') -%}
 <div id="transform-progress"
      {% if _status in _polling_states %}
@@ -37,9 +41,11 @@
         <em>Review</em> the plan.
       {% elif progress.status == 'applying' %}
         <em>Applying</em><span class="ellipsis"></span>
+      {% elif progress.status == 'rejecting' %}
+        <em>Cancelling</em><span class="ellipsis"></span>
       {% elif progress.status == 'done' %}
         Done.
-      {% elif progress.status == 'rejected' %}
+      {% elif progress.status in ('rejected', 'gone') %}
         Cancelled.
       {% elif progress.status == 'failed' %}
         Failed.
@@ -274,10 +280,24 @@
     {# Action row depends on the workflow's status. #}
     <div class="study-actions transform-actions">
       {% if scope in ('deck', 'reorganize') and progress.status == 'awaiting_apply' %}
-        <form method="post" action="{{ _root }}/transform/{{ wid }}/apply" style="flex:1;min-width:10rem">
+        {# Both forms POST to the same #transform-progress swap so the
+           response (a fresh fragment with status=applying or rejecting)
+           replaces this card in place — no page navigation, no
+           handle.result() blocking on the server. The hx-trigger
+           attribute on the new fragment's root element drives any
+           subsequent polling. #}
+        <form method="post" action="{{ _root }}/transform/{{ wid }}/apply"
+              hx-post="{{ _root }}/transform/{{ wid }}/apply"
+              hx-target="#transform-progress"
+              hx-swap="outerHTML"
+              style="flex:1;min-width:10rem">
           <button class="btn btn-primary" type="submit" style="width:100%">Apply changes</button>
         </form>
-        <form method="post" action="{{ _root }}/transform/{{ wid }}/reject" style="flex:1;min-width:10rem">
+        <form method="post" action="{{ _root }}/transform/{{ wid }}/reject"
+              hx-post="{{ _root }}/transform/{{ wid }}/reject"
+              hx-target="#transform-progress"
+              hx-swap="outerHTML"
+              style="flex:1;min-width:10rem">
           <button class="btn btn-quiet" type="submit" style="width:100%">Reject</button>
         </form>
       {% elif progress.status == 'done' %}
@@ -286,7 +306,7 @@
         {% else %}
           <a class="btn btn-primary" href="{{ _root }}/">Back home</a>
         {% endif %}
-      {% elif progress.status in ('failed', 'rejected') %}
+      {% elif progress.status in ('failed', 'rejected', 'gone') %}
         {% if deck_name %}
           <a class="btn btn-quiet" href="{{ _root }}/deck/{{ deck_name }}">Back to deck</a>
         {% else %}
