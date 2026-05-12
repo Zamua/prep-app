@@ -148,9 +148,15 @@ func (a *HTTPAgent) httpClient() *http.Client {
 	if a.Client != nil {
 		return a.Client
 	}
-	// Generation / grading often takes 30-60s. The activity-level
-	// timeout is the real bound; we leave a generous ceiling here.
-	return &http.Client{Timeout: 5 * time.Minute}
+	// Long ceiling on purpose. Claude calls inside the agent container
+	// can run for many minutes (large-deck transforms, reorganize, plan
+	// expansion against a context-heavy deck) and we'd rather surface a
+	// clear "agent http: deadline exceeded" error than have temporal
+	// guillotine the activity mid-flight. The activity-level
+	// StartToCloseTimeout is set ABOVE this (31m) so the HTTP client
+	// times out first with an attributable message, rather than the
+	// workflow killing the activity with a generic timeout.
+	return &http.Client{Timeout: 30 * time.Minute}
 }
 
 func (a *HTTPAgent) Run(ctx context.Context, in RunInput) (RunOutput, error) {

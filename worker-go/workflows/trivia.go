@@ -66,12 +66,16 @@ func TriviaGenerate(ctx workflow.Context, in shared.TriviaGenerateInput) (shared
 
 	// ---- GENERATING ----
 	genOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+		// Ceiling sits 1m above the HTTP client's 30m timeout so a stuck
+		// claude call surfaces as an HTTP deadline error rather than a
+		// temporal activity timeout.
+		StartToCloseTimeout: 31 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
+			// No retries on claude calls — surface failure to the user.
 			InitialInterval:    2 * time.Second,
 			BackoffCoefficient: 2.0,
-			MaximumAttempts:    2,
+			MaximumAttempts:    1,
 			NonRetryableErrorTypes: []string{
 				"BadInput", "BadTriviaJSON", "NoAgent",
 			},
