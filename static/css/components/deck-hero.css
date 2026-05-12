@@ -122,43 +122,10 @@
   gap: 0.1em;
 }
 
-/* The pin partial renders as a `<button class="tag tag-pin">` (a tinted
-   chip) by default. Inside the overflow body we want it to read as a
-   plain menu item — same shape as the `.deck-overflow-action` links
-   below it. Strip the chip decoration and rebuild as a row. */
-.deck-overflow-body .deck-pin-form {
-  margin: 0;
-  display: block;
-}
-.deck-overflow-body .deck-pin-form .tag-pin,
-.deck-overflow-body .deck-pin-form .tag-pin-active {
-  display: flex;
-  align-items: center;
-  gap: 0.55em;
-  padding: 0.55em 0.7em;
-  border-radius: 0.4em;
-  border: none;
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  width: 100%;
-}
-.deck-overflow-body .deck-pin-form .tag-pin:hover,
-.deck-overflow-body .deck-pin-form .tag-pin-active:hover {
-  background: var(--panel-tint);
-}
-/* `.tag-pin` inherits text-transform: lowercase from pill.css; override
-   inside the menu so "Pin" / "Unpin" match the Title-Case convention of
-   the other items (Add card, Edit with claude, …). */
-.deck-overflow-body .deck-pin-form .tag-pin,
-.deck-overflow-body .deck-pin-form .tag-pin-active {
-  text-transform: none;
-}
-/* Pin/Unpin reads as an action label (not a state), so the active class
-   doesn't need a color cue inside the menu. The label text itself tells
-   you the current state ("Unpin" implies you're currently pinned). */
+/* Pin/Unpin form inside the menu uses a plain .deck-overflow-action
+   button (the form is just a POST wrapper around it). No special chip
+   styling — appearance is inherited from .deck-overflow-action above. */
+.deck-overflow-body .deck-pin-menu-form { margin: 0; display: block; }
 
 /* Generic action items in the menu */
 .deck-overflow-action {

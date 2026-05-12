@@ -24,7 +24,19 @@
              a setting that's already inline-editable doesn't need a
              menu shortcut. #}
           {% set pinned = deck_meta.pinned %}
-          {% include "partials/pin_form.html" %}
+          {# Render the pin toggle as a plain menu item (matches the
+             shape of Add card / Edit with claude / Split / Delete)
+             rather than including pin_form.html, whose `.tag-pin`
+             chip styling fights against the menu's row layout. #}
+          <form method="post"
+                action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
+                class="deck-pin-menu-form">
+            <input type="hidden" name="pinned" value="{{ 'off' if pinned else 'on' }}">
+            <button type="submit" class="deck-overflow-action">
+              {{ icon('push-pin' if pinned else 'push-pin-simple', class_='icon icon-inline') }}
+              <span>{{ 'Unpin' if pinned else 'Pin' }}</span>
+            </button>
+          </form>
           {% include "partials/notif_edit.html" %}
           <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new" class="deck-overflow-action">{{ icon('plus', class_='icon icon-inline') }}<span>Add card</span></a>
           {% if agent_available %}
