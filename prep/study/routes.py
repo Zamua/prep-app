@@ -735,6 +735,12 @@ async def grading_fragment(
     desc = await temporal_client.describe_workflow(wid)
     status = (progress or {}).get("status") or (desc or {}).get("status") or "unknown"
 
+    # Workflow-tracker hook — diff status, fire push notifications on
+    # transitions. Errors are absorbed by the tracker.
+    from prep.workflows import service as _workflows_service
+
+    _workflows_service.update_status(workflow_id=wid, new_status=status)
+
     terminal = status in {"done", "failed", "COMPLETED", "FAILED", "CANCELED", "TERMINATED"}
     if terminal:
         # HX-Redirect tells htmx to do a full-page navigation. We send

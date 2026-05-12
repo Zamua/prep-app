@@ -1224,6 +1224,16 @@ async def transform_fragment(
         else:
             progress = {"status": "gone"}
 
+    # Workflow-tracker hook: diff status against the last poll and fire
+    # the push-notification side effect on awaiting-action / terminal
+    # transitions. update_status is idempotent + swallows errors, so a
+    # tracking failure never breaks the fragment response.
+    from prep.workflows import service as _workflows_service
+
+    _workflows_service.update_status(
+        workflow_id=wid, new_status=(progress or {}).get("status") or status
+    )
+
     uid = user["tailscale_login"]
     ctx = service.build_transform_view_ctx(
         deck_repo=deck_repo,
@@ -1444,6 +1454,13 @@ async def plan_fragment(
     progress = await service.get_plan_progress(temporal_client, wid)
     if progress is None:
         progress = {"status": "gone"}
+
+    # Workflow-tracker hook — see transform_fragment for the rationale.
+    from prep.workflows import service as _workflows_service
+
+    _workflows_service.update_status(
+        workflow_id=wid, new_status=progress.get("status") or "unknown"
+    )
 
     return templates.TemplateResponse(
         "partials/plan_progress.html",
