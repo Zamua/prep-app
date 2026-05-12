@@ -424,3 +424,30 @@ def init() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_trivia_queue_pos ON trivia_queue(queue_position);
         """)
+
+        # 12. Active workflows registry — one row per in-flight or
+        #     recently-terminal Temporal workflow per user. Powers the
+        #     masthead "running operations" badge + drives push
+        #     notifications on awaiting-action / terminal transitions.
+        #     Rows are written by prep.workflows.service.register() at
+        #     workflow-start time and updated by the same module's
+        #     update_status() on each fragment poll. Terminal rows
+        #     stay visible for ~60s (RECENT_TERMINAL_WINDOW) then are
+        #     cleaned up opportunistically on the next badge fetch.
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS active_workflows (
+                workflow_id          TEXT PRIMARY KEY,
+                user_login           TEXT NOT NULL,
+                workflow_type        TEXT NOT NULL,
+                deck_id              INTEGER,
+                deck_name            TEXT,
+                status               TEXT NOT NULL,
+                started_at           TEXT NOT NULL,
+                terminal_at          TEXT,
+                url_path             TEXT NOT NULL,
+                notified_action_at   TEXT,
+                notified_terminal_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_active_workflows_user
+                ON active_workflows(user_login, terminal_at);
+        """)
