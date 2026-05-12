@@ -94,13 +94,16 @@ func (a *Activities) buildTransformPrompt(in shared.ComputeTransformInput) (stri
 		if len(cards) == 0 {
 			return "", fmt.Errorf("question %d not found for user %s", in.TargetID, in.UserID)
 		}
-		return cardScopePrompt(cards[0], in.Prompt), nil
+		return cardScopePrompt(cards[0], in.Prompt, in.DeckContextPrompt), nil
 	}
 	if in.Scope == "reorganize" {
 		decks, err := loadAllUserDecksForTransform(a.Cfg.DBPath, in.UserID)
 		if err != nil {
 			return "", err
 		}
+		// Reorganize is cross-deck; the cards-per-deck JSON already carries
+		// each deck's topic, so the per-deck context_prompt would be both
+		// redundant and ambiguous. Leave reorganize unchanged.
 		return reorganizeScopePrompt(decks, in.Prompt), nil
 	}
 
@@ -112,14 +115,30 @@ func (a *Activities) buildTransformPrompt(in shared.ComputeTransformInput) (stri
 	// populated one (the action is just "claude, generate everything from
 	// scratch per my prompt"). Pass an empty list and let claude return
 	// pure additions. The route already verified the deck row exists.
-	return deckScopePrompt(cards, in.Prompt), nil
+	return deckScopePrompt(cards, in.Prompt, in.DeckContextPrompt), nil
 }
 
-func cardScopePrompt(card cardForTransform, userPrompt string) string {
+// deckContextBlock renders the optional "deck overall context" preamble
+// included before the card/deck JSON in card- and deck-scope prompts.
+// Empty string when the deck has no context_prompt set (legacy decks,
+// or anything created before context_prompt existed) — caller drops it
+// into the prompt verbatim.
+func deckContextBlock(deckContextPrompt string) string {
+	trimmed := strings.TrimSpace(deckContextPrompt)
+	if trimmed == "" {
+		return ""
+	}
+	return fmt.Sprintf(`**Deck overall context** (what this deck is about per the owner):
+%s
+
+`, trimmed)
+}
+
+func cardScopePrompt(card cardForTransform, userPrompt, deckContextPrompt string) string {
 	cardJSON, _ := json.MarshalIndent(card, "", "  ")
 	return fmt.Sprintf(`You are improving a single flashcard in a spaced-repetition learning app, per the user's request.
 
-**Current card (JSON):**
+%s**Current card (JSON):**
 `+"```json"+`
 %s
 `+"```"+`
@@ -151,10 +170,10 @@ Return a JSON object describing the new state of THIS card. Shape:
 `+"```"+`
 
 Preserve fields the user's request didn't ask to change. Output ONLY the JSON object, no commentary or fences.`,
-		string(cardJSON), userPrompt)
+		deckContextBlock(deckContextPrompt), string(cardJSON), userPrompt)
 }
 
-func deckScopePrompt(cards []cardForTransform, userPrompt string) string {
+func deckScopePrompt(cards []cardForTransform, userPrompt, deckContextPrompt string) string {
 	// json.MarshalIndent(nil) = "null"; we want "[]" so an empty deck
 	// reads as a clean empty list to claude.
 	if cards == nil {
@@ -163,7 +182,7 @@ func deckScopePrompt(cards []cardForTransform, userPrompt string) string {
 	cardsJSON, _ := json.MarshalIndent(cards, "", "  ")
 	return fmt.Sprintf(`You are applying a deck-wide transformation to a spaced-repetition flashcard deck, per the user's request.
 
-**Current deck (JSON array of cards):**
+%s**Current deck (JSON array of cards):**
 `+"```json"+`
 %s
 `+"```"+`
@@ -194,7 +213,7 @@ Field guidance:
 - Preserve fields the user's request didn't ask to change.
 
 Output ONLY the JSON object, no commentary or fences. If the request asks for fewer than 1 change, return empty arrays. Cap additions at 15 cards per request.`,
-		string(cardsJSON), userPrompt)
+		deckContextBlock(deckContextPrompt), string(cardsJSON), userPrompt)
 }
 
 func parseTransformPlan(out []byte) (shared.TransformPlan, error) {

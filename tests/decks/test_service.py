@@ -183,36 +183,140 @@ async def test_get_plan_progress_returns_client_payload():
 # ---- deck-wide transform -----------------------------------------------
 
 
-async def test_start_deck_transform_passes_scope_and_target():
+async def test_start_deck_transform_passes_scope_and_target(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
     """Deck-scope transform → scope='deck', target_id=deck_id."""
+    deck_repo, _q_repo = repos
+    user = initialized_db
+    deck_id = deck_repo.create(user, "go-systems")
     client = FakeTemporalClient()
     await svc.start_deck_transform(
         client,
-        user_id="alice@example.com",
-        deck_id=7,
+        deck_repo=deck_repo,
+        user_id=user,
+        deck_id=deck_id,
         prompt="Make every prompt shorter.",
     )
     assert client.calls[0][0] == "start_transform"
     args = client.calls[0][1]
     assert args["scope"] == "deck"
-    assert args["target_id"] == 7
+    assert args["target_id"] == deck_id
     assert args["prompt"] == "Make every prompt shorter."
 
 
-async def test_start_card_transform_passes_scope_and_target():
+async def test_start_deck_transform_threads_deck_context_prompt(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """When the deck has a context_prompt, the service looks it up
+    and passes it through to the temporal client as
+    `deck_context_prompt` — the worker injects it into claude's
+    prompt so a deck-wide rewrite reads the deck's overall theme."""
+    deck_repo, _q_repo = repos
+    user = initialized_db
+    deck_id = deck_repo.create(
+        user, "world-history", context_prompt="World history from antiquity to 1900."
+    )
+    client = FakeTemporalClient()
+    await svc.start_deck_transform(
+        client,
+        deck_repo=deck_repo,
+        user_id=user,
+        deck_id=deck_id,
+        prompt="Add 3 cards on the silk road.",
+    )
+    args = client.calls[0][1]
+    assert args["deck_context_prompt"] == "World history from antiquity to 1900."
+
+
+async def test_start_deck_transform_empty_context_for_legacy_deck(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Legacy decks with no context_prompt set should produce
+    deck_context_prompt='' — the worker drops the preamble block
+    when it's empty rather than rendering an empty heading."""
+    deck_repo, _q_repo = repos
+    user = initialized_db
+    deck_id = deck_repo.create(user, "legacy-deck", context_prompt=None)
+    client = FakeTemporalClient()
+    await svc.start_deck_transform(
+        client,
+        deck_repo=deck_repo,
+        user_id=user,
+        deck_id=deck_id,
+        prompt="Polish wording.",
+    )
+    args = client.calls[0][1]
+    assert args["deck_context_prompt"] == ""
+
+
+async def test_start_card_transform_passes_scope_and_target(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
     """Card-scope transform → scope='card', target_id=qid. Workflow
     auto-applies on completion (no apply/reject signals expected)."""
+    deck_repo, q_repo = repos
+    user = initialized_db
+    deck_id = deck_repo.create(user, "scratch")
+    qid = q_repo.add(user, deck_id, NewQuestion(type=QuestionType.MCQ, prompt="q", answer="a"))
     client = FakeTemporalClient()
     await svc.start_card_transform(
         client,
-        user_id="alice@example.com",
-        qid=42,
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=user,
+        qid=qid,
         prompt="Tighten the wording.",
     )
     assert client.calls[0][0] == "start_transform"
     args = client.calls[0][1]
     assert args["scope"] == "card"
-    assert args["target_id"] == 42
+    assert args["target_id"] == qid
+
+
+async def test_start_card_transform_threads_deck_context_prompt(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Card-scope: service walks question → deck → context_prompt
+    and passes it through. A single-card rewrite still benefits
+    from knowing the deck's overall theme."""
+    deck_repo, q_repo = repos
+    user = initialized_db
+    deck_id = deck_repo.create(
+        user, "databases", context_prompt="ACID, isolation levels, replication."
+    )
+    qid = q_repo.add(user, deck_id, NewQuestion(type=QuestionType.SHORT, prompt="?", answer="!"))
+    client = FakeTemporalClient()
+    await svc.start_card_transform(
+        client,
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=user,
+        qid=qid,
+        prompt="Make this clearer.",
+    )
+    args = client.calls[0][1]
+    assert args["deck_context_prompt"] == "ACID, isolation levels, replication."
+
+
+async def test_start_card_transform_unknown_qid_passes_empty_context(
+    repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
+):
+    """Defense-in-depth: if the question lookup fails (shouldn't
+    happen — the route gate runs first — but service should not
+    crash), the call still goes through with empty context."""
+    deck_repo, q_repo = repos
+    client = FakeTemporalClient()
+    await svc.start_card_transform(
+        client,
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+        user_id=initialized_db,
+        qid=999999,
+        prompt="Fix it.",
+    )
+    args = client.calls[0][1]
+    assert args["deck_context_prompt"] == ""
 
 
 async def test_transform_signals_pass_through():
