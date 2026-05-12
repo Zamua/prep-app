@@ -33,6 +33,7 @@ from markupsafe import Markup
 # gated everywhere the operator's deploy doesn't have an agent.
 from prep import agent as _agent_mod
 from prep import icons, notify
+from prep import workflows as _workflows_mod
 from prep.agent.routes import router as agent_router
 from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
@@ -254,6 +255,9 @@ async def _boot() -> None:
        exec into the container.'
     2. legacy push-subscriptions.json cleanup (one-time).
     3. start the notification scheduler.
+    4. start the workflow reconciler — the server-side fallback that
+       keeps active_workflows accurate when the user isn't polling.
+       Same shape as notify.start_scheduler: one bg task per app.
     """
     from prep.infrastructure.db import init as _db_init
 
@@ -262,3 +266,4 @@ async def _boot() -> None:
     if legacy.exists():
         legacy.rename(legacy.with_suffix(".json.archived-pre-v0.5"))
     notify.start_scheduler()
+    _workflows_mod.start_workflows_scheduler()
