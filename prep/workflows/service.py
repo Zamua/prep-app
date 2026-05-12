@@ -1,6 +1,6 @@
 """Application service for workflow-tracking.
 
-Two entry points used by the rest of the app:
+Three entry points used by the rest of the app:
 
 - `register(...)` — called by start_* routes/services immediately
   after Temporal hands back a workflow id. Inserts a row in
@@ -12,14 +12,27 @@ Two entry points used by the rest of the app:
   transitions (idempotent via the notified_*_at columns), and stamps
   terminal_at when the workflow first reaches a terminal status.
 
-Both functions swallow errors — the workflow tracker is observability,
-not the path that matters. A failure here must NOT break the start or
-fragment poll.
+- `reconcile_active_workflows(...)` — called periodically from
+  `prep.workflows.scheduler`. Walks every non-terminal row in the
+  table, re-queries Temporal for the truth-of-state, drives each row
+  forward via `update_status` (so push notifications fire idempotently
+  through the same code path the fragment polls use), and prunes
+  long-since-terminal rows. This keeps the table accurate even when
+  the user closes the fragment-polling page before the workflow
+  finishes.
+
+All three functions swallow errors — the workflow tracker is
+observability, not the path that matters. A failure here must NOT
+break the start route, the fragment poll, or the scheduler loop.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Protocol
 
 from prep.workflows.entities import (
     ActiveWorkflow,
@@ -27,7 +40,10 @@ from prep.workflows.entities import (
     is_action_required,
     is_terminal,
 )
-from prep.workflows.repo import ActiveWorkflowsRepo
+from prep.workflows.repo import (
+    RECONCILER_PRUNE_WINDOW_SECONDS,
+    ActiveWorkflowsRepo,
+)
 
 _log = logging.getLogger("prep.workflows")
 
@@ -194,3 +210,193 @@ def _terminal_body(wf_type: WorkflowType, label: str, status: str) -> str:
     if wf_type is WorkflowType.PLAN:
         return f"Plan for {label} is done."
     return f"Transform on {label} is done."
+
+
+# ----- Reconciler ----------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReconcileSummary:
+    """Per-tick stats from `reconcile_active_workflows`.
+
+    The scheduler logs these at INFO so a quick `docker logs | grep
+    'workflow reconciler'` shows whether the loop is healthy and
+    making progress."""
+
+    checked: int = 0
+    status_changed: int = 0
+    notified: int = 0
+    pruned: int = 0
+
+
+class _TemporalClientProtocol(Protocol):
+    """Minimal surface the reconciler needs from `prep.temporal_client`.
+
+    Inlined as a Protocol so tests can pass any stub with the same
+    coroutine shape without depending on temporalio. Production passes
+    the `prep.temporal_client` module itself."""
+
+    async def describe_workflow(self, workflow_id: str) -> dict[str, Any]: ...
+    async def get_transform_progress(self, workflow_id: str) -> dict[str, Any] | None: ...
+    async def get_plan_progress(self, workflow_id: str) -> dict[str, Any] | None: ...
+    async def get_grade_progress(self, workflow_id: str) -> dict[str, Any] | None: ...
+    async def get_trivia_progress(self, workflow_id: str) -> dict[str, Any] | None: ...
+
+
+async def _query_progress(
+    temporal_client: Any, wf_type: WorkflowType, workflow_id: str
+) -> dict[str, Any] | None:
+    """Dispatch to the type-specific progress query. Returns the same
+    `{status: ...}` dict every workflow exposes via its getXProgress
+    handler, or None if the query handler is gone (closed workflow)."""
+    if wf_type is WorkflowType.TRANSFORM:
+        return await temporal_client.get_transform_progress(workflow_id)
+    if wf_type is WorkflowType.PLAN:
+        return await temporal_client.get_plan_progress(workflow_id)
+    if wf_type is WorkflowType.GRADING:
+        return await temporal_client.get_grade_progress(workflow_id)
+    if wf_type is WorkflowType.TRIVIA_GEN:
+        return await temporal_client.get_trivia_progress(workflow_id)
+    return None
+
+
+def _derive_status(progress: dict[str, Any] | None, desc: dict[str, Any] | None) -> str:
+    """Same precedence the fragment routes use: live progress status
+    wins; fall back to the describe()-derived status when the query
+    handler is gone. Map COMPLETED → 'done' so the row lands in the
+    terminal bucket without depending on entities.TERMINAL_STATUSES
+    catching the verbatim describe-status (it does, but it reads
+    cleaner in the UI and in push body text)."""
+    raw = (progress or {}).get("status") or (desc or {}).get("status") or ""
+    if raw == "COMPLETED":
+        return "done"
+    if raw == "FAILED":
+        return "failed"
+    if raw in ("CANCELED", "TERMINATED"):
+        return "rejected"
+    return raw
+
+
+async def reconcile_active_workflows(
+    *,
+    workflows_repo: ActiveWorkflowsRepo,
+    temporal_client: _TemporalClientProtocol,
+    push_send_fn: Callable[..., Awaitable[None] | None] | None = None,
+    now: datetime | None = None,
+    prune_window_seconds: int = RECONCILER_PRUNE_WINDOW_SECONDS,
+) -> ReconcileSummary:
+    """Walk every non-terminal row, re-query Temporal, drive updates
+    through `update_status` (which handles push fan-out idempotently),
+    and prune ancient terminal rows.
+
+    Designed to be safe to run repeatedly even if individual rows are
+    in odd shapes: every per-row query is wrapped, and a failure on
+    one row doesn't abort the rest of the tick.
+
+    Returns a `ReconcileSummary` for the scheduler to log."""
+    _ = now or datetime.now(timezone.utc)  # reserved for future "stuck workflow" detection
+    rows = workflows_repo.list_non_terminal()
+
+    checked = 0
+    status_changed = 0
+    notified = 0
+
+    for wf in rows:
+        checked += 1
+        try:
+            prev_status = wf.status
+            prev_notified_action = wf.notified_action_at
+            prev_notified_terminal = wf.notified_terminal_at
+
+            new_status = await _query_one(temporal_client, wf)
+
+            if not new_status:
+                # Couldn't determine a status (e.g. transient temporal
+                # blip). Leave the row as-is; we'll retry next tick.
+                continue
+
+            if new_status == prev_status:
+                continue
+
+            updated = update_status(
+                workflow_id=wf.workflow_id,
+                new_status=new_status,
+                repo=workflows_repo,
+                notifier=push_send_fn,
+            )
+            if updated is None:
+                continue
+
+            status_changed += 1
+            # Count a notification iff one of the notified_*_at columns
+            # transitioned from NULL to a value in this update.
+            if (updated.notified_action_at and not prev_notified_action) or (
+                updated.notified_terminal_at and not prev_notified_terminal
+            ):
+                notified += 1
+        except Exception as e:
+            _log.exception("reconciler row failed for %s: %s", wf.workflow_id, e)
+
+    pruned = 0
+    try:
+        pruned = workflows_repo.prune_terminal_older_than(window_seconds=prune_window_seconds)
+    except Exception as e:
+        _log.exception("reconciler prune failed: %s", e)
+
+    return ReconcileSummary(
+        checked=checked,
+        status_changed=status_changed,
+        notified=notified,
+        pruned=pruned,
+    )
+
+
+async def _query_one(temporal_client: _TemporalClientProtocol, wf: ActiveWorkflow) -> str | None:
+    """Pull progress+describe for one workflow and derive a status.
+
+    Returns None when both queries fail in ways we can't classify
+    (transient — leave the row alone). Returns 'failed' when the
+    workflow is GONE from temporal (e.g. namespace cleanup deleted it
+    entirely) so the row gets stamped terminal and pruned on a
+    subsequent tick.
+
+    A workflow that's still in flight but whose query handler hasn't
+    set status yet returns ''; the caller treats '' == prev_status as
+    a no-op."""
+    progress: dict[str, Any] | None = None
+    desc: dict[str, Any] | None = None
+    progress_err: Exception | None = None
+    desc_err: Exception | None = None
+
+    try:
+        progress = await _query_progress(temporal_client, wf.workflow_type, wf.workflow_id)
+    except Exception as e:
+        progress_err = e
+
+    try:
+        desc = await temporal_client.describe_workflow(wf.workflow_id)
+    except Exception as e:
+        desc_err = e
+
+    # describe() failing AND progress query failing — usually means the
+    # workflow record itself is gone from temporal (not just the in-memory
+    # query handler). Mark failed so the row is stamped terminal and ages
+    # out. The classifier is intentionally loose: any error message
+    # containing 'not found', 'NOT_FOUND', or 'no rows' counts; we don't
+    # depend on a specific exception class so this is resilient to
+    # temporalio SDK upgrades.
+    if desc_err is not None and progress is None:
+        msg = (str(desc_err) + " " + str(progress_err or "")).lower()
+        if "not found" in msg or "no rows" in msg or "no workflow" in msg:
+            return "failed"
+        # Some other transient temporal error — leave the row for the
+        # next tick.
+        _log.warning(
+            "reconciler couldn't reach temporal for %s: desc=%r progress=%r",
+            wf.workflow_id,
+            desc_err,
+            progress_err,
+        )
+        return None
+
+    return _derive_status(progress, desc)
