@@ -36,6 +36,7 @@
 @import "./components/stale-session.css" layer(components);
 @import "./components/deck-list.css" layer(components);
 @import "./components/deck-page.css" layer(components);
+@import "./components/deck-hero.css" layer(components);
 @import "./components/card-index.css" layer(components);
 @import "./components/study-card.css" layer(components);
 @import "./components/code-editor.css" layer(components);

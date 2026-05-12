@@ -137,13 +137,19 @@ def test_deck_view_lazy_materializes_empty_deck(client: TestClient, initialized_
     assert DeckRepo().find_id(user, "fresh-deck") is not None
 
 
-def test_deck_view_hides_study_button_for_trivia(client: TestClient, initialized_db: str):
-    """Trivia decks are notification-driven — the deck page should
-    omit the Begin button entirely. The deck-type eyebrow in the
-    header communicates the type."""
+def test_trivia_deck_shows_start_session_button(client: TestClient, initialized_db: str):
+    """Trivia decks now expose a "Start session" primary-action button
+    so the user can short-circuit the notification wait. The button
+    deep-links to /trivia/session/<deck> — same path the notification
+    uses — so the existing resume-or-create logic handles everything.
+    The SRS-style "Begin study session" label still must NOT appear
+    on trivia decks (trivia has no "due" backlog concept)."""
     DeckRepo().create_trivia(initialized_db, "geo", topic="capitals", interval_minutes=30)
     r = client.get("/deck/geo")
     assert r.status_code == 200
+    assert "Start session" in r.text
+    assert "/trivia/session/geo" in r.text
+    # SRS phrasing must not bleed into the trivia branch.
     assert "Begin study session" not in r.text
     assert "deck-type-eyebrow" in r.text
 
@@ -181,12 +187,14 @@ def test_trivia_deck_renders_mastery_bar_with_breakdown(client: TestClient, init
     assert r.status_code == 200
     # SRS-style "due now" line is omitted for trivia decks.
     assert "due now" not in r.text
-    # Mastery bar markup present, with computed counts in the labels.
+    # Mastery bar + compact stats line: "<unanswered> fresh · <wrong> wrong
+    # · <mastered>/<total> mastered · <pct>%". Hero layout swapped the
+    # three-line (label/bar/chips) presentation for one compact line.
     assert "mastery-bar" in r.text
-    assert "1 of 4 mastered" in r.text
+    assert "1/4</strong> mastered" in r.text
     assert "25%" in r.text  # 1/4 → 25%
-    assert "2 unanswered" in r.text
-    assert "1 wrong" in r.text
+    assert "2</strong> fresh" in r.text
+    assert "1</strong> wrong" in r.text
 
 
 def test_deck_view_renders_add_and_split_pills(client: TestClient, initialized_db: str):

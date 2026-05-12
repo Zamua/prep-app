@@ -3,6 +3,81 @@
 {% block page_class %}deck{% endblock %}
 {% import "macros/mastery.html" as mastery with context %}
 {% block main %}
+
+{% if deck_type == 'trivia' %}
+  {# Trivia decks: hero-band layout. Eyebrow + name + Start-session
+     button live inside a treated band (horizontal rules above/below);
+     all deck management (pin/notif/add/edit/split/edit-topic/delete)
+     hides behind a top-right ⋯ menu so the band stays uncluttered.
+     Stats render below the band as compact data. #}
+  <section class="deck-header deck-header-hero">
+    <div class="deck-hero-topbar">
+      <a href="{{ request.scope.get('root_path','') }}/" class="back" aria-label="Back to all decks">{{ icon('arrow-left', class_='icon icon-inline') }}</a>
+      <details class="deck-overflow-menu">
+        <summary title="More actions" aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
+        <div class="deck-overflow-body">
+          {# Pin + notif live inside the menu because the hero band reads
+             cleaner without inline pills. Both still 2-tap (open menu →
+             toggle); rare enough that the cleanliness wins. #}
+          {% set pinned = deck_meta.pinned %}
+          {% include "partials/pin_form.html" %}
+          {% include "partials/notif_edit.html" %}
+          <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new" class="deck-overflow-action">{{ icon('plus', class_='icon icon-inline') }}<span>Add card</span></a>
+          {% if agent_available %}
+            <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/edit-with-claude" class="deck-overflow-action">{{ icon('sparkle', class_='icon icon-inline') }}<span>Edit with claude</span></a>
+          {% endif %}
+          {% if questions %}
+            <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split" class="deck-overflow-action">{{ icon('arrow-up-right', class_='icon icon-inline') }}<span>Split deck</span></a>
+          {% endif %}
+          <a href="#topic-prompt" class="deck-overflow-action">{{ icon('pencil-simple-line', class_='icon icon-inline') }}<span>Edit topic</span></a>
+          <button type="button" id="open-delete-dialog" class="deck-overflow-action deck-overflow-action-danger">{{ icon('trash', class_='icon icon-inline') }}<span>Delete deck</span></button>
+        </div>
+      </details>
+    </div>
+    <div class="deck-hero">
+      <p class="deck-type-eyebrow">{{ deck_type }}</p>
+      <div class="deck-title-row deck-title-row-hero">
+        <h1 class="display deck-title">{{ deck_name }}</h1>
+        <details class="deck-rename">
+          <summary class="deck-rename-trigger" title="Rename deck">
+            {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+            <span class="visually-hidden">Rename deck</span>
+          </summary>
+          <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/rename"
+                class="deck-rename-form">
+            <label class="form-label">Rename deck</label>
+            <input type="text" name="new_name" value="{{ deck_name }}" required
+                   pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
+                   autocapitalize="none" autocorrect="off"
+                   class="deck-rename-input">
+            <button type="submit" class="btn btn-quiet">Save</button>
+            <p class="form-hint">2–30 chars, lowercase letters/digits/hyphens.</p>
+          </form>
+        </details>
+      </div>
+      <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}"
+         class="btn btn-primary deck-hero-cta">
+        <span>Start session</span>
+        {% if trivia_stats and trivia_stats.unanswered %}
+          <span class="btn-aside">{{ trivia_stats.unanswered }} fresh</span>
+        {% endif %}
+      </a>
+    </div>
+    {% if trivia_stats %}
+      {% set _t = trivia_stats.total or 1 %}
+      {% set _pct = (100 * trivia_stats.mastered / _t) | round | int %}
+      <div class="deck-mastery deck-mastery-hero">
+        <div class="deck-mastery-line">
+          <strong>{{ trivia_stats.unanswered }}</strong> fresh<span class="sep">·</span>
+          <strong>{{ trivia_stats.wrong }}</strong> wrong<span class="sep">·</span>
+          <strong>{{ trivia_stats.mastered }}/{{ trivia_stats.total }}</strong> mastered<span class="sep">·</span>
+          {{ _pct }}%
+        </div>
+        {{ mastery.bar(trivia_stats.mastered, trivia_stats.wrong, trivia_stats.total) }}
+      </div>
+    {% endif %}
+  </section>
+{% else %}
 <section class="deck-header">
   <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
   <p class="deck-type-eyebrow">{{ deck_type }}</p>
@@ -130,16 +205,12 @@
   {% endif %}
 </section>
 
-{# Trivia decks have no primary action — the deck-type tag in the
-   header already communicates "notification-driven", and the notif
-   pill exposes the on/off state. Show the SRS Begin button only
-   for SRS decks. #}
-{% if deck_type != 'trivia' %}
+{# Primary action for SRS decks. /begin auto-resumes any active session
+   on this deck, otherwise creates a fresh one. (Trivia decks render
+   their Start-session button inside the hero band above, so this
+   block is wrapped in the {% else %} branch of the deck_type check.) #}
 <section class="primary-action">
   {% if due_count > 0 %}
-    {# /begin auto-resumes any active session on this deck, otherwise creates
-       a fresh one. Add ?fresh=1 to force-start a new one. POST to keep the
-       URL path clean — but we also accept GET for direct linking. #}
     <form method="post" action="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}/begin" style="margin:0">
       <button class="btn btn-primary" type="submit" style="width:100%">
         <span>Begin study session</span>
@@ -152,15 +223,16 @@
     </span>
   {% endif %}
 </section>
-{% endif %}
+{% endif %}{# end of trivia/SRS deck-header split #}
 
 {# Trivia topic prompt — drives future batch generation. Surfaces as
    its own per-element edit affordance (small pencil + collapsible
    form), pulled out of the old AI edit panel because it's a manual
    metadata write, not a claude-driven action. SRS decks don't use
-   topic prompts — only trivia. #}
+   topic prompts — only trivia. Anchor id="topic-prompt" so the
+   "Edit topic" item in the hero-band [⋯] menu jumps here. #}
 {% if deck_type == 'trivia' %}
-<section class="deck-topic">
+<section class="deck-topic" id="topic-prompt">
   <details class="deck-topic-edit">
     <summary class="deck-topic-summary">
       <span class="deck-topic-eyebrow">topic prompt</span>

@@ -1,0 +1,170 @@
+/* Hero-band layout for trivia decks. Treated horizontal-rule band
+   that contains the deck name + Start-session button; all deck
+   management (pin/notif/add/edit/split/delete) hides behind a
+   top-right ⋯ overflow menu so the band reads clean. */
+
+.deck-header-hero {
+  /* No background-color or special padding; the band shape comes from
+     the horizontal rules on .deck-hero, not the outer section. */
+}
+
+.deck-hero-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+  min-height: 2rem;
+}
+
+.deck-hero-topbar .back {
+  color: var(--ink-muted);
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35em;
+  margin-left: -0.35em; /* nudge into edge */
+  border-radius: 0.4em;
+}
+.deck-hero-topbar .back:hover { background: var(--panel-tint); }
+
+/* Hero band itself — treated with horizontal rules above + below */
+.deck-hero {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 1.4rem 0 1.5rem;
+  margin: 0.4rem 0 1rem;
+  text-align: center;
+}
+.deck-hero .deck-type-eyebrow {
+  display: block; /* override prelude.css's inline-block so eyebrow gets its own line under the rule */
+  margin: 0 0 0.45rem;
+}
+.deck-hero .deck-title { margin: 0 0 1.1rem; }
+.deck-title-row-hero {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5em;
+  justify-content: center;
+}
+/* The rename pencil sits inline next to the title, subtle */
+.deck-title-row-hero .deck-rename-trigger {
+  opacity: 0.5;
+}
+.deck-title-row-hero .deck-rename-trigger:hover { opacity: 1; }
+
+.deck-hero-cta {
+  min-width: 14em;
+}
+
+/* Compact stats line + bar under the hero band */
+.deck-mastery-hero {
+  margin: 0.6rem 0 1.4rem;
+}
+.deck-mastery-hero .deck-mastery-line {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+  text-align: center;
+  margin-bottom: 0.4rem;
+  font-feature-settings: "tnum";
+}
+.deck-mastery-hero .deck-mastery-line .sep { opacity: 0.45; margin: 0 0.4em; }
+.deck-mastery-hero .deck-mastery-line strong { color: var(--ink); font-weight: 600; }
+
+/* ⋯ overflow menu */
+.deck-overflow-menu {
+  position: relative;
+}
+.deck-overflow-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.35em 0.5em;
+  border-radius: 0.4em;
+  color: var(--ink-muted);
+  display: inline-flex;
+  align-items: center;
+}
+.deck-overflow-menu > summary::-webkit-details-marker { display: none; }
+.deck-overflow-menu > summary::marker { content: ""; }
+.deck-overflow-menu > summary:hover { background: var(--panel-tint); }
+.deck-overflow-menu[open] > summary {
+  background: var(--panel-tint);
+  color: var(--ink);
+}
+.deck-overflow-menu > summary .icon {
+  width: 1.4em;
+  height: 1.4em;
+}
+/* Glyph-based dots when using a Unicode ⋯ instead of an icon */
+.deck-overflow-menu > summary > span {
+  font-size: 1.4em;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+  padding: 0 0.15em;
+}
+
+.deck-overflow-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.3em);
+  z-index: 10;
+  min-width: 14em;
+  padding: 0.4em;
+  background: var(--panel-bg, var(--bg, #f8f3e9));
+  border: 1px solid var(--rule);
+  border-radius: 0.6em;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+}
+
+/* Existing pin-form + notif partial come in as their own pill markup.
+   We want them to look like menu items inside the overflow body, not
+   like floating chips. Override their decoration. */
+.deck-overflow-body .pin-pill-form,
+.deck-overflow-body .notif-pill-form,
+.deck-overflow-body .notif-edit {
+  display: block;
+}
+.deck-overflow-body .pin-pill,
+.deck-overflow-body .notif-pill-summary,
+.deck-overflow-body > .notif-edit > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.55em 0.7em;
+  border-radius: 0.4em;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  width: 100%;
+  list-style: none;
+}
+.deck-overflow-body .pin-pill:hover,
+.deck-overflow-body .notif-pill-summary:hover,
+.deck-overflow-body > .notif-edit > summary:hover {
+  background: var(--panel-tint);
+}
+
+/* Generic action items in the menu */
+.deck-overflow-action {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.55em 0.7em;
+  border-radius: 0.4em;
+  text-decoration: none;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.deck-overflow-action:hover { background: var(--panel-tint); }
+.deck-overflow-action-danger { color: var(--danger, #a14040); }
+.deck-overflow-action-danger:hover { background: rgba(161, 64, 64, 0.08); }
