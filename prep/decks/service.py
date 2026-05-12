@@ -282,37 +282,68 @@ async def get_plan_progress(client: Any, wid: str) -> dict:
 async def start_deck_transform(
     client: Any,
     *,
+    deck_repo: DeckRepo,
     user_id: str,
     deck_id: int,
     prompt: str,
 ) -> Any:
     """Kick off a deck-scope Transform Temporal workflow. Waits for an
     apply/reject signal before writing — gives the user a chance to
-    review the proposed changes."""
+    review the proposed changes.
+
+    The deck's `context_prompt` ("what this deck is about") is looked
+    up here and passed through to the workflow so claude sees the
+    deck's overall theme alongside the per-card JSON — same role
+    context_prompt plays in the plan-first generation flow."""
+    deck_context_prompt = _resolve_deck_context_prompt(deck_repo, user_id, deck_id)
     return await client.start_transform(
         user_id=user_id,
         scope="deck",
         target_id=deck_id,
         prompt=prompt,
+        deck_context_prompt=deck_context_prompt,
     )
 
 
 async def start_card_transform(
     client: Any,
     *,
+    deck_repo: DeckRepo,
+    question_repo: QuestionRepo,
     user_id: str,
     qid: int,
     prompt: str,
 ) -> Any:
     """Kick off a card-scope Transform — auto-applies on completion
     (no apply/reject loop, since per-card improvements are usually
-    just the user nudging one prompt at a time)."""
+    just the user nudging one prompt at a time).
+
+    Looks up the question's owning deck so we can thread that deck's
+    `context_prompt` through to claude — a single-card edit benefits
+    from knowing the deck's overall theme too, not just the card
+    JSON in isolation."""
+    deck_context_prompt = ""
+    q = question_repo.get(user_id, qid)
+    if q is not None:
+        deck_context_prompt = _resolve_deck_context_prompt(deck_repo, user_id, q.deck_id)
     return await client.start_transform(
         user_id=user_id,
         scope="card",
         target_id=qid,
         prompt=prompt,
+        deck_context_prompt=deck_context_prompt,
     )
+
+
+def _resolve_deck_context_prompt(deck_repo: DeckRepo, user_id: str, deck_id: int) -> str:
+    """Look up a deck's context_prompt by id. Returns "" for legacy
+    decks without one set, or when the deck doesn't exist / belongs
+    to another user (defense-in-depth — the IDOR guard at the route
+    layer should have caught that already)."""
+    name = deck_repo.find_name(user_id, deck_id)
+    if not name:
+        return ""
+    return deck_repo.get_context_prompt(user_id, name) or ""
 
 
 async def apply_transform(client: Any, wid: str) -> None:

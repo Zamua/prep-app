@@ -109,11 +109,26 @@ async def describe_workflow(workflow_id: str) -> dict[str, Any]:
 # ---- Transform workflow helpers ----
 
 
-async def start_transform(*, user_id: str, scope: str, target_id: int, prompt: str) -> StartResult:
+async def start_transform(
+    *,
+    user_id: str,
+    scope: str,
+    target_id: int,
+    prompt: str,
+    deck_context_prompt: str = "",
+) -> StartResult:
     """Start a TransformWorkflow run. Three scopes:
     - 'card'       target_id = question_id; auto-applies on completion
     - 'deck'       target_id = deck_id; preview-then-apply via signals
-    - 'reorganize' target_id ignored (cross-deck); preview-then-apply"""
+    - 'reorganize' target_id ignored (cross-deck); preview-then-apply
+
+    `deck_context_prompt` is the deck's standing description (what
+    the owner said the deck is about). Passed through to claude so
+    a transform reads the deck's overall theme before deciding on
+    edits — same role context_prompt plays in the plan-first
+    generation flow. Empty for reorganize scope (cross-deck) and
+    for legacy decks without one set; the worker drops the preamble
+    block when empty."""
     if scope not in ("card", "deck", "reorganize"):
         raise ValueError(f"unknown transform scope {scope!r}")
     client = await _get_client()
@@ -125,6 +140,7 @@ async def start_transform(*, user_id: str, scope: str, target_id: int, prompt: s
             "scope": scope,
             "target_id": target_id,
             "prompt": prompt,
+            "deck_context_prompt": deck_context_prompt,
         },
         id=wid,
         task_queue=TASK_QUEUE,

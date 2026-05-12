@@ -926,6 +926,7 @@ async def deck_transform(
     try:
         result = await service.start_deck_transform(
             temporal_client,
+            deck_repo=deck_repo,
             user_id=uid,
             deck_id=deck_id,
             prompt=prompt.strip(),
@@ -1000,6 +1001,7 @@ async def question_improve(
     prompt: str = Form(...),
     user: dict = Depends(current_user),
     q_repo: QuestionRepo = Depends(_question_repo),
+    deck_repo: DeckRepo = Depends(_deck_repo),
 ):
     """Per-card free-text rewrite via the AI agent. Auto-applies on
     completion (card-scope transforms don't have an apply/reject
@@ -1016,6 +1018,8 @@ async def question_improve(
     try:
         result = await service.start_card_transform(
             temporal_client,
+            deck_repo=deck_repo,
+            question_repo=q_repo,
             user_id=uid,
             qid=qid,
             prompt=prompt.strip(),
