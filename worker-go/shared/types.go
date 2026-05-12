@@ -224,6 +224,14 @@ type TransformInput struct {
 	Scope    string `json:"scope"`     // "card" | "deck"
 	TargetID int    `json:"target_id"` // question_id (card) | deck_id (deck)
 	Prompt   string `json:"prompt"`    // the user's free-text instruction
+	// DeckContextPrompt is the deck's standing description ("what this
+	// deck is about") supplied by the owner at creation time. Threaded
+	// through to claude so a transform reads the deck's overall theme
+	// before deciding on edits — same role context_prompt plays in the
+	// plan-first generation flow. Empty for reorganize scope (no
+	// single deck) and for legacy decks created before context_prompt
+	// existed; the prompt builder skips the block when empty.
+	DeckContextPrompt string `json:"deck_context_prompt,omitempty"`
 }
 
 // CardModification is a full replacement of a card's user-visible fields.
@@ -323,6 +331,11 @@ type ComputeTransformInput struct {
 	Scope    string `json:"scope"`
 	TargetID int    `json:"target_id"`
 	Prompt   string `json:"prompt"`
+	// DeckContextPrompt mirrors TransformInput.DeckContextPrompt. The
+	// workflow threads it through unchanged; the activity injects it
+	// into the deck/card-scope prompts. Always empty for reorganize
+	// scope (cross-deck — no single deck context).
+	DeckContextPrompt string `json:"deck_context_prompt,omitempty"`
 }
 
 // ApplyTransformInput is the apply-step activity input. The plan is

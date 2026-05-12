@@ -72,10 +72,11 @@ func Transform(ctx workflow.Context, in shared.TransformInput) (shared.Transform
 	cctx := workflow.WithActivityOptions(ctx, computeOpts)
 	var plan shared.TransformPlan
 	if err := workflow.ExecuteActivity(cctx, a.ComputeTransform, shared.ComputeTransformInput{
-		UserID:   in.UserID,
-		Scope:    in.Scope,
-		TargetID: in.TargetID,
-		Prompt:   in.Prompt,
+		UserID:            in.UserID,
+		Scope:             in.Scope,
+		TargetID:          in.TargetID,
+		Prompt:            in.Prompt,
+		DeckContextPrompt: in.DeckContextPrompt,
 	}).Get(ctx, &plan); err != nil {
 		progress.Status = "failed"
 		progress.Error = err.Error()
