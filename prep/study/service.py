@@ -131,6 +131,21 @@ async def start_grading(
     here verbatim — adapter, not domain remodeling."""
     result = await client.start_grading(qid, deck_name, user_answer, idk, user_id=user_id)
     session_repo.set_grading(user_id, sid, qid, result.workflow_id, expected_version)
+    # Register with the active-workflows tracker so the masthead badge
+    # picks this up. The grading polling URL carries the session id so
+    # the "view" link in the badge lands the user back on the session.
+    from prep.workflows import service as workflows_service
+    from prep.workflows.entities import WorkflowType
+
+    workflows_service.register(
+        user_login=user_id,
+        workflow_id=result.workflow_id,
+        workflow_type=WorkflowType.GRADING,
+        deck_id=None,
+        deck_name=deck_name,
+        url_path=f"/grading/{result.workflow_id}?sid={sid}",
+        initial_status="grading",
+    )
     return result.workflow_id
 
 

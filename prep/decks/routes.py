@@ -440,6 +440,21 @@ async def deck_new_trivia_create(
         # the error so the user can either retry or hit the manual
         # /trivia/decks/<id>/generate route.
         raise HTTPException(500, f"deck created but failed to start trivia workflow: {e}") from e
+    # Register with the active-workflows tracker — masthead badge
+    # picks it up on the next 5s poll. Late import to avoid eager
+    # module loading; the workflows context is tracker-only.
+    from prep.workflows import service as _workflows_service
+    from prep.workflows.entities import WorkflowType as _WT
+
+    _workflows_service.register(
+        user_login=uid,
+        workflow_id=res.workflow_id,
+        workflow_type=_WT.TRIVIA_GEN,
+        deck_id=deck_id,
+        deck_name=clean,
+        url_path=f"/trivia/gen/{res.workflow_id}",
+        initial_status="computing",
+    )
     return responses.redirect(request, f"/trivia/gen/{res.workflow_id}")
 
 
@@ -929,6 +944,7 @@ async def deck_transform(
             user_id=uid,
             deck_id=deck_id,
             prompt=prompt.strip(),
+            deck_name=name,
         )
     except Exception as e:
         raise HTTPException(500, f"failed to start transform: {e}")
@@ -990,6 +1006,20 @@ async def reorganize_submit(
         )
     except Exception as e:
         raise HTTPException(500, f"failed to start reorganize: {e}")
+    # Register the cross-deck workflow so the badge shows it as
+    # "reorganize" (no single deck name to attach).
+    from prep.workflows import service as _workflows_service
+    from prep.workflows.entities import WorkflowType as _WT
+
+    _workflows_service.register(
+        user_login=uid,
+        workflow_id=result.workflow_id,
+        workflow_type=_WT.TRANSFORM,
+        deck_id=None,
+        deck_name=None,
+        url_path=f"/transform/{result.workflow_id}",
+        initial_status="computing",
+    )
     return responses.redirect(request, f"/transform/{result.workflow_id}")
 
 
@@ -1005,10 +1035,17 @@ async def question_improve(
     completion (card-scope transforms don't have an apply/reject
     review step — that's reserved for deck-wide changes)."""
     uid = user["tailscale_login"]
-    if q_repo.get(uid, qid) is None:
+    q_entity = q_repo.get(uid, qid)
+    if q_entity is None:
         raise HTTPException(404, "question not found")
     if not prompt.strip():
         raise HTTPException(400, "empty prompt")
+    # Resolve the deck name eagerly so the workflow tracker has a
+    # human-friendly label for the badge popover (card-scope transforms
+    # auto-apply with no review screen, so the badge is the only UI
+    # surface that shows the running operation).
+    deck_repo_for_name = DeckRepo()
+    deck_name = deck_repo_for_name.find_name(uid, q_entity.deck_id)
     # Late import: keeps the routes module's startup-time graph clean
     # of temporal-client setup, which has its own retry/dial logic.
     from prep import temporal_client
@@ -1019,6 +1056,7 @@ async def question_improve(
             user_id=uid,
             qid=qid,
             prompt=prompt.strip(),
+            deck_name=deck_name,
         )
     except Exception as e:
         raise HTTPException(500, f"failed to start transform: {e}")

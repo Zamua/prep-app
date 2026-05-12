@@ -36,6 +36,8 @@ from prep.decks.entities import (
     Question,
 )
 from prep.decks.repo import DeckRepo, QuestionRepo
+from prep.workflows import service as workflows_service
+from prep.workflows.entities import WorkflowType
 
 # ============================================================================
 # Synchronous CRUD use cases
@@ -248,12 +250,25 @@ async def start_plan_generation(
     """Kick off a PlanGenerate Temporal workflow. Returns the workflow
     handle / metadata object the temporal client gives back — caller
     extracts `.workflow_id` to redirect the user to the plan page."""
-    return await client.start_plan_generate(
+    result = await client.start_plan_generate(
         user_id=user_id,
         deck_id=deck_id,
         deck_name=deck_name,
         prompt=prompt,
     )
+    # Register with the active-workflows tracker so the masthead badge
+    # picks it up immediately. Registration never raises — a tracking
+    # failure shouldn't break the start path.
+    workflows_service.register(
+        user_login=user_id,
+        workflow_id=result.workflow_id,
+        workflow_type=WorkflowType.PLAN,
+        deck_id=deck_id,
+        deck_name=deck_name,
+        url_path=f"/plan/{result.workflow_id}",
+        initial_status="computing",
+    )
+    return result
 
 
 async def submit_plan_feedback(client: Any, wid: str, feedback: str) -> None:
@@ -285,16 +300,30 @@ async def start_deck_transform(
     user_id: str,
     deck_id: int,
     prompt: str,
+    deck_name: str | None = None,
 ) -> Any:
     """Kick off a deck-scope Transform Temporal workflow. Waits for an
     apply/reject signal before writing — gives the user a chance to
-    review the proposed changes."""
-    return await client.start_transform(
+    review the proposed changes.
+
+    `deck_name` is optional but recommended — passed through to the
+    workflow tracker for the masthead badge label."""
+    result = await client.start_transform(
         user_id=user_id,
         scope="deck",
         target_id=deck_id,
         prompt=prompt,
     )
+    workflows_service.register(
+        user_login=user_id,
+        workflow_id=result.workflow_id,
+        workflow_type=WorkflowType.TRANSFORM,
+        deck_id=deck_id,
+        deck_name=deck_name,
+        url_path=f"/transform/{result.workflow_id}",
+        initial_status="computing",
+    )
+    return result
 
 
 async def start_card_transform(
@@ -303,16 +332,27 @@ async def start_card_transform(
     user_id: str,
     qid: int,
     prompt: str,
+    deck_name: str | None = None,
 ) -> Any:
     """Kick off a card-scope Transform — auto-applies on completion
     (no apply/reject loop, since per-card improvements are usually
     just the user nudging one prompt at a time)."""
-    return await client.start_transform(
+    result = await client.start_transform(
         user_id=user_id,
         scope="card",
         target_id=qid,
         prompt=prompt,
     )
+    workflows_service.register(
+        user_login=user_id,
+        workflow_id=result.workflow_id,
+        workflow_type=WorkflowType.TRANSFORM,
+        deck_id=None,
+        deck_name=deck_name,
+        url_path=f"/transform/{result.workflow_id}",
+        initial_status="computing",
+    )
+    return result
 
 
 async def apply_transform(client: Any, wid: str) -> None:
