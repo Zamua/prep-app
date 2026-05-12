@@ -161,3 +161,63 @@ def test_cleanup_deletes_only_stale_terminal_rows(initialized_db: str):
     # In-flight + recent rows still present.
     assert repo.get("inflight") is not None
     assert repo.get("recent-terminal") is not None
+
+
+def test_list_non_terminal_returns_only_in_flight_rows(initialized_db: str):
+    """The reconciler's input set — every row whose terminal_at is NULL,
+    across users. Terminal rows are excluded."""
+    from prep.auth.repo import UserRepo
+
+    UserRepo().upsert("bob@example.com", display_name="Bob")
+    repo = ActiveWorkflowsRepo()
+    _seed(repo, workflow_id="alice-inflight", user_login=initialized_db)
+    _seed(repo, workflow_id="bob-inflight", user_login="bob@example.com")
+    _seed(repo, workflow_id="alice-terminal", user_login=initialized_db)
+    repo.update_status("alice-terminal", "done")
+    repo.set_terminal_at("alice-terminal")
+
+    items = repo.list_non_terminal()
+    ids = {w.workflow_id for w in items}
+    assert ids == {"alice-inflight", "bob-inflight"}
+
+
+def test_list_non_terminal_orders_oldest_first(initialized_db: str):
+    """started_at ASC so a backlog gets walked oldest-first per tick —
+    stuck workflows surface before fresher ones."""
+    repo = ActiveWorkflowsRepo()
+    # `register` stamps started_at = now() at insert; force two distinct
+    # timestamps by manually rewriting them after registration.
+    _seed(repo, workflow_id="newer", user_login=initialized_db)
+    _seed(repo, workflow_id="older", user_login=initialized_db)
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        c.execute(
+            "UPDATE active_workflows SET started_at = ? WHERE workflow_id = ?",
+            ("2026-05-10T10:00:00+00:00", "older"),
+        )
+        c.execute(
+            "UPDATE active_workflows SET started_at = ? WHERE workflow_id = ?",
+            ("2026-05-11T10:00:00+00:00", "newer"),
+        )
+
+    items = repo.list_non_terminal()
+    assert [w.workflow_id for w in items] == ["older", "newer"]
+
+
+def test_prune_terminal_older_than_24h(initialized_db: str):
+    """The reconciler's wider prune window — 24h default, not the 60s
+    opportunistic-cleanup window used on badge reads."""
+    repo = ActiveWorkflowsRepo()
+    _seed(repo, workflow_id="recent", user_login=initialized_db)
+    _seed(repo, workflow_id="ancient", user_login=initialized_db)
+    repo.update_status("recent", "done")
+    repo.update_status("ancient", "done")
+    repo.set_terminal_at("recent")  # ~now
+    twenty_five_hours_ago = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+    repo.set_terminal_at("ancient", terminal_at=twenty_five_hours_ago)
+
+    n = repo.prune_terminal_older_than()
+    assert n == 1
+    assert repo.get("ancient") is None
+    assert repo.get("recent") is not None

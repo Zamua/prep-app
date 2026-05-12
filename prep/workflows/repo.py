@@ -3,10 +3,20 @@
 SQL lives here directly. The repo returns `ActiveWorkflow` entities;
 the service layer above orchestrates inserts/updates + push fan-out.
 
-Cleanup policy: rows with `terminal_at` older than RECENT_TERMINAL_WINDOW
-are pruned on every badge fetch (opportunistic — no separate scheduler
-task needed at this scale). Rows for in-flight workflows are never
-auto-pruned.
+Cleanup policy:
+
+- Rows with `terminal_at` older than RECENT_TERMINAL_WINDOW are pruned
+  on every badge fetch (opportunistic — keeps the badge popover clean
+  even between reconciler ticks). Cheap single-DELETE-per-poll.
+- Rows with `terminal_at` older than ~24h are pruned by the periodic
+  workflow reconciler (`prep.workflows.scheduler`). The opportunistic
+  badge cleanup uses the short 60s window; the reconciler's wider
+  window catches rows for users who haven't visited recently.
+
+Rows for in-flight workflows are never auto-pruned. The reconciler
+re-queries Temporal for any non-terminal row, transitions it forward
+through `service.update_status`, and stamps terminal_at when the
+workflow reaches a terminal state.
 """
 
 from __future__ import annotations
@@ -21,6 +31,14 @@ from prep.workflows.entities import ActiveWorkflow, WorkflowType
 # the spec — long enough for the user to notice, short enough that
 # the badge clears on its own without manual dismissal.
 RECENT_TERMINAL_WINDOW_SECONDS = 60
+
+# Wider window the periodic reconciler uses to hard-delete long-since-
+# terminal rows. Set to 24h so a user who took a few hours to come back
+# still sees their recent-completion pill (within the 60s opportunistic
+# window after their next badge fetch, which fires set_terminal_at on
+# transition), but the table doesn't accumulate forever for users who
+# never come back.
+RECONCILER_PRUNE_WINDOW_SECONDS = 24 * 60 * 60
 
 
 def _row_to_entity(row) -> ActiveWorkflow:
@@ -175,7 +193,35 @@ class ActiveWorkflowsRepo:
         cutoff_iso = cutoff_dt.isoformat()
         with cursor() as c:
             cur = c.execute(
-                "DELETE FROM active_workflows " "WHERE terminal_at IS NOT NULL AND terminal_at < ?",
+                "DELETE FROM active_workflows WHERE terminal_at IS NOT NULL AND terminal_at < ?",
                 (cutoff_iso,),
             )
             return cur.rowcount
+
+    def list_non_terminal(self) -> list[ActiveWorkflow]:
+        """All rows that have NOT yet been stamped terminal — i.e. the
+        set the reconciler must re-query Temporal for. Cross-user; this
+        is the periodic background sweep, not the user-facing badge.
+
+        Ordering is `started_at ASC` so the oldest in-flight workflows
+        get re-checked first per tick (they're the most likely to be
+        stuck or have just transitioned)."""
+        with cursor() as c:
+            rows = c.execute(
+                "SELECT * FROM active_workflows "
+                "WHERE terminal_at IS NULL "
+                "ORDER BY started_at ASC"
+            ).fetchall()
+        return [_row_to_entity(r) for r in rows]
+
+    def prune_terminal_older_than(
+        self,
+        *,
+        window_seconds: int = RECONCILER_PRUNE_WINDOW_SECONDS,
+    ) -> int:
+        """Hard-delete terminal rows whose terminal_at is more than
+        `window_seconds` ago. Used by the reconciler to age out long-
+        forgotten rows (24h default) without disturbing the short
+        opportunistic-cleanup window that `cleanup_stale_terminal` runs
+        on badge reads (60s)."""
+        return self.cleanup_stale_terminal(window_seconds=window_seconds)
