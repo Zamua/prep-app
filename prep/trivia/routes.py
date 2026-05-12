@@ -81,6 +81,12 @@ async def _trivia_gen_progress(wid: str, user_login: str) -> tuple[str, dict]:
         # Workflow finished + dropped its query handler. Treat as done.
         progress = {"status": "done"}
     progress["deck_name"] = deck_name
+    # Workflow-tracker hook — diff status, fire push on terminal.
+    # Trivia gen has no awaiting-action state so only the done/failed
+    # transition pings the user.
+    from prep.workflows import service as _workflows_service
+
+    _workflows_service.update_status(workflow_id=wid, new_status=progress.get("status") or "")
     return deck_name, progress
 
 

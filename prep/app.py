@@ -44,6 +44,7 @@ from prep.web import errors as _errors_mod
 from prep.web.index import router as index_router
 from prep.web.pwa import router as pwa_router
 from prep.web.templates import templates
+from prep.workflows.routes import router as workflows_router
 
 # templates/ + static/ live at the repo root, one above the prep package.
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -210,6 +211,7 @@ app.include_router(agent_router)
 app.include_router(auth_router)
 app.include_router(index_router)
 app.include_router(pwa_router)
+app.include_router(workflows_router)
 
 # Dev-only template preview routes (read-only, no DB writes). Gated
 # behind PREP_DEV — set in dev environments only, never in prod

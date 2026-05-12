@@ -488,6 +488,20 @@ async def study_submit(
             res = await temporal_client.start_grading(qid, name, user_answer, idk, user_id=uid)
         except Exception as e:
             raise HTTPException(500, f"failed to start grading workflow: {e}")
+        # Register with the active-workflows tracker so the masthead
+        # badge picks this up (no-session study path, so no sid in the URL).
+        from prep.workflows import service as _workflows_service
+        from prep.workflows.entities import WorkflowType as _WT
+
+        _workflows_service.register(
+            user_login=uid,
+            workflow_id=res.workflow_id,
+            workflow_type=_WT.GRADING,
+            deck_id=None,
+            deck_name=name,
+            url_path=f"/grading/{res.workflow_id}",
+            initial_status="grading",
+        )
         return responses.redirect(request, f"/grading/{res.workflow_id}")
 
     # Fast path: idk + mcq/multi.
@@ -720,6 +734,12 @@ async def grading_fragment(
     progress = await temporal_client.get_grade_progress(wid)
     desc = await temporal_client.describe_workflow(wid)
     status = (progress or {}).get("status") or (desc or {}).get("status") or "unknown"
+
+    # Workflow-tracker hook — diff status, fire push notifications on
+    # transitions. Errors are absorbed by the tracker.
+    from prep.workflows import service as _workflows_service
+
+    _workflows_service.update_status(workflow_id=wid, new_status=status)
 
     terminal = status in {"done", "failed", "COMPLETED", "FAILED", "CANCELED", "TERMINATED"}
     if terminal:
