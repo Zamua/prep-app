@@ -69,12 +69,16 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 	var a *activities.Activities
 
 	planOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		// Ceiling sits 1m above the HTTP client's 30m timeout so a stuck
+		// claude call surfaces as an HTTP deadline error (attributable)
+		// rather than a temporal activity timeout.
+		StartToCloseTimeout: 31 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
+			// No retries on claude calls — surface failure to the user.
 			InitialInterval:    2 * time.Second,
 			BackoffCoefficient: 2.0,
-			MaximumAttempts:    2,
+			MaximumAttempts:    1,
 			NonRetryableErrorTypes: []string{
 				"BadInput", "BadPlanJSON", "NoAgent",
 			},
@@ -208,13 +212,19 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 	wfID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
 	expandOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		// Ceiling sits 1m above the HTTP client's 30m timeout — a stuck
+		// claude expansion call surfaces as a deadline error rather than
+		// a temporal kill.
+		StartToCloseTimeout: 31 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
+			// No retries on claude calls. Individual expansion failures
+			// already get skipped (not fatal to the workflow); a single
+			// attempt is fine.
 			InitialInterval:    2 * time.Second,
 			BackoffCoefficient: 2.0,
 			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    2,
+			MaximumAttempts:    1,
 			NonRetryableErrorTypes: []string{
 				"BadCardJSON", "NoAgent",
 			},

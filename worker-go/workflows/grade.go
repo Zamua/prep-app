@@ -49,13 +49,18 @@ func GradeAnswer(ctx workflow.Context, in shared.GradeAnswerInput) (shared.Grade
 
 	// ---- Grade ----
 	gradeOpts := workflow.ActivityOptions{
-		StartToCloseTimeout: 90 * time.Second,
+		// Ceiling sits 1m above the HTTP client's 30m timeout so a stuck
+		// claude call surfaces as an HTTP deadline error rather than a
+		// temporal activity timeout. Grading is usually <10s, but
+		// applying the same policy keeps the failure mode consistent.
+		StartToCloseTimeout: 31 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
+			// No retries on claude calls — surface failure to the user.
 			InitialInterval:    2 * time.Second,
 			BackoffCoefficient: 2.0,
 			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    3,
+			MaximumAttempts:    1,
 			NonRetryableErrorTypes: []string{
 				"BadQuestionID",
 			},

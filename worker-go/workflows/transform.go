@@ -54,16 +54,24 @@ func Transform(ctx workflow.Context, in shared.TransformInput) (shared.Transform
 
 	// ---- Compute the plan ----
 	computeOpts := workflow.ActivityOptions{
-		// Generous: claude reads the entire deck and rewrites multiple cards.
-		// Activity heartbeats every 10s so a truly hung run still gets killed
-		// by the heartbeat timeout — this is just the upper bound.
-		StartToCloseTimeout: 15 * time.Minute,
+		// Ceiling sits 1 minute ABOVE the HTTP client's 30m so the
+		// claude HTTP call errors out first with an attributable
+		// "agent http: deadline exceeded" rather than temporal killing
+		// the activity with a generic timeout. claude reads the entire
+		// deck and rewrites multiple cards — large-deck reorganize can
+		// legitimately run for many minutes.
+		StartToCloseTimeout: 31 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
+			// No retries on claude calls. Re-running a 20-minute prompt
+			// after a timeout is almost never what the user wants — and
+			// silently retrying hides the real failure mode (claude is
+			// slow / stuck) for another 20+ minutes. Surface the error
+			// to the user instead and let them retry explicitly.
 			InitialInterval:    2 * time.Second,
 			BackoffCoefficient: 2.0,
 			MaximumInterval:    30 * time.Second,
-			MaximumAttempts:    2,
+			MaximumAttempts:    1,
 			NonRetryableErrorTypes: []string{
 				"BadInput",
 			},
