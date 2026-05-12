@@ -16,9 +16,13 @@
       <details class="deck-overflow-menu">
         <summary title="More actions" aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
         <div class="deck-overflow-body">
-          {# Pin + notif live inside the menu because the hero band reads
-             cleaner without inline pills. Both still 2-tap (open menu →
-             toggle); rare enough that the cleanliness wins. #}
+          {# Pin lives in the menu because it's a clean 1-tap toggle.
+             Topic prompt + notification schedule are NOT here — they
+             each render as their own inline section below the hero
+             with their own edit affordances (pencil + collapsible
+             popover). Mirroring "no duplicate entry points" rule:
+             a setting that's already inline-editable doesn't need a
+             menu shortcut. #}
           {% set pinned = deck_meta.pinned %}
           {% include "partials/pin_form.html" %}
           {% include "partials/notif_edit.html" %}
@@ -29,7 +33,6 @@
           {% if questions %}
             <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split" class="deck-overflow-action">{{ icon('arrow-up-right', class_='icon icon-inline') }}<span>Split deck</span></a>
           {% endif %}
-          <a href="#topic-prompt" class="deck-overflow-action">{{ icon('pencil-simple-line', class_='icon icon-inline') }}<span>Edit topic</span></a>
           <button type="button" id="open-delete-dialog" class="deck-overflow-action deck-overflow-action-danger">{{ icon('trash', class_='icon icon-inline') }}<span>Delete deck</span></button>
         </div>
       </details>

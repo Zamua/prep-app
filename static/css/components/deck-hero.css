@@ -40,10 +40,14 @@
 }
 .deck-hero .deck-title { margin: 0 0 1.1rem; }
 .deck-title-row-hero {
-  display: inline-flex;
+  /* Block-level flex so the title (+ rename pencil) always occupies its
+     own row. Earlier inline-flex let a short title (e.g. "dsa") share a
+     row with the Start-session button below, which read as one weird
+     combined chunk. justify-content centers the title within the band. */
+  display: flex;
+  justify-content: center;
   align-items: baseline;
   gap: 0.5em;
-  justify-content: center;
 }
 /* The rename pencil sits inline next to the title, subtle */
 .deck-title-row-hero .deck-rename-trigger {
@@ -118,17 +122,16 @@
   gap: 0.1em;
 }
 
-/* Existing pin-form + notif partial come in as their own pill markup.
-   We want them to look like menu items inside the overflow body, not
-   like floating chips. Override their decoration. */
-.deck-overflow-body .pin-pill-form,
-.deck-overflow-body .notif-pill-form,
-.deck-overflow-body .notif-edit {
+/* The pin partial renders as a `<button class="tag tag-pin">` (a tinted
+   chip) by default. Inside the overflow body we want it to read as a
+   plain menu item — same shape as the `.deck-overflow-action` links
+   below it. Strip the chip decoration and rebuild as a row. */
+.deck-overflow-body .deck-pin-form {
+  margin: 0;
   display: block;
 }
-.deck-overflow-body .pin-pill,
-.deck-overflow-body .notif-pill-summary,
-.deck-overflow-body > .notif-edit > summary {
+.deck-overflow-body .deck-pin-form .tag-pin,
+.deck-overflow-body .deck-pin-form .tag-pin-active {
   display: flex;
   align-items: center;
   gap: 0.55em;
@@ -141,13 +144,21 @@
   color: inherit;
   cursor: pointer;
   width: 100%;
-  list-style: none;
 }
-.deck-overflow-body .pin-pill:hover,
-.deck-overflow-body .notif-pill-summary:hover,
-.deck-overflow-body > .notif-edit > summary:hover {
+.deck-overflow-body .deck-pin-form .tag-pin:hover,
+.deck-overflow-body .deck-pin-form .tag-pin-active:hover {
   background: var(--panel-tint);
 }
+/* `.tag-pin` inherits text-transform: lowercase from pill.css; override
+   inside the menu so "Pin" / "Unpin" match the Title-Case convention of
+   the other items (Add card, Edit with claude, …). */
+.deck-overflow-body .deck-pin-form .tag-pin,
+.deck-overflow-body .deck-pin-form .tag-pin-active {
+  text-transform: none;
+}
+/* Pin/Unpin reads as an action label (not a state), so the active class
+   doesn't need a color cue inside the menu. The label text itself tells
+   you the current state ("Unpin" implies you're currently pinned). */
 
 /* Generic action items in the menu */
 .deck-overflow-action {
@@ -168,3 +179,80 @@
 .deck-overflow-action:hover { background: var(--panel-tint); }
 .deck-overflow-action-danger { color: var(--danger, #a14040); }
 .deck-overflow-action-danger:hover { background: rgba(161, 64, 64, 0.08); }
+
+/* Notif partial inside the overflow menu.
+   The notif_edit partial renders a `<details class="notif-edit">` whose
+   summary is a tinted pill ("every Nm" / "paused") and whose popover
+   floats absolutely positioned. Neither looks right inside the menu:
+     - the summary needs to read like a plain menu row (icon + label)
+     - the popover needs to flow INLINE inside the menu (push items
+       below it) instead of floating outside, otherwise it lands
+       outside the menu's bounds (the "janky" 2026-05-12 incident).
+*/
+.deck-overflow-body .notif-edit { display: block; }
+.deck-overflow-body .notif-pill,
+.deck-overflow-body .notif-pill-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.55em 0.7em;
+  border-radius: 0.4em;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  width: 100%;
+  list-style: none;
+  text-transform: none;
+}
+.deck-overflow-body .notif-pill:hover,
+.deck-overflow-body .notif-pill-summary:hover {
+  background: var(--panel-tint);
+}
+/* Popover breaks out of the menu's narrow column but stays anchored
+   visually to the notif row that spawned it — like a "speech bubble"
+   pointing at the trigger. Anchored to `.notif-edit` (relative inside
+   the menu) so a little caret can sit on the popover's top edge above
+   the row that spawned it. Width spans the page (left of the menu)
+   while right-edge aligns with the menu's right edge. */
+.deck-overflow-body .notif-edit { position: relative; }
+.deck-overflow-body .notif-popover {
+  position: absolute;
+  top: calc(100% + 0.7rem);
+  right: -0.4em; /* nudge past the menu's right padding so the caret sits cleanly under the row */
+  left: auto;
+  width: calc(100vw - 2rem);
+  max-width: 22rem;
+  z-index: 100;
+  padding: 0.85rem 0.95rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+  display: flex; flex-direction: column; gap: 0.7rem;
+}
+/* Caret pointing up at the notif row. Two stacked triangles — outer
+   matches the popover border, inner the background, with a 1px offset
+   so the border line continues across the caret. */
+.deck-overflow-body .notif-popover::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: 1.3rem;
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid var(--rule);
+}
+.deck-overflow-body .notif-popover::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  right: 1.4rem;
+  width: 0; height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid var(--paper);
+}

@@ -19,6 +19,6 @@
           class="tag tag-pin {% if pinned %}tag-pin-active{% endif %}"
           title="{{ 'Unpin from top of index' if pinned else 'Pin to top of index' }}">
     {{ icon('push-pin' if pinned else 'push-pin-simple', class_='icon icon-inline') }}
-    <span>{{ 'pinned' if pinned else 'pin' }}</span>
+    <span>{{ 'Unpin' if pinned else 'Pin' }}</span>
   </button>
 </form>
