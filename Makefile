@@ -199,6 +199,10 @@ deploy-prod:
 	@echo "→ deploy-prod (image=prep:$(DEPLOY_PROD_TAG), project=prod, port=8081)"
 	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
 	git worktree add --detach $(DEPLOY_BUILD_DIR) $(DEPLOY_PROD_TAG)
+	@# Same .env-sourcing trick as deploy-stag — secrets (PREP_INTERNAL_TOKEN,
+	@# CLAUDE_CODE_OAUTH_TOKEN) live in the workspace .env, not the prod
+	@# git worktree. Without this, compose's ${VAR:?} guards fail.
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=$(DEPLOY_PROD_TAG) \
 	  docker compose \
 	    -f docker-compose.yml \
