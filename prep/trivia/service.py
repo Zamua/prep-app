@@ -30,6 +30,9 @@ from prep.trivia.repo import TriviaQueueRepo
 logger = logging.getLogger(__name__)
 
 
+# Cap, not a target: the prompt asks the agent to pick a count that
+# fits the topic, up to this ceiling. Set to bound credit burn — a
+# narrow topic might naturally call for 6 cards, a broad one for 25.
 DEFAULT_BATCH_SIZE = 25
 
 
@@ -51,7 +54,12 @@ flashcard app. Each card has a Q (the prompt), an A (the short answer),
 an E (a deeper explanation that gets revealed when the user taps to
 expand "Deep dive"), and an R (a regex that grades user answers).
 
-Generate exactly %(batch_size)d questions on the topic:
+Generate **up to %(batch_size)d** questions on the topic — pick the
+count that genuinely fits. A narrow / sparse topic deserves fewer
+high-quality cards; a broad topic with many distinct sub-areas can
+fill the cap. Don't pad to hit the ceiling, but don't cut corners
+either — aim for the natural number of cards a thoughtful
+flashcard-author would write on this topic.
 
 %(topic)s
 
@@ -178,6 +186,12 @@ def generate_batch(
         raise AgentUnavailable(
             f"agent returned unparseable output: {e}; head={stdout[:300]!r}"
         ) from e
+
+    # Hard cap. The prompt tells the agent "up to N" but if it
+    # overshoots we drop the tail so credit estimates stay predictable.
+    if len(pairs) > batch_size:
+        logger.info("agent returned %d > cap %d; truncating", len(pairs), batch_size)
+        pairs = pairs[:batch_size]
 
     existing_lc = {p.strip().lower() for p in existing}
     inserted = 0
