@@ -1,30 +1,109 @@
 """HTTP routes for the agent bounded context.
 
-Three endpoints, all under /settings/agent:
-- GET  /settings/agent             → settings template
+Four endpoints:
+- GET  /settings/agent             → settings template (user-facing)
 - POST /settings/agent/connect     → forward token to agent-server
 - POST /settings/agent/disconnect  → wipe token via agent-server
+- POST /api/agent/run              → SDK-backed one-shot prompt
+                                     (machine-to-machine; used by the
+                                      Temporal worker once its env var
+                                      flips from agent-server to prep)
 
-The connect/disconnect routes call the agent-server (the docker
-sidecar) over HTTP. This module is the only place outside the worker
-that talks to the agent-server's /connect + /disconnect endpoints.
+The /api/agent/run endpoint speaks the same wire format the agent-
+server's /run does ({prompt, session_id?, resume_id?} → {stdout}),
+so the worker swap is a one-line env-var change with no Go-side
+diff. Auth: requires a matching PREP_INTERNAL_TOKEN header — the
+worker shares the same docker network + container, but we still
+gate the endpoint so it can't burn credits if accidentally exposed.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import urllib.error
 import urllib.request
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
 
 from prep import agent as _agent_mod
+from prep.agent.port import AgentUnavailable
+from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
+from prep.agent.usage import AgentUsageRepo, hash_token
 from prep.auth import current_user
 from prep.web.templates import templates
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ---- machine-to-machine /api/agent/run -------------------------------
+
+
+class _RunRequest(BaseModel):
+    """Wire format matching worker-go/agent.RunInput so the worker can
+    point at prep with no client-side change. session_id / resume_id
+    are accepted-but-ignored — the SDK port doesn't currently expose
+    multi-turn sessions for our one-shot callers."""
+
+    prompt: str
+    session_id: str | None = None
+    resume_id: str | None = None
+    # Optional escape hatches; callers normally omit and inherit the
+    # adapter's defaults (Sonnet 4.6 + medium reasoning effort).
+    model: str | None = None
+    reasoning: str | None = None
+
+
+def _require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
+    """Reject /api/agent/* calls that don't carry the shared secret.
+    Configured via PREP_INTERNAL_TOKEN env var (set in deploy/*.env).
+    If the env var is unset we refuse all calls — fail-closed."""
+    expected = (os.environ.get("PREP_INTERNAL_TOKEN") or "").strip()
+    if not expected:
+        raise HTTPException(503, "PREP_INTERNAL_TOKEN not configured")
+    if not x_internal_token or x_internal_token != expected:
+        raise HTTPException(401, "invalid X-Internal-Token")
+
+
+@router.post("/api/agent/run")
+async def api_agent_run(
+    body: _RunRequest,
+    _gate: None = Depends(_require_internal_token),
+):
+    """Execute a single prompt via the SDK adapter, log usage, return
+    {stdout} (matching the legacy agent-server response shape so the
+    Go worker doesn't notice it's hitting a different host)."""
+    adapter: ClaudeAgentSdkAdapter = _agent_mod.get_agent()
+    try:
+        result = await adapter.run(body.prompt, model=body.model, reasoning=body.reasoning)
+    except AgentUnavailable as e:
+        logger.warning("agent adapter unavailable: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+    # Best-effort usage logging. Don't fail the call if the rollup
+    # write fails — the caller already paid for the credits.
+    token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "").strip()
+    if token:
+        try:
+            AgentUsageRepo().record(
+                token_hash=hash_token(token),
+                model=result.model,
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
+                cost_usd=result.cost_usd,
+                user_login=None,  # machine-to-machine; no user context
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("agent_usage record failed")
+
+    return {"stdout": result.text}
+
+
+# ---- user-facing /settings/agent --------------------------------------
 
 
 def _agent_server_url() -> str | None:

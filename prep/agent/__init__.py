@@ -17,12 +17,35 @@ proxy attribute access there to avoid a stale cached copy on the
 package itself.
 """
 
+from prep.agent.port import AgentPort
+from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
 from prep.agent.status import (
     init_availability,
     probe,
     set_available,
     status,
 )
+
+# Process-singleton adapter — stateless, safe to share. Tests can
+# override with `set_agent(FakeAgent())`.
+_agent_instance: AgentPort = ClaudeAgentSdkAdapter()
+
+
+def get_agent() -> AgentPort:
+    """Return the current process-level `AgentPort` implementation.
+
+    Routes / services should depend on this rather than constructing
+    an adapter at the callsite — that way `set_agent()` can swap in
+    a `FakeAgent` for tests without touching production code."""
+    return _agent_instance
+
+
+def set_agent(impl: AgentPort) -> None:
+    """Replace the singleton. Intended for tests only — production
+    code should leave the default in place. Pair with a fixture
+    that restores the original after each test."""
+    global _agent_instance
+    _agent_instance = impl
 
 
 def __getattr__(name: str):
@@ -40,9 +63,12 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "AgentPort",
+    "get_agent",
     "init_availability",
     "is_available",
     "probe",
+    "set_agent",
     "set_available",
     "status",
 ]
