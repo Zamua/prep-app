@@ -147,7 +147,12 @@ class SessionRepo:
 
         Side-effect: ages out THIS USER's sessions idle for >7d into
         status='abandoned'. Cheap to do on each list call rather than
-        wiring a separate reaper."""
+        wiring a separate reaper.
+
+        Snoozed sessions (snoozed_until in the future) are filtered
+        out — they re-appear automatically once the timestamp passes,
+        no scheduler tick needed."""
+        now_iso = datetime.now(timezone.utc).isoformat()
         abandon_before = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         with cursor() as c:
             c.execute(
@@ -163,12 +168,24 @@ class SessionRepo:
                   JOIN decks d ON d.id = s.deck_id
                   LEFT JOIN questions q ON q.id = s.current_question_id
                  WHERE s.user_id = ? AND s.status = 'active'
+                   AND (s.snoozed_until IS NULL OR s.snoozed_until <= ?)
                  ORDER BY s.last_active DESC
                  LIMIT ?
                 """,
-                (user_id, limit),
+                (user_id, now_iso, limit),
             ).fetchall()
         return [_row_to_recent(dict(r)) for r in rows]
+
+    def snooze(self, user_id: str, sid: str, until_iso: str) -> None:
+        """Hide this session from the Continue strip until `until_iso`.
+        No status change — the session is still 'active', it just
+        doesn't surface. Idempotent; setting twice with different
+        timestamps simply overwrites. Pass an ISO-8601 UTC string."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE study_sessions SET snoozed_until = ? " " WHERE id = ? AND user_id = ?",
+                (until_iso, sid, user_id),
+            )
 
     # ---- mutations -------------------------------------------------
 

@@ -260,3 +260,42 @@ def test_grading_fragment_is_html_not_json(monkeypatch, client: TestClient, init
     r = client.get(f"/grading/{wid}/fragment")
     assert r.status_code == 200
     assert not r.headers["content-type"].startswith("application/json")
+
+
+# ---- /session/<sid>/snooze -----------------------------------------
+
+
+def test_session_snooze_with_preset_redirects_home_and_hides(
+    client: TestClient, initialized_db: str
+):
+    _seed_srs_deck(initialized_db)
+    r = client.post("/study/study-rt/begin", follow_redirects=False)
+    sid = r.headers["location"].rsplit("/", 1)[-1]
+    r2 = client.post(f"/session/{sid}/snooze", data={"preset": "1h"}, follow_redirects=False)
+    assert r2.status_code == 303
+    assert r2.headers["location"].endswith("/")
+    # Now hidden from list_recent.
+    recents = SessionRepo().list_recent(initialized_db)
+    assert all(s.id != sid for s in recents)
+
+
+def test_session_snooze_with_custom_duration(client: TestClient, initialized_db: str):
+    _seed_srs_deck(initialized_db)
+    r = client.post("/study/study-rt/begin", follow_redirects=False)
+    sid = r.headers["location"].rsplit("/", 1)[-1]
+    r2 = client.post(
+        f"/session/{sid}/snooze",
+        data={"custom": "2", "unit": "days"},
+        follow_redirects=False,
+    )
+    assert r2.status_code == 303
+    recents = SessionRepo().list_recent(initialized_db)
+    assert all(s.id != sid for s in recents)
+
+
+def test_session_snooze_bad_preset_returns_400(client: TestClient, initialized_db: str):
+    _seed_srs_deck(initialized_db)
+    r = client.post("/study/study-rt/begin", follow_redirects=False)
+    sid = r.headers["location"].rsplit("/", 1)[-1]
+    r2 = client.post(f"/session/{sid}/snooze", data={"preset": "garbage"}, follow_redirects=False)
+    assert r2.status_code == 400

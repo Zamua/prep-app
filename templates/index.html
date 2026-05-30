@@ -13,11 +13,14 @@
   </p>
 </section>
 
-{# Reusable overflow menu for a session card. View deck + Discard
-   session today; Snooze + Mute notifications will land in follow-up
-   commits. The form keeps the .session-discard-form class so the
-   shared JS handler picks up its submit. #}
-{% macro session_menu(deck_name, discard_action) %}
+{# Reusable overflow menu for a session card. View deck, Snooze
+   (both card types), Mute push (trivia only — SRS has no per-deck
+   push), Discard. Snooze + Mute open the shared bottom-sheet (see
+   the duration-sheet element below the lists) via data-sheet-open;
+   the form keeps the .session-discard-form class so the existing
+   JS handler picks up its submit. #}
+{% macro session_menu(deck_name, snooze_action, discard_action, mute_deck_id=None) %}
+{%- set root = request.scope.get('root_path','') -%}
 <details class="session-menu">
   <summary aria-label="Session actions">
     {# dots-three-vertical inline (no static icon yet for this) #}
@@ -29,13 +32,33 @@
   </summary>
   <div class="session-menu-popover" data-details-body role="menu">
     <a class="session-menu-row" role="menuitem"
-       href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">
+       href="{{ root }}/deck/{{ deck_name }}">
       {{ icon('cards', class_='icon icon-inline') }}
       View deck
     </a>
+    <button type="button" class="session-menu-row" role="menuitem"
+            data-sheet-open="duration-sheet"
+            data-sheet-action="{{ root }}{{ snooze_action }}"
+            data-sheet-title="snooze"
+            data-sheet-deck="{{ deck_name }}"
+            data-sheet-subtitle="hides from your continue list until the picked time. nothing else changes.">
+      {{ icon('clock', class_='icon icon-inline') }}
+      Snooze
+    </button>
+    {% if mute_deck_id %}
+    <button type="button" class="session-menu-row" role="menuitem"
+            data-sheet-open="duration-sheet"
+            data-sheet-action="{{ root }}/trivia/decks/{{ mute_deck_id }}/mute"
+            data-sheet-title="mute"
+            data-sheet-deck="{{ deck_name }}"
+            data-sheet-subtitle="silences push notifications for this deck. auto-unmutes when the timer runs out.">
+      {{ icon('bell-slash', class_='icon icon-inline') }}
+      Mute notifications
+    </button>
+    {% endif %}
     <hr class="session-menu-sep">
     <form method="post"
-          action="{{ request.scope.get('root_path','') }}{{ discard_action }}"
+          action="{{ root }}{{ discard_action }}"
           class="session-discard-form session-discard-form-inline">
       <button type="submit" class="session-menu-row danger" role="menuitem"
               data-deck="{{ deck_name }}" aria-label="Discard this session">
@@ -53,7 +76,12 @@
   <ul class="session-list" role="list">
     {% for s in active_trivia_sessions %}
       <li class="session-card">
-        {{ session_menu(s.deck_name, "/trivia/session/" ~ s.deck_name ~ "/abandon") }}
+        {{ session_menu(
+             s.deck_name,
+             snooze_action="/trivia/session/" ~ s.deck_name ~ "/snooze",
+             discard_action="/trivia/session/" ~ s.deck_name ~ "/abandon",
+             mute_deck_id=s.deck_id,
+           ) }}
         <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ s.deck_name }}?cards={{ s.queue_param }}{% if s.done_param %}&amp;done={{ s.done_param }}{% endif %}" class="session-link">
           <span class="session-deck">{{ s.deck_name }}</span>
           <span class="session-meta">
@@ -73,7 +101,11 @@
   <ul class="session-list" role="list">
     {% for s in recent_sessions %}
       <li class="session-card" data-session-id="{{ s.id }}">
-        {{ session_menu(s.deck_name, "/session/" ~ s.id ~ "/abandon") }}
+        {{ session_menu(
+             s.deck_name,
+             snooze_action="/session/" ~ s.id ~ "/snooze",
+             discard_action="/session/" ~ s.id ~ "/abandon",
+           ) }}
         <a href="{{ request.scope.get('root_path','') }}/session/{{ s.id }}" class="session-link">
           <span class="session-deck">{{ s.deck_name }}</span>
           <span class="session-meta">
@@ -96,6 +128,7 @@
    before opening, then dispatches confirm/cancel back to the
    originating form. #}
 {% if recent_sessions or active_trivia_sessions %}
+{% include "partials/sheet_duration.html" %}
 <dialog id="session-discard-dialog" data-dialog class="session-confirm-dialog">
   <h3 id="session-discard-title">Discard session?</h3>
   <p>Reviews already recorded are kept; the session itself becomes abandoned and falls out of the Continue list.</p>

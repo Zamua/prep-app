@@ -999,3 +999,54 @@ def test_trivia_gen_fragment_is_html_not_json(monkeypatch, client: TestClient, i
     r = client.get(f"/trivia/gen/{wid}/fragment")
     assert r.status_code == 200
     assert not r.headers["content-type"].startswith("application/json")
+
+
+# ---- /trivia/session/<deck>/snooze + /trivia/decks/<id>/mute -------
+
+
+def test_trivia_session_snooze_hides_from_list_active(client: TestClient, initialized_db: str):
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    repo = TriviaSessionsRepo()
+    repo.start_or_resume(initialized_db, deck_id, queue=qids, done=[])
+    r = client.post(
+        "/trivia/session/geo/snooze", data={"preset": "tomorrow"}, follow_redirects=False
+    )
+    assert r.status_code == 303
+    assert repo.list_active(initialized_db) == []
+
+
+def test_trivia_session_snooze_404_for_unknown_deck(client: TestClient, initialized_db: str):
+    r = client.post("/trivia/session/nope/snooze", data={"preset": "1h"}, follow_redirects=False)
+    assert r.status_code == 404
+
+
+def test_trivia_deck_mute_sets_until(client: TestClient, initialized_db: str):
+    from prep.decks.repo import DeckRepo
+
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.post(
+        f"/trivia/decks/{deck_id}/mute",
+        data={"preset": "1d"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    decks = {d.id: d for d in DeckRepo().list_trivia_decks()}
+    assert decks[deck_id].notifications_muted_until is not None
+
+
+def test_trivia_deck_unmute_clears(client: TestClient, initialized_db: str):
+    from prep.decks.repo import DeckRepo
+
+    deck_id, _ = _seed_n_trivia_questions(initialized_db, "geo", 1)
+    DeckRepo().mute_notifications_until(initialized_db, deck_id, "2099-12-31T23:59:59+00:00")
+    r = client.post(f"/trivia/decks/{deck_id}/unmute", follow_redirects=False)
+    assert r.status_code == 303
+    decks = {d.id: d for d in DeckRepo().list_trivia_decks()}
+    assert decks[deck_id].notifications_muted_until is None
+
+
+def test_trivia_deck_mute_404_for_unknown_deck(client: TestClient, initialized_db: str):
+    r = client.post("/trivia/decks/999999/mute", data={"preset": "1h"}, follow_redirects=False)
+    assert r.status_code == 404

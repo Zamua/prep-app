@@ -396,6 +396,79 @@ def trivia_session_abandon(
     return responses.redirect(request, "/")
 
 
+@router.post("/trivia/session/{deck_name}/snooze")
+async def trivia_session_snooze(
+    deck_name: str,
+    request: Request,
+    user: dict = Depends(current_user),
+):
+    """Snooze the active trivia mini-session for (user, deck) — hides
+    it from the "Continue trivia" strip until the picked duration
+    passes. Mirrors /session/{sid}/snooze for SRS. Same bottom-sheet
+    form shape (preset OR custom + unit). Status stays 'active'; the
+    list query filters by snoozed_until."""
+    from prep.web.durations import DurationError, parse_until
+
+    uid = user["tailscale_login"]
+    deck_id = DeckRepo().find_id(uid, deck_name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    form = await request.form()
+    try:
+        until = parse_until(
+            preset=form.get("preset"),
+            custom=form.get("custom"),
+            unit=form.get("unit"),
+        )
+    except DurationError as e:
+        raise HTTPException(400, str(e)) from e
+    TriviaSessionsRepo().snooze_active_for_deck(uid, deck_id, until)
+    return responses.redirect(request, "/")
+
+
+@router.post("/trivia/decks/{deck_id}/mute")
+async def trivia_deck_mute(
+    deck_id: int,
+    request: Request,
+    user: dict = Depends(current_user),
+):
+    """Mute push notifications for this trivia deck until the picked
+    duration passes. Distinct from the permanent on/off toggle on the
+    deck page: mute is time-bounded and auto-expires; the toggle is
+    durable. Both gate the scheduler — a deck must be enabled AND
+    not muted to fire a push. Returns to /."""
+    from prep.web.durations import DurationError, parse_until
+
+    uid = user["tailscale_login"]
+    decks = DeckRepo()
+    form = await request.form()
+    try:
+        until = parse_until(
+            preset=form.get("preset"),
+            custom=form.get("custom"),
+            unit=form.get("unit"),
+        )
+    except DurationError as e:
+        raise HTTPException(400, str(e)) from e
+    if not decks.mute_notifications_until(uid, deck_id, until):
+        raise HTTPException(404, "deck not found")
+    return responses.redirect(request, "/")
+
+
+@router.post("/trivia/decks/{deck_id}/unmute")
+def trivia_deck_unmute(
+    deck_id: int,
+    request: Request,
+    user: dict = Depends(current_user),
+):
+    """Clear an active mute on this trivia deck. Idempotent — calling
+    on a non-muted deck is a no-op as long as the deck exists."""
+    uid = user["tailscale_login"]
+    if not DeckRepo().mute_notifications_until(uid, deck_id, None):
+        raise HTTPException(404, "deck not found")
+    return responses.redirect(request, "/")
+
+
 @router.get("/trivia/{question_id}", response_class=HTMLResponse)
 def trivia_card(
     question_id: int,

@@ -1,0 +1,53 @@
+{# Shared bottom-sheet drawer for picking a snooze / mute duration.
+   Triggered by any button with data-sheet-open="duration-sheet" +
+   data-sheet-action="<POST url>" + data-sheet-title + data-sheet-deck.
+   The JS in modules/sheet.js handles open + populate + close + chip
+   submit. The same <form> is reused for every trigger — its action
+   attribute gets rewritten on open.
+
+   Field shape posts to prep.web.durations.parse_until:
+     - preset = one of {1h, 4h, tonight, tomorrow, 1d, 1w, forever}
+       (Mute also offers 'forever' since indefinite mute is meaningful)
+     - OR (custom = int, unit = hours|days|weeks)
+#}
+<dialog id="duration-sheet" data-sheet aria-label="Pick a duration">
+  <div class="sheet-body">
+    <div class="sheet-grabber"></div>
+    <h2 class="sheet-title">
+      <span data-sheet-title-out></span>
+    </h2>
+    <p class="sheet-subtitle" data-sheet-subtitle-out></p>
+
+    <form method="post" data-sheet-form data-submit-pending>
+      <p class="sheet-eyebrow">Quick</p>
+      <div class="sheet-chips">
+        <button type="submit" name="preset" value="1h" class="sheet-chip" aria-pressed="false">1 h</button>
+        <button type="submit" name="preset" value="4h" class="sheet-chip" aria-pressed="false">4 h</button>
+        <button type="submit" name="preset" value="tonight" class="sheet-chip" aria-pressed="false">until tonight</button>
+        <button type="submit" name="preset" value="tomorrow" class="sheet-chip" aria-pressed="false">tomorrow</button>
+        <button type="submit" name="preset" value="1d" class="sheet-chip" aria-pressed="false">1 day</button>
+        <button type="submit" name="preset" value="1w" class="sheet-chip" aria-pressed="false">1 week</button>
+        <button type="submit" name="preset" value="forever" class="sheet-chip" aria-pressed="false">forever</button>
+      </div>
+
+      <p class="sheet-eyebrow">Custom</p>
+      <div class="sheet-custom">
+        <input type="number" name="custom" min="1" max="999"
+               placeholder="e.g. 3"
+               class="sheet-custom-input"
+               inputmode="numeric"
+               autocomplete="off">
+        <select name="unit" class="sheet-custom-unit" aria-label="Unit">
+          <option value="hours">hours</option>
+          <option value="days">days</option>
+          <option value="weeks">weeks</option>
+        </select>
+        <button type="submit" class="sheet-custom-go">Go</button>
+      </div>
+    </form>
+
+    <div class="sheet-cancel-row">
+      <button type="button" class="sheet-cancel" data-sheet-cancel>Cancel</button>
+    </div>
+  </div>
+</dialog>

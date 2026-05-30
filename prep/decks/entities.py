@@ -96,6 +96,12 @@ class Deck(BaseModel):
     # the route opens a session of this many cards. Default 3. Only
     # meaningful when deck_type=='trivia'.
     trivia_session_size: int = 3
+    # Time-bounded notification mute. NULL = not muted; otherwise an
+    # ISO-8601 UTC string the scheduler compares against now() — if the
+    # timestamp is in the future, push is suppressed. Distinct from the
+    # permanent `notifications_enabled` toggle: mute auto-expires, the
+    # toggle persists. Only meaningful when deck_type=='trivia'.
+    notifications_muted_until: str | None = None
 
 
 class DeckSummary(BaseModel):

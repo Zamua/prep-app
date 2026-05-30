@@ -413,6 +413,37 @@ def session_abandon(
     return responses.redirect(request, f"/deck/{deck_name}" if deck_name else "/")
 
 
+@router.post("/session/{sid}/snooze")
+async def session_snooze(
+    request: Request,
+    sid: str,
+    user: dict = Depends(current_user),
+    session_repo: SessionRepo = Depends(_session_repo),
+):
+    """Hide a session from the index Continue strip until a duration
+    passes. Driven by the bottom-sheet picker in the session-card
+    overflow menu; accepts either a `preset` (1h / tonight / tomorrow
+    / 1d / 1w / …) OR a `custom` integer + `unit` (hours/days/weeks).
+
+    Session row stays status='active' — list_recent filters by
+    snoozed_until so it just doesn't surface until the timestamp is
+    in the past. No reaper needed."""
+    from prep.web.durations import DurationError, parse_until
+
+    uid = user["tailscale_login"]
+    form = await request.form()
+    try:
+        until = parse_until(
+            preset=form.get("preset"),
+            custom=form.get("custom"),
+            unit=form.get("unit"),
+        )
+    except DurationError as e:
+        raise HTTPException(400, str(e)) from e
+    session_repo.snooze(uid, sid, until)
+    return responses.redirect(request, "/")
+
+
 # ---- legacy no-session study path --------------------------------------
 
 

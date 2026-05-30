@@ -420,8 +420,13 @@ class TriviaSessionsRepo:
         """All active trivia sessions for the user, joined with deck
         names for the index "Continue" strip. Side-effect: idle >7d
         sessions get aged to status='abandoned' (cheap inline reaper,
-        same pattern as SessionRepo.list_recent)."""
+        same pattern as SessionRepo.list_recent).
+
+        Snoozed sessions (snoozed_until in the future) are filtered
+        out — they re-appear once the timestamp passes, no scheduler
+        tick needed."""
         threshold = (datetime.now(timezone.utc) - _ACTIVE_TIMEOUT).isoformat(timespec="seconds")
+        now_iso = _now_iso()
         with cursor() as c:
             c.execute(
                 "UPDATE trivia_sessions SET status = 'abandoned'"
@@ -434,9 +439,10 @@ class TriviaSessionsRepo:
                   FROM trivia_sessions s
                   JOIN decks d ON d.id = s.deck_id
                  WHERE s.user_id = ? AND s.status = 'active'
+                   AND (s.snoozed_until IS NULL OR s.snoozed_until <= ?)
                  ORDER BY s.last_active DESC
                 """,
-                (user_id,),
+                (user_id, now_iso),
             ).fetchall()
         return [
             ActiveTriviaSession(
@@ -448,6 +454,18 @@ class TriviaSessionsRepo:
             )
             for r in rows
         ]
+
+    def snooze_active_for_deck(self, user_id: str, deck_id: int, until_iso: str) -> int:
+        """Hide the active session for (user, deck) from the Continue
+        strip until `until_iso`. Returns rows touched (0 if no active
+        session exists, 1 if snoozed)."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE trivia_sessions SET snoozed_until = ?"
+                " WHERE user_id = ? AND deck_id = ? AND status = 'active'",
+                (until_iso, user_id, deck_id),
+            )
+            return cur.rowcount or 0
 
     def start_or_resume(
         self, user_id: str, deck_id: int, *, queue: list[int], done: list[tuple[int, str]]

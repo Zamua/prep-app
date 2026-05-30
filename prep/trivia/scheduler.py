@@ -140,6 +140,16 @@ def tick(now_utc: datetime) -> None:
             # off should be cheap and not leave half-notified state behind.
             if not deck.notifications_enabled:
                 continue
+            # Time-bounded mute (set via the session-card overflow menu).
+            # Auto-expires: once `notifications_muted_until` is in the
+            # past we resume firing without needing a scheduler cleanup
+            # step. Compared as ISO-8601 strings, which sort
+            # lexicographically the same as timestamps.
+            if (
+                deck.notifications_muted_until
+                and deck.notifications_muted_until > now_utc.isoformat()
+            ):
+                continue
             interval = deck.notification_interval_minutes or _DEFAULT_INTERVAL_MINUTES
             streak = deck.notification_ignored_streak
             if not _is_due(now_utc, deck.last_notified_at, interval, streak):

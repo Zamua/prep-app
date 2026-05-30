@@ -68,6 +68,7 @@ def index(
     active_trivia_views = [
         {
             "deck_name": s.deck_name,
+            "deck_id": s.deck_id,
             "remaining": s.remaining,
             "total": s.total,
             "last_active": s.last_active,

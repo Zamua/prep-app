@@ -459,3 +459,22 @@ def init() -> None:
             -- never went to prod.
             DROP TABLE IF EXISTS agent_usage;
         """)
+
+        # 13. Snooze + mute (Continue-list triage). Pushed through the
+        #     session-card overflow menu. Snooze hides a single session
+        #     from the index Continue strip until a timestamp passes —
+        #     no underlying status change, the session just doesn't
+        #     surface. Mute silences a trivia deck's push notifications
+        #     for a window (NULL = not muted, ISO UTC string = muted
+        #     until). Both columns are nullable + default NULL so the
+        #     ALTER is cheap on existing rows and the absence of a row
+        #     means "behaving normally."
+        scols = {r["name"] for r in c.execute("PRAGMA table_info(study_sessions)").fetchall()}
+        if "snoozed_until" not in scols:
+            c.execute("ALTER TABLE study_sessions ADD COLUMN snoozed_until TEXT")
+        tcols = {r["name"] for r in c.execute("PRAGMA table_info(trivia_sessions)").fetchall()}
+        if "snoozed_until" not in tcols:
+            c.execute("ALTER TABLE trivia_sessions ADD COLUMN snoozed_until TEXT")
+        dcols = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
+        if "notifications_muted_until" not in dcols:
+            c.execute("ALTER TABLE decks ADD COLUMN notifications_muted_until TEXT")

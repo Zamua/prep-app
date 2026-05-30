@@ -1,0 +1,179 @@
+/* Bottom-sheet drawer (snooze / mute pickers). Built on native
+ * <dialog> with showModal() so we get the input trap + ::backdrop +
+ * ESC handling for free. JS in sheet.js handles open + populate +
+ * backdrop-click-to-close. See partials/_sheet_duration.html for the
+ * canonical body shape.
+ */
+
+/* Take the dialog out of its normal center-of-viewport position and
+ * pin it to the bottom of the screen. `inset-block-end: 0` + auto
+ * margins puts it at the bottom; min-width: 100% spans the viewport.
+ *
+ * Gated on [open] because <dialog>'s UA default is display:none when
+ * closed — overriding display: flex would leak the dialog into the
+ * layout as a no-op inline block at page bottom.
+ */
+dialog[data-sheet] {
+  border: none;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  margin: 0;
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  width: 100%;
+  max-width: 100%;
+  /* Respect the iPhone home-indicator inset on PWA standalone. */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  box-shadow: 0 -10px 36px -8px rgba(0, 0, 0, 0.45);
+  /* The dialog itself is empty until we set [open]; native UA-CSS
+   * sets display:block when [open], which combined with our absolute
+   * positioning slides it to the bottom. */
+}
+
+dialog[data-sheet][open] {
+  animation: sheet-rise 220ms ease-out;
+}
+
+@keyframes sheet-rise {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+dialog[data-sheet]::backdrop {
+  background: rgba(20, 14, 8, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.5rem 1rem 1.4rem;
+  max-width: 36rem;
+  margin: 0 auto;
+}
+
+.sheet-grabber {
+  width: 38px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rule);
+  margin: 0.55rem auto 0.3rem;
+}
+
+.sheet-title {
+  font-family: var(--serif);
+  font-weight: 480;
+  font-size: 1.1rem;
+  margin: 0;
+  letter-spacing: -0.005em;
+  text-transform: lowercase;
+}
+.sheet-deck-name {
+  font-family: var(--serif);
+  color: var(--ink);
+}
+
+.sheet-subtitle {
+  font-size: 0.86rem;
+  color: var(--ink-mute);
+  margin: -0.5rem 0 0;
+  line-height: 1.4;
+}
+
+.sheet-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 0;
+}
+
+.sheet-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+}
+
+.sheet-chip {
+  appearance: none;
+  background: var(--tint);
+  border: 1px solid var(--hairline);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sheet-chip:hover {
+  background: var(--warm);
+}
+.sheet-chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+  border-color: var(--ink-soft);
+}
+
+.sheet-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+}
+.sheet-custom-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 0.6rem 0.65rem;
+  font: inherit;
+  /* 16px = iOS Safari's auto-zoom threshold. Stay AT or above so
+   * focusing the input doesn't trigger a viewport zoom on iOS. */
+  font-size: 1rem;
+  min-width: 0;
+}
+.sheet-custom-unit {
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 0.6rem 0.55rem;
+  font: inherit;
+  font-size: 0.95rem;
+}
+.sheet-custom-go {
+  background: var(--ink);
+  color: var(--paper);
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.sheet-custom-go:hover { filter: brightness(1.05); }
+
+.sheet-cancel-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.2rem;
+}
+.sheet-cancel {
+  background: transparent;
+  border: none;
+  color: var(--ink-mute);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0.5rem 0.65rem;
+  cursor: pointer;
+}
+.sheet-cancel:hover { color: var(--ink); }

@@ -271,3 +271,46 @@ def test_find_active_decodes_cached_verdict_and_state(session_repo: SessionRepo,
     assert isinstance(resumed.last_answered_state, dict)
     assert resumed.last_answered_state["step"] == 0
     assert resumed.last_answered_state["interval_minutes"] == 10
+
+
+# ---- snooze --------------------------------------------------------
+
+
+def test_snooze_hides_from_list_recent(session_repo: SessionRepo, seeded_deck):
+    from datetime import datetime, timedelta, timezone
+
+    user, deck_id, _ = seeded_deck
+    sid = session_repo.create(user, deck_id, "Mac")
+    assert len(session_repo.list_recent(user)) == 1
+    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    session_repo.snooze(user, sid, future)
+    assert session_repo.list_recent(user) == []
+
+
+def test_snooze_expired_resurfaces_session(session_repo: SessionRepo, seeded_deck):
+    from datetime import datetime, timedelta, timezone
+
+    user, deck_id, _ = seeded_deck
+    sid = session_repo.create(user, deck_id, "Mac")
+    past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    session_repo.snooze(user, sid, past)
+    # Past timestamp = snooze already elapsed; session re-surfaces.
+    recents = session_repo.list_recent(user)
+    assert len(recents) == 1
+    assert recents[0].deck_name == "study-test"
+
+
+def test_snooze_scoped_to_user_and_session(session_repo: SessionRepo, seeded_deck):
+    from datetime import datetime, timedelta, timezone
+
+    from prep.auth.repo import UserRepo
+
+    user_a, deck_id, _ = seeded_deck
+    user_b = "other@taln"
+    UserRepo().upsert(user_b, None, None)
+    sid_a = session_repo.create(user_a, deck_id, "Mac")
+    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    # Another user trying to snooze user_a's session has no effect —
+    # the row's user_id guard blocks the write silently.
+    session_repo.snooze(user_b, sid_a, future)
+    assert len(session_repo.list_recent(user_a)) == 1

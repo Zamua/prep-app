@@ -258,3 +258,41 @@ def test_set_suspended_flips_flag(deck_repo: DeckRepo, q_repo: QuestionRepo, ini
     assert q_repo.get(user, qid).suspended is True
     q_repo.set_suspended(user, qid, False)
     assert q_repo.get(user, qid).suspended is False
+
+
+# ---- mute notifications --------------------------------------------
+
+
+def test_mute_notifications_until_sets_timestamp(deck_repo: DeckRepo, initialized_db: str):
+    """Sanity: the column round-trips through the trivia list."""
+    user = initialized_db
+    deck_id = deck_repo.create_trivia(
+        user, "interview-prep", topic="general knowledge", interval_minutes=60
+    )
+    assert deck_repo.mute_notifications_until(user, deck_id, "2027-01-01T00:00:00+00:00")
+    decks = {d.id: d for d in deck_repo.list_trivia_decks()}
+    assert decks[deck_id].notifications_muted_until == "2027-01-01T00:00:00+00:00"
+
+
+def test_mute_notifications_clear_resets_to_null(deck_repo: DeckRepo, initialized_db: str):
+    user = initialized_db
+    deck_id = deck_repo.create_trivia(
+        user, "interview-prep", topic="general knowledge", interval_minutes=60
+    )
+    deck_repo.mute_notifications_until(user, deck_id, "2027-01-01T00:00:00+00:00")
+    assert deck_repo.mute_notifications_until(user, deck_id, None)
+    decks = {d.id: d for d in deck_repo.list_trivia_decks()}
+    assert decks[deck_id].notifications_muted_until is None
+
+
+def test_mute_notifications_user_scoped(deck_repo: DeckRepo, initialized_db: str):
+    """Another user's mute call against a deck they don't own returns False."""
+    from prep.auth.repo import UserRepo
+
+    user_a = initialized_db
+    user_b = "other@taln"
+    UserRepo().upsert(user_b, None, None)
+    deck_id = deck_repo.create_trivia(
+        user_a, "interview-prep-x", topic="general knowledge", interval_minutes=60
+    )
+    assert deck_repo.mute_notifications_until(user_b, deck_id, "2027-01-01T00:00:00+00:00") is False

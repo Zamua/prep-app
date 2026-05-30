@@ -275,7 +275,7 @@ class DeckRepo:
                 SELECT id, user_id, name, created_at, context_prompt,
                        deck_type, notification_interval_minutes, last_notified_at,
                        notifications_enabled, notification_ignored_streak,
-                       trivia_session_size
+                       trivia_session_size, notifications_muted_until
                 FROM decks
                 WHERE deck_type = 'trivia'
                 """
@@ -284,18 +284,23 @@ class DeckRepo:
 
     @staticmethod
     def _row_to_deck(r) -> Deck:
+        # PRAGMA-tolerant access: columns added by later migrations may
+        # be missing on freshly-imported test fixtures. Use dict.get to
+        # default cleanly without crashing.
+        rd = dict(r) if not isinstance(r, dict) else r
         return Deck(
-            id=r["id"],
-            user_id=r["user_id"],
-            name=r["name"],
-            created_at=r["created_at"],
-            context_prompt=r["context_prompt"],
-            deck_type=DeckType(r["deck_type"] or "srs"),
-            notification_interval_minutes=r["notification_interval_minutes"],
-            last_notified_at=r["last_notified_at"],
-            notifications_enabled=bool(r["notifications_enabled"]),
-            notification_ignored_streak=int(r["notification_ignored_streak"] or 0),
-            trivia_session_size=int(r["trivia_session_size"] or 3),
+            id=rd["id"],
+            user_id=rd["user_id"],
+            name=rd["name"],
+            created_at=rd["created_at"],
+            context_prompt=rd.get("context_prompt"),
+            deck_type=DeckType(rd.get("deck_type") or "srs"),
+            notification_interval_minutes=rd.get("notification_interval_minutes"),
+            last_notified_at=rd.get("last_notified_at"),
+            notifications_enabled=bool(rd.get("notifications_enabled", 1)),
+            notification_ignored_streak=int(rd.get("notification_ignored_streak") or 0),
+            trivia_session_size=int(rd.get("trivia_session_size") or 3),
+            notifications_muted_until=rd.get("notifications_muted_until"),
         )
 
     def record_notification_fire(self, deck_id: int, ts: str, ignored_streak: int) -> None:
@@ -381,6 +386,21 @@ class DeckRepo:
             cur = c.execute(
                 "UPDATE decks SET notifications_enabled = ? WHERE id = ?  AND user_id = ?",
                 (1 if enabled else 0, deck_id, user_id),
+            )
+            return cur.rowcount > 0
+
+    def mute_notifications_until(self, user_id: str, deck_id: int, until_iso: str | None) -> bool:
+        """Silence push notifications for this deck until `until_iso`.
+        Pass None to clear an active mute (un-mute). Distinct from the
+        permanent on/off `notifications_enabled` toggle — mute is
+        time-bounded and auto-expires; enabled is the durable user
+        choice. The scheduler checks both: a deck must be enabled AND
+        not currently muted to fire a push. Returns True if a row was
+        updated."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE decks SET notifications_muted_until = ? WHERE id = ? AND user_id = ?",
+                (until_iso, deck_id, user_id),
             )
             return cur.rowcount > 0
 
