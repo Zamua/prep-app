@@ -13,12 +13,47 @@
   </p>
 </section>
 
+{# Reusable overflow menu for a session card. View deck + Discard
+   session today; Snooze + Mute notifications will land in follow-up
+   commits. The form keeps the .session-discard-form class so the
+   shared JS handler picks up its submit. #}
+{% macro session_menu(deck_name, discard_action) %}
+<details class="session-menu">
+  <summary aria-label="Session actions">
+    {# dots-three-vertical inline (no static icon yet for this) #}
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="12" cy="5"  r="1.6"/>
+      <circle cx="12" cy="12" r="1.6"/>
+      <circle cx="12" cy="19" r="1.6"/>
+    </svg>
+  </summary>
+  <div class="session-menu-popover" data-details-body role="menu">
+    <a class="session-menu-row" role="menuitem"
+       href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">
+      {{ icon('cards', class_='icon icon-inline') }}
+      View deck
+    </a>
+    <hr class="session-menu-sep">
+    <form method="post"
+          action="{{ request.scope.get('root_path','') }}{{ discard_action }}"
+          class="session-discard-form session-discard-form-inline">
+      <button type="submit" class="session-menu-row danger" role="menuitem"
+              data-deck="{{ deck_name }}" aria-label="Discard this session">
+        {{ icon('trash', class_='icon icon-inline') }}
+        Discard session
+      </button>
+    </form>
+  </div>
+</details>
+{% endmacro %}
+
 {% if active_trivia_sessions %}
 <section class="recent-sessions">
   <p class="section-eyebrow"><span>Continue trivia</span><span class="rule"></span></p>
   <ul class="session-list" role="list">
     {% for s in active_trivia_sessions %}
       <li class="session-card">
+        {{ session_menu(s.deck_name, "/trivia/session/" ~ s.deck_name ~ "/abandon") }}
         <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ s.deck_name }}?cards={{ s.queue_param }}{% if s.done_param %}&amp;done={{ s.done_param }}{% endif %}" class="session-link">
           <span class="session-deck">{{ s.deck_name }}</span>
           <span class="session-meta">
@@ -38,20 +73,7 @@
   <ul class="session-list" role="list">
     {% for s in recent_sessions %}
       <li class="session-card" data-session-id="{{ s.id }}">
-        {# discard button: top-LEFT, opposite the resume arrow on the right.
-           same `/session/<id>/abandon` endpoint behind the scenes — soft
-           delete, status flips to 'abandoned' which falls out of the
-           recent-sessions query (db.list_recent_sessions filters by
-           status='active'). JS intercepts to fetch + remove inline. #}
-        <form method="post"
-              action="{{ request.scope.get('root_path','') }}/session/{{ s.id }}/abandon"
-              class="session-discard-form">
-          <button type="submit" class="session-discard"
-                  aria-label="Discard this session"
-                  data-deck="{{ s.deck_name }}">
-            {{ icon('x', class_='icon icon-inline') }}
-          </button>
-        </form>
+        {{ session_menu(s.deck_name, "/session/" ~ s.id ~ "/abandon") }}
         <a href="{{ request.scope.get('root_path','') }}/session/{{ s.id }}" class="session-link">
           <span class="session-deck">{{ s.deck_name }}</span>
           <span class="session-meta">
@@ -67,21 +89,62 @@
     {% endfor %}
   </ul>
 </section>
+{% endif %}
+
+{# Single shared confirm dialog for "Discard session" across both
+   sections. The JS below interpolates the deck name into the title
+   before opening, then dispatches confirm/cancel back to the
+   originating form. #}
+{% if recent_sessions or active_trivia_sessions %}
+<dialog id="session-discard-dialog" data-dialog class="session-confirm-dialog">
+  <h3 id="session-discard-title">Discard session?</h3>
+  <p>Reviews already recorded are kept; the session itself becomes abandoned and falls out of the Continue list.</p>
+  <div class="session-confirm-actions">
+    <button type="button" data-action="cancel">Cancel</button>
+    <button type="button" data-action="confirm" class="danger">Discard</button>
+  </div>
+</dialog>
 
 <script>
-// Inline session discard. confirm() before fetch, optimistic DOM remove on
-// success, fall back to a real form submit on failure. The cards aren't
-// many so we don't worry about empty-state handling here — if you discard
-// the last one, the section just becomes empty until next page load.
+// Discard flow:
+//   1. The overflow-menu's discard form submits → we capture it
+//   2. Open the shared confirm dialog with the deck name interpolated
+//   3. On Confirm: fetch the abandon URL, optimistically remove the card
+//      (works for both trivia and SRS — they POST to different URLs but
+//      the response is the same 303 redirect).
+//   4. On Cancel / backdrop / Esc: close, do nothing.
+//
+// Fall back to a real submit on network failure so the canonical
+// (full-page-redirect) error path still runs.
 (function () {
-  document.addEventListener('submit', async (e) => {
+  const dlg = document.getElementById('session-discard-dialog');
+  const title = document.getElementById('session-discard-title');
+  if (!dlg) return;
+  let pendingForm = null;
+
+  document.addEventListener('submit', (e) => {
     const form = e.target;
     if (!form.classList.contains('session-discard-form')) return;
     e.preventDefault();
-    const card = form.closest('.session-card');
-    const btn = form.querySelector('.session-discard');
+    const btn = form.querySelector('.session-menu-row');
     const deck = btn?.dataset.deck || 'this session';
-    if (!confirm(`Discard your in-progress session for "${deck}"?\n\nReviews already recorded are kept; the session itself becomes abandoned.`)) return;
+    title.textContent = `Discard "${deck}"?`;
+    pendingForm = form;
+    // Close the parent <details> so the popover collapses behind the dialog
+    form.closest('details.session-menu')?.removeAttribute('open');
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  });
+
+  dlg.addEventListener('click', async (e) => {
+    const action = e.target?.dataset?.action;
+    if (!action) return;
+    if (action === 'cancel') { dlg.close(); pendingForm = null; return; }
+    if (action !== 'confirm' || !pendingForm) return;
+    const form = pendingForm;
+    pendingForm = null;
+    dlg.close();
+    const card = form.closest('.session-card');
     try {
       const r = await fetch(form.action, {
         method: 'POST',
@@ -96,7 +159,6 @@
       card.style.transform = 'translateX(-1rem)';
       setTimeout(() => card.remove(), 200);
     } catch (err) {
-      // Fall back to a real submit so the canonical error path runs.
       form.submit();
     }
   });

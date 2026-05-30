@@ -1,0 +1,159 @@
+/* Session-card overflow menu — the ⋯ button at the right edge of each
+ * session card opens a small popover with per-session actions (View
+ * deck, Discard session, …). Built on <details> so the open/close
+ * state is native; the existing details-toggle.js handles iOS 26
+ * pointer-up + outside-click + Esc.
+ *
+ * Mirrored across trivia and SRS session cards. Replaces the prior
+ * left-edge X-button discard (which was SRS-only) with a unified
+ * overflow surface that can grow.
+ */
+
+/* The trigger lives on the right edge of the card, mirroring the
+ * deck-arrow's position. Keep the card itself positioned so the
+ * popover (absolutely positioned to top: 100%) anchors correctly. */
+.session-menu {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  transform: translateY(-50%);
+  z-index: 2;
+  margin: 0;
+}
+.session-menu[open] {
+  z-index: 5;   /* lift above the link's arrow when open */
+}
+.session-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--ink-mute);
+  opacity: 0.55;
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 160ms ease, opacity 160ms ease;
+}
+.session-menu > summary::-webkit-details-marker { display: none; }
+.session-menu > summary::marker { content: ""; }
+.session-menu > summary:hover,
+.session-menu > summary:focus-visible,
+.session-menu[open] > summary {
+  color: var(--ink); opacity: 1; outline: none;
+}
+.session-menu > summary svg { width: 1.25rem; height: 1.25rem; }
+
+/* The popover. Anchored below + to the right edge of the trigger.
+ * data-details-body on the wrapping div tells details-toggle.js that
+ * taps INSIDE shouldn't close the parent <details>. */
+.session-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 0.3rem;
+  min-width: 12rem;
+  font-size: 0.93rem;
+}
+.session-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.93rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.session-menu-row:hover,
+.session-menu-row:focus-visible {
+  background: var(--ink-soft-bg-faint);
+  outline: none;
+}
+.session-menu-row.danger { color: var(--wrong); }
+.session-menu-row.danger:hover,
+.session-menu-row.danger:focus-visible {
+  background: var(--wrong-bg-soft);
+}
+.session-menu-row svg { width: 1rem; height: 1rem; flex-shrink: 0; }
+.session-menu-sep {
+  height: 1px;
+  background: var(--hairline);
+  border: none;
+  margin: 0.25rem 0.3rem;
+}
+.session-discard-form-inline { margin: 0; }   /* form has no spacing inside popover */
+
+/* The card itself needs room on the right so the deck name doesn't
+ * sit under the overflow button. Symmetric to the existing
+ * .session-link arrow gutter. */
+.session-card .session-link { padding-right: 2.8rem; }
+.session-card .session-link .deck-arrow {
+  /* nudge the arrow inward so the ⋯ has space on the right */
+  margin-right: 1.8rem;
+}
+
+/* Confirm dialog for destructive actions (Discard session). Reuses
+ * the existing data-dialog backdrop-click-to-close pattern. */
+.session-confirm-dialog {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 1.05rem 1.1rem 0.95rem;
+  max-width: 24rem;
+  box-shadow: 0 18px 36px -18px rgba(0, 0, 0, 0.5);
+}
+.session-confirm-dialog::backdrop {
+  background: rgba(20, 14, 8, 0.4);
+  backdrop-filter: blur(1px);
+}
+.session-confirm-dialog h3 {
+  margin: 0 0 0.35rem;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 480;
+}
+.session-confirm-dialog p {
+  margin: 0 0 0.9rem;
+  font-size: 0.86rem;
+  color: var(--ink-mute);
+  line-height: 1.45;
+}
+.session-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+.session-confirm-actions button {
+  font: inherit;
+  font-size: 0.93rem;
+  font-weight: 500;
+  padding: 0.6rem 1.15rem;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.session-confirm-actions button.danger {
+  background: var(--wrong);
+  color: var(--paper);
+  border-color: var(--wrong);
+}
+.session-confirm-actions button.danger:hover { filter: brightness(0.92); }
+</content>

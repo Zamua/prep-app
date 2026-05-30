@@ -56,35 +56,11 @@
 .session-divider { color: var(--rule); }
 .session-link .deck-arrow { grid-column: 2; grid-row: 1 / span 2; }
 
-/* Session-card discard button — absolutely positioned on the left
- * edge, mirrors the resume-arrow's right placement. Borderless icon-
- * only button; mute by default, terracotta on hover/focus. */
+/* Position context for the overflow-menu popover (anchored
+ * absolute inside the card). Discard button + its styles moved to
+ * session-menu.css; here we just preserve the card-as-positioning-
+ * context invariant. */
 .session-card { position: relative; }
-.session-discard-form {
-  position: absolute; top: 50%; left: 0.5rem;
-  transform: translateY(-50%);
-  z-index: 2; margin: 0;
-}
-.session-discard {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 2.2rem; height: 2.2rem;
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: var(--ink-mute);
-  opacity: 0.55;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: color 160ms ease, opacity 160ms ease;
-}
-.session-discard:hover, .session-discard:focus-visible {
-  color: var(--wrong); opacity: 1; outline: none;
-}
-.session-discard .icon { width: 1em; height: 1em; }
-
-/* Make room on the session-link so the deck name doesn't sit under
- * the discard. Symmetric with the right-side arrow's gutter. */
-.session-card .session-link { padding-left: 2.6rem; }
 
 /* Section divider between sessions and decks */
 .decks-section { margin-top: 1.6rem; }

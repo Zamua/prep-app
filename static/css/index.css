@@ -33,6 +33,7 @@
 @import "./components/user-indicator.css" layer(components);
 @import "./components/workflow-badge.css" layer(components);
 @import "./components/recent-sessions.css" layer(components);
+@import "./components/session-menu.css" layer(components);
 @import "./components/stale-session.css" layer(components);
 @import "./components/deck-list.css" layer(components);
 @import "./components/deck-page.css" layer(components);
