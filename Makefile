@@ -182,6 +182,12 @@ deploy-stag:
 	@# --wait blocks until both services pass their healthcheck (see
 	@# the `healthcheck:` blocks in docker-compose.yml). Surfaces boot
 	@# failures here instead of in an after-the-fact `make logs-stag`.
+	@# Auto-source local .env (gitignored secrets like PREP_INTERNAL_TOKEN
+	@# + CLAUDE_CODE_OAUTH_TOKEN) if it exists. Layered ON TOP of
+	@# deploy/staging.env so per-machine values override the tracked
+	@# deploy shape. Without this, `make deploy-stag` from a fresh
+	@# shell fails compose's ${VAR:?} guards.
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
 	  docker compose --env-file deploy/staging.env -p stag up -d --build --wait --remove-orphans
 
