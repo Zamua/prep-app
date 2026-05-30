@@ -16,10 +16,20 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def token_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point PREP_DATA_DIR at a per-test tmp dir so token_store reads
-    + writes don't touch the real /data volume."""
+    + writes don't touch the real /data volume.
+
+    Also force-clears CLAUDE_CODE_OAUTH_TOKEN on teardown. The /connect
+    route stamps `os.environ[...]` directly (production behavior), and
+    monkeypatch can't auto-revert mutations it didn't make — so without
+    this teardown the env var leaks into later tests, causing the SDK
+    adapter to think it has a real token and try to talk to Anthropic
+    (3+ min hang per test that triggers a run_prompt call)."""
+    import os
+
     monkeypatch.setenv("PREP_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
-    return tmp_path
+    yield tmp_path
+    os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
 
 
 def test_settings_agent_view_renders(client: TestClient, initialized_db: str, token_dir: Path):

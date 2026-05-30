@@ -18,7 +18,6 @@ package itself.
 """
 
 from prep.agent.port import AgentPort
-from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
 from prep.agent.status import (
     init_availability,
     probe,
@@ -26,17 +25,26 @@ from prep.agent.status import (
     status,
 )
 
-# Process-singleton adapter — stateless, safe to share. Tests can
-# override with `set_agent(FakeAgent())`.
-_agent_instance: AgentPort = ClaudeAgentSdkAdapter()
+# Process-singleton adapter, lazily constructed on first get_agent()
+# call. Late construction avoids paying the sdk_adapter module-import
+# cost (which transitively pulls in claude_agent_sdk's anyio + mcp +
+# pydantic_settings + sse_starlette deps) just because something
+# touched `prep.agent`. Tests that swap a FakeAgent via set_agent()
+# never trigger the SDK adapter import at all.
+_agent_instance: AgentPort | None = None
 
 
 def get_agent() -> AgentPort:
     """Return the current process-level `AgentPort` implementation.
 
-    Routes / services should depend on this rather than constructing
-    an adapter at the callsite — that way `set_agent()` can swap in
-    a `FakeAgent` for tests without touching production code."""
+    Constructs the default SDK adapter on first call (late-import so
+    test paths that always set_agent(FakeAgent()) never load the
+    real SDK)."""
+    global _agent_instance
+    if _agent_instance is None:
+        from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
+
+        _agent_instance = ClaudeAgentSdkAdapter()
     return _agent_instance
 
 

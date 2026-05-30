@@ -105,3 +105,21 @@ def initialized_db(env: None):
 
 # Force-disable noisy startup logs during tests.
 os.environ.setdefault("PYTHONWARNINGS", "ignore")
+
+
+@pytest.fixture(autouse=True)
+def _no_claude_token_leak():
+    """Autouse, defense-in-depth: ensure no test ends with a leaked
+    CLAUDE_CODE_OAUTH_TOKEN in os.environ.
+
+    Multiple code paths write the env var directly (production code
+    in /settings/agent/connect, init_availability's load_into_env,
+    etc.). monkeypatch can't auto-revert those because it didn't make
+    the mutation. Without this fixture, the first test to set the env
+    leaves a `sk-ant-oat01-fake-…` value behind, and every later test
+    that exercises a `run_prompt` path will hand it to the real SDK,
+    which then hangs 3+ min retrying the invalid token against
+    Anthropic. Caught the hard way: a single leak ballooned the full
+    suite from ~14s to 20+ min."""
+    yield
+    os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)

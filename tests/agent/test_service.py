@@ -15,16 +15,22 @@ import pytest
 
 @pytest.fixture
 def isolated_status(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """Reset all env vars + point PREP_DATA_DIR at a fresh tmp dir so
-    each test sees a clean status environment."""
+    """Reset env + point PREP_DATA_DIR at a fresh tmp dir.
+
+    Teardown force-clears CLAUDE_CODE_OAUTH_TOKEN: init_availability()
+    calls token_store.load_into_env() which mutates os.environ directly;
+    monkeypatch can't auto-revert that, so the leak makes later
+    scheduler tests hit the real SDK (each one hangs ~3 min on the
+    invalid-token retry loop)."""
+    import os
+
     monkeypatch.setenv("PREP_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
-    # Legacy vars — the new probe doesn't read them, but explicit
-    # delenv makes the test intent clear.
     monkeypatch.delenv("PREP_AGENT_URL", raising=False)
     monkeypatch.delenv("PREP_AGENT_BIN", raising=False)
     monkeypatch.delenv("CLAUDE_BIN", raising=False)
-    return tmp_path
+    yield tmp_path
+    os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
 
 
 def test_status_unconfigured_when_no_token_anywhere(isolated_status):

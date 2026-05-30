@@ -28,7 +28,6 @@ from pydantic import BaseModel
 
 from prep import agent as _agent_mod
 from prep.agent.port import AgentUnavailable
-from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
 from prep.agent.usage import AgentUsageRepo, hash_token
 from prep.auth import current_user
 from prep.web.templates import templates
@@ -74,7 +73,7 @@ async def api_agent_run(
     """Execute a single prompt via the SDK adapter, log usage, return
     {stdout} (matching the legacy agent-server response shape so the
     Go worker doesn't notice it's hitting a different host)."""
-    adapter: ClaudeAgentSdkAdapter = _agent_mod.get_agent()
+    adapter = _agent_mod.get_agent()
     try:
         result = await adapter.run(body.prompt, model=body.model, reasoning=body.reasoning)
     except AgentUnavailable as e:
