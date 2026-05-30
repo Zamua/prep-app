@@ -1050,3 +1050,19 @@ def test_trivia_deck_unmute_clears(client: TestClient, initialized_db: str):
 def test_trivia_deck_mute_404_for_unknown_deck(client: TestClient, initialized_db: str):
     r = client.post("/trivia/decks/999999/mute", data={"preset": "1h"}, follow_redirects=False)
     assert r.status_code == 404
+
+
+def test_trivia_session_snooze_preset_wake_clears(client: TestClient, initialized_db: str):
+    from datetime import datetime, timedelta, timezone
+
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    repo = TriviaSessionsRepo()
+    repo.start_or_resume(initialized_db, deck_id, queue=qids, done=[])
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    repo.snooze_active_for_deck(initialized_db, deck_id, future)
+    r = client.post("/trivia/session/geo/snooze", data={"preset": "wake"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert len(repo.list_active(initialized_db)) == 1
+    assert repo.list_snoozed(initialized_db) == []

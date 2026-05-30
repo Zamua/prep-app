@@ -21,6 +21,11 @@ const ACTION_ATTR = "data-sheet-action";
 const TITLE_ATTR = "data-sheet-title";
 const DECK_ATTR = "data-sheet-deck";
 const SUBTITLE_ATTR = "data-sheet-subtitle";
+// Triggers that want the "Wake now" chip in the sheet (used by the
+// Snoozed list to let the user clear an active snooze) set this to
+// "1". The chip itself lives in the sheet template tagged with
+// .sheet-wake-only; CSS hides it unless the dialog carries .has-wake.
+const SHOW_WAKE_ATTR = "data-sheet-show-wake";
 
 function setupTriggers(root) {
   root.addEventListener("click", (ev) => {
@@ -57,6 +62,10 @@ function setupTriggers(root) {
     sheet.querySelectorAll(".sheet-chip[aria-pressed=true]").forEach((c) => {
       c.setAttribute("aria-pressed", "false");
     });
+
+    // Toggle the Wake-now chip per the trigger. .has-wake on the
+    // dialog reveals .sheet-wake-only descendants via the CSS.
+    sheet.classList.toggle("has-wake", trigger.getAttribute(SHOW_WAKE_ATTR) === "1");
 
     sheet.showModal();
   });

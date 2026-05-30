@@ -455,10 +455,11 @@ class TriviaSessionsRepo:
             for r in rows
         ]
 
-    def snooze_active_for_deck(self, user_id: str, deck_id: int, until_iso: str) -> int:
+    def snooze_active_for_deck(self, user_id: str, deck_id: int, until_iso: str | None) -> int:
         """Hide the active session for (user, deck) from the Continue
-        strip until `until_iso`. Returns rows touched (0 if no active
-        session exists, 1 if snoozed)."""
+        strip until `until_iso`. Pass None to wake immediately (clear
+        the snooze). Returns rows touched (0 if no active session
+        exists, 1 if snoozed/woken)."""
         with cursor() as c:
             cur = c.execute(
                 "UPDATE trivia_sessions SET snoozed_until = ?"
@@ -466,6 +467,38 @@ class TriviaSessionsRepo:
                 (until_iso, user_id, deck_id),
             )
             return cur.rowcount or 0
+
+    def list_snoozed(self, user_id: str) -> list[ActiveTriviaSession]:
+        """Trivia sessions currently snoozed into the future, ordered by
+        wake time (soonest first). Returned as ActiveTriviaSession so
+        the same row partial renders both the active strip and the
+        snoozed list. The repo populates `snoozed_until` so the
+        template can render "wakes in X"."""
+        now_iso = _now_iso()
+        with cursor() as c:
+            rows = c.execute(
+                """
+                SELECT s.deck_id, s.last_active, s.queue, s.done, s.snoozed_until,
+                       d.name AS deck_name
+                  FROM trivia_sessions s
+                  JOIN decks d ON d.id = s.deck_id
+                 WHERE s.user_id = ? AND s.status = 'active'
+                   AND s.snoozed_until IS NOT NULL AND s.snoozed_until > ?
+                 ORDER BY s.snoozed_until ASC
+                """,
+                (user_id, now_iso),
+            ).fetchall()
+        return [
+            ActiveTriviaSession(
+                deck_name=r["deck_name"],
+                deck_id=r["deck_id"],
+                last_active=r["last_active"],
+                queue=parse_card_ids(r["queue"]),
+                done=parse_done(r["done"]),
+                snoozed_until=r["snoozed_until"],
+            )
+            for r in rows
+        ]
 
     def start_or_resume(
         self, user_id: str, deck_id: int, *, queue: list[int], done: list[tuple[int, str]]

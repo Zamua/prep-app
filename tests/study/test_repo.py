@@ -314,3 +314,35 @@ def test_snooze_scoped_to_user_and_session(session_repo: SessionRepo, seeded_dec
     # the row's user_id guard blocks the write silently.
     session_repo.snooze(user_b, sid_a, future)
     assert len(session_repo.list_recent(user_a)) == 1
+
+
+def test_list_snoozed_returns_snoozed_sessions_only(session_repo: SessionRepo, seeded_deck):
+    from datetime import datetime, timedelta, timezone
+
+    user, deck_id, _ = seeded_deck
+    sid_active = session_repo.create(user, deck_id, "Mac")
+    sid_snoozed = session_repo.create(user, deck_id, "Mac")
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    session_repo.snooze(user, sid_snoozed, future)
+
+    snoozed = session_repo.list_snoozed(user)
+    assert {s.id for s in snoozed} == {sid_snoozed}
+    assert snoozed[0].snoozed_until == future
+    # Active session stays in list_recent, snoozed one drops out.
+    recent_ids = {s.id for s in session_repo.list_recent(user)}
+    assert sid_active in recent_ids
+    assert sid_snoozed not in recent_ids
+
+
+def test_snooze_none_wakes_session(session_repo: SessionRepo, seeded_deck):
+    from datetime import datetime, timedelta, timezone
+
+    user, deck_id, _ = seeded_deck
+    sid = session_repo.create(user, deck_id, "Mac")
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    session_repo.snooze(user, sid, future)
+    assert len(session_repo.list_snoozed(user)) == 1
+    # Pass None to clear the snooze — session resurfaces in list_recent.
+    session_repo.snooze(user, sid, None)
+    assert session_repo.list_snoozed(user) == []
+    assert any(s.id == sid for s in session_repo.list_recent(user))

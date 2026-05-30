@@ -306,3 +306,35 @@ def test_snooze_expired_resurfaces(repos):
     past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
     sessions.snooze_active_for_deck(user, deck_id, past)
     assert len(sessions.list_active(user)) == 1
+
+
+def test_list_snoozed_returns_snoozed_only(repos):
+    from datetime import datetime, timedelta, timezone
+
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=3)
+    user = repos["user"]
+    sessions = TriviaSessionsRepo()
+    sessions.start_or_resume(user, deck_id, queue=qids, done=[])
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    sessions.snooze_active_for_deck(user, deck_id, future)
+
+    snoozed = sessions.list_snoozed(user)
+    assert len(snoozed) == 1
+    assert snoozed[0].deck_id == deck_id
+    assert snoozed[0].snoozed_until == future
+    assert sessions.list_active(user) == []
+
+
+def test_snooze_none_wakes_trivia_session(repos):
+    from datetime import datetime, timedelta, timezone
+
+    deck_id, qids = _seed_trivia_deck(repos, n_questions=3)
+    user = repos["user"]
+    sessions = TriviaSessionsRepo()
+    sessions.start_or_resume(user, deck_id, queue=qids, done=[])
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    sessions.snooze_active_for_deck(user, deck_id, future)
+    assert len(sessions.list_snoozed(user)) == 1
+    sessions.snooze_active_for_deck(user, deck_id, None)
+    assert sessions.list_snoozed(user) == []
+    assert len(sessions.list_active(user)) == 1

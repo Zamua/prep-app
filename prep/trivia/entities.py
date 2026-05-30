@@ -80,6 +80,11 @@ class ActiveTriviaSession(BaseModel):
     last_active: str
     queue: list[int]
     done: list[tuple[int, str]]
+    # Set when the session is user-snoozed and the wake time is in the
+    # future. The Snoozed sub-section on the index renders rows with
+    # this populated; list_active filters them out. Same field on both
+    # entities so the template can share one row partial.
+    snoozed_until: str | None = None
 
     @property
     def remaining(self) -> int:

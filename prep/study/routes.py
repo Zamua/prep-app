@@ -423,18 +423,23 @@ async def session_snooze(
     """Hide a session from the index Continue strip until a duration
     passes. Driven by the bottom-sheet picker in the session-card
     overflow menu; accepts either a `preset` (1h / tonight / tomorrow
-    / 1d / 1w / …) OR a `custom` integer + `unit` (hours/days/weeks).
+    / 1d / 1w / wake / …) OR a `custom` integer + `unit`.
 
     Session row stays status='active' — list_recent filters by
     snoozed_until so it just doesn't surface until the timestamp is
-    in the past. No reaper needed."""
+    in the past. `preset=wake` clears the snooze (immediate wake) —
+    used by the adjust sheet on already-snoozed sessions."""
     from prep.web.durations import DurationError, parse_until
 
     uid = user["tailscale_login"]
     form = await request.form()
+    preset = (form.get("preset") or "").strip().lower()
+    if preset == "wake":
+        session_repo.snooze(uid, sid, None)
+        return responses.redirect(request, "/")
     try:
         until = parse_until(
-            preset=form.get("preset"),
+            preset=preset or None,
             custom=form.get("custom"),
             unit=form.get("unit"),
         )

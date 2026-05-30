@@ -64,7 +64,8 @@ def index(
     # Active trivia sessions across all decks — powers the "Continue"
     # strip at the top of the home page so the user can resume any
     # in-progress session without going to the deck page first.
-    active_trivia = TriviaSessionsRepo().list_active(uid)
+    trivia_sessions = TriviaSessionsRepo()
+    active_trivia = trivia_sessions.list_active(uid)
     active_trivia_views = [
         {
             "deck_name": s.deck_name,
@@ -77,6 +78,22 @@ def index(
         }
         for s in active_trivia
     ]
+    # Snoozed sessions across both SRS + trivia, merged into one list
+    # so the "Snoozed" sub-section renders as a single group ordered
+    # by wake time. Each row carries the form action it needs to POST
+    # to when the user adjusts/wakes — the template uses `kind` to
+    # pick which URL pattern (sid for SRS, deck_name for trivia).
+    snoozed_srs = session_repo.list_snoozed(uid)
+    snoozed_trivia = trivia_sessions.list_snoozed(uid)
+    snoozed_views = [
+        {"kind": "srs", "id": s.id, "deck_name": s.deck_name, "snoozed_until": s.snoozed_until}
+        for s in snoozed_srs
+    ] + [
+        {"kind": "trivia", "deck_name": s.deck_name, "snoozed_until": s.snoozed_until}
+        for s in snoozed_trivia
+    ]
+    # Soonest wakes first — same order on both sides of the merge.
+    snoozed_views.sort(key=lambda r: r["snoozed_until"] or "")
     return templates.TemplateResponse(
         "index.html",
         {
@@ -86,5 +103,6 @@ def index(
             "decks": others,
             "recent_sessions": [r.model_dump() for r in recents],
             "active_trivia_sessions": active_trivia_views,
+            "snoozed_sessions": snoozed_views,
         },
     )

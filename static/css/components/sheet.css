@@ -125,6 +125,22 @@ dialog[data-sheet]::backdrop {
   border-color: var(--ink-soft);
 }
 
+/* Wake-now chip — only visible when the sheet was opened for an
+ * already-snoozed session (sheet has .has-wake). Primary moss accent
+ * so it reads as the recommended action when present; default state
+ * hides it so the snoozing-fresh flow doesn't show a clear-snooze
+ * option that wouldn't do anything. */
+.sheet-wake-only { display: none; }
+dialog[data-sheet].has-wake .sheet-wake-only { display: inline-flex; align-items: center; }
+.sheet-chip-wake {
+  background: var(--right);
+  color: var(--bg);
+  border-color: var(--right);
+  font-weight: 500;
+  margin-bottom: 0.45rem;
+}
+.sheet-chip-wake:hover { filter: brightness(1.05); }
+
 .sheet-custom {
   display: flex;
   align-items: center;

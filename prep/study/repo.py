@@ -176,16 +176,38 @@ class SessionRepo:
             ).fetchall()
         return [_row_to_recent(dict(r)) for r in rows]
 
-    def snooze(self, user_id: str, sid: str, until_iso: str) -> None:
+    def snooze(self, user_id: str, sid: str, until_iso: str | None) -> None:
         """Hide this session from the Continue strip until `until_iso`.
         No status change — the session is still 'active', it just
         doesn't surface. Idempotent; setting twice with different
-        timestamps simply overwrites. Pass an ISO-8601 UTC string."""
+        timestamps simply overwrites. Pass an ISO-8601 UTC string,
+        or None to wake the session immediately (clear the snooze)."""
         with cursor() as c:
             c.execute(
-                "UPDATE study_sessions SET snoozed_until = ? " " WHERE id = ? AND user_id = ?",
+                "UPDATE study_sessions SET snoozed_until = ? WHERE id = ? AND user_id = ?",
                 (until_iso, sid, user_id),
             )
+
+    def list_snoozed(self, user_id: str) -> list[RecentSession]:
+        """Sessions snoozed into the future, ordered by wake time
+        (soonest first). Reuses the RecentSession shape so the index
+        template can render both lists with the same partial."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with cursor() as c:
+            rows = c.execute(
+                """
+                SELECT s.*, d.name AS deck_name,
+                       q.prompt AS current_prompt, q.type AS current_type
+                  FROM study_sessions s
+                  JOIN decks d ON d.id = s.deck_id
+                  LEFT JOIN questions q ON q.id = s.current_question_id
+                 WHERE s.user_id = ? AND s.status = 'active'
+                   AND s.snoozed_until IS NOT NULL AND s.snoozed_until > ?
+                 ORDER BY s.snoozed_until ASC
+                """,
+                (user_id, now_iso),
+            ).fetchall()
+        return [_row_to_recent(dict(r)) for r in rows]
 
     # ---- mutations -------------------------------------------------
 
@@ -600,4 +622,5 @@ def _row_to_recent(row: dict) -> RecentSession:
         current_question_id=row.get("current_question_id"),
         current_prompt=row.get("current_prompt"),
         current_type=row.get("current_type"),
+        snoozed_until=row.get("snoozed_until"),
     )

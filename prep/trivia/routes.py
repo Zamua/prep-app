@@ -405,8 +405,10 @@ async def trivia_session_snooze(
     """Snooze the active trivia mini-session for (user, deck) — hides
     it from the "Continue trivia" strip until the picked duration
     passes. Mirrors /session/{sid}/snooze for SRS. Same bottom-sheet
-    form shape (preset OR custom + unit). Status stays 'active'; the
-    list query filters by snoozed_until."""
+    form shape (preset OR custom + unit). `preset=wake` clears the
+    snooze (immediate wake) — used by the adjust sheet on already-
+    snoozed sessions. Status stays 'active' throughout; the list
+    queries filter by snoozed_until."""
     from prep.web.durations import DurationError, parse_until
 
     uid = user["tailscale_login"]
@@ -414,9 +416,13 @@ async def trivia_session_snooze(
     if deck_id is None:
         raise HTTPException(404, "deck not found")
     form = await request.form()
+    preset = (form.get("preset") or "").strip().lower()
+    if preset == "wake":
+        TriviaSessionsRepo().snooze_active_for_deck(uid, deck_id, None)
+        return responses.redirect(request, "/")
     try:
         until = parse_until(
-            preset=form.get("preset"),
+            preset=preset or None,
             custom=form.get("custom"),
             unit=form.get("unit"),
         )

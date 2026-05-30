@@ -123,11 +123,51 @@
 </section>
 {% endif %}
 
+{% if snoozed_sessions %}
+{# Collapsed group below the active strips. Tap header → expand to see
+   each snoozed session with "wakes in X" + chevron. Tapping any row
+   opens the shared duration sheet pre-targeted at the snooze route;
+   the sheet's "Wake now" chip lets the user clear the snooze without
+   waiting it out. #}
+{%- set root = request.scope.get('root_path','') -%}
+<details class="snoozed-group">
+  <summary class="snoozed-header" aria-label="{{ snoozed_sessions|length }} snoozed">
+    {{ icon('moon', class_='icon icon-inline snoozed-glyph') }}
+    <span class="snoozed-count"><strong>{{ snoozed_sessions|length }}</strong> snoozed</span>
+    <span class="snoozed-caret" aria-hidden="true">▾</span>
+  </summary>
+  <ul class="snoozed-list" role="list">
+    {% for s in snoozed_sessions %}
+      <li class="snoozed-row">
+        {%- if s.kind == 'srs' -%}
+          {%- set action_url = root ~ '/session/' ~ s.id ~ '/snooze' -%}
+        {%- else -%}
+          {%- set action_url = root ~ '/trivia/session/' ~ s.deck_name ~ '/snooze' -%}
+        {%- endif -%}
+        <button type="button" class="snoozed-row-button"
+                data-sheet-open="duration-sheet"
+                data-sheet-action="{{ action_url }}"
+                data-sheet-title="adjust snooze for"
+                data-sheet-deck="{{ s.deck_name }}"
+                data-sheet-subtitle="wake now, or pick a new duration. picking a new one overwrites the current snooze."
+                data-sheet-show-wake="1">
+          <span class="snoozed-row-text">
+            <span class="snoozed-row-deck">{{ s.deck_name }}</span>
+            <span class="snoozed-row-wakes">wakes {{ s.snoozed_until|wakes_in }}</span>
+          </span>
+          {{ icon('caret-right', class_='icon icon-inline snoozed-row-caret') }}
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
 {# Single shared confirm dialog for "Discard session" across both
    sections. The JS below interpolates the deck name into the title
    before opening, then dispatches confirm/cancel back to the
    originating form. #}
-{% if recent_sessions or active_trivia_sessions %}
+{% if recent_sessions or active_trivia_sessions or snoozed_sessions %}
 {% include "partials/sheet_duration.html" %}
 <dialog id="session-discard-dialog" data-dialog class="session-confirm-dialog">
   <h3 id="session-discard-title">Discard session?</h3>

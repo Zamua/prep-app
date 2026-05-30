@@ -130,8 +130,48 @@ def _relative_time(iso_ts: str | None) -> str:
     return f"{years} yr ago" if years == 1 else f"{years} yrs ago"
 
 
+def _wakes_in(iso_ts: str | None) -> str:
+    """Jinja filter: render a FUTURE ISO-8601 UTC timestamp as the
+    delta from now ("in 45 min" / "in 3 hrs" / "tomorrow" / "in 4
+    days"). Used by the Snoozed sub-section to show when each
+    snoozed session will resurface. Past timestamps (already woken)
+    surface as the empty string so the template can skip them."""
+    if not iso_ts:
+        return ""
+    from datetime import datetime, timezone
+
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+    except (TypeError, ValueError):
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    secs = int((dt - datetime.now(timezone.utc)).total_seconds())
+    if secs <= 0:
+        return ""
+    if secs < 60:
+        return "in <1 min"
+    mins = secs // 60
+    if mins < 60:
+        return f"in {mins} min"
+    hours = mins // 60
+    if hours < 24:
+        return "in 1 hr" if hours == 1 else f"in {hours} hrs"
+    days = hours // 24
+    if days == 1:
+        return "tomorrow"
+    if days < 30:
+        return f"in {days} days"
+    months = days // 30
+    if months < 12:
+        return "next month" if months == 1 else f"in {months} months"
+    years = days // 365
+    return "next year" if years == 1 else f"in {years} years"
+
+
 templates.env.filters["markdown"] = _markdown
 templates.env.filters["relative_time"] = _relative_time
+templates.env.filters["wakes_in"] = _wakes_in
 templates.env.globals["icon"] = icons.icon
 
 # ---- App + mounts ---------------------------------------------------------

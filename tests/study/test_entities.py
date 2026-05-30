@@ -97,6 +97,7 @@ def test_recent_session_round_trips_dict():
         "current_question_id": 42,
         "current_prompt": "Implement a bounded queue.",
         "current_type": "code",
+        "snoozed_until": None,
     }
     s = RecentSession.model_validate(raw)
     out = s.model_dump()

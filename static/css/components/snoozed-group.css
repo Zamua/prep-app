@@ -1,0 +1,113 @@
+/* Snoozed sub-section on the home page. Sits below the active
+ * Continue strips as a collapsed <details>; expanding reveals each
+ * snoozed session as a row with deck name + "wakes in X" + chevron.
+ *
+ * Tapping anywhere on a row opens the shared duration sheet
+ * (templates/partials/sheet_duration.html) pre-populated for that
+ * snooze. The chevron is the only affordance — the row itself is the
+ * tap target. iOS-standard `›` pattern, matches the deck-arrow used
+ * on active session cards. No discrete edit button (deliberate — the
+ * row IS the button).
+ */
+
+.snoozed-group {
+  margin-top: 1.05rem;
+  margin-bottom: 0.85rem;
+}
+
+.snoozed-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 0.95rem;
+  color: var(--ink-mute);
+  font-size: 0.86rem;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.snoozed-header::-webkit-details-marker { display: none; }
+.snoozed-header::marker { content: ""; }
+.snoozed-header:hover { color: var(--ink); border-color: var(--rule); }
+
+.snoozed-glyph { opacity: 0.7; flex-shrink: 0; }
+.snoozed-count strong { color: var(--ink); font-weight: 500; }
+.snoozed-caret {
+  margin-left: auto;
+  opacity: 0.55;
+  font-size: 0.78rem;
+  transition: transform 140ms ease;
+}
+.snoozed-group[open] .snoozed-header {
+  background: var(--tint);
+  border-style: solid;
+  border-color: var(--rule);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  color: var(--ink);
+}
+.snoozed-group[open] .snoozed-caret { transform: rotate(180deg); }
+
+.snoozed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0.4rem 0.55rem;
+  border: 1px solid var(--rule);
+  border-top: none;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--bg);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.snoozed-row { margin: 0; }
+.snoozed-row-button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.snoozed-row-button:hover {
+  border-color: var(--rule);
+  background: var(--warm);
+}
+.snoozed-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+.snoozed-row-deck {
+  font-family: var(--serif);
+  font-size: 1rem;
+  letter-spacing: -0.005em;
+  text-transform: lowercase;
+  color: var(--ink);
+}
+.snoozed-row-wakes {
+  font-size: 0.8rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.snoozed-row-caret {
+  width: 0.95rem;
+  height: 0.95rem;
+  opacity: 0.55;
+  flex-shrink: 0;
+}

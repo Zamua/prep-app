@@ -79,6 +79,10 @@ class RecentSession(BaseModel):
     current_question_id: int | None = None
     current_prompt: str | None = None
     current_type: str | None = None
+    # Set when the session has been user-snoozed and the wake time is
+    # in the future. Surfaced in the index "Snoozed" sub-section to
+    # show "wakes in X" and drive the adjust-sheet wake-from-here flow.
+    snoozed_until: str | None = None
 
 
 class Review(BaseModel):

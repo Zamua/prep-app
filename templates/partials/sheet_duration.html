@@ -27,6 +27,14 @@
        preset nor (custom + unit), and the route 400s. Sheet closes on
        success so double-tap protection isn't load-bearing here. #}
     <form method="post" data-sheet-form>
+      {# Wake-now chip — visible only when the trigger sets
+         data-sheet-show-wake=1 (i.e. the sheet was opened for an
+         already-snoozed session). Posts preset=wake which the route
+         interprets as "clear the snooze". CSS hides .sheet-wake-only
+         elements unless the parent dialog carries .has-wake. #}
+      <button type="submit" name="preset" value="wake"
+              class="sheet-chip sheet-wake-only sheet-chip-wake"
+              aria-pressed="false">Wake now</button>
       <p class="sheet-eyebrow">Quick</p>
       <div class="sheet-chips">
         <button type="submit" name="preset" value="1h" class="sheet-chip" aria-pressed="false">1 h</button>

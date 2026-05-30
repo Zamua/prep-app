@@ -299,3 +299,17 @@ def test_session_snooze_bad_preset_returns_400(client: TestClient, initialized_d
     sid = r.headers["location"].rsplit("/", 1)[-1]
     r2 = client.post(f"/session/{sid}/snooze", data={"preset": "garbage"}, follow_redirects=False)
     assert r2.status_code == 400
+
+
+def test_session_snooze_preset_wake_clears(client: TestClient, initialized_db: str):
+    from datetime import datetime, timedelta, timezone
+
+    _seed_srs_deck(initialized_db)
+    r = client.post("/study/study-rt/begin", follow_redirects=False)
+    sid = r.headers["location"].rsplit("/", 1)[-1]
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    SessionRepo().snooze(initialized_db, sid, future)
+    r2 = client.post(f"/session/{sid}/snooze", data={"preset": "wake"}, follow_redirects=False)
+    assert r2.status_code == 303
+    # Wake cleared the snooze — session is back in list_recent.
+    assert any(s.id == sid for s in SessionRepo().list_recent(initialized_db))
