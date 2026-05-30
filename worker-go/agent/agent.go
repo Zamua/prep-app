@@ -128,20 +128,32 @@ func (a *ShellAgent) renderArgs() []string {
 
 // ---- HTTPAgent -------------------------------------------------------
 
-// HTTPAgent posts to an external agent-server. The server is responsible
-// for whatever auth + binary lives on its host.
+// HTTPAgent posts to an HTTP server that wraps a Claude invocation.
+//
+// Today the only target is prep's own FastAPI handler at
+// $PREP_AGENT_URL/run (typically http://localhost:8082/api/agent/run);
+// the legacy agent-server container is gone post-SDK-migration. The
+// wire format is preserved so older agent-server deploys still work
+// without code changes.
 //
 // Wire format:
 //
 //	POST <BaseURL>/run
+//	  headers:  Content-Type: application/json
+//	            X-Internal-Token: <PREP_INTERNAL_TOKEN>   (sent if set)
 //	  request:  { "prompt", "session_id"?, "resume_id"? }
 //	  response: 200 { "stdout" }   |   non-2xx { "error" }
 //
 //	GET  <BaseURL>/healthz
 //	  response: 200 { "ok": true, ... }
+//
+// InternalToken is the shared secret that prep's /api/agent/run
+// requires in the X-Internal-Token header. Empty = don't send the
+// header (back-compat for the legacy agent-server which had no auth).
 type HTTPAgent struct {
-	BaseURL string
-	Client  *http.Client // optional; defaults to a long-timeout client.
+	BaseURL       string
+	InternalToken string
+	Client        *http.Client // optional; defaults to a long-timeout client.
 }
 
 func (a *HTTPAgent) httpClient() *http.Client {
@@ -174,6 +186,11 @@ func (a *HTTPAgent) Run(ctx context.Context, in RunInput) (RunOutput, error) {
 		return RunOutput{}, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("content-type", "application/json")
+	if a.InternalToken != "" {
+		// prep's /api/agent/run rejects calls without this header
+		// (fail-closed). Legacy agent-server ignored it harmlessly.
+		req.Header.Set("X-Internal-Token", a.InternalToken)
+	}
 
 	resp, err := a.httpClient().Do(req)
 	if err != nil {
@@ -210,7 +227,10 @@ func (a *HTTPAgent) Run(ctx context.Context, in RunInput) (RunOutput, error) {
 // (gated on the Python probe) never sends work the worker can't run.
 func FromEnv() Client {
 	if u := strings.TrimSpace(os.Getenv("PREP_AGENT_URL")); u != "" {
-		return &HTTPAgent{BaseURL: u}
+		return &HTTPAgent{
+			BaseURL:       u,
+			InternalToken: strings.TrimSpace(os.Getenv("PREP_INTERNAL_TOKEN")),
+		}
 	}
 	bin := strings.TrimSpace(os.Getenv("PREP_AGENT_BIN"))
 	if bin == "" {
