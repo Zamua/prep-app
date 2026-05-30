@@ -135,7 +135,13 @@ def _wakes_in(iso_ts: str | None) -> str:
     delta from now ("in 45 min" / "in 3 hrs" / "tomorrow" / "in 4
     days"). Used by the Snoozed sub-section to show when each
     snoozed session will resurface. Past timestamps (already woken)
-    surface as the empty string so the template can skip them."""
+    surface as the empty string so the template can skip them.
+
+    The "forever" snooze preset maps to a year-2099 sentinel (see
+    prep.web.durations.FOREVER_ISO) so the read path doesn't have to
+    special-case None vs forever everywhere. A literal arithmetic
+    render of that ("in 73 years") is silly — anything past ~5 years
+    is effectively forever in app terms, so we collapse it."""
     if not iso_ts:
         return ""
     from datetime import datetime, timezone
@@ -149,15 +155,21 @@ def _wakes_in(iso_ts: str | None) -> str:
     secs = int((dt - datetime.now(timezone.utc)).total_seconds())
     if secs <= 0:
         return ""
+    # ~5 year cap before we collapse to "forever". Below that we render
+    # a real delta; above, anything is forever-shaped.
+    if secs > 5 * 365 * 86400:
+        return "forever"
     if secs < 60:
         return "in <1 min"
-    mins = secs // 60
+    # Round to the nearest unit so picking "1 day" and reloading the
+    # page a second later renders "in 1 day", not "in 23 hrs".
+    mins = (secs + 30) // 60
     if mins < 60:
         return f"in {mins} min"
-    hours = mins // 60
+    hours = (mins + 30) // 60
     if hours < 24:
         return "in 1 hr" if hours == 1 else f"in {hours} hrs"
-    days = hours // 24
+    days = (hours + 12) // 24
     if days == 1:
         return "tomorrow"
     if days < 30:

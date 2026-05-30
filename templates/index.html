@@ -153,7 +153,12 @@
                 data-sheet-show-wake="1">
           <span class="snoozed-row-text">
             <span class="snoozed-row-deck">{{ s.deck_name }}</span>
-            <span class="snoozed-row-wakes">wakes {{ s.snoozed_until|wakes_in }}</span>
+            {%- set _wakes = s.snoozed_until|wakes_in -%}
+            <span class="snoozed-row-wakes">
+              {%- if _wakes == 'forever' -%}snoozed indefinitely
+              {%- else -%}wakes {{ _wakes }}
+              {%- endif -%}
+            </span>
           </span>
           {{ icon('caret-right', class_='icon icon-inline snoozed-row-caret') }}
         </button>
