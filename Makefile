@@ -251,13 +251,16 @@ deploy-stag-from-tag:
 	  echo "tag $(v) not found locally"; exit 1; fi
 	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
 	git worktree add --detach $(DEPLOY_BUILD_DIR) $(v)
+	@# Source local .env from the workspace (where secrets live) so
+	@# compose's ${VAR:?} guards pass — the worktree itself has no .env.
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
 	  docker compose \
 	    -f docker-compose.yml \
 	    --project-directory $(DEPLOY_BUILD_DIR) \
 	    --env-file deploy/staging.env \
 	    -p stag \
-	    up -d --build --wait
+	    up -d --build --wait --remove-orphans
 	git worktree remove --force $(DEPLOY_BUILD_DIR)
 
 logs-stag:
