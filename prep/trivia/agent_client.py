@@ -1,112 +1,87 @@
-"""Python-side HTTP client for the agent container.
+"""Python-side agent client — thin shim over `prep.agent` for legacy callers.
 
-Trivia generation is a single one-shot claude call (in vs the
-multi-step plan/expand flow, which earns its keep on Temporal). We
-keep it out of the worker entirely and POST directly from the FastAPI
-process — same wire format the Go worker uses (`POST /run` →
-`{"stdout"}`), just from Python so the trivia service stays
-self-contained in `prep.trivia`.
+This module used to POST to the agent-server container's /run
+endpoint over HTTP. As of the SDK migration it routes through
+`prep.agent.get_agent()` (an in-process `claude-agent-sdk` adapter
+by default; FakeAgent in tests). The public API is preserved so
+existing callers (`trivia.service`, `trivia.routes`, `notify.scheduler`,
+trivia.scheduler) don't need to change their imports.
 
-If the agent is unreachable, callers see `AgentUnavailable` and
-should treat trivia generation as best-effort skipped (the scheduler
-will retry on the next tick).
+What you get:
+- `AgentUnavailable` — same name, same semantics; re-exported from
+  `prep.agent.port`. Catching the old import path still works.
+- `run_prompt(prompt, *, timeout_s)` — sync entry point. Wraps the
+  async adapter via `asyncio.run`. Safe to call ONLY from non-async
+  contexts (e.g., inside `asyncio.to_thread` from the scheduler);
+  same constraint as before. Async callers must use `run_prompt_async`.
+- `run_prompt_async(prompt, *, timeout_s)` — async entry point.
+
+Usage is recorded (same `agent_usage` rollup the FastAPI handler
+populates) so the per-token monthly total covers both worker calls
+and Python-side calls.
 """
 
 from __future__ import annotations
 
-import json
+import asyncio
+import logging
 import os
-import urllib.error
-import urllib.request
 
-import httpx
+from prep import agent as _agent_mod
+from prep.agent.port import AgentUnavailable
+from prep.agent.usage import AgentUsageRepo, hash_token
+
+logger = logging.getLogger(__name__)
+
+__all__ = ["AgentUnavailable", "run_prompt", "run_prompt_async"]
 
 
-class AgentUnavailable(RuntimeError):
-    """Raised when the agent container can't be reached or returns
-    an error. Caller decides whether to log + skip or surface."""
-
-
-# Generation prompts ask for ~25 questions including a regex per
-# card. Claude often takes 15-25s per card these days; a full batch
-# can run 8-10 minutes, so we give a generous wall-clock budget.
-# Falling well short of this would have us silently dropping work
-# claude already did (the agent finishes server-side after the prep
-# client closes).
+# Long timeout retained from the HTTP era — generation prompts can
+# run 8-10 minutes on full deck batches; the SDK call inherits this
+# as a wall-clock budget so a stalled provider surfaces a clean
+# AgentUnavailable instead of a generic timeout up-stack.
 _DEFAULT_TIMEOUT_S = 900.0
 
 
-def _agent_url() -> str:
-    base = (os.environ.get("PREP_AGENT_URL") or "").strip()
-    if not base:
-        raise AgentUnavailable(
-            "PREP_AGENT_URL is not set — trivia generation needs the "
-            "agent container to be running and reachable."
+def _record_usage(result, *, user_login: str | None = None) -> None:
+    """Append one agent_usage row. Best-effort; logs + swallows any
+    repo failure so a transient SQLite hiccup never breaks the
+    caller's workflow."""
+    token = (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip()
+    if not token:
+        return
+    try:
+        AgentUsageRepo().record(
+            token_hash=hash_token(token),
+            model=result.model,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            cost_usd=result.cost_usd,
+            user_login=user_login,
         )
-    return base.rstrip("/") + "/run"
+    except Exception:  # noqa: BLE001
+        logger.exception("agent_usage record failed (non-fatal)")
 
 
 def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
-    """POST a single prompt to the agent's /run endpoint and return
-    its stdout. Raises `AgentUnavailable` on transport / HTTP errors.
+    """Sync facade over the async adapter. Wraps `asyncio.run`, which
+    creates a fresh event loop — must not be called from an existing
+    one. The notify.scheduler tick is the only legit caller today;
+    it runs the trivia refill under `asyncio.to_thread`, so this
+    wrapper executes on a worker thread with no active loop.
 
-    Synchronous. Safe to call ONLY from contexts that aren't on the
-    asyncio event loop:
-    - the Temporal worker (separate Go process; calls back into prep
-      to write rows but doesn't share our event loop)
-    - inside an `asyncio.to_thread(...)` wrapper (which is what
-      notify.scheduler does for the in-process trivia refill tick)
-
-    Calling this directly from an async coroutine blocks the entire
-    event loop for up to `timeout_s` seconds — taking down ALL request
-    handling, not just the caller. Caught the hard way at 19:30 UTC on
-    2026-05-07: notify scheduler's `_tick` was awaiting `_trivia_tick`
-    synchronously, which called generate_batch which called this
-    function which blocked on urlopen. Request-path callers must use
-    `run_prompt_async` instead.
-    """
-    url = _agent_url()
-    body = json.dumps({"prompt": prompt}).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout_s) as r:
-            data = json.load(r)
-            if "stdout" not in data:
-                raise AgentUnavailable(f"agent returned no stdout: {str(data)[:300]}")
-            return data["stdout"]
-    except urllib.error.HTTPError as e:
-        try:
-            err = json.loads(e.read().decode(errors="replace")).get("error", "")
-        except Exception:
-            err = str(e)
-        raise AgentUnavailable(f"agent HTTP {e.code}: {err}") from e
-    except (urllib.error.URLError, OSError, TimeoutError) as e:
-        raise AgentUnavailable(f"agent unreachable: {e}") from e
+    Caught the hard way at 19:30 UTC on 2026-05-07 (pre-migration):
+    a request-path call blocked the event loop until the upstream
+    timeout fired, taking down all request handling. The async
+    variant (run_prompt_async) is the request-path safe option."""
+    return asyncio.run(run_prompt_async(prompt, timeout_s=timeout_s))
 
 
 async def run_prompt_async(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
-    """Async counterpart to `run_prompt`, for callers that run on the
-    request path. Uses httpx.AsyncClient so a slow agent call yields
-    the event loop instead of holding a Starlette threadpool slot.
-    Same `AgentUnavailable` contract as the sync version."""
-    url = _agent_url()
-    try:
-        async with httpx.AsyncClient(timeout=timeout_s) as client:
-            r = await client.post(url, json={"prompt": prompt})
-            if r.status_code != 200:
-                try:
-                    err = r.json().get("error", "")
-                except Exception:
-                    err = r.text
-                raise AgentUnavailable(f"agent HTTP {r.status_code}: {err}")
-            data = r.json()
-            if "stdout" not in data:
-                raise AgentUnavailable(f"agent returned no stdout: {str(data)[:300]}")
-            return data["stdout"]
-    except (httpx.TimeoutException, httpx.TransportError) as e:
-        raise AgentUnavailable(f"agent unreachable: {e}") from e
+    """Async facade. Calls the configured `AgentPort` and returns the
+    response text. Raises `AgentUnavailable` on adapter failure
+    (matches the legacy contract — service-layer error handling
+    doesn't change)."""
+    result = await _agent_mod.get_agent().run(prompt, timeout_s=timeout_s)
+    _record_usage(result)
+    return result.text
