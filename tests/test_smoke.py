@@ -67,6 +67,38 @@ def test_static_assets_served(client: TestClient):
     assert r.status_code == 200
 
 
+def test_html_responses_carry_no_cache_header(client: TestClient):
+    """HTML must re-validate on every navigation, otherwise iOS PWA
+    standalone serves the previous deploy's index HTML forever — and
+    that cached HTML points at stale `?v=…` CSS/JS, so the installed
+    app drifts off whatever the latest deploy actually shipped."""
+    r = client.get("/")
+    assert r.status_code == 200
+    cc = r.headers.get("cache-control", "")
+    assert "no-cache" in cc, f"expected no-cache on HTML, got: {cc!r}"
+
+
+def test_manifest_is_no_cache(client: TestClient):
+    """Same reasoning for the PWA manifest — if it gets cached the
+    installed app keeps its prior scope/icons forever after a rename."""
+    r = client.get("/manifest.json")
+    assert r.status_code == 200
+    cc = r.headers.get("cache-control", "")
+    assert "no-cache" in cc, f"expected no-cache on manifest, got: {cc!r}"
+
+
+def test_static_css_still_cacheable(client: TestClient):
+    """Inverse of the HTML test: hashed/versioned assets MUST NOT get
+    the HTML middleware's no-cache stamped on them, otherwise the
+    cache-bust dance breaks down (every browser refetches every CSS
+    file on every nav). Pin the boundary so future middleware changes
+    don't silently regress it."""
+    r = client.get("/static/css/index.css")
+    assert r.status_code == 200
+    cc = r.headers.get("cache-control", "")
+    assert "no-cache" not in cc, f"static CSS unexpectedly no-cache: {cc!r}"
+
+
 def test_healthcheck_or_root_responds_quickly(client: TestClient):
     """/healthz is the canonical liveness probe (no DB hit, no
     template render). The docker-compose healthcheck targets it; this

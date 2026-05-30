@@ -148,6 +148,27 @@ from prep.web import metrics as _metrics  # noqa: E402
 app.middleware("http")(_metrics.http_metrics_middleware)
 
 
+# Force HTML + manifest responses to re-validate on every navigation.
+# Hashed asset URLs (CSS `?v=…`, versioned JS module space) already
+# defeat caching for static files — but only if the HTML pointing at
+# them is fresh. iOS PWA standalone aggressively caches the start_url
+# HTML in its Web App Bundle, so without no-cache on the HTML the
+# installed PWA serves the previous deploy's `?v=` token forever and
+# never picks up new CSS / JS. Symptom: post-deploy layout glitches
+# that only repro inside the home-screen PWA, not in Safari proper.
+# Same fix nginx's `expires -1` does for `index.html` in classic SPA
+# hosting — we apply it at the app layer because we don't have a
+# reverse-proxy hop that owns it.
+@app.middleware("http")
+async def _no_cache_html(request, call_next):
+    response = await call_next(request)
+    ct = response.headers.get("content-type", "")
+    path = request.url.path
+    if ct.startswith("text/html") or path.endswith("/manifest.json"):
+        response.headers["cache-control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 @app.get("/metrics", include_in_schema=False)
 async def metrics_endpoint():
     """Prometheus scrape target. Plain-text exposition format."""
