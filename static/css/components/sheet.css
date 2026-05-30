@@ -6,12 +6,15 @@
  */
 
 /* Take the dialog out of its normal center-of-viewport position and
- * pin it to the bottom of the screen. `inset-block-end: 0` + auto
- * margins puts it at the bottom; min-width: 100% spans the viewport.
+ * pin it to the bottom of the screen.
  *
- * Gated on [open] because <dialog>'s UA default is display:none when
- * closed — overriding display: flex would leak the dialog into the
- * layout as a no-op inline block at page bottom.
+ * The UA stylesheet sets `top: 0; bottom: 0; margin: auto` on <dialog>
+ * to vertically center it. If we only override `bottom`, the leftover
+ * `top: 0` makes the dialog stretch full-height and the content sits
+ * at the top — looks like a top sheet, not a bottom one. Explicitly
+ * resetting `top: auto` (alongside `bottom: 0`) is what actually
+ * pins it to the bottom. Confirmed broken in chromium + iOS Safari
+ * without this. Don't drop `top: auto`.
  */
 dialog[data-sheet] {
   border: none;
@@ -22,16 +25,16 @@ dialog[data-sheet] {
   border-top-right-radius: var(--radius-lg);
   margin: 0;
   position: fixed;
-  inset-inline: 0;
-  inset-block-end: 0;
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
   width: 100%;
   max-width: 100%;
+  height: auto;
   /* Respect the iPhone home-indicator inset on PWA standalone. */
   padding-bottom: env(safe-area-inset-bottom, 0);
   box-shadow: 0 -10px 36px -8px rgba(0, 0, 0, 0.45);
-  /* The dialog itself is empty until we set [open]; native UA-CSS
-   * sets display:block when [open], which combined with our absolute
-   * positioning slides it to the bottom. */
 }
 
 dialog[data-sheet][open] {
