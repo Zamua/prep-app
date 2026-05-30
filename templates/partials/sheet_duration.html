@@ -18,7 +18,15 @@
     </h2>
     <p class="sheet-subtitle" data-sheet-subtitle-out></p>
 
-    <form method="post" data-sheet-form data-submit-pending>
+    {# NO data-submit-pending here — this form has multiple submitters
+       (one per chip). submit-pending grabs the FIRST submit button and
+       disables it on the submit event, but in a multi-submitter form
+       the first button is often the one the user just clicked, and a
+       disabled control is excluded from the form data set. Result:
+       the submitter's name/value is dropped, the server gets neither
+       preset nor (custom + unit), and the route 400s. Sheet closes on
+       success so double-tap protection isn't load-bearing here. #}
+    <form method="post" data-sheet-form>
       <p class="sheet-eyebrow">Quick</p>
       <div class="sheet-chips">
         <button type="submit" name="preset" value="1h" class="sheet-chip" aria-pressed="false">1 h</button>
