@@ -32,6 +32,11 @@ dependencies = [
     # gauge, claude_grade histogram, http request duration.
     # See prep/web/metrics.py for the registry + middleware.
     "prometheus-client==0.21.0",
+    # claude-agent-sdk — Python SDK for in-process Claude invocations.
+    # Replaces the agent-server container (shelling out to `claude -p`).
+    # Auths via CLAUDE_CODE_OAUTH_TOKEN env var (subscription credits).
+    # Adapter at prep/agent/sdk_adapter.py wraps it behind AgentPort.
+    "claude-agent-sdk==0.2.87",
 ]
 
 [tool.uv]

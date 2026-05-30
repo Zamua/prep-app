@@ -450,4 +450,21 @@ def init() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_active_workflows_user
                 ON active_workflows(user_login, terminal_at);
+
+            -- prep.agent — per-invocation usage accounting. Token-
+            -- scoped (token_hash), not user-scoped, because the OAuth
+            -- token is what Anthropic bills against. user_login is a
+            -- secondary dimension for breakdowns.
+            CREATE TABLE IF NOT EXISTS agent_usage (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_hash     TEXT NOT NULL,        -- sha256 of OAuth token
+                called_at      TEXT NOT NULL,        -- ISO 8601 UTC
+                model          TEXT NOT NULL,
+                input_tokens   INTEGER,
+                output_tokens  INTEGER,
+                cost_usd       REAL,                 -- adapter-reported best-effort
+                user_login     TEXT                  -- nullable; populated when known
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_usage_token_month
+                ON agent_usage(token_hash, called_at);
         """)
