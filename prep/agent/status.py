@@ -1,28 +1,23 @@
 """Agent availability probe — used by the FastAPI app at startup.
 
-The actual agent shell-out happens entirely in the Go worker; this
-module exists so the Python side can answer "is AI configured + reachable
-right now?" without taking a hard dependency on the worker boot order.
+Post-SDK-migration: the probe is purely local. We check whether a
+Claude OAuth token is present in the env (or in the prep-data
+token file) AND the `claude_agent_sdk` package can be imported.
+That's "the SDK can run if asked" — same semantic the old
+agent-server-/healthz check provided.
 
-The probe checks:
-  1. PREP_AGENT_URL → GET <url>/healthz, parse JSON, surface logged_in.
-  2. PREP_AGENT_BIN (or CLAUDE_BIN) → check the file is executable.
-  3. ~/.local/bin/claude — last-resort default that maps to the
-     conventional Claude Code installer path.
-
-Result feeds the `agent_available` jinja context flag, which gates AI
-surfaces in the UI.
+Result feeds the `agent_available` Jinja context flag, which gates
+AI surfaces in the UI.
 """
 
 from __future__ import annotations
 
-import json
+import logging
 import os
-import urllib.error
-import urllib.request
-from pathlib import Path
 
-_DEFAULT_BIN = str(Path.home() / ".local" / "bin" / "claude")
+from prep.agent import token_store
+
+logger = logging.getLogger(__name__)
 
 
 def status() -> dict:
@@ -30,51 +25,30 @@ def status() -> dict:
 
     Shape:
       {
-        "kind":         "http" | "shell" | "unconfigured",
+        "kind":         "sdk" | "unconfigured",
         "logged_in":    bool,
-        "email":        str (optional),
-        "org_name":     str (optional),
-        "subscription_type": str (optional),
         "reason":       str (optional, when logged_in is False),
       }
-    """
-    url = (os.environ.get("PREP_AGENT_URL") or "").strip()
-    if url:
-        out = {"kind": "http", "logged_in": False}
-        try:
-            with urllib.request.urlopen(url.rstrip("/") + "/healthz", timeout=2.0) as resp:
-                if 200 <= resp.status < 300:
-                    body = resp.read().decode("utf-8", errors="replace")
-                    try:
-                        data = json.loads(body)
-                        out["logged_in"] = bool(data.get("logged_in"))
-                        for k in ("email", "org_name", "subscription_type", "reason"):
-                            if data.get(k):
-                                out[k] = data[k]
-                    except json.JSONDecodeError:
-                        out["reason"] = "agent-server returned non-JSON"
-                else:
-                    out["reason"] = f"agent-server returned HTTP {resp.status}"
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            out["reason"] = f"agent-server unreachable: {e}"
-        return out
 
-    bin_path = (os.environ.get("PREP_AGENT_BIN") or "").strip() or (
-        os.environ.get("CLAUDE_BIN") or ""
-    ).strip()
-    if not bin_path:
-        bin_path = _DEFAULT_BIN
-        if not (os.path.isfile(bin_path) and os.access(bin_path, os.X_OK)):
-            return {
-                "kind": "unconfigured",
-                "logged_in": False,
-                "reason": "neither PREP_AGENT_URL nor PREP_AGENT_BIN is set",
-            }
-    available = os.path.isfile(bin_path) and os.access(bin_path, os.X_OK)
-    out = {"kind": "shell", "logged_in": available}
-    if not available:
-        out["reason"] = f"PREP_AGENT_BIN={bin_path!r} doesn't exist or isn't executable"
-    return out
+    Token sources (in precedence):
+      1. CLAUDE_CODE_OAUTH_TOKEN env var (set explicitly or loaded
+         from the token file at boot)
+      2. The token file at PREP_DATA_DIR/claude-oauth-token
+
+    We don't probe `import claude_agent_sdk` here — the package is a
+    hard dependency declared in pyproject; if it's missing prep won't
+    boot, and the probe import was adding ~2s per call which made
+    test runs 70× slower (status() fires per test-client construction).
+    """
+    have_env = bool((os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip())
+    have_file = token_store.token_exists()
+    if not (have_env or have_file):
+        return {
+            "kind": "unconfigured",
+            "logged_in": False,
+            "reason": "no CLAUDE_CODE_OAUTH_TOKEN — paste a `claude setup-token` value",
+        }
+    return {"kind": "sdk", "logged_in": True}
 
 
 def probe() -> bool:
@@ -101,19 +75,10 @@ def set_available(value: bool) -> None:
 
 def init_availability() -> None:
     """Re-run the probe and cache the result. Called once at app
-    startup; safe to call again to refresh.
+    startup; also loads the token file into the process env if
+    present (so the SDK can pick it up without a container restart).
 
-    Retries the probe a few times because in docker-compose deploys
-    the prep + agent containers boot in parallel — agent-server may
-    not be listening yet when prep imports. Without retries a fresh
-    deploy left agent_available=False until the user manually hit
-    /settings/agent/connect, which made AI-gated UI (the cross-deck
-    edit pill, etc.) silently disappear after every redeploy."""
-    import time
-
-    for _ in range(8):
-        if probe():
-            set_available(True)
-            return
-        time.sleep(0.5)
-    set_available(False)
+    No retries needed any more — the probe is local-only (file +
+    import check), unlike the prior HTTP-to-agent-server probe."""
+    token_store.load_into_env()
+    set_available(probe())

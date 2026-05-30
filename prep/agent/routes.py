@@ -19,11 +19,8 @@ gate the endpoint so it can't burn credits if accidentally exposed.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-import urllib.error
-import urllib.request
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -105,12 +102,10 @@ async def api_agent_run(
 
 # ---- user-facing /settings/agent --------------------------------------
 
-
-def _agent_server_url() -> str | None:
-    """Returns the agent-server base URL with trailing slash trimmed,
-    or None when the deploy uses a shell-agent (or no agent at all)."""
-    u = (os.environ.get("PREP_AGENT_URL") or "").strip()
-    return u.rstrip("/") if u else None
+# Anthropic-issued `claude setup-token` values look like
+# `sk-ant-oat01-…`. Reject anything else upstream so the UI surfaces
+# a clear error instead of a downstream "auth failed" later.
+_TOKEN_PREFIX = "sk-ant-oat01-"
 
 
 def _refresh_agent_status() -> dict:
@@ -136,22 +131,11 @@ def settings_agent_view(request: Request, user: dict = Depends(current_user)):
 
 @router.post("/settings/agent/connect", response_class=HTMLResponse)
 async def settings_agent_connect(request: Request, user: dict = Depends(current_user)):
-    """Forward a setup-token to the agent-server's /connect endpoint."""
-    url = _agent_server_url()
-    if not url:
-        return templates.TemplateResponse(
-            "settings_agent.html",
-            {
-                "request": request,
-                "status": _agent_mod.status(),
-                "error": (
-                    "PREP_AGENT_URL is not set on this prep instance — "
-                    "connect flow only applies to the docker / agent-server deploy."
-                ),
-                "flash": None,
-            },
-            status_code=400,
-        )
+    """Persist a `claude setup-token` value to prep-data + activate it
+    in-process. Post-SDK migration: no HTTP round-trip to a separate
+    container — token storage is fully prep-side."""
+    from prep.agent import token_store
+
     form = await request.form()
     token = (form.get("token") or "").strip()
     if not token:
@@ -165,44 +149,38 @@ async def settings_agent_connect(request: Request, user: dict = Depends(current_
             },
             status_code=400,
         )
-
-    payload = json.dumps({"token": token}).encode("utf-8")
-    req = urllib.request.Request(
-        url + "/connect",
-        data=payload,
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10.0) as resp:
-            resp.read()
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        try:
-            err = json.loads(body).get("error") or body
-        except json.JSONDecodeError:
-            err = body
+    if not token.startswith(_TOKEN_PREFIX):
         return templates.TemplateResponse(
             "settings_agent.html",
             {
                 "request": request,
                 "status": _agent_mod.status(),
-                "error": f"Agent rejected the token: {err}",
+                "error": (
+                    f"Token must start with {_TOKEN_PREFIX!r}. "
+                    "Run `claude setup-token` on a machine you control and paste the output here."
+                ),
                 "flash": None,
             },
             status_code=400,
         )
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
+
+    try:
+        token_store.write_token(token)
+    except OSError as e:
+        logger.exception("token write failed")
         return templates.TemplateResponse(
             "settings_agent.html",
             {
                 "request": request,
                 "status": _agent_mod.status(),
-                "error": f"Couldn't reach agent-server: {e}",
+                "error": f"Couldn't write token to prep-data: {e}",
                 "flash": None,
             },
-            status_code=502,
+            status_code=500,
         )
+    # Stamp into the live process env so the SDK adapter picks it up
+    # without a container restart.
+    os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = token
 
     s = _refresh_agent_status()
     return templates.TemplateResponse(
@@ -218,24 +196,12 @@ async def settings_agent_connect(request: Request, user: dict = Depends(current_
 
 @router.post("/settings/agent/disconnect", response_class=HTMLResponse)
 def settings_agent_disconnect(request: Request, user: dict = Depends(current_user)):
-    url = _agent_server_url()
-    if not url:
-        raise HTTPException(400, "PREP_AGENT_URL is not set on this prep instance.")
-    req = urllib.request.Request(url + "/disconnect", data=b"", method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
-            resp.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        return templates.TemplateResponse(
-            "settings_agent.html",
-            {
-                "request": request,
-                "status": _agent_mod.status(),
-                "error": f"Couldn't reach agent-server: {e}",
-                "flash": None,
-            },
-            status_code=502,
-        )
+    """Delete the persisted token + clear the process env. Idempotent
+    — calling on an already-disconnected instance is a no-op."""
+    from prep.agent import token_store
+
+    token_store.delete_token()
+    token_store.clear_env()
     s = _refresh_agent_status()
     return templates.TemplateResponse(
         "settings_agent.html",
