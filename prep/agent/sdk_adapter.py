@@ -24,10 +24,32 @@ import os
 from prep.agent.port import (
     DEFAULT_MODEL,
     DEFAULT_REASONING,
+    AgentBudgetExhausted,
     AgentPort,
     AgentResult,
     AgentUnavailable,
 )
+
+# Substrings the SDK / Anthropic API surface in their error messages
+# when the user has burned through their monthly agent-SDK credit
+# allocation. Match is case-insensitive. We map the bare text rather
+# than a typed exception because the SDK doesn't (today) expose a
+# dedicated exception class for this — credit exhaustion comes back
+# as a generic API error with a recognizable message.
+_BUDGET_EXHAUSTED_MARKERS = (
+    "credit balance",
+    "monthly credit",
+    "credit_balance",
+    "insufficient_quota",
+    "agent_sdk_credit",
+    "subscription credit",
+)
+
+
+def _is_budget_exhausted(err_text: str) -> bool:
+    low = err_text.lower()
+    return any(m in low for m in _BUDGET_EXHAUSTED_MARKERS)
+
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +113,20 @@ class ClaudeAgentSdkAdapter(AgentPort):
                 elif isinstance(msg, ResultMessage):
                     result_msg = msg
         except Exception as e:  # noqa: BLE001 — funnel any SDK fault as Unavailable
+            err = str(e)
+            if _is_budget_exhausted(err):
+                raise AgentBudgetExhausted(
+                    "monthly Claude agent-SDK allocation exhausted: " + err
+                ) from e
             raise AgentUnavailable(f"claude-agent-sdk error: {e}") from e
+
+        # Some SDK error paths come back inside a ResultMessage with
+        # is_error=True instead of raising. Map those too.
+        if result_msg is not None and getattr(result_msg, "is_error", False):
+            err = (getattr(result_msg, "result", None) or "").strip() or "agent reported error"
+            if _is_budget_exhausted(err):
+                raise AgentBudgetExhausted("monthly Claude agent-SDK allocation exhausted: " + err)
+            raise AgentUnavailable(f"claude-agent-sdk error: {err}")
 
         text = "".join(text_parts).strip()
         if not text:

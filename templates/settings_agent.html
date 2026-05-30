@@ -81,31 +81,21 @@
 </section>
 {% endif %}
 
-{% if usage is defined and usage %}
-<section class="agent-panel agent-usage">
+{% if status.logged_in %}
+<section class="agent-panel">
   <p class="section-eyebrow"><span>Usage</span><span class="rule"></span></p>
-  <p class="agent-usage-summary">
-    <strong>≈ ${{ "%.2f"|format(usage.spent_usd) }}</strong>
-    of <strong>${{ "%.0f"|format(usage.budget_usd) }}</strong>
-    used this month
-    · <em>{{ usage.calls }} call{% if usage.calls != 1 %}s{% endif %}</em>
-  </p>
-  <div class="agent-usage-bar" aria-label="Monthly usage progress" role="progressbar"
-       aria-valuemin="0" aria-valuemax="100"
-       aria-valuenow="{{ usage.pct_used|round(0, 'floor') }}">
-    <span class="agent-usage-bar-fill"
-          style="width: {{ usage.pct_used|round(1) }}%"
-          data-pct="{{ usage.pct_used|round(0, 'floor') }}"></span>
-  </div>
-  <p class="agent-usage-note">
-    Per-token rollup, last 30 days. ${{ "%.2f"|format(usage.remaining_usd) }}
-    remaining against the configured budget. This is an estimate based on
-    cost data the SDK returns per call — the authoritative source is
-    <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener">claude.ai/settings/usage</a>.
+  <p class="agent-disconnect-blurb">
+    Your Claude subscription has a monthly Agent SDK credit pool
+    ($200 on Max 20x, $20 on Pro). When it's exhausted, AI features
+    in prep stop until the next monthly reset — manual flows keep
+    working. Check
+    <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener">claude.ai/settings/usage</a>
+    for your current balance — prep doesn't try to track it locally
+    (the allocation is per Anthropic account, which prep can't see).
   </p>
 </section>
-{% endif %}
 
+{% endif %}
 {% if status.logged_in %}
 <section class="agent-panel">
   <p class="section-eyebrow"><span>Disconnect</span><span class="rule"></span></p>

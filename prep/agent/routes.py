@@ -27,8 +27,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from prep import agent as _agent_mod
-from prep.agent.port import AgentUnavailable
-from prep.agent.usage import AgentUsageRepo, hash_token
+from prep.agent.port import AgentBudgetExhausted, AgentUnavailable
 from prep.auth import current_user
 from prep.web.templates import templates
 
@@ -76,25 +75,14 @@ async def api_agent_run(
     adapter = _agent_mod.get_agent()
     try:
         result = await adapter.run(body.prompt, model=body.model, reasoning=body.reasoning)
+    except AgentBudgetExhausted as e:
+        logger.warning("agent budget exhausted: %s", e)
+        # 429 maps cleanly to "you've been throttled" — workflow code
+        # can distinguish from 502 to surface the budget-specific UI.
+        return JSONResponse({"error": str(e), "kind": "budget_exhausted"}, status_code=429)
     except AgentUnavailable as e:
         logger.warning("agent adapter unavailable: %s", e)
         return JSONResponse({"error": str(e)}, status_code=502)
-
-    # Best-effort usage logging. Don't fail the call if the rollup
-    # write fails — the caller already paid for the credits.
-    token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "").strip()
-    if token:
-        try:
-            AgentUsageRepo().record(
-                token_hash=hash_token(token),
-                model=result.model,
-                input_tokens=result.input_tokens,
-                output_tokens=result.output_tokens,
-                cost_usd=result.cost_usd,
-                user_login=None,  # machine-to-machine; no user context
-            )
-        except Exception:  # noqa: BLE001
-            logger.exception("agent_usage record failed")
 
     return {"stdout": result.text}
 
@@ -124,52 +112,8 @@ def settings_agent_view(request: Request, user: dict = Depends(current_user)):
     s = _refresh_agent_status()
     return templates.TemplateResponse(
         "settings_agent.html",
-        {
-            "request": request,
-            "status": s,
-            "usage": _current_token_usage(),
-            "error": None,
-            "flash": None,
-        },
+        {"request": request, "status": s, "error": None, "flash": None},
     )
-
-
-# Default Max-20x agent-SDK monthly credit allocation (USD). Surfaced
-# in the UI as the denominator on "≈ $X used of $Y this month". Make
-# configurable via PREP_AGENT_BUDGET_USD if you're on a different plan.
-_DEFAULT_BUDGET_USD = 200.0
-
-
-def _current_token_usage() -> dict | None:
-    """Return the usage rollup for the currently-configured token, or
-    None when nothing is configured yet. UI hides the panel when None.
-
-    The rollup is per-token-hash, not per-user — multiple prep users
-    sharing one token sum into one bucket. Cost is an adapter-side
-    estimate; the canonical source is claude.ai/settings/usage."""
-    from datetime import datetime, timedelta, timezone
-
-    from prep.agent.usage import AgentUsageRepo, hash_token
-
-    token = (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip()
-    if not token:
-        return None
-    th = hash_token(token)
-    # Rolling 30-day window. Anthropic's reset is calendar-month-based
-    # but the exact reset date isn't exposed, so 30d is the safer
-    # rolling proxy.
-    window_start = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat(timespec="seconds")
-    repo = AgentUsageRepo()
-    spent = repo.monthly_cost(th, month_start_iso=window_start)
-    calls = repo.call_count(th, month_start_iso=window_start)
-    budget = float(os.environ.get("PREP_AGENT_BUDGET_USD") or _DEFAULT_BUDGET_USD)
-    return {
-        "spent_usd": spent,
-        "calls": calls,
-        "budget_usd": budget,
-        "remaining_usd": max(0.0, budget - spent),
-        "pct_used": min(100.0, (spent / budget * 100.0) if budget > 0 else 0.0),
-    }
 
 
 @router.post("/settings/agent/connect", response_class=HTMLResponse)

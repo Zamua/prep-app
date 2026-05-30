@@ -58,6 +58,16 @@ class AgentUnavailable(RuntimeError):
     exception handling."""
 
 
+class AgentBudgetExhausted(AgentUnavailable):
+    """Subclass surfaced when the SDK reports that the user has hit
+    their monthly Anthropic agent-SDK credit allocation (the per-
+    plan $X/mo pool — $200 on Max 20x, $20 on Pro). Catch this
+    specifically to render a "your Claude plan's monthly allocation
+    is exhausted — resumes [next reset]" message instead of the
+    generic "AI unavailable." Bare AgentUnavailable still works
+    as a catch-all for legacy callers."""
+
+
 class AgentPort(Protocol):
     """Provider-agnostic agent interface.
 

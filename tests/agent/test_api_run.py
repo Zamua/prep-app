@@ -13,8 +13,7 @@ from fastapi.testclient import TestClient
 
 from prep import agent as _agent_mod
 from prep.agent.fake import FakeAgent
-from prep.agent.port import AgentResult
-from prep.agent.usage import AgentUsageRepo, hash_token
+from prep.agent.port import AgentBudgetExhausted, AgentResult
 
 
 @pytest.fixture
@@ -33,13 +32,6 @@ def fake_agent(monkeypatch: pytest.MonkeyPatch) -> FakeAgent:
 def internal_token(monkeypatch: pytest.MonkeyPatch) -> str:
     token = "test-internal-secret"
     monkeypatch.setenv("PREP_INTERNAL_TOKEN", token)
-    return token
-
-
-@pytest.fixture
-def oauth_token(monkeypatch: pytest.MonkeyPatch) -> str:
-    token = "sk-ant-oat01-test-fake-oauth-token"
-    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", token)
     return token
 
 
@@ -98,37 +90,27 @@ def test_run_502_when_agent_unavailable(
     assert "error" in r.json()
 
 
-def test_run_logs_usage_keyed_on_token_hash(
-    client: TestClient,
-    fake_agent: FakeAgent,
-    internal_token: str,
-    oauth_token: str,
-    initialized_db: str,
+def test_run_429_with_kind_when_budget_exhausted(
+    client: TestClient, fake_agent: FakeAgent, internal_token: str
 ):
-    """Every successful call lands one row in agent_usage, keyed on
-    the sha256 of CLAUDE_CODE_OAUTH_TOKEN, with the adapter-reported
-    cost. user_login is null for worker calls."""
-    fake_agent.next_response = AgentResult(
-        text="ok",
-        model="claude-sonnet-4-6",
-        input_tokens=42,
-        output_tokens=8,
-        cost_usd=0.0123,
-    )
+    """AgentBudgetExhausted from the adapter (the SDK reported the
+    user hit their monthly allocation) → 429 + a `kind` field UI
+    can switch on to render the budget-specific message instead of
+    the generic 'AI unavailable'."""
+
+    async def _raise(*_args, **_kwargs):
+        raise AgentBudgetExhausted("monthly allocation exhausted")
+
+    fake_agent.run = _raise  # type: ignore[method-assign]
     r = client.post(
         "/api/agent/run",
-        json={"prompt": "hi"},
+        json={"prompt": "x"},
         headers={"X-Internal-Token": internal_token},
     )
-    assert r.status_code == 200
-
-    from datetime import datetime, timedelta, timezone
-
-    repo = AgentUsageRepo()
-    th = hash_token(oauth_token)
-    window = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(timespec="seconds")
-    assert repo.call_count(th, month_start_iso=window) == 1
-    assert abs(repo.monthly_cost(th, month_start_iso=window) - 0.0123) < 1e-9
+    assert r.status_code == 429
+    body = r.json()
+    assert body.get("kind") == "budget_exhausted"
+    assert "error" in body
 
 
 def test_run_passes_through_model_and_reasoning_overrides(

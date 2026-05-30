@@ -25,11 +25,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 
 from prep import agent as _agent_mod
 from prep.agent.port import AgentUnavailable
-from prep.agent.usage import AgentUsageRepo, hash_token
 
 logger = logging.getLogger(__name__)
 
@@ -41,26 +39,6 @@ __all__ = ["AgentUnavailable", "run_prompt", "run_prompt_async"]
 # as a wall-clock budget so a stalled provider surfaces a clean
 # AgentUnavailable instead of a generic timeout up-stack.
 _DEFAULT_TIMEOUT_S = 900.0
-
-
-def _record_usage(result, *, user_login: str | None = None) -> None:
-    """Append one agent_usage row. Best-effort; logs + swallows any
-    repo failure so a transient SQLite hiccup never breaks the
-    caller's workflow."""
-    token = (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip()
-    if not token:
-        return
-    try:
-        AgentUsageRepo().record(
-            token_hash=hash_token(token),
-            model=result.model,
-            input_tokens=result.input_tokens,
-            output_tokens=result.output_tokens,
-            cost_usd=result.cost_usd,
-            user_login=user_login,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("agent_usage record failed (non-fatal)")
 
 
 def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
@@ -83,5 +61,4 @@ async def run_prompt_async(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S
     (matches the legacy contract — service-layer error handling
     doesn't change)."""
     result = await _agent_mod.get_agent().run(prompt, timeout_s=timeout_s)
-    _record_usage(result)
     return result.text
