@@ -154,10 +154,18 @@
       if (!r.ok && r.type !== 'opaqueredirect' && r.status !== 0) {
         throw new Error('non-success: ' + r.status);
       }
+      const list = card.closest('.session-list');
+      const section = card.closest('section.recent-sessions');
       card.style.transition = 'opacity 180ms ease, transform 180ms ease';
       card.style.opacity = '0';
       card.style.transform = 'translateX(-1rem)';
-      setTimeout(() => card.remove(), 200);
+      setTimeout(() => {
+        card.remove();
+        // Empty-state cleanup: if this was the last card in its
+        // section, drop the whole section so the eyebrow header
+        // doesn't sit alone above an empty list.
+        if (list && list.children.length === 0 && section) section.remove();
+      }, 200);
     } catch (err) {
       form.submit();
     }
