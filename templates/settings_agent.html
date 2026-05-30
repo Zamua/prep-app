@@ -22,17 +22,10 @@
   <p class="agent-status" data-state="{{ 'on' if status.logged_in else 'off' }}">
     {% if status.logged_in %}
       {{ icon('check-circle', class_='icon icon-inline') }}
-      <strong>Connected</strong>
-      {% if status.email %} · {{ status.email }}{% endif %}
-      {% if status.subscription_type %} · {{ status.subscription_type }} subscription{% endif %}
-    {% elif status.kind == 'shell' %}
-      {{ icon('warning-circle', class_='icon icon-inline') }}
-      <strong>Managed by host CLI</strong> · this prep instance is configured
-      to call claude directly on the host (PREP_AGENT_BIN).
-      {% if status.reason %}<br><small>{{ status.reason }}</small>{% endif %}
+      <strong>Connected</strong> · in-process SDK
     {% elif status.kind == 'unconfigured' %}
       {{ icon('warning-circle', class_='icon icon-inline') }}
-      <strong>Not configured</strong> — neither PREP_AGENT_URL nor PREP_AGENT_BIN is set.
+      <strong>Not connected</strong> — paste a <code>claude setup-token</code> below to activate AI features.
     {% else %}
       {{ icon('warning-circle', class_='icon icon-inline') }}
       <strong>Not connected</strong>{% if status.reason %} · {{ status.reason }}{% endif %}
@@ -50,7 +43,7 @@
 {# Connect / disconnect controls only apply when the agent is an HTTP
    server we can talk to. Shell-agent setups manage auth on the host
    (keychain on mac, file on linux); this page can't drive that. #}
-{% if status.kind == 'http' and not status.logged_in %}
+{% if not status.logged_in %}
 <section class="agent-panel">
   <p class="section-eyebrow"><span>Connect Claude</span><span class="rule"></span></p>
   <ol class="agent-steps">
@@ -88,7 +81,32 @@
 </section>
 {% endif %}
 
-{% if status.kind == 'http' and status.logged_in %}
+{% if usage is defined and usage %}
+<section class="agent-panel agent-usage">
+  <p class="section-eyebrow"><span>Usage</span><span class="rule"></span></p>
+  <p class="agent-usage-summary">
+    <strong>≈ ${{ "%.2f"|format(usage.spent_usd) }}</strong>
+    of <strong>${{ "%.0f"|format(usage.budget_usd) }}</strong>
+    used this month
+    · <em>{{ usage.calls }} call{% if usage.calls != 1 %}s{% endif %}</em>
+  </p>
+  <div class="agent-usage-bar" aria-label="Monthly usage progress" role="progressbar"
+       aria-valuemin="0" aria-valuemax="100"
+       aria-valuenow="{{ usage.pct_used|round(0, 'floor') }}">
+    <span class="agent-usage-bar-fill"
+          style="width: {{ usage.pct_used|round(1) }}%"
+          data-pct="{{ usage.pct_used|round(0, 'floor') }}"></span>
+  </div>
+  <p class="agent-usage-note">
+    Per-token rollup, last 30 days. ${{ "%.2f"|format(usage.remaining_usd) }}
+    remaining against the configured budget. This is an estimate based on
+    cost data the SDK returns per call — the authoritative source is
+    <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener">claude.ai/settings/usage</a>.
+  </p>
+</section>
+{% endif %}
+
+{% if status.logged_in %}
 <section class="agent-panel">
   <p class="section-eyebrow"><span>Disconnect</span><span class="rule"></span></p>
   <p class="agent-disconnect-blurb">

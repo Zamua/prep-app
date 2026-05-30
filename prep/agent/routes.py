@@ -124,8 +124,52 @@ def settings_agent_view(request: Request, user: dict = Depends(current_user)):
     s = _refresh_agent_status()
     return templates.TemplateResponse(
         "settings_agent.html",
-        {"request": request, "status": s, "error": None, "flash": None},
+        {
+            "request": request,
+            "status": s,
+            "usage": _current_token_usage(),
+            "error": None,
+            "flash": None,
+        },
     )
+
+
+# Default Max-20x agent-SDK monthly credit allocation (USD). Surfaced
+# in the UI as the denominator on "≈ $X used of $Y this month". Make
+# configurable via PREP_AGENT_BUDGET_USD if you're on a different plan.
+_DEFAULT_BUDGET_USD = 200.0
+
+
+def _current_token_usage() -> dict | None:
+    """Return the usage rollup for the currently-configured token, or
+    None when nothing is configured yet. UI hides the panel when None.
+
+    The rollup is per-token-hash, not per-user — multiple prep users
+    sharing one token sum into one bucket. Cost is an adapter-side
+    estimate; the canonical source is claude.ai/settings/usage."""
+    from datetime import datetime, timedelta, timezone
+
+    from prep.agent.usage import AgentUsageRepo, hash_token
+
+    token = (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip()
+    if not token:
+        return None
+    th = hash_token(token)
+    # Rolling 30-day window. Anthropic's reset is calendar-month-based
+    # but the exact reset date isn't exposed, so 30d is the safer
+    # rolling proxy.
+    window_start = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat(timespec="seconds")
+    repo = AgentUsageRepo()
+    spent = repo.monthly_cost(th, month_start_iso=window_start)
+    calls = repo.call_count(th, month_start_iso=window_start)
+    budget = float(os.environ.get("PREP_AGENT_BUDGET_USD") or _DEFAULT_BUDGET_USD)
+    return {
+        "spent_usd": spent,
+        "calls": calls,
+        "budget_usd": budget,
+        "remaining_usd": max(0.0, budget - spent),
+        "pct_used": min(100.0, (spent / budget * 100.0) if budget > 0 else 0.0),
+    }
 
 
 @router.post("/settings/agent/connect", response_class=HTMLResponse)
