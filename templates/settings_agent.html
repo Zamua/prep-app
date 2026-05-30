@@ -83,21 +83,6 @@
 
 {% if status.logged_in %}
 <section class="agent-panel">
-  <p class="section-eyebrow"><span>Usage</span><span class="rule"></span></p>
-  <p class="agent-disconnect-blurb">
-    Your Claude subscription has a monthly Agent SDK credit pool
-    ($200 on Max 20x, $20 on Pro). When it's exhausted, AI features
-    in prep stop until the next monthly reset — manual flows keep
-    working. Check
-    <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener">claude.ai/settings/usage</a>
-    for your current balance — prep doesn't try to track it locally
-    (the allocation is per Anthropic account, which prep can't see).
-  </p>
-</section>
-
-{% endif %}
-{% if status.logged_in %}
-<section class="agent-panel">
   <p class="section-eyebrow"><span>Disconnect</span><span class="rule"></span></p>
   <p class="agent-disconnect-blurb">
     Wipes the OAuth token from this prep instance. AI features hide;
