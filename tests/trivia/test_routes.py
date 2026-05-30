@@ -402,6 +402,38 @@ def test_session_404_for_unknown_deck(client: TestClient, initialized_db: str):
     assert r.status_code == 404
 
 
+# ---- /trivia/session/<deck_name>/abandon -----------------------------
+
+
+def test_session_abandon_flips_active_to_abandoned(client: TestClient, initialized_db: str):
+    """User-initiated discard from the Continue strip. Active row flips
+    to status='abandoned'; subsequent list_active drops it."""
+    from prep.trivia.repo import TriviaSessionsRepo
+
+    deck_id, qids = _seed_n_trivia_questions(initialized_db, "geo", 3)
+    repo = TriviaSessionsRepo()
+    repo.start_or_resume(initialized_db, deck_id, queue=qids, done=[])
+    assert len(repo.list_active(initialized_db)) == 1
+
+    r = client.post("/trivia/session/geo/abandon", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].endswith("/")
+    assert len(repo.list_active(initialized_db)) == 0
+
+
+def test_session_abandon_is_idempotent_when_no_active(client: TestClient, initialized_db: str):
+    """No active session — POST still returns the canonical redirect.
+    Lets the JS-intercepted form be safely re-triggered without 4xx."""
+    _seed_n_trivia_questions(initialized_db, "geo", 1)
+    r = client.post("/trivia/session/geo/abandon", follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_session_abandon_404_for_unknown_deck(client: TestClient, initialized_db: str):
+    r = client.post("/trivia/session/nonexistent/abandon", follow_redirects=False)
+    assert r.status_code == 404
+
+
 # ---- /trivia/decks/<id>/interval -------------------------------------
 
 

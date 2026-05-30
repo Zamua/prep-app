@@ -375,6 +375,27 @@ async def trivia_session_answer(
     )
 
 
+@router.post("/trivia/session/{deck_name}/abandon")
+def trivia_session_abandon(
+    deck_name: str,
+    request: Request,
+    user: dict = Depends(current_user),
+):
+    """Abandon any active trivia mini-session for this (user, deck).
+    User-initiated discard from the index "Continue trivia" strip —
+    parity with /session/{sid}/abandon for SRS. Soft delete: row
+    flips to status='abandoned' and falls out of `list_active`,
+    cards already answered keep their verdict history. Redirects
+    to home; the JS on the index intercepts to do an optimistic
+    remove without the round-trip."""
+    uid = user["tailscale_login"]
+    deck_id = DeckRepo().find_id(uid, deck_name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    TriviaSessionsRepo().abandon_all_for_deck(uid, deck_id)
+    return responses.redirect(request, "/")
+
+
 @router.get("/trivia/{question_id}", response_class=HTMLResponse)
 def trivia_card(
     question_id: int,
