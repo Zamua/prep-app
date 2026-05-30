@@ -183,7 +183,7 @@ deploy-stag:
 	@# the `healthcheck:` blocks in docker-compose.yml). Surfaces boot
 	@# failures here instead of in an after-the-fact `make logs-stag`.
 	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
-	  docker compose --env-file deploy/staging.env -p stag up -d --build --wait
+	  docker compose --env-file deploy/staging.env -p stag up -d --build --wait --remove-orphans
 
 deploy-prod:
 	@if [ -z "$(DEPLOY_PROD_TAG)" ]; then \
@@ -199,7 +199,7 @@ deploy-prod:
 	    --project-directory $(DEPLOY_BUILD_DIR) \
 	    --env-file deploy/prod.env \
 	    -p prod \
-	    up -d --build --wait
+	    up -d --build --wait --remove-orphans
 	git worktree remove --force $(DEPLOY_BUILD_DIR)
 
 promote:
