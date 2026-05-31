@@ -178,7 +178,7 @@ def generate_batch(
     """
     existing = trivia_repo.existing_prompts(deck_id)
     prompt = _build_prompt(topic, batch_size, existing)
-    stdout = run_prompt(prompt)
+    stdout = run_prompt(prompt, user_id=user_id)
 
     try:
         pairs = _parse_qa_pairs(stdout)
@@ -390,7 +390,12 @@ _GRADE_TIMEOUT_S = 12.0
 
 
 async def claude_grade(
-    *, prompt: str, expected: str, given: str, current_regex: str | None = None
+    *,
+    prompt: str,
+    expected: str,
+    given: str,
+    current_regex: str | None = None,
+    user_id: str | None = None,
 ) -> dict:
     """Async claude-graded verdict. Returns
     `{"correct": bool, "feedback": str, "regex_update": str | None}`.
@@ -420,7 +425,7 @@ async def claude_grade(
     }
     t0 = time.monotonic()
     try:
-        out = await run_prompt_async(prompt_text, timeout_s=_GRADE_TIMEOUT_S)
+        out = await run_prompt_async(prompt_text, user_id=user_id, timeout_s=_GRADE_TIMEOUT_S)
     except AgentUnavailable as e:
         elapsed = time.monotonic() - t0
         logger.warning(
@@ -510,7 +515,7 @@ def grade_answer(*, expected: str, given: str) -> bool:
 # ---- Grading dispatch (deterministic + claude tie-breaker) -------------
 
 
-async def grade_with_fallback(q, user_answer: str) -> dict:
+async def grade_with_fallback(q, user_answer: str, *, user_id: str | None = None) -> dict:
     """Dispatch through three layers, fastest first:
 
     1. **Stored regex** — if `q.answer_regex` is set and matches
@@ -545,6 +550,7 @@ async def grade_with_fallback(q, user_answer: str) -> dict:
             expected=q.answer,
             given=user_answer,
             current_regex=q.answer_regex,
+            user_id=user_id,
         )
 
     det_correct = grade_answer(expected=q.answer, given=user_answer)
@@ -561,6 +567,7 @@ async def grade_with_fallback(q, user_answer: str) -> dict:
             expected=q.answer,
             given=user_answer,
             current_regex=q.answer_regex,
+            user_id=user_id,
         )
     return {"correct": False, "feedback": None, "regex_update": None}
 

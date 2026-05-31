@@ -42,7 +42,7 @@ def test_generate_batch_inserts_pairs(monkeypatch, fixtures):
         {"q": "Capital of Japan?", "a": "Tokyo"},
         {"q": "Capital of Egypt?", "a": "Cairo"}
     ]"""
-    monkeypatch.setattr(svc, "run_prompt", lambda _p: fixed)
+    monkeypatch.setattr(svc, "run_prompt", lambda _p, **_kw: fixed)
     out = svc.generate_batch(
         user_id=fixtures["user"],
         deck_id=fixtures["deck_id"],
@@ -59,7 +59,7 @@ def test_generate_batch_inserts_pairs(monkeypatch, fixtures):
 def test_generate_batch_strips_code_fences(monkeypatch, fixtures):
     """Claude sometimes wraps JSON in ```json — we tolerate it."""
     fixed = '```json\n[{"q": "x?", "a": "y"}]\n```'
-    monkeypatch.setattr(svc, "run_prompt", lambda _p: fixed)
+    monkeypatch.setattr(svc, "run_prompt", lambda _p, **_kw: fixed)
     out = svc.generate_batch(
         user_id=fixtures["user"],
         deck_id=fixtures["deck_id"],
@@ -74,7 +74,7 @@ def test_generate_batch_strips_code_fences(monkeypatch, fixtures):
 def test_generate_batch_skips_dupes(monkeypatch, fixtures):
     """Re-running with the same prompts → all duplicates, none inserted."""
     fixed = '[{"q": "Capital of France?", "a": "Paris"}]'
-    monkeypatch.setattr(svc, "run_prompt", lambda _p: fixed)
+    monkeypatch.setattr(svc, "run_prompt", lambda _p, **_kw: fixed)
     svc.generate_batch(
         user_id=fixtures["user"],
         deck_id=fixtures["deck_id"],
@@ -102,7 +102,7 @@ def test_generate_batch_skips_invalid_entries(monkeypatch, fixtures):
         {"q": "valid?", "a": ""},
         {"q": "ok?", "a": "yes"}
     ]"""
-    monkeypatch.setattr(svc, "run_prompt", lambda _p: fixed)
+    monkeypatch.setattr(svc, "run_prompt", lambda _p, **_kw: fixed)
     out = svc.generate_batch(
         user_id=fixtures["user"],
         deck_id=fixtures["deck_id"],
@@ -118,7 +118,7 @@ def test_generate_batch_skips_invalid_entries(monkeypatch, fixtures):
 def test_generate_batch_raises_on_unparseable(monkeypatch, fixtures):
     """Claude returns prose only → AgentUnavailable, not silent
     write of garbage."""
-    monkeypatch.setattr(svc, "run_prompt", lambda _p: "Sorry, I can't help with that.")
+    monkeypatch.setattr(svc, "run_prompt", lambda _p, **_kw: "Sorry, I can't help with that.")
     with pytest.raises(AgentUnavailable):
         svc.generate_batch(
             user_id=fixtures["user"],

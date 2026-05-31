@@ -41,24 +41,32 @@ __all__ = ["AgentUnavailable", "run_prompt", "run_prompt_async"]
 _DEFAULT_TIMEOUT_S = 900.0
 
 
-def run_prompt(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
+def run_prompt(
+    prompt: str, *, user_id: str | None = None, timeout_s: float = _DEFAULT_TIMEOUT_S
+) -> str:
     """Sync facade over the async adapter. Wraps `asyncio.run`, which
     creates a fresh event loop — must not be called from an existing
     one. The notify.scheduler tick is the only legit caller today;
     it runs the trivia refill under `asyncio.to_thread`, so this
     wrapper executes on a worker thread with no active loop.
 
+    `user_id` selects the per-user BYOK adapter when present (Anthropic
+    API key) and falls back to the subscription OAuth token when None
+    or the user has no BYOK row. See `prep.agent.selector`.
+
     Caught the hard way at 19:30 UTC on 2026-05-07 (pre-migration):
     a request-path call blocked the event loop until the upstream
     timeout fired, taking down all request handling. The async
     variant (run_prompt_async) is the request-path safe option."""
-    return asyncio.run(run_prompt_async(prompt, timeout_s=timeout_s))
+    return asyncio.run(run_prompt_async(prompt, user_id=user_id, timeout_s=timeout_s))
 
 
-async def run_prompt_async(prompt: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S) -> str:
-    """Async facade. Calls the configured `AgentPort` and returns the
-    response text. Raises `AgentUnavailable` on adapter failure
-    (matches the legacy contract — service-layer error handling
-    doesn't change)."""
-    result = await _agent_mod.get_agent().run(prompt, timeout_s=timeout_s)
+async def run_prompt_async(
+    prompt: str, *, user_id: str | None = None, timeout_s: float = _DEFAULT_TIMEOUT_S
+) -> str:
+    """Async facade. Calls the user's configured `AgentPort` (BYOK
+    first, subscription OAuth fallback) and returns the response
+    text. Raises `AgentUnavailable` on adapter failure (matches the
+    legacy contract — service-layer error handling doesn't change)."""
+    result = await _agent_mod.get_agent(user_id).run(prompt, timeout_s=timeout_s)
     return result.text

@@ -166,7 +166,9 @@ def test_generate_route_inserts_via_mocked_agent(
     agent. We monkey-patch the agent call to return canned JSON."""
     user = initialized_db
     deck_id = DeckRepo().create(user, "history", context_prompt="World War II turning points")
-    monkeypatch.setattr(svc, "run_prompt", lambda _p: '[{"q": "Year of D-Day?", "a": "1944"}]')
+    monkeypatch.setattr(
+        svc, "run_prompt", lambda _p, **_kw: '[{"q": "Year of D-Day?", "a": "1944"}]'
+    )
     r = client.post(f"/trivia/decks/{deck_id}/generate", follow_redirects=False)
     assert r.status_code == 200
     # The stub redirect page mentions the count.

@@ -55,7 +55,7 @@ func (a *Activities) PlanCards(ctx context.Context, in shared.PlanCardsInput) ([
 	}()
 
 	prompt := buildPlanPrompt(in)
-	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt, UserID: in.UserID})
 	if err != nil {
 		return nil, fmt.Errorf("agent plan failed: %w", err)
 	}
@@ -248,7 +248,7 @@ Output ONLY the JSON object.`,
 		optLanguageHint(in.Item),
 		in.Item.Type)
 
-	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt, UserID: in.UserID})
 	if err != nil {
 		return shared.Card{}, fmt.Errorf("agent expand failed: %w", err)
 	}

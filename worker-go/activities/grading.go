@@ -110,7 +110,7 @@ Output ONLY the JSON object.`,
 	if a.Cfg.Agent == nil {
 		return shared.Verdict{}, noAgentErr("GradeFreeText")
 	}
-	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt, UserID: in.UserID})
 	if err != nil {
 		return shared.Verdict{}, fmt.Errorf("agent grade failed: %w", err)
 	}

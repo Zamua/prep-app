@@ -110,7 +110,7 @@ func (a *Activities) GenerateTriviaBatch(ctx context.Context, in shared.Generate
 	}
 	prompt := fmt.Sprintf(_triviaBatchPromptTemplate, batch, strings.TrimSpace(in.Topic), existingBlock)
 
-	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt, UserID: in.UserID})
 	if err != nil {
 		return nil, fmt.Errorf("agent trivia gen failed: %w", err)
 	}

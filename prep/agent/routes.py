@@ -42,11 +42,18 @@ class _RunRequest(BaseModel):
     """Wire format matching worker-go/agent.RunInput so the worker can
     point at prep with no client-side change. session_id / resume_id
     are accepted-but-ignored — the SDK port doesn't currently expose
-    multi-turn sessions for our one-shot callers."""
+    multi-turn sessions for our one-shot callers.
+
+    `user_id` is plumbed end-to-end so the selector can route to the
+    user's BYOK key when present. Optional for backwards compat (an
+    older worker without the field falls through to the subscription
+    OAuth adapter), but any new caller should send it.
+    """
 
     prompt: str
     session_id: str | None = None
     resume_id: str | None = None
+    user_id: str | None = None
     # Optional escape hatches; callers normally omit and inherit the
     # adapter's defaults (Sonnet 4.6 + medium reasoning effort).
     model: str | None = None
@@ -69,10 +76,11 @@ async def api_agent_run(
     body: _RunRequest,
     _gate: None = Depends(_require_internal_token),
 ):
-    """Execute a single prompt via the SDK adapter, log usage, return
-    {stdout} (matching the legacy agent-server response shape so the
-    Go worker doesn't notice it's hitting a different host)."""
-    adapter = _agent_mod.get_agent()
+    """Execute a single prompt via the user's configured adapter (BYOK
+    first, subscription OAuth fallback), log usage, return {stdout}
+    (matching the legacy agent-server response shape so the Go
+    worker doesn't notice it's hitting a different host)."""
+    adapter = _agent_mod.get_agent(body.user_id)
     try:
         result = await adapter.run(body.prompt, model=body.model, reasoning=body.reasoning)
     except AgentBudgetExhausted as e:

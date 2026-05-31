@@ -324,7 +324,7 @@ async def trivia_session_answer(
         verdict: dict = {"correct": False, "feedback": None, "regex_update": None}
         given = ""
     else:
-        verdict = await grade_with_fallback(q, answer)
+        verdict = await grade_with_fallback(q, answer, user_id=uid)
         correct = verdict["correct"]
         given = answer
 
@@ -518,7 +518,7 @@ async def trivia_answer(
     if q is None:
         raise HTTPException(404, "question not found")
 
-    verdict = await grade_with_fallback(q, answer)
+    verdict = await grade_with_fallback(q, answer, user_id=user["tailscale_login"])
     correct = verdict["correct"]
     trivia.mark_answered(question_id, correct=correct)
     regex_updated = False

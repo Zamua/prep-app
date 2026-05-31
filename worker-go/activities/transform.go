@@ -70,7 +70,7 @@ func (a *Activities) ComputeTransform(ctx context.Context, in shared.ComputeTran
 	if a.Cfg.Agent == nil {
 		return shared.TransformPlan{}, noAgentErr("ComputeTransform")
 	}
-	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt})
+	out, err := a.Cfg.Agent.Run(ctx, agent.RunInput{Prompt: prompt, UserID: in.UserID})
 	if err != nil {
 		return shared.TransformPlan{}, fmt.Errorf("agent transform failed: %w", err)
 	}

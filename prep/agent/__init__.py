@@ -25,35 +25,41 @@ from prep.agent.status import (
     status,
 )
 
-# Process-singleton adapter, lazily constructed on first get_agent()
-# call. Late construction avoids paying the sdk_adapter module-import
-# cost (which transitively pulls in claude_agent_sdk's anyio + mcp +
-# pydantic_settings + sse_starlette deps) just because something
-# touched `prep.agent`. Tests that swap a FakeAgent via set_agent()
-# never trigger the SDK adapter import at all.
-_agent_instance: AgentPort | None = None
+# Test-injected override. Production code goes through
+# `agent_for_user(user_id)` → prep.agent.selector, which consults
+# BYOK + subscription-token in precedence and returns the right
+# adapter. `set_agent()` skips that selection entirely; tests use it
+# to inject a FakeAgent without touching DB or env.
+_agent_override: AgentPort | None = None
 
 
-def get_agent() -> AgentPort:
-    """Return the current process-level `AgentPort` implementation.
+def get_agent(user_id: str | None = None) -> AgentPort:
+    """Return the `AgentPort` for this user's AI call.
 
-    Constructs the default SDK adapter on first call (late-import so
-    test paths that always set_agent(FakeAgent()) never load the
-    real SDK)."""
-    global _agent_instance
-    if _agent_instance is None:
-        from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
+    Pass the calling user's ID so per-user BYOK keys are honored.
+    With `user_id=None` the selector skips BYOK and falls back to
+    the deploy-wide subscription OAuth token. See
+    `prep.agent.selector.agent_for_user` for the full precedence.
 
-        _agent_instance = ClaudeAgentSdkAdapter()
-    return _agent_instance
+    Tests can `set_agent(FakeAgent())` to override regardless of
+    user / DB / env — that path bypasses the selector entirely.
+    """
+    if _agent_override is not None:
+        return _agent_override
+    from prep.agent.selector import agent_for_user
+
+    return agent_for_user(user_id)
 
 
-def set_agent(impl: AgentPort) -> None:
-    """Replace the singleton. Intended for tests only — production
-    code should leave the default in place. Pair with a fixture
-    that restores the original after each test."""
-    global _agent_instance
-    _agent_instance = impl
+def set_agent(impl: AgentPort | None) -> None:
+    """Replace the agent globally — tests only.
+
+    Pass None to restore the default selector-driven behavior. The
+    BYOK-then-subscription precedence in `selector.agent_for_user`
+    is the real entry point in production.
+    """
+    global _agent_override
+    _agent_override = impl
 
 
 def __getattr__(name: str):

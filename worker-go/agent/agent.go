@@ -48,6 +48,12 @@ type RunInput struct {
 	Prompt    string `json:"prompt"`
 	SessionID string `json:"session_id,omitempty"`
 	ResumeID  string `json:"resume_id,omitempty"`
+	// UserID is the deck/question owner — plumbed end-to-end so the
+	// prep-side selector can route to the user's BYOK API key when
+	// one is configured. Omitting it (older callers) falls through to
+	// the deploy-wide subscription OAuth token, preserving the
+	// pre-BYOK behavior.
+	UserID string `json:"user_id,omitempty"`
 }
 
 // RunOutput is whatever the agent printed to stdout, byte-for-byte.
