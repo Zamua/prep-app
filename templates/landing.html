@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}prep · a commonplace book{% endblock %}
+{% block page_class %}landing{% endblock %}
+{% block header_extra %}
+  {# Sign-in chip in the masthead — mirrors the user-indicator slot on
+     the authed dashboard so the layout doesn't shift when someone
+     signs in. Only rendered when the active provider has a hosted
+     sign-in URL (Clerk on the public deploy; Tailscale's None
+     skips the chip entirely). #}
+  {% if sign_in_url %}
+    <a class="btn btn-quiet masthead-cta" href="{{ sign_in_url }}">Sign in</a>
+  {% endif %}
+{% endblock %}
+{% block main %}
+<section class="prelude landing-hero">
+  <p class="eyebrow">prep</p>
+  <h1 class="display">A standing library<br><em>of questions</em>.</h1>
+  <p class="lede">
+    Spaced-repetition flashcards for the things you want to keep —
+    a topic in, a deck out, then a forgetting curve that re-surfaces
+    each card right before you'd lose it.
+  </p>
+  {% if sign_in_url %}
+    <p class="landing-cta-row">
+      <a class="btn btn-primary" href="{{ sign_in_url }}">Sign in to start</a>
+    </p>
+  {% endif %}
+</section>
+
+<section class="landing-grid">
+  <article class="landing-tile">
+    <p class="section-eyebrow"><span>How it works</span><hr></p>
+    <h2>Describe it, study it.</h2>
+    <p>
+      Type a topic — <em>capitals of every country</em>, <em>the Krebs cycle</em>,
+      <em>Postgres MVCC</em> — and an AI agent plans a deck for you to
+      review and accept. Or write the cards yourself. Either way,
+      what comes out is yours.
+    </p>
+  </article>
+
+  <article class="landing-tile">
+    <p class="section-eyebrow"><span>The schedule</span><hr></p>
+    <h2>10m · 1d · 3d · 7d · 14d · 30d.</h2>
+    <p>
+      Every card walks up a ladder of intervals as you get it right
+      and drops back down when you miss. The ones you know fade
+      out of the way; the ones you don't quietly come back around.
+    </p>
+  </article>
+
+  <article class="landing-tile">
+    <p class="section-eyebrow"><span>Bring your own key</span><hr></p>
+    <h2>Your model, your bill.</h2>
+    <p>
+      Generation, grading, and transforms run against an API key
+      you supply. No usage caps imposed by us, no shared pool to
+      throttle against, and your prompts and answers never leave
+      the path between you and the model you chose.
+    </p>
+  </article>
+
+  <article class="landing-tile">
+    <p class="section-eyebrow"><span>On every device</span><hr></p>
+    <h2>Installs as an app.</h2>
+    <p>
+      Open it in a browser, add to home screen, and prep behaves
+      like a native app — offline-tolerant, push-notified when a
+      stack of cards comes due, sized for one-thumb study on the
+      train.
+    </p>
+  </article>
+</section>
+
+{% if sign_in_url %}
+<section class="landing-foot">
+  <p class="landing-foot-text">
+    Free while we're in early access. No credit card to start.
+  </p>
+  <p class="landing-cta-row">
+    <a class="btn btn-primary" href="{{ sign_in_url }}">Sign in</a>
+    <a class="btn btn-quiet" href="{{ sign_in_url }}">Create an account</a>
+  </p>
+</section>
+{% endif %}
+{% endblock %}

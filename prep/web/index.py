@@ -17,7 +17,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from prep.auth import current_user
+from prep.auth.identity import optional_current_user
+from prep.auth.providers import get_provider
 from prep.decks.repo import DeckRepo
 from prep.study.repo import SessionRepo
 from prep.trivia.repo import TriviaQueueRepo, TriviaSessionsRepo
@@ -38,14 +39,30 @@ def healthz() -> PlainTextResponse:
 @router.get("/", response_class=HTMLResponse)
 def index(
     request: Request,
-    user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(DeckRepo),
     session_repo: SessionRepo = Depends(SessionRepo),
 ):
-    """Home page: the user's decks plus the last five active study
-    sessions across all decks. The repo orders pinned-first (recency
-    DESC) then alphabetical; we split into pinned + unpinned groups
-    so the template can render them as separate sections."""
+    """Home page.
+
+    Unauthenticated visitors get the marketing landing page (sells
+    the product, points at sign-in). Authenticated users get the
+    dashboard — their decks plus the last five active study sessions
+    across all decks (pinned-first ordering split into two groups).
+
+    Branching on auth state at the SAME URL means link-sharing works
+    naturally — `prepcards.app` is the canonical entrypoint whether
+    you're a first-time visitor or a returning user."""
+    user = optional_current_user(request)
+    if user is None:
+        urls = get_provider().urls()
+        return templates.TemplateResponse(
+            "landing.html",
+            {
+                "request": request,
+                "user": None,
+                "sign_in_url": urls.sign_in,
+            },
+        )
     uid = user["tailscale_login"]
     summaries = deck_repo.list_summaries(uid)
     recents = session_repo.list_recent(uid, limit=5)

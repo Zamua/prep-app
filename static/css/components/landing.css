@@ -1,0 +1,82 @@
+/* Landing page — rendered at `/` when no user is signed in.
+ * Reuses the existing prelude/eyebrow/display/lede chrome but adds a
+ * 2-column value-prop grid that collapses to a single column on
+ * narrow viewports. Stays minimal so the page reads like the rest of
+ * prep (paper + ink + Fraunces) rather than a generic marketing page.
+ */
+
+.page-landing .folio {
+  padding-block: 2rem 4rem;
+}
+
+.landing-hero {
+  margin-block-end: 3rem;
+}
+
+.landing-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 1.75rem;
+}
+
+/* Two-up grid. The .landing-tile carries its own card chrome so it
+ * doesn't depend on other components' selectors. */
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-block-end: 3rem;
+}
+
+.landing-tile {
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 1.75rem 1.5rem;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.landing-tile h2 {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 36, "SOFT" 50;
+  font-weight: 420;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--ink);
+}
+.landing-tile p {
+  color: var(--ink-soft);
+  line-height: 1.55;
+  margin: 0;
+  font-size: 0.98rem;
+}
+.landing-tile em { color: var(--quill); font-style: italic; }
+
+/* Footer band — repeats the CTAs after the value props so a long-
+ * scrolling reader doesn't have to scroll back up to find the button. */
+.landing-foot {
+  margin-block-start: 1.5rem;
+  padding-block-start: 2rem;
+  border-block-start: 1px solid var(--rule);
+  text-align: center;
+}
+.landing-foot .landing-cta-row {
+  justify-content: center;
+}
+.landing-foot-text {
+  color: var(--ink-mute);
+  font-style: italic;
+  margin: 0;
+}
+
+.masthead-cta {
+  /* Compact pill that sits in the masthead slot where the user-chip
+   * lives for authed users — keeps the header's right edge balanced. */
+  padding-block: 0.45rem;
+  padding-inline: 0.95rem;
+  min-height: 2.1rem;
+  font-size: 0.92rem;
+}

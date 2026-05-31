@@ -18,4 +18,7 @@
   .qcard { padding: 1rem 1.05rem; }
   .study-actions > .btn,
   .study-actions > form { min-width: 100%; }
+  .landing-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .landing-tile { padding: 1.35rem 1.2rem; }
+  .landing-tile h2 { font-size: 1.25rem; }
 }

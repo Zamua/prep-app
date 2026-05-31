@@ -33,9 +33,20 @@ def current_user(request: Request) -> dict:
     DB row on `request.state.user` for the Jinja context_processor
     in app.py to surface to every template.
     """
+    user = optional_current_user(request)
+    if user is None:
+        raise HTTPException(401, "not authenticated")
+    return user
+
+
+def optional_current_user(request: Request) -> dict | None:
+    """Variant of `current_user` that returns None for unauthenticated
+    requests instead of raising 401. Used by routes that have a
+    public branch (the landing page) AND a signed-in branch (the
+    dashboard) — same URL, different render."""
     resolved = get_provider().resolve(request)
     if not resolved:
-        raise HTTPException(401, "not authenticated")
+        return None
     user = UserRepo().upsert(
         external_id=resolved.external_id,
         email=resolved.email,

@@ -20,10 +20,14 @@ def test_index_returns_200_for_default_user(client: TestClient):
     assert "<html" in r.text.lower()
 
 
-def test_index_401s_when_no_identity(env: None, monkeypatch):
-    """With PREP_DEFAULT_USER unset and no Tailscale headers, the app
-    must refuse the request. This is the fundamental auth invariant —
-    it should hold across any refactor."""
+def test_index_renders_landing_when_no_identity(env: None, monkeypatch):
+    """With PREP_DEFAULT_USER unset and no Tailscale headers, `/`
+    renders the public marketing landing instead of 401-ing. The
+    auth invariant moved to protected routes (see
+    `test_protected_route_401s_when_no_identity` below) — the home
+    URL has to work for first-time visitors so they see what prep
+    is before signing in.
+    """
     monkeypatch.delenv("PREP_DEFAULT_USER", raising=False)
 
     import importlib
@@ -38,6 +42,29 @@ def test_index_401s_when_no_identity(env: None, monkeypatch):
 
     c = TestClient(app_mod.app)
     r = c.get("/")
+    assert r.status_code == 200
+    # Marketing copy lives in the landing template, not the dashboard.
+    assert "standing library" in r.text.lower()
+
+
+def test_protected_route_401s_when_no_identity(env: None, monkeypatch):
+    """The fundamental auth invariant — non-public routes still refuse
+    an identity-less request. /notify/ has always required
+    `current_user` and is a stable witness for the rule."""
+    monkeypatch.delenv("PREP_DEFAULT_USER", raising=False)
+
+    import importlib
+
+    from prep.infrastructure import db as db_mod
+
+    importlib.reload(db_mod)
+
+    from prep import app as app_mod
+
+    importlib.reload(app_mod)
+
+    c = TestClient(app_mod.app)
+    r = c.get("/notify", follow_redirects=False)
     assert r.status_code == 401
 
 

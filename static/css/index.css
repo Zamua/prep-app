@@ -58,4 +58,5 @@
 @import "./components/trivia-card.css" layer(components);
 @import "./components/session-summary.css" layer(components);
 @import "./components/notify-log.css" layer(components);
+@import "./components/landing.css" layer(components);
 @import "./components/mobile.css" layer(components);
