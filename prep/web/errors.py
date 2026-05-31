@@ -16,7 +16,7 @@ import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from prep.web.templates import templates
@@ -25,7 +25,8 @@ _ERROR_COPY = {
     400: ("Bad request.", "Something in that URL didn't quite parse."),
     401: (
         "Not signed in.",
-        "prep authenticates via Tailscale Serve — open this page through your tailnet so the server can read your Tailscale identity. "
+        "prep needs to know who you are. On the public deploy that's a sign-in flow; "
+        "on the tailnet shape it's the Tailscale-User-Login header from the proxy. "
         "For local development, set PREP_DEFAULT_USER (the make dev shim does this automatically).",
     ),
     403: ("Forbidden.", "That's not yours to look at."),
@@ -86,6 +87,19 @@ def register(app: FastAPI) -> None:
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         if _wants_json(request):
             return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        # 401 + active provider has a sign-in URL → redirect there
+        # instead of rendering the "Not signed in" page. On the public
+        # deploy that's Clerk's hosted UI; on Tailscale (sign_in=None)
+        # we fall through to the friendly error page as before.
+        if exc.status_code == 401:
+            try:
+                from prep.auth.providers import get_provider
+
+                sign_in = get_provider().urls().sign_in
+            except Exception:  # noqa: BLE001 — never break error rendering on auth misconfig
+                sign_in = None
+            if sign_in:
+                return RedirectResponse(sign_in, status_code=303)
         return _render_error(request, exc.status_code, exc.detail)
 
     @app.exception_handler(RequestValidationError)
