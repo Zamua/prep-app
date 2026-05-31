@@ -11,14 +11,21 @@
   <h1 class="display">Push&nbsp;<em>me</em>&nbsp;a question.</h1>
   <p class="lede">
     Tell prep what to quiz you on, then pick how often you want to see
-    a card. Claude generates a batch up front, the scheduler pings you
-    on the interval, you tap to answer in seconds. Cards rotate
-    forever; new batches drop in when you've cycled through.
+    a card. The scheduler pings you on the interval, you tap to answer
+    in seconds. {% if agent_available %}With an AI agent configured, a fresh batch is generated up front and new batches drop in as you cycle through.{% else %}Add cards yourself, or <a href="{{ request.scope.get('root_path','') }}/settings/agent">configure an AI agent</a> to have batches generated for you.{% endif %}
   </p>
 </section>
 
 {% if error %}
-<p class="form-error">{{ error }}</p>
+<p class="form-error">{{ error|safe }}</p>
+{% endif %}
+
+{% if not agent_available %}
+<p class="form-hint" style="border:1px solid var(--rule); border-radius:8px; padding:0.9rem 1rem; color:var(--ink-soft);">
+  No AI agent is configured, so prep won't generate a starter batch.
+  The deck is created empty and you can add cards manually from the
+  deck page. <a href="{{ request.scope.get('root_path','') }}/settings/agent">Set up an agent</a> if you'd like AI-generated batches.
+</p>
 {% endif %}
 
 <form method="post" action="{{ request.scope.get('root_path','') }}/decks/new/trivia" class="deck-new-form" autocomplete="off" data-submit-pending>
@@ -34,11 +41,10 @@
   <label class="form-field">
     <span class="form-label">Topic</span>
     <textarea name="topic" rows="6" maxlength="8000"
-              placeholder="What should claude quiz you on? Be specific: 'world capitals', 'Rust ownership rules', '1990s NBA finals MVPs'. The more focused, the better the questions."
+              placeholder="What should the deck quiz you on? Be specific: 'world capitals', 'Rust ownership rules', '1990s NBA finals MVPs'. The more focused, the better the questions."
               required>{{ topic_value }}</textarea>
     <span class="form-hint">
-      Free-form. Claude reads this and generates 25 short-answer
-      questions per batch. URLs are fine.
+      Free-form. Describes what this deck is for{% if agent_available %} — and the AI uses it to generate 25 short-answer questions per batch{% endif %}. URLs are fine.
     </span>
   </label>
 
@@ -59,7 +65,7 @@
 
   <div class="study-actions deck-new-actions">
     <button type="submit" class="btn btn-primary" id="trivia-submit"
-            data-pending-label="Generating 25 questions…">
+            data-pending-label="{% if agent_available %}Generating 25 questions…{% else %}Creating deck…{% endif %}">
       Create trivia deck
     </button>
     <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/decks/new">Cancel</a>

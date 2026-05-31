@@ -234,6 +234,42 @@ def test_decks_new_trivia_creates_deck_and_starts_workflow(
     assert TriviaQueueRepo().pick_next_for_deck(geo.id) is None
 
 
+def test_decks_new_trivia_redirects_to_deck_page_when_no_agent(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """Without an AI agent configured the trivia route creates an
+    empty deck and bounces the user straight to /deck/<name> where
+    they can add cards manually. The workflow is NOT started — there's
+    nothing to generate."""
+    import prep.agent
+    from prep import temporal_client as _tc
+
+    prep.agent.is_available = False
+
+    called = False
+
+    async def fake_start(**kwargs):
+        nonlocal called
+        called = True
+        return _tc.StartResult(workflow_id="should-not-fire", run_id="r")
+
+    monkeypatch.setattr(_tc, "start_trivia_generate", fake_start)
+    r = client.post(
+        "/decks/new/trivia",
+        data={
+            "name": "manual-only",
+            "topic": "anything",
+            "notification_interval_minutes": "30",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"].endswith("/deck/manual-only")
+    assert called is False
+    # Deck row still landed.
+    assert any(d.name == "manual-only" for d in DeckRepo().list_trivia_decks())
+
+
 # ---- /trivia/session/<deck_name> --------------------------------------
 
 

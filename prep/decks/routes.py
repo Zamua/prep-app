@@ -334,11 +334,12 @@ async def deck_new_srs_create(
     if action == "plan":
         if not _agent_mod.is_available:
             return rerender(
-                "Plan & generate needs an AI agent. Set PREP_AGENT_URL or PREP_AGENT_BIN, "
-                "or pick 'Create empty deck' instead."
+                "Plan & generate needs an AI agent. Configure one on the "
+                "agent settings page (/settings/agent), or pick "
+                "'Create empty deck' to add cards yourself."
             )
         if not context_prompt:
-            return rerender("Plan & generate needs a description for claude to plan against.")
+            return rerender("Plan & generate needs a description for the AI to plan against.")
 
     deck_id = service.create_deck(deck_repo, uid, clean, context_prompt or None)
 
@@ -410,12 +411,9 @@ async def deck_new_trivia_create(
     if len(topic) > _MAX_CONTEXT_PROMPT_CHARS:
         return rerender(f"Topic is too long ({len(topic)} chars; max {_MAX_CONTEXT_PROMPT_CHARS}).")
     if not topic:
-        return rerender("Topic is required — claude reads it to generate questions.")
-
-    if not _agent_mod.is_available:
         return rerender(
-            "Trivia decks need an AI agent for the initial batch. "
-            "Set PREP_AGENT_URL or PREP_AGENT_BIN."
+            "Topic is required — it describes what the deck is about, "
+            "and the AI uses it later if you configure one."
         )
 
     try:
@@ -426,7 +424,16 @@ async def deck_new_trivia_create(
         return rerender("Notification interval must be 1–720 minutes.")
 
     deck_id = deck_repo.create_trivia(uid, clean, topic=topic, interval_minutes=interval)
-    # Kick off the workflow that does the actual claude call + per-card
+
+    # AI is optional. When no agent is configured, create the deck and
+    # send the user to the deck page — they can add cards manually
+    # there (the existing /trivia/decks/<id>/manual-add path). When an
+    # agent IS configured, kick off the batch-generation workflow and
+    # redirect to the polling page.
+    if not _agent_mod.is_available:
+        return responses.redirect(request, f"/deck/{clean}")
+
+    # Kick off the workflow that does the actual AI call + per-card
     # inserts. Returns immediately — UI redirects to a polling page.
     try:
         res = await temporal_client.start_trivia_generate(
