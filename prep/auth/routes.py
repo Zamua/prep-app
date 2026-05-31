@@ -52,6 +52,66 @@ def sign_out(request: Request):
     return RedirectResponse(urls.sign_out, status_code=303)
 
 
+@router.get("/_debug/auth")
+def debug_auth(request: Request):
+    """Diagnostic endpoint — does NOT touch the DB, just reports what
+    the active provider sees on this request. Useful when sign-in
+    completes but the user is bounced back to the landing page —
+    answer is almost always 'cookie not present' or 'JWT verify
+    failed'.
+
+    Returns JSON; safe to leave deployed (no secrets, only request
+    metadata about the caller's own session)."""
+    provider = get_provider()
+    cookie_header = request.headers.get("cookie") or ""
+    cookie_names = sorted(
+        {c.split("=", 1)[0].strip() for c in cookie_header.split(";") if c.strip()}
+    )
+    has_session_cookie = "__session" in cookie_names
+    has_auth_header = bool(request.headers.get("authorization"))
+
+    out: dict = {
+        "provider": provider.name,
+        "cookie_names": cookie_names,
+        "has_session_cookie": has_session_cookie,
+        "has_authorization_header": has_auth_header,
+        "host": request.headers.get("host"),
+        "referer": request.headers.get("referer"),
+    }
+
+    if provider.name == "clerk":
+        try:
+            from clerk_backend_api import AuthenticateRequestOptions
+
+            class _Adapter:
+                def __init__(self, h):
+                    self.headers = h
+
+            headers = {}
+            for k, v in request.headers.items():
+                headers[k] = v
+                headers[k.lower()] = v
+            state = provider._sdk.authenticate_request(  # type: ignore[attr-defined]
+                _Adapter(headers),
+                AuthenticateRequestOptions(authorized_parties=provider._authorized_parties),  # type: ignore[attr-defined]
+            )
+            out["clerk"] = {
+                "is_signed_in": getattr(state, "is_signed_in", None),
+                "reason": str(getattr(state, "reason", None)),
+                "message": getattr(state, "message", None),
+                "payload_keys": sorted((state.payload or {}).keys())
+                if getattr(state, "payload", None)
+                else None,
+                "sub": (state.payload or {}).get("sub")
+                if getattr(state, "payload", None)
+                else None,
+            }
+        except Exception as e:  # noqa: BLE001
+            out["clerk"] = {"error": f"{type(e).__name__}: {e}"}
+
+    return out
+
+
 @router.get("/settings/editor", response_class=HTMLResponse)
 def editor_settings(
     request: Request,
