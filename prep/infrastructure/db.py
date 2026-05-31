@@ -478,3 +478,20 @@ def init() -> None:
         dcols = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
         if "notifications_muted_until" not in dcols:
             c.execute("ALTER TABLE decks ADD COLUMN notifications_muted_until TEXT")
+
+        # 14. Auth providers became pluggable on 2026-05-31 — Tailscale
+        #     on the mac-mini, Clerk on the public VPS. The users table
+        #     primary key (`tailscale_login`) is now opaque and may hold
+        #     a Clerk user_id; add a separate `email` column so we can
+        #     surface the user's address in UI + emails regardless of
+        #     which provider supplied identity. Tailscale rows backfill
+        #     to email == tailscale_login (login IS the email there);
+        #     Clerk rows get email set by the user.created webhook.
+        ucols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "email" not in ucols:
+            c.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            # Backfill: any existing row's `tailscale_login` is an
+            # email (Tailscale logins are email-shaped). Copying it
+            # makes the column populated on day one for all legacy
+            # users without forcing them through a re-auth.
+            c.execute("UPDATE users SET email = tailscale_login WHERE email IS NULL")

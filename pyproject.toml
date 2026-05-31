@@ -26,7 +26,7 @@ dependencies = [
     # for request-path grading. Was previously dev-only (FastAPI TestClient
     # depends on it); promoted to runtime when async grading landed. Don't
     # drop without rewiring grading or prep.app boot will crash.
-    "httpx==0.27.2",
+    "httpx==0.28.1",
     # prometheus_client — exposes /metrics for scraping by the obs-stack
     # Prometheus running on the same box. Emitted: anyio threadpool
     # gauge, claude_grade histogram, http request duration.
@@ -37,6 +37,14 @@ dependencies = [
     # Auths via CLAUDE_CODE_OAUTH_TOKEN env var (subscription credits).
     # Adapter at prep/agent/sdk_adapter.py wraps it behind AgentPort.
     "claude-agent-sdk==0.2.87",
+    # clerk-backend-api + svix — Clerk identity provider for the public
+    # VPS deploy (PREP_AUTH_MODE=clerk). Mac-mini install stays on
+    # tailscale auth and never imports these at request time, but they
+    # ride in the wheel so a single image works for both deploys.
+    # Adapter at prep/auth/providers/clerk.py; webhook receiver uses
+    # svix for HMAC verification of the user.* events Clerk pushes.
+    "clerk-backend-api==5.0.7",
+    "svix==1.95.1",
 ]
 
 [tool.uv]
@@ -54,7 +62,7 @@ dev = [
     "ruff==0.7.4",
     "pytest==8.3.3",
     "pytest-asyncio==0.24.0",
-    "httpx==0.27.2",
+    "httpx==0.28.1",
     "freezegun==1.5.1",
     # End-to-end tests (tests/e2e/) drive Chromium via Playwright against
     # the deployed staging instance. `make promote` runs them before

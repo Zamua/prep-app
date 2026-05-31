@@ -40,36 +40,58 @@ class UserRepo:
 
     def upsert(
         self,
-        tailscale_login: str,
+        external_id: str | None = None,
+        email: str | None = None,
         display_name: str | None = None,
         profile_pic_url: str | None = None,
+        *,
+        tailscale_login: str | None = None,
     ) -> dict:
         """Called on every authenticated request. Upserts the user row
-        and bumps last_seen_at. Returns the canonical user dict."""
+        and bumps last_seen_at. Returns the canonical user dict.
+
+        `external_id` is the universal primary-key argument added when
+        auth went pluggable (Tailscale | Clerk | …) — for Tailscale
+        users it's the email; for Clerk it's the Clerk user_id. The
+        underlying column is still named `tailscale_login` for
+        migration-free reasons. The `tailscale_login` keyword stays
+        accepted as an alias so the older positional callers
+        (auth/routes.py + a few tests) keep working without churn."""
+        # Back-compat: accept the legacy `tailscale_login` arg or a
+        # bare positional that historically was the login.
+        key = external_id or tailscale_login
+        if not key:
+            raise ValueError("UserRepo.upsert needs external_id or tailscale_login")
         ts = now()
+        # Don't overwrite a previously-set email with None — webhook
+        # may have populated it before a request arrives, and the
+        # request's resolved user (e.g. Clerk JWT without email
+        # claim) shouldn't clobber that.
         with cursor() as c:
             c.execute(
-                """INSERT INTO users (tailscale_login, display_name, profile_pic_url, created_at, last_seen_at)
-                   VALUES (?, ?, ?, ?, ?)
+                """INSERT INTO users (tailscale_login, email, display_name,
+                                      profile_pic_url, created_at, last_seen_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
                    ON CONFLICT(tailscale_login) DO UPDATE SET
+                     email = COALESCE(?, users.email),
                      display_name = COALESCE(?, users.display_name),
                      profile_pic_url = COALESCE(?, users.profile_pic_url),
                      last_seen_at = ?""",
                 (
-                    tailscale_login,
+                    key,
+                    email,
                     display_name,
                     profile_pic_url,
                     ts,
                     ts,
+                    email,
                     display_name,
                     profile_pic_url,
                     ts,
                 ),
             )
             return dict(
-                c.execute(
-                    "SELECT * FROM users WHERE tailscale_login = ?", (tailscale_login,)
-                ).fetchone()
+                c.execute("SELECT * FROM users WHERE tailscale_login = ?", (key,)).fetchone()
             )
 
     def get_editor_input_mode(self, user_id: str) -> str:

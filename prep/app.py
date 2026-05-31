@@ -287,6 +287,16 @@ app.include_router(index_router)
 app.include_router(pwa_router)
 app.include_router(workflows_router)
 
+# Clerk webhook receiver — mounted only when configured so the
+# import of `clerk-backend-api` / `svix` doesn't happen on
+# Tailscale-mode deploys (where the env var is absent). The route
+# itself defensive-checks the env var too; this gate is the cheap
+# import-cost optimization.
+if os.environ.get("CLERK_WEBHOOK_SECRET"):
+    from prep.auth.webhooks_clerk import router as clerk_webhook_router
+
+    app.include_router(clerk_webhook_router)
+
 # Dev-only template preview routes (read-only, no DB writes). Gated
 # behind PREP_DEV — set in dev environments only, never in prod
 # images. The Dockerfile.prep does not set it, so prod containers
