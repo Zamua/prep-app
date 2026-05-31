@@ -495,3 +495,23 @@ def init() -> None:
             # makes the column populated on day one for all legacy
             # users without forcing them through a re-auth.
             c.execute("UPDATE users SET email = tailscale_login WHERE email IS NULL")
+
+        # 15. BYOK credentials. Per-user AI provider API keys stored
+        #     AES-256-GCM-encrypted with the deploy's master key (see
+        #     prep/byok/crypto.py for the threat model + format).
+        #     One row per (user, provider) — if a user updates their
+        #     key we INSERT OR REPLACE so there's only ever a single
+        #     active blob per provider. ON DELETE CASCADE means the
+        #     credentials disappear with the user (Clerk user.deleted
+        #     webhook cleans this up alongside everything else).
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS byok_credentials (
+                user_id        TEXT NOT NULL REFERENCES users(tailscale_login) ON DELETE CASCADE,
+                provider       TEXT NOT NULL,
+                ciphertext     TEXT NOT NULL,
+                key_prefix     TEXT NOT NULL,
+                created_at     TEXT NOT NULL,
+                last_used_at   TEXT,
+                PRIMARY KEY (user_id, provider)
+            );
+        """)
