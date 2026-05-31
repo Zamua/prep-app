@@ -167,7 +167,7 @@ When you want to test the actual deploy shape:
 
 ```bash
 docker compose build      # multi-stage: go + bun + python:slim
-docker compose up -d      # bring up prep + agent containers
+docker compose up -d      # one container; FastAPI + Temporal + Go worker
 docker compose logs -f    # tail
 ```
 
@@ -243,10 +243,15 @@ prep/
 templates/                  Jinja2 templates (at repo root)
 static/                     style.css, icons/, pwa/, cm-bundle.js (at repo root)
 tests/<context>/            per-context test pyramid (entities, repo, service, routes)
-worker-go/                  Go Temporal worker
-docker/                     Dockerfile.prep + Dockerfile.agent + Procfile.docker
-docker-compose.yml          canonical deploy: prep + agent containers
+worker-go/                  Go Temporal worker (in-container)
+docker/                     Dockerfile.prep + Procfile.docker
+docker-compose.yml          canonical deploy: single prep container
 ```
+
+AI integration runs in-process via the `claude-agent-sdk` Python
+package — there's no separate "agent" sidecar. Auth: paste the
+output of `claude setup-token` into `/settings/agent`. The token is
+written to `/data/claude-oauth-token` inside the prep container.
 
 Each `prep/<context>/` typically holds `entities.py` (pydantic
 types), `repo.py` (read/write surface), `service.py` (use cases),

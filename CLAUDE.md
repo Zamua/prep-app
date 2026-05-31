@@ -31,24 +31,41 @@ browser (PWA)
                                 start-dev   (FastAPI app)  (workflows)
                                   :7233        :8082             │
                                                                  ↓
-                                                     agent container :9999
-                                                          │
-                                                     claude CLI inside
-                                                     CLAUDE_CODE_OAUTH_TOKEN
-                                                     → anthropic
+                                                       POST /api/agent/run
+                                                       (X-Internal-Token)
+                                                                 │
+                                                                 ↓
+                                                  prep.agent.sdk_adapter
+                                                  (claude-agent-sdk in-process)
+                                                  CLAUDE_CODE_OAUTH_TOKEN
+                                                       → anthropic
 ```
 
-Two containers, one compose project:
+**Single container, one compose project.** Everything runs inside
+`prep`: FastAPI (uvicorn) + Temporal devserver + Go worker, all under
+goreman. AI calls go through `prep/agent/`'s SDK adapter (the
+Python `claude-agent-sdk` package) — no separate agent container,
+no `claude` CLI binary, no HTTP hop to a sidecar.
 
-- **prep** — FastAPI (uvicorn) + Temporal devserver + Go Temporal
-  worker, all in one container, supervised by goreman. The
-  user-facing surface.
-- **agent** — Node + Claude Code CLI + a tiny Go HTTP wrapper. The
-  worker calls `POST /run` here for every claude invocation. Token
-  is stored in a persistent volume so it survives restarts.
+The Go worker still needs to invoke AI work, but rather than calling
+out to a sidecar container it POSTs `/api/agent/run` against its own
+prep host (`http://localhost:8082/api/agent/run`). The route is gated
+by an `X-Internal-Token` header (shared secret in `PREP_INTERNAL_TOKEN`,
+fail-closed if unset) so the endpoint can't be hit from outside the
+container. Token + secret are unique-per-deploy; never overlap stag
+and prod.
 
-Both volumes are env-named (`${ENV_NAME}-data`, `${ENV_NAME}-agent-data`)
-so staging and prod can run side-by-side on one host without colliding.
+OAuth token lives at `/data/claude-oauth-token` (0600) inside the
+single `${ENV_NAME}-data` volume — written by the `/settings/agent/connect`
+form when the user pastes a `claude setup-token` output, loaded into
+`CLAUDE_CODE_OAUTH_TOKEN` on app boot. Deleting the file (or hitting
+`/settings/agent/disconnect`) wipes auth in-place.
+
+**History:** the architecture used to be two containers — prep + an
+`agent` sidecar (Node + Claude Code CLI + a Go HTTP wrapper at port
+9999) — but the SDK migration on 2026-05-30 collapsed it. The
+sidecar binary at `worker-go/cmd/agent-server/` is retired; the
+orphaned `prep-agent-data` volume was removed.
 
 ---
 
@@ -88,8 +105,15 @@ prep/
 │   │                        async start_grading + grading_landed
 │   └── routes.py            /study/*, /session/*, /grading/*
 ├── agent/                   bounded context: AI integration
+│   ├── port.py              AgentPort Protocol + AgentResult dataclass +
+│   │                        AgentUnavailable / AgentBudgetExhausted exceptions
+│   ├── sdk_adapter.py       AgentPort impl via `claude-agent-sdk` (in-process,
+│   │                        no CLI binary). Late-imports the SDK.
+│   ├── fake.py              FakeAgent — test double; record calls, return canned text
+│   ├── token_store.py       atomic 0600 write/read of /data/claude-oauth-token
 │   ├── status.py            probe + structured status() + cached is_available
-│   └── routes.py            /settings/agent + connect/disconnect to agent-server
+│   └── routes.py            /settings/agent + connect/disconnect + /api/agent/run
+│                            (worker-callable, X-Internal-Token gated)
 ├── auth/                    bounded context: identity + per-user prefs
 │   ├── identity.py          current_user FastAPI dependency, Tailscale headers
 │   ├── repo.py              UserRepo (upsert, editor_input_mode)
@@ -117,8 +141,8 @@ tests/                       per-context test pyramid
 ├── study/                   same shape
 
 worker-go/                   Go Temporal worker
-├── agent/agent.go           Client interface + ShellAgent + HTTPAgent
-├── cmd/agent-server/        agent container binary: /run + /healthz + /connect + /disconnect
+├── agent/agent.go           Client interface + HTTPAgent (POSTs prep's
+│                            /api/agent/run with X-Internal-Token)
 ├── workflows/               GradeAnswer, Transform, PlanGenerate
 ├── activities/              GradeFreeText, ComputeTransform, ApplyTransform,
 │                            PlanCards, GenerateCardFromBrief, InsertCard
@@ -127,12 +151,11 @@ worker-go/                   Go Temporal worker
 docker/
 ├── Dockerfile.prep          multi-stage: golang:1.26 (worker+goreman), oven/bun:1.1.0
 │                            (cm-bundle), python:3.11-slim runtime with uv-installed
-│                            venv + temporal CLI baked
-├── Dockerfile.agent         node:22-slim + npm-installed claude-code + go-built agent-server
+│                            venv (incl. claude-agent-sdk) + temporal CLI baked
 └── Procfile.docker          temporal | uvicorn | worker, all under goreman in the prep
                              container
 
-docker-compose.yml           prep + agent services, env-driven volume + image names
+docker-compose.yml           single `prep` service, env-driven volume + image names
 .env.example                 per-deploy config template (PORT, ROOT_PATH, ENV_NAME, ...)
 deploy/{staging,prod}.env    tracked deploy-shape env files for `make deploy-{stag,prod}`
 .prod-version                single-line tag pinning what's running in prod
@@ -336,22 +359,44 @@ Generation example (the plan-first flow at `/decks/new` action=plan):
    `temporal_client.start_plan_generate` kicks off `PlanGenerateWorkflow`
    on the worker.
 2. Workflow calls activity `PlanCards` → worker's `Cfg.Agent.Run(prompt)`
-   → over HTTP to the agent container → spawns `claude -p <prompt>` with
-   `CLAUDE_CODE_OAUTH_TOKEN` in env → returns stdout.
+   → POST `http://localhost:8082/api/agent/run` with `X-Internal-Token`
+   header → prep's FastAPI route hands off to `prep.agent.get_agent()`
+   (the `ClaudeAgentSdkAdapter`) → in-process `claude-agent-sdk` call →
+   returns text from `AssistantMessage` chunks + cost/usage from the
+   final `ResultMessage`.
 3. Workflow stores plan, query handler exposes it. UI polls
    `/plan/<wid>/status` and renders the brief outline.
 4. User signals `feedback` (replan), `accept` (expand), or `reject`.
 5. On accept: workflow `ExecuteActivity` for each `PlanItem` in
-   parallel — N concurrent `claude -p` calls — gathers results,
-   writes via `InsertCard` activity (idempotency via
-   `questions_idempotency` table).
+   parallel — N concurrent SDK calls through `/api/agent/run` —
+   gathers results, writes via `InsertCard` activity (idempotency
+   via `questions_idempotency` table).
 
-The agent boundary (`worker-go/agent/agent.go`) is the seam. Two
-implementations:
-- **ShellAgent** — `exec.Command(claude, args, prompt)`, used when
-  `PREP_AGENT_BIN` is set. Native (no docker) dev or legacy.
-- **HTTPAgent** — `POST <url>/run`, used when `PREP_AGENT_URL` is
-  set. The container path. `FromEnv()` picks based on env.
+**Two seams worth knowing:**
+
+- **`AgentPort` (prep/agent/port.py)** — the Python-side abstraction.
+  `ClaudeAgentSdkAdapter` is the production impl; `FakeAgent` is the
+  test double. `get_agent()` returns the singleton; `set_agent()`
+  swaps for tests. Errors surface as `AgentUnavailable` (generic
+  failure → 502) or `AgentBudgetExhausted` (the user blew their
+  monthly credit pool → 429 + `kind: budget_exhausted` so the UI can
+  show a specific message).
+- **Worker's `HTTPAgent` (worker-go/agent/agent.go)** — the Go-side
+  HTTP client. Configured via `PREP_AGENT_URL` (host) +
+  `PREP_INTERNAL_TOKEN` (shared secret). It POSTs the same wire
+  format the old sidecar's `/run` accepted (`{prompt, session_id?,
+  resume_id?}` → `{stdout}`), so the worker stayed unchanged across
+  the SDK migration apart from a one-line env-var flip.
+
+**Auth model:** the user runs `claude setup-token` on a machine they
+control, pastes the resulting `sk-ant-oat01-…` token into
+`/settings/agent/connect`. Prep writes it to
+`/data/claude-oauth-token` (0600) and stamps `CLAUDE_CODE_OAUTH_TOKEN`
+into the live process env so the SDK adapter can use it without a
+restart. The token authenticates against the user's Claude
+subscription credit pool (Max 20x = ~$200/mo, post Anthropic's
+2026-06-15 SDK-credit-eligibility change), not a separate API-key
+billing account.
 
 ---
 
@@ -397,7 +442,7 @@ clauses (cross-user lookups return None as if the row didn't exist).
 | `static/*.css`, `static/icons/*` | hard-refresh browser |
 | `static/cm/` (CodeMirror source) | `cd static/cm && bun run build` |
 | `worker-go/**/*.go` | `Ctrl-C` make dev, `make build`, `make dev` |
-| `worker-go/cmd/agent-server/` | rebuild agent image: `docker compose build agent && docker compose up -d agent` (or run `go run ./cmd/agent-server` standalone for fast iteration) |
+| `prep/agent/sdk_adapter.py` | uvicorn `--reload` (in-process; no separate container to rebuild) |
 | Schema change | edit `db.init()`, restart `make dev` |
 | New dep (python) | `mise exec -- uv add <pkg>` |
 | New dep (go) | `cd worker-go && mise exec -- go get <mod>` |
@@ -416,14 +461,17 @@ One checkout (`prep-app-staging/`, on `main`), two compose stacks
 running on the same docker daemon:
 
 - **stag** — image `prep:staging`, project `stag`, host port 8082,
-  volumes `prep-data` + `prep-agent-data`. Tailscale serves at
-  `/prep-staging/`. Built from current working tree on every
-  `make deploy-stag`.
+  single `prep-data` volume. Tailscale serves at `/prep-staging/`.
+  Built from current working tree on every `make deploy-stag`.
 - **prod** — image `prep:<tag>`, project `prod`, host port 8081,
-  volumes `prod-data` + `prod-agent-data`. Tailscale serves at
-  `/prep/`. Built from `git worktree add --detach <tag>` against
-  whatever tag is in `.prod-version`. The working tree never moves
-  during a prod build.
+  single `prod-data` volume. Tailscale serves at `/prep/`. Built from
+  `git worktree add --detach <tag>` against whatever tag is in
+  `.prod-version`. The working tree never moves during a prod build.
+
+(Pre-SDK-migration there was a second per-env `*-agent-data` volume
+for the sidecar's OAuth token. With the token now in `prep-data` at
+`/data/claude-oauth-token`, those volumes are retired —
+`prep-agent-data` was removed on 2026-05-30.)
 
 **Source of truth for "what is prod"** = `.prod-version` (single
 line, e.g., `v0.13.3`). Tracked in git so `git log .prod-version` is
@@ -524,8 +572,16 @@ diagnostics need `docker compose logs -f` for app errors only. Add
 `--log-level debug` to Procfile.docker for verbose tracing.
 
 **`claude setup-token` output prefix**: `sk-ant-oat01-…`. The
-agent-server's `/connect` validates that prefix. Other token shapes
-(API keys, OAuth URLs) are rejected with a friendly error.
+`/settings/agent/connect` route validates that prefix. Other token
+shapes (API keys, OAuth URLs) are rejected with a friendly error.
+
+**`/api/agent/run` is fail-closed without `PREP_INTERNAL_TOKEN`.**
+The route's `_require_internal_token` dependency raises 503 if the
+env var is unset, and 401 if the request's `X-Internal-Token` header
+doesn't match. Both stag and prod set the var via `deploy/<env>.env`;
+local dev (`make dev`) needs it too if you want the worker → prep
+path to work. NB stag and prod MUST use distinct values — never
+share secrets across environments.
 
 **Worker boots before temporal under goreman.** `dialTemporalWithRetry`
 in `worker-go/main.go` retries dial up to 60s with exponential
@@ -595,12 +651,19 @@ cordon the deploy until they finish.** `temporal -n <ns> workflow
 list` to see what's in flight; `temporal workflow terminate -w …`
 to clean up.
 
-**The agent's `/healthz` lies about claude login state.** It
-returns `{"ok":true,"logged_in":true}` if a token *file* exists on
-disk, regardless of whether the token actually works. To probe real
-auth, you have to run `claude -p "test"` inside the agent
-container. Plan to fix /healthz to do a real auth probe; for now,
-don't trust its `logged_in` field.
+**`prep.agent.status()` is file-presence-only.** The probe checks
+whether `CLAUDE_CODE_OAUTH_TOKEN` is in env OR the token file exists
+at `/data/claude-oauth-token` — NOT whether the token actually
+authenticates. To probe real auth, call the SDK once. Cheap
+end-to-end check from inside the container:
+`docker exec stag-prep-1 .venv/bin/python -c "import asyncio; from prep.agent import get_agent; print(asyncio.run(get_agent().run('hi')).text[:80])"`.
+
+**`/api/agent/run` is best-effort idempotent.** Each call makes a
+fresh SDK request — there's no de-dup. If the worker retries a
+failed activity, you'll pay credits twice. Workflow code that
+generates content uses an `idempotency_key` table to dedupe at the
+write side, not the agent-call side. Don't add free retries to AI
+activities without the dedupe shield.
 
 ---
 
@@ -670,9 +733,17 @@ add an e2e that drives it to terminal — don't ship blind.
 ## What's intentionally NOT here
 
 - ANTHROPIC_API_KEY support. We use the Claude subscription path on
-  purpose. The agent-server inherits whatever auth `claude setup-token`
-  produced; users opt in once.
-- A test suite. Exercise via UI. Adding one is a known gap.
+  purpose — the SDK adapter authenticates via
+  `CLAUDE_CODE_OAUTH_TOKEN` (output of `claude setup-token`) only,
+  which draws from the user's Max-plan credit pool.
+- Per-token usage tracking. We had a `agent_usage` table briefly,
+  but Anthropic meters per-account, not per-token, so the rollup
+  modeled the wrong thing — dropped. Now we just handle
+  `AgentBudgetExhausted` gracefully (429 + UI message) and wait for
+  Anthropic to expose a real per-token usage API.
+- A separate AI sidecar. The 2026-05-30 SDK migration pulled the
+  agent in-process; the old `worker-go/cmd/agent-server/` binary +
+  `Dockerfile.agent` are gone.
 - Cloud SaaS / multi-tenant auth. prep is single-tenant
   per-deployment.
 - Mobile native apps. PWA covers it.
