@@ -7,5 +7,10 @@
 # .env file). HOST + PORT are baked into Dockerfile.prep's ENV.
 
 temporal: sh -c 'mkdir -p /data/temporal /data/prep && exec temporal server start-dev --ip 127.0.0.1 --port 7233 --ui-port 8233 --db-filename /data/temporal/temporal.db --namespace $TEMPORAL_NAMESPACE --log-level warn'
-app: .venv/bin/uvicorn prep.app:app --host $HOST --port $PORT --no-access-log --root-path $ROOT_PATH
+# Wrap in `sh -c` so we can splice --root-path only when ROOT_PATH is
+# non-empty. uvicorn rejects `--root-path` with no value, so a bare
+# ROOT_PATH="" deploy (root-domain shape, e.g. prepcards.app) used to
+# crash on boot. The ${VAR:+...} expansion drops the whole flag when
+# unset, keeps it when set (e.g. /prep or /prep-staging).
+app: sh -c '.venv/bin/uvicorn prep.app:app --host $HOST --port $PORT --no-access-log ${ROOT_PATH:+--root-path "$ROOT_PATH"}'
 worker: ./worker-go/bin/worker
