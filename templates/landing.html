@@ -80,4 +80,45 @@
   </p>
 </section>
 {% endif %}
+
+{# ClerkJS bootstrap. The Account-Portal sign-in flow at
+   accounts.prepcards.app sets `__client_uat` on the apex but cannot
+   set `__session` (only ClerkJS-on-page can). So a freshly-signed-in
+   user lands here, ClerkJS picks up __client_uat, requests a JWT
+   from clerk.<domain>, sets __session on .prepcards.app, and we
+   reload — second request reaches the server with __session and
+   renders the dashboard instead of this landing.
+
+   The sessionStorage guard prevents an infinite reload loop if
+   Clerk reports a user but the cookie still doesn't reach the
+   server (e.g. cookie SameSite mismatch, blocked third-party
+   cookies). One auto-reload, then we stop and let the user click
+   the Sign in CTA again. #}
+{% if clerk_publishable_key and clerk_frontend_api_host %}
+<script async crossorigin="anonymous"
+        data-clerk-publishable-key="{{ clerk_publishable_key }}"
+        src="https://{{ clerk_frontend_api_host }}/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+        type="text/javascript"></script>
+<script>
+  // Poll for ClerkJS — the async script may finish loading after
+  // window.load fires, so binding a one-shot load listener races.
+  (async function () {
+    let waited = 0;
+    while (!window.Clerk && waited < 5000) {
+      await new Promise(r => setTimeout(r, 50));
+      waited += 50;
+    }
+    if (!window.Clerk) return;
+    try {
+      await window.Clerk.load();
+      if (window.Clerk.user && !sessionStorage.getItem("clerk_bootstrap_done")) {
+        sessionStorage.setItem("clerk_bootstrap_done", "1");
+        window.location.reload();
+      }
+    } catch (e) {
+      console.warn("Clerk bootstrap failed:", e);
+    }
+  })();
+</script>
+{% endif %}
 {% endblock %}
