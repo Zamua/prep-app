@@ -70,6 +70,14 @@ services:
       CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-}
       CLERK_FRONTEND_API_URL: ${CLERK_FRONTEND_API_URL:-}
 
+      # ---- BYOK encryption (per-user Anthropic API keys) ------------
+      # 32-byte hex master key used to AES-256-GCM encrypt every BYOK
+      # row before it lands in the DB. `openssl rand -hex 32`; lives
+      # in /home/admin/prep.env on the VPS alongside the Clerk + token
+      # secrets. Optional: leave unset and BYOK feature 503s with a
+      # clear operator message; the rest of prep works.
+      PREP_KEY_ENCRYPTION_SECRET: ${PREP_KEY_ENCRYPTION_SECRET:-}
+
 volumes:
   # Env-driven name so staging + prod can run side-by-side on one
   # daemon. Default 'prep' for ad-hoc. `make deploy-prod` sets
