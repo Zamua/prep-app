@@ -8,24 +8,91 @@
 
 <section class="prelude">
   <p class="eyebrow">AI agent</p>
-  <h1 class="display">{% if status.logged_in %}<em>Connected</em>.{% else %}Bring your <em>own</em> agent.{% endif %}</h1>
+  <h1 class="display">{% if byok or status.logged_in %}<em>Connected</em>.{% else %}Bring your <em>own</em> agent.{% endif %}</h1>
   <p class="lede">
-    Prep can use an AI agent to generate cards, grade code/short
-    answers, and run deck transforms. The app works without it
-    (manual cards + self-grading); AI features light up once you
-    connect one below.
+    Prep can use an AI agent to generate cards, grade short answers,
+    and run deck transforms. The app works without it (manual cards
+    + self-grading); AI features light up once you connect one
+    below. Two ways to do it: your own Anthropic API key (recommended
+    — you keep control of billing) or a Claude subscription token.
   </p>
 </section>
 
+{# ---- BYOK: Anthropic API key (per-user, recommended) ---- #}
 <section class="agent-panel">
-  <p class="section-eyebrow"><span>Status</span><span class="rule"></span></p>
-  <p class="agent-status" data-state="{{ 'on' if status.logged_in else 'off' }}">
+  <p class="section-eyebrow"><span>Your Anthropic API key</span><span class="rule"></span></p>
+
+  {% if byok %}
+    <p class="agent-status" data-state="on">
+      {{ icon('check-circle', class_='icon icon-inline') }}
+      <strong>Connected</strong> · <code>{{ byok.key_prefix }}</code>
+      <span class="form-hint">
+        added {{ byok.created_at[:10] }}{% if byok.last_used_at %} · last used {{ byok.last_used_at[:10] }}{% else %} · not yet used{% endif %}
+      </span>
+    </p>
+  {% else %}
+    <p class="agent-status" data-state="off">
+      {{ icon('warning-circle', class_='icon icon-inline') }}
+      <strong>Not configured</strong> — paste a key below to enable AI features.
+    </p>
+  {% endif %}
+
+  {% if byok_error %}
+    <p class="form-error">{{ byok_error }}</p>
+  {% endif %}
+  {% if byok_flash %}
+    <p class="notify-status" data-kind="ok">{{ byok_flash }}</p>
+  {% endif %}
+
+  <form method="post"
+        action="{{ request.scope.get('root_path','') }}/settings/agent/byok/connect"
+        class="agent-connect-form" autocomplete="off">
+    <label class="freetext">
+      <span class="freetext-label">{% if byok %}Replace key{% else %}API key{% endif %}</span>
+      <input type="password" name="api_key" required spellcheck="false"
+             autocapitalize="off" autocorrect="off"
+             placeholder="sk-ant-api03-…" style="font-family: var(--mono); width: 100%;">
+      <span class="freetext-hint">
+        Get a key at
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.
+        Encrypted at rest with AES-256-GCM; only used for your own AI calls.
+      </span>
+    </label>
+    <div class="study-actions">
+      <button type="submit" class="btn btn-primary">
+        {% if byok %}Replace{% else %}Save key{% endif %}
+      </button>
+    </div>
+  </form>
+
+  {% if byok %}
+    <form method="post"
+          action="{{ request.scope.get('root_path','') }}/settings/agent/byok/disconnect"
+          class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
+      <button type="submit" class="btn btn-quiet">Remove key</button>
+    </form>
+  {% endif %}
+</section>
+
+{# ---- Subscription path (deploy-shared OAuth token, secondary) ---- #}
+<details class="agent-panel" {% if not byok and status.logged_in %}open{% endif %}>
+  <summary class="section-eyebrow" style="cursor: pointer; list-style: none;">
+    <span>Or: connect a Claude subscription token</span><span class="rule"></span>
+  </summary>
+
+  <p class="form-hint" style="margin-block-start: 0.85rem;">
+    The subscription path uses a single OAuth token shared across all
+    users on this deploy. Suitable when one operator wants to fund
+    everyone's AI usage from their own Max subscription.
+  </p>
+
+  <p class="agent-status" data-state="{{ 'on' if status.logged_in else 'off' }}" style="margin-block-start: 0.85rem;">
     {% if status.logged_in %}
       {{ icon('check-circle', class_='icon icon-inline') }}
       <strong>Connected</strong> · in-process SDK
     {% elif status.kind == 'unconfigured' %}
       {{ icon('warning-circle', class_='icon icon-inline') }}
-      <strong>Not connected</strong> — paste a <code>claude setup-token</code> below to activate AI features.
+      <strong>Not connected</strong>
     {% else %}
       {{ icon('warning-circle', class_='icon icon-inline') }}
       <strong>Not connected</strong>{% if status.reason %} · {{ status.reason }}{% endif %}
@@ -38,62 +105,41 @@
   {% if flash %}
     <p class="notify-status" data-kind="ok">{{ flash }}</p>
   {% endif %}
-</section>
 
-{# Connect / disconnect controls for the Claude-subscription path.
-   When the API-key BYOK path lands (phase 2) it'll sit alongside
-   this section as a second connection option. #}
-{% if not status.logged_in %}
-<section class="agent-panel">
-  <p class="section-eyebrow"><span>Connect via Claude subscription</span><span class="rule"></span></p>
-  <ol class="agent-steps">
-    <li>
-      On any machine where you have Claude Code installed and signed
-      in, run:
-      <pre class="reproduction agent-cmd"><code id="agent-cmd-copy">claude setup-token</code></pre>
-      <button type="button" class="btn btn-quiet btn-tiny" id="copy-agent-cmd">Copy command</button>
-    </li>
-    <li>
-      Authenticate in the browser when it opens, then copy the token
-      it prints to the terminal. The token starts with <code>sk-ant-oat01-</code>
-      and is good for one year.
-    </li>
-    <li>
-      Paste the token here and click <strong>Connect</strong>.
-    </li>
-  </ol>
+  {% if not status.logged_in %}
+    <ol class="agent-steps">
+      <li>
+        On any machine where you have Claude Code installed and signed
+        in, run:
+        <pre class="reproduction agent-cmd"><code id="agent-cmd-copy">claude setup-token</code></pre>
+        <button type="button" class="btn btn-quiet btn-tiny" id="copy-agent-cmd">Copy command</button>
+      </li>
+      <li>
+        Authenticate in the browser when it opens, then copy the token
+        it prints to the terminal. Starts with <code>sk-ant-oat01-</code>; valid for a year.
+      </li>
+      <li>
+        Paste the token here and click <strong>Connect</strong>.
+      </li>
+    </ol>
 
-  <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
-    <label class="freetext">
-      <span class="freetext-label">Token</span>
-      <textarea name="token" rows="3" required spellcheck="false"
-                autocapitalize="off" autocorrect="off"
-                placeholder="sk-ant-oat01-…"></textarea>
-      <span class="freetext-hint">
-        Stored on this prep instance only — never sent to anthropic by us
-        beyond the requests you'd make anyway when generating cards.
-      </span>
-    </label>
-    <div class="study-actions">
-      <button type="submit" class="btn btn-primary">Connect</button>
-    </div>
-  </form>
-</section>
-{% endif %}
-
-{% if status.logged_in %}
-<section class="agent-panel">
-  <p class="section-eyebrow"><span>Disconnect</span><span class="rule"></span></p>
-  <p class="agent-disconnect-blurb">
-    Wipes the OAuth token from this prep instance. AI features hide;
-    manual flows keep working. You can reconnect any time with a new
-    <code>claude setup-token</code>.
-  </p>
-  <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/disconnect" class="agent-disconnect-form">
-    <button type="submit" class="btn btn-quiet">Disconnect</button>
-  </form>
-</section>
-{% endif %}
+    <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
+      <label class="freetext">
+        <span class="freetext-label">Token</span>
+        <textarea name="token" rows="3" required spellcheck="false"
+                  autocapitalize="off" autocorrect="off"
+                  placeholder="sk-ant-oat01-…"></textarea>
+      </label>
+      <div class="study-actions">
+        <button type="submit" class="btn btn-primary">Connect</button>
+      </div>
+    </form>
+  {% else %}
+    <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/disconnect" class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
+      <button type="submit" class="btn btn-quiet">Disconnect</button>
+    </form>
+  {% endif %}
+</details>
 
 <script>
 (function () {

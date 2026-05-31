@@ -95,3 +95,70 @@ def test_settings_agent_disconnect_removes_token(
     # Idempotent — second call still 200, no exception.
     r2 = client.post("/settings/agent/disconnect")
     assert r2.status_code == 200
+
+
+# ---- BYOK routes ---------------------------------------------------------
+
+
+@pytest.fixture
+def _byok_master(monkeypatch):
+    """BYOK routes need PREP_KEY_ENCRYPTION_SECRET in env to encrypt
+    the posted key. Deterministic test key — never used outside tests."""
+    monkeypatch.setenv("PREP_KEY_ENCRYPTION_SECRET", "dd" * 32)
+
+
+def test_byok_connect_rejects_wrong_prefix(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """OAuth-prefix keys aren't API keys — surface the mismatch clearly
+    rather than letting Anthropic reject the request later."""
+    r = client.post("/settings/agent/byok/connect", data={"api_key": "sk-ant-oat01-not-an-api-key"})
+    assert r.status_code == 400
+
+
+def test_byok_connect_rejects_missing(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    r = client.post("/settings/agent/byok/connect", data={"api_key": "  "})
+    assert r.status_code == 400
+
+
+def test_byok_connect_stores_and_metadata_round_trips(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """Happy path: POST a valid key → 200 + masked prefix visible in the
+    rendered page. The actual ciphertext is encrypted at rest (see
+    tests/byok/test_repo.py for the storage-level guarantees)."""
+    r = client.post(
+        "/settings/agent/byok/connect",
+        data={"api_key": "sk-ant-api03-abcdefghijklmnop"},
+    )
+    assert r.status_code == 200
+    # The masked prefix renders in the page so the user can verify
+    # they pasted the right key. Last 4 chars of the secret.
+    assert "mnop" in r.text
+
+
+def test_byok_disconnect_is_idempotent(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    r1 = client.post("/settings/agent/byok/disconnect")
+    assert r1.status_code == 200
+    # Second call with no row → still 200.
+    r2 = client.post("/settings/agent/byok/disconnect")
+    assert r2.status_code == 200
+
+
+def test_byok_connect_503_when_master_key_missing(
+    client: TestClient, initialized_db: str, token_dir: Path, monkeypatch
+):
+    """Deploy without PREP_KEY_ENCRYPTION_SECRET → BYOK feature is
+    disabled with a clear operator-facing message rather than a
+    confusing crypto error."""
+    monkeypatch.delenv("PREP_KEY_ENCRYPTION_SECRET", raising=False)
+    r = client.post(
+        "/settings/agent/byok/connect",
+        data={"api_key": "sk-ant-api03-abcdefghijklmnop"},
+    )
+    assert r.status_code == 503
+    assert "PREP_KEY_ENCRYPTION_SECRET" in r.text
