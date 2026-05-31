@@ -59,6 +59,17 @@ services:
       PREP_DEFAULT_USER: ${PREP_DEFAULT_USER-guest}
       PREP_VAPID_SUB: ${PREP_VAPID_SUB:-mailto:noreply@example.com}
 
+      # ---- auth provider (tailscale | clerk | fake) -----------------
+      # Default `tailscale` keeps the mac-mini install on its existing
+      # header-based auth. Public deploys (prepcards.app on the VPS)
+      # set this to `clerk` + provide the four CLERK_* vars below.
+      PREP_AUTH_MODE: ${PREP_AUTH_MODE:-tailscale}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+      CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-}
+      CLERK_FRONTEND_API_URL: ${CLERK_FRONTEND_API_URL:-}
+
 volumes:
   # Env-driven name so staging + prod can run side-by-side on one
   # daemon. Default 'prep' for ad-hoc. `make deploy-prod` sets
