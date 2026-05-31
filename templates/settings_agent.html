@@ -8,12 +8,12 @@
 
 <section class="prelude">
   <p class="eyebrow">AI agent</p>
-  <h1 class="display">{% if status.logged_in %}<em>Connected</em>.{% else %}Bring your <em>own</em> Claude.{% endif %}</h1>
+  <h1 class="display">{% if status.logged_in %}<em>Connected</em>.{% else %}Bring your <em>own</em> agent.{% endif %}</h1>
   <p class="lede">
-    Prep uses your Claude subscription to generate cards, grade
-    code/short answers, and run deck transforms. The app works
-    without it (manual cards + self-grading), but AI features need
-    a connected agent.
+    Prep can use an AI agent to generate cards, grade code/short
+    answers, and run deck transforms. The app works without it
+    (manual cards + self-grading); AI features light up once you
+    connect one below.
   </p>
 </section>
 
@@ -40,12 +40,12 @@
   {% endif %}
 </section>
 
-{# Connect / disconnect controls only apply when the agent is an HTTP
-   server we can talk to. Shell-agent setups manage auth on the host
-   (keychain on mac, file on linux); this page can't drive that. #}
+{# Connect / disconnect controls for the Claude-subscription path.
+   When the API-key BYOK path lands (phase 2) it'll sit alongside
+   this section as a second connection option. #}
 {% if not status.logged_in %}
 <section class="agent-panel">
-  <p class="section-eyebrow"><span>Connect Claude</span><span class="rule"></span></p>
+  <p class="section-eyebrow"><span>Connect via Claude subscription</span><span class="rule"></span></p>
   <ol class="agent-steps">
     <li>
       On any machine where you have Claude Code installed and signed

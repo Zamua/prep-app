@@ -46,9 +46,9 @@
         Skim the outline below. Send feedback to refine, or accept and we'll
         write the full content for each card in parallel.
       {% elif _status == 'planning' %}
-        Claude is sketching the outline. About 5 seconds.
+        The AI is sketching the outline. About 5 seconds.
       {% elif _status == 'replanning' %}
-        Claude is reworking the outline based on your feedback.
+        The AI is reworking the outline based on your feedback.
       {% elif _status == 'generating' %}
         Writing {{ _total }} cards in parallel.
         {% if _generated %}{{ _generated }} done so far.{% endif %}

@@ -613,7 +613,7 @@ def test_regrade_flips_wrong_to_right_on_claude_disagree(
     )
     assert r.status_code == 200
     assert "trivia-result-right" in r.text
-    assert "re-graded by claude" in r.text
+    assert "re-graded by AI" in r.text
     # Queue verdict flipped to right.
     from prep.infrastructure.db import cursor
 
@@ -702,7 +702,7 @@ def test_session_regrade_flips_done_chain_verdict(
     assert "trivia-result-right" in r.text
     # Next-card link now carries the FLIPPED verdict for qids[0].
     assert f"done={qids[0]}r" in r.text
-    assert "re-graded by claude" in r.text
+    assert "re-graded by AI" in r.text
 
 
 def test_answer_uses_stored_regex_for_short(monkeypatch, client: TestClient, initialized_db: str):
@@ -770,7 +770,7 @@ def test_initial_answer_persists_regex_update_when_claude_proposes_one(
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "wal"})
     assert r.status_code == 200
     assert "trivia-result-right" in r.text
-    assert "claude expanded the accepted-answer regex" in r.text
+    assert "AI expanded the accepted-answer regex" in r.text
     q = QuestionRepo().get(user, qid)
     assert q.answer_regex == "(write[- ]?ahead log|wal)"
 
@@ -978,7 +978,7 @@ def test_trivia_gen_fragment_mid_flow_keeps_polling(
     assert r.headers["content-type"].startswith("text/html")
     assert 'hx-trigger="every' in r.text
     # In-flight label.
-    assert "asking claude" in r.text
+    assert "asking the AI" in r.text
 
 
 def test_trivia_gen_fragment_terminal_done_stops_polling(

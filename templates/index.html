@@ -270,7 +270,7 @@
   <p class="section-eyebrow"><span>{% if pinned_decks %}Other decks{% elif recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
   {# Deck-level actions sit under the section header as small pills,
      not as full-width tiles in the list. New deck is always available;
-     "edit with claude" only when an agent is configured + there's at
+     "edit with AI" only when an agent is configured + there's at
      least one deck to edit. #}
   <div class="deck-actions">
     <a href="{{ request.scope.get('root_path','') }}/decks/new" class="deck-action-pill">
@@ -280,7 +280,7 @@
     {% if agent_available and (decks or pinned_decks) %}
       <a href="{{ request.scope.get('root_path','') }}/reorganize" class="deck-action-pill">
         {{ icon('sparkle', class_='icon icon-inline') }}
-        <span>edit with claude</span>
+        <span>edit with AI</span>
       </a>
     {% endif %}
   </div>

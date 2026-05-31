@@ -25,7 +25,7 @@
              menu shortcut. #}
           {% set pinned = deck_meta.pinned %}
           {# Render the pin toggle as a plain menu item (matches the
-             shape of Add card / Edit with claude / Split / Delete)
+             shape of Add card / Edit with AI / Split / Delete)
              rather than including pin_form.html, whose `.tag-pin`
              chip styling fights against the menu's row layout. #}
           <form method="post"
@@ -40,7 +40,7 @@
           {% include "partials/notif_edit.html" %}
           <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new" class="deck-overflow-action">{{ icon('plus', class_='icon icon-inline') }}<span>Add card</span></a>
           {% if agent_available %}
-            <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/edit-with-claude" class="deck-overflow-action">{{ icon('sparkle', class_='icon icon-inline') }}<span>Edit with claude</span></a>
+            <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/edit-with-claude" class="deck-overflow-action">{{ icon('sparkle', class_='icon icon-inline') }}<span>Edit with AI</span></a>
           {% endif %}
           {% if questions %}
             <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split" class="deck-overflow-action">{{ icon('arrow-up-right', class_='icon icon-inline') }}<span>Split deck</span></a>
@@ -152,7 +152,7 @@
       </form>
     {% endif %}
     {# Deck-level action pills. Mirrors the index page's "new deck" /
-       "edit with claude" pattern — each action gets its own pill. #}
+       "edit with AI" pattern — each action gets its own pill. #}
     <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new"
        class="edit-pill" title="Add a card by hand">
       {{ icon('plus', class_='icon icon-inline') }}
@@ -160,9 +160,9 @@
     </a>
     {% if agent_available %}
       <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/edit-with-claude"
-         class="edit-pill" title="Edit with claude — deck-wide AI prompt">
+         class="edit-pill" title="Edit with AI — deck-wide AI prompt">
         {{ icon('sparkle', class_='icon icon-inline') }}
-        <span>edit with claude</span>
+        <span>edit with AI</span>
       </a>
     {% endif %}
     {# Split pill: cross-deck reorganize action (not an edit-this-
@@ -243,7 +243,7 @@
 {# Trivia topic prompt — drives future batch generation. Surfaces as
    its own per-element edit affordance (small pencil + collapsible
    form), pulled out of the old AI edit panel because it's a manual
-   metadata write, not a claude-driven action. SRS decks don't use
+   metadata write, not an AI-driven action. SRS decks don't use
    topic prompts — only trivia. Anchor id="topic-prompt" so the
    "Edit topic" item in the hero-band [⋯] menu jumps here. #}
 {% if deck_type == 'trivia' %}
@@ -256,7 +256,7 @@
         {%- if _topic -%}
           {{ _topic[:120] }}{% if _topic|length > 120 %}…{% endif %}
         {%- else -%}
-          <em>not set — claude needs this to generate fresh batches</em>
+          <em>not set — the AI uses this to generate fresh batches</em>
         {%- endif -%}
       </span>
       {{ icon('pencil-simple-line', class_='icon icon-inline deck-topic-pencil') }}
@@ -416,7 +416,7 @@
     <p class="empty-headline"><em>No cards yet.</em></p>
     <p class="empty-sub">
       {% if deck_type == 'trivia' %}
-        Cards arrive on the next scheduler tick — claude generates a fresh batch from the deck's topic prompt.
+        Cards arrive on the next scheduler tick — the AI generates a fresh batch from the deck's topic prompt.
       {% elif agent_available %}
         Use the box above to describe the first batch you'd like, or add a card by hand.
       {% else %}
@@ -446,7 +446,7 @@
     </p>
     <p class="improve-card-context" id="improve-card-context"></p>
     <label class="freetext">
-      <span class="freetext-label">What should claude change?</span>
+      <span class="freetext-label">What should the AI change?</span>
       <textarea name="prompt" id="improve-prompt" rows="4" maxlength="2000"
                 placeholder="e.g. add a code skeleton · fix the typo in `releaze` · simplify the prompt"
                 required></textarea>

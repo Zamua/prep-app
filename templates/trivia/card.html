@@ -104,8 +104,8 @@
         </div>
       </section>
 
-      {# Claude's feedback (only present when the question hit the
-         claude-graded path; deterministic-graded answers don't need
+      {# AI feedback (only present when the question hit the
+         AI-graded path; deterministic-graded answers don't need
          narration since the visual diff between the two answer
          blocks already tells the story). #}
       {% if result.feedback %}
@@ -192,7 +192,7 @@
           {% if _show_regrade %}
             {# Dispute body — sibling of .trivia-disc-row, shown via
                the :has(.trivia-disc-dispute[open]) selector. Two
-               forms side-by-side: ask claude to re-evaluate, or
+               forms side-by-side: ask the AI to re-evaluate, or
                manually flip the verdict. #}
             <div class="trivia-disc-body trivia-disc-body-dispute" data-details-body>
               <p class="trivia-dispute-eyebrow">if the grader was harsh</p>
@@ -222,7 +222,7 @@
                     <input type="hidden" name="done" value="{{ session_done or '' }}">
                   {% endif %}
                   <button type="submit" class="trivia-override-btn"
-                          title="Flip the verdict to right without consulting claude — for when the grader was simply too harsh">
+                          title="Flip the verdict to right without consulting the AI — for when the grader was simply too harsh">
                     {{ icon('check', class_='icon icon-inline') }}
                     <span>I was right</span>
                   </button>
@@ -235,7 +235,7 @@
 
       {% if result.regraded %}
         <p class="trivia-regrade-note">
-          <em>re-graded by claude{% if result.regex_updated %} · accepted answers expanded{% endif %}</em>
+          <em>re-graded by AI{% if result.regex_updated %} · accepted answers expanded{% endif %}</em>
         </p>
       {% elif result.overridden %}
         <p class="trivia-regrade-note">
@@ -243,7 +243,7 @@
         </p>
       {% elif result.regex_updated %}
         <p class="trivia-regrade-note">
-          <em>claude expanded the accepted-answer regex</em>
+          <em>AI expanded the accepted-answer regex</em>
         </p>
       {% endif %}
 

@@ -1,5 +1,5 @@
 {# Per-modification before/after diff card. The fields surfaced are
-   the ones claude can edit (prompt, answer, topic, rubric, type,
+   the ones the AI can edit (prompt, answer, topic, rubric, type,
    skeleton, language). Unchanged fields collapse so the eye lands
    on what actually changed. Caller passes `d` (a modification_diff
    dict). Used by transform.html for both single-deck and reorganize
@@ -38,7 +38,7 @@
   {% endfor %}
   {% if not ns.any_changed %}
     <p class="transform-diff-empty">
-      Claude flagged this card but no field values differ from current state.
+      The AI flagged this card but no field values differ from current state.
     </p>
   {% endif %}
 </li>

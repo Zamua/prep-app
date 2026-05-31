@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}edit with claude · {{ deck_name }} · prep{% endblock %}
+{% block title %}edit with AI · {{ deck_name }} · prep{% endblock %}
 {% block page_class %}deck-edit-ai{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}
 {{ nav.back("/deck/" ~ deck_name, deck_name) }}
 
 <section class="prelude">
-  <p class="eyebrow">Edit with claude</p>
-  <h1 class="display"><em>Tell</em> claude what to change.</h1>
+  <p class="eyebrow">Edit with AI</p>
+  <h1 class="display"><em>Tell</em> the AI what to change.</h1>
   <p class="lede">
-    Claude reads every card in the deck, proposes a patch, and you confirm
+    The AI reads every card in the deck, proposes a patch, and you confirm
     before anything writes. The plan is reversible up to the point you tap
     Apply.
   </p>
@@ -24,7 +24,7 @@
   <label class="freetext">
     <span class="freetext-label">
       {{ icon('sparkle', class_='icon icon-inline') }}
-      Ask claude to {% if deck_type == 'trivia' %}edit existing cards{% else %}add cards or edit existing ones{% endif %}
+      Ask the AI to {% if deck_type == 'trivia' %}edit existing cards{% else %}add cards or edit existing ones{% endif %}
     </span>
     <textarea name="prompt" rows="5" maxlength="4000"
               placeholder="{% if deck_type == 'trivia' %}e.g. reword cards so each clearly expects a 1-2 word answer (no essay-style 'explain why' prompts){% else %}e.g. add 5 more cards on consensus algorithms · convert all go problems to java · fix typos · add skeletons where missing{% endif %}"
