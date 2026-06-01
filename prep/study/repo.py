@@ -517,7 +517,15 @@ class ReviewRepo:
                 fsrs_state=row["fsrs_state"] or 1,
                 last_review=last_review,
             )
-            scheduled = schedule_review(state, verdict, now=ts)
+            # User's chosen FSRS desired-retention overrides the
+            # algorithm default (0.90). Cheap one-column lookup; we're
+            # already inside the same transaction.
+            ret_row = c.execute(
+                "SELECT desired_retention FROM users WHERE tailscale_login = ?",
+                (user_id,),
+            ).fetchone()
+            user_retention = ret_row["desired_retention"] if ret_row else None
+            scheduled = schedule_review(state, verdict, now=ts, desired_retention=user_retention)
             interval_minutes = max(1, scheduled.interval_seconds // 60)
             next_due_iso = scheduled.next_due.isoformat()
             c.execute(

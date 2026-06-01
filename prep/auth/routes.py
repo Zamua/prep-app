@@ -153,6 +153,84 @@ def editor_settings_save(
     )
 
 
+# ---- /settings/srs — FSRS retention target -----------------------------
+#
+# Per-user knob that maps to FSRS's desired_retention parameter — the
+# probability the algorithm aims for at the moment a card becomes due.
+# Higher = more frequent reviews (more work, better retention); lower =
+# fewer reviews, accept more forgetting. Anki's default + the FSRS
+# paper reference is 0.90. We expose a small set of presets rather
+# than a free slider so users don't drift into unstable territory
+# (the algorithm misbehaves at the extremes).
+
+
+_RETENTION_PRESETS = (
+    (0.80, "80% — Relaxed", "Fewer reviews; more cards slip through."),
+    (0.85, "85% — Mild", "Slightly less frequent; light maintenance."),
+    (0.90, "90% — Default", "Anki's default. Balances retention vs work."),
+    (0.95, "95% — Strict", "Tighter recall, more frequent reviews."),
+)
+
+
+@router.get("/settings/srs", response_class=HTMLResponse)
+def srs_settings(
+    request: Request,
+    user: dict = Depends(current_user),
+    repo: UserRepo = Depends(_user_repo),
+):
+    from prep.domain.srs import DEFAULT_DESIRED_RETENTION
+
+    current = repo.get_desired_retention(user["tailscale_login"])
+    return templates.TemplateResponse(
+        "settings_srs.html",
+        {
+            "request": request,
+            "user": user,
+            "current": current if current is not None else DEFAULT_DESIRED_RETENTION,
+            "is_default": current is None,
+            "presets": _RETENTION_PRESETS,
+            "saved": False,
+        },
+    )
+
+
+@router.post("/settings/srs", response_class=HTMLResponse)
+def srs_settings_save(
+    request: Request,
+    retention: str = Form(...),
+    user: dict = Depends(current_user),
+    repo: UserRepo = Depends(_user_repo),
+):
+    from prep.domain.srs import (
+        DEFAULT_DESIRED_RETENTION,
+        MAX_DESIRED_RETENTION,
+        MIN_DESIRED_RETENTION,
+    )
+
+    try:
+        value = float(retention)
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"retention must be a number, got {retention!r}") from None
+    if not (MIN_DESIRED_RETENTION <= value <= MAX_DESIRED_RETENTION):
+        raise HTTPException(
+            400,
+            f"retention must be between {MIN_DESIRED_RETENTION:.0%} and "
+            f"{MAX_DESIRED_RETENTION:.0%}",
+        )
+    repo.set_desired_retention(user["tailscale_login"], value)
+    return templates.TemplateResponse(
+        "settings_srs.html",
+        {
+            "request": request,
+            "user": user,
+            "current": value,
+            "is_default": abs(value - DEFAULT_DESIRED_RETENTION) < 1e-6,
+            "presets": _RETENTION_PRESETS,
+            "saved": True,
+        },
+    )
+
+
 # ---- /settings/account — delete-account flow ---------------------------
 #
 # Clerk-mode only. On Tailscale-mode deploys the user's identity comes

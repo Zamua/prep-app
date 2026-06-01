@@ -57,7 +57,15 @@ from fsrs import State as _FsrsState
 # recall the card the moment it becomes due. Anki's default + the
 # FSRS paper reference. Higher = more frequent reviews (more work,
 # better retention); lower = the opposite.
-_DESIRED_RETENTION = 0.90
+#
+# This is the FALLBACK when a per-user value isn't supplied (or a
+# caller passes None). The per-user value lives on users.desired_retention
+# and threads through prep.study.service into schedule_review() —
+# see prep/auth/repo.py + prep/study/repo.py.
+DEFAULT_DESIRED_RETENTION = 0.90
+MIN_DESIRED_RETENTION = 0.70
+MAX_DESIRED_RETENTION = 0.97
+_DESIRED_RETENTION = DEFAULT_DESIRED_RETENTION  # legacy name; kept for any external import
 
 
 class Verdict(str, Enum):
@@ -126,15 +134,27 @@ class ScheduledReview:
     step_bucket: int
 
 
-# Single shared Scheduler — the upstream class is parameter-bag-only
-# (weights + retention) so it's safe to reuse across threads.
-_SCHEDULER = _FsrsScheduler(desired_retention=_DESIRED_RETENTION)
+# Scheduler cache keyed on retention. The upstream Scheduler is
+# parameter-bag-only (immutable weights + retention) so it's safe to
+# reuse across threads — but each distinct retention value needs its
+# own instance. Small footprint (most installs only have a handful
+# of distinct values across all users), zero allocation on the hot
+# path once warm.
+_SCHEDULER_CACHE: dict[float, _FsrsScheduler] = {}
+
+
+def _scheduler_for(retention: float) -> _FsrsScheduler:
+    key = round(retention, 3)
+    if key not in _SCHEDULER_CACHE:
+        _SCHEDULER_CACHE[key] = _FsrsScheduler(desired_retention=key)
+    return _SCHEDULER_CACHE[key]
 
 
 def schedule_review(
     state: CardSRSState,
     verdict: Verdict,
     now: datetime | None = None,
+    desired_retention: float | None = None,
 ) -> ScheduledReview:
     """Pure scheduler call. State + verdict + now → new state.
 
@@ -142,11 +162,19 @@ def schedule_review(
     reproducibility. The library wants timezone-aware datetimes; we
     coerce naive inputs to UTC rather than failing — easier for
     callers, no foot-gun.
+
+    `desired_retention` defaults to the FSRS paper / Anki convention
+    of 0.90. Per-user values flow in from prep/auth/repo.py via the
+    study repo's record(). Clamped to [MIN, MAX] to keep the
+    scheduler well-behaved.
     """
     if now is None:
         now = datetime.now(timezone.utc)
     elif now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
+
+    retention = desired_retention if desired_retention is not None else DEFAULT_DESIRED_RETENTION
+    retention = max(MIN_DESIRED_RETENTION, min(MAX_DESIRED_RETENTION, retention))
 
     card = _FsrsCard(
         state=_FsrsState(state.fsrs_state) if state.fsrs_state else _FsrsState.Learning,
@@ -155,7 +183,7 @@ def schedule_review(
         last_review=state.last_review,
         due=now,
     )
-    updated, _log = _SCHEDULER.review_card(
+    updated, _log = _scheduler_for(retention).review_card(
         card,
         verdict._to_fsrs(),
         review_datetime=now,

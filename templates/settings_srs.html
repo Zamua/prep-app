@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Spaced repetition · prep{% endblock %}
+{% block page_class %}settings{% endblock %}
+{% block main %}
+
+<section class="prelude">
+  <p class="eyebrow">Scheduling</p>
+  <h1 class="display">How <em>often</em> should I see a card?</h1>
+  <p class="lede">
+    Prep uses the <a href="https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm" target="_blank" rel="noopener">FSRS algorithm</a> to time each review. The setting below is the probability the algorithm aims for at the moment a card comes due — the higher you set it, the more often you'll see each card.
+  </p>
+</section>
+
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Desired retention</span><span class="rule"></span></p>
+
+  {% if saved %}
+    <p class="form-saved" style="margin-top: 0.4rem;">
+      Saved. New reviews use this target starting with your next answer.
+    </p>
+  {% endif %}
+
+  <form method="post" action="{{ request.scope.get('root_path','') }}/settings/srs"
+        class="deck-new-form" autocomplete="off" data-submit-pending>
+    <div class="form-field">
+      <span class="form-label">Pick a target</span>
+      <div class="retention-presets">
+        {% for value, label, blurb in presets %}
+          {% set picked = (current - value)|abs < 0.001 %}
+          <label class="retention-preset {% if picked %}is-active{% endif %}">
+            <input type="radio" name="retention" value="{{ value }}"
+                   {% if picked %}checked{% endif %}>
+            <span class="retention-preset-label">{{ label }}</span>
+            <span class="retention-preset-blurb">{{ blurb }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <span class="form-hint">
+        90% is the FSRS paper default and what Anki ships with. Move it
+        down to ease off; up to drill harder. Existing cards re-schedule
+        on their next review, not retroactively.
+      </span>
+    </div>
+    <div class="study-actions">
+      <button type="submit" class="btn btn-primary" data-pending-label="Saving…">Save</button>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

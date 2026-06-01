@@ -183,3 +183,29 @@ class UserRepo:
                 "UPDATE users SET active_byok_provider = ? WHERE tailscale_login = ?",
                 (provider, user_id),
             )
+
+    # ---- FSRS retention target ------------------------------------------
+
+    def get_desired_retention(self, user_id: str) -> float | None:
+        """The user's chosen FSRS desired-retention. None when they
+        haven't picked one — the scheduler then uses the algorithm
+        default (0.90, per FSRS paper / Anki convention)."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT desired_retention FROM users WHERE tailscale_login = ?",
+                (user_id,),
+            ).fetchone()
+        if not row:
+            return None
+        val = row["desired_retention"]
+        return float(val) if val is not None else None
+
+    def set_desired_retention(self, user_id: str, retention: float | None) -> None:
+        """Persist (or clear with None) the user's FSRS retention
+        target. Caller is responsible for clamping to a sensible
+        range (see prep.domain.srs MIN/MAX constants)."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE users SET desired_retention = ? WHERE tailscale_login = ?",
+                (retention, user_id),
+            )

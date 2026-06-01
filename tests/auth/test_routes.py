@@ -132,3 +132,69 @@ def test_account_delete_requires_matching_confirm(client: TestClient, initialize
         assert "doesn&#39;t match" in r.text or "doesn't match" in r.text
     finally:
         set_provider(None)
+
+
+# ---- /settings/srs — FSRS retention -------------------------------------
+
+
+def test_srs_settings_renders_with_default(client: TestClient, initialized_db: str):
+    """Fresh user — no row in users.desired_retention — gets the 0.90
+    default highlighted as active, with the is_default flag set."""
+    r = client.get("/settings/srs")
+    assert r.status_code == 200
+    assert "Desired retention" in r.text
+    assert "90% — Default" in r.text
+
+
+def test_srs_settings_save_persists(client: TestClient, initialized_db: str):
+    """Saving a value writes it to users.desired_retention and the
+    next GET shows it as the active preset."""
+    r = client.post("/settings/srs", data={"retention": "0.85"})
+    assert r.status_code == 200
+    val = UserRepo().get_desired_retention(initialized_db)
+    assert val == 0.85
+
+
+def test_srs_settings_rejects_out_of_range(client: TestClient, initialized_db: str):
+    r = client.post("/settings/srs", data={"retention": "0.50"})
+    assert r.status_code == 400
+    r2 = client.post("/settings/srs", data={"retention": "1.50"})
+    assert r2.status_code == 400
+
+
+def test_record_review_uses_user_retention(initialized_db: str):
+    """End-to-end: setting users.desired_retention changes the
+    interval the scheduler picks for the same card + verdict.
+    A higher retention target → shorter interval (more frequent reviews).
+    """
+    from prep.auth.repo import UserRepo
+    from prep.decks.entities import NewQuestion, QuestionType
+    from prep.decks.repo import DeckRepo, QuestionRepo
+    from prep.study.repo import ReviewRepo
+
+    repo = UserRepo()
+    deck_id = DeckRepo().get_or_create(initialized_db, "ret-test")
+    qid = QuestionRepo().add(
+        initialized_db,
+        deck_id,
+        NewQuestion(type=QuestionType.SHORT, prompt="Q", answer="A"),
+    )
+    # First review at default retention (0.90 baseline).
+    repo.set_desired_retention(initialized_db, 0.80)
+    state_low = ReviewRepo().record(initialized_db, qid, "right", user_answer="A")
+    low_interval = state_low.interval_minutes
+
+    # Second card, second user, different retention.
+    repo.set_desired_retention(initialized_db, 0.95)
+    qid2 = QuestionRepo().add(
+        initialized_db,
+        deck_id,
+        NewQuestion(type=QuestionType.SHORT, prompt="Q2", answer="A2"),
+    )
+    state_high = ReviewRepo().record(initialized_db, qid2, "right", user_answer="A2")
+    high_interval = state_high.interval_minutes
+
+    # Higher retention → tighter scheduling → shorter interval.
+    assert high_interval <= low_interval, (
+        f"high-retention ({high_interval}m) should be ≤ " f"low-retention ({low_interval}m)"
+    )

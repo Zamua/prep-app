@@ -1,0 +1,58 @@
+/* Retention-target preset cards on /settings/srs.
+ *
+ * Each preset is a radio-styled card — label + short blurb explaining
+ * the trade-off.  The active card carries a quill border so the
+ * user can see at a glance which preset is currently saved.  Hidden
+ * native radio drives the state via :checked + the .is-active class
+ * the template stamps on render.
+ */
+
+.retention-presets {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.retention-preset {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--tint);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.retention-preset:hover {
+  border-color: var(--quill);
+}
+.retention-preset.is-active,
+.retention-preset:has(input:checked) {
+  border-color: var(--quill);
+  background: color-mix(in srgb, var(--quill) 14%, var(--tint));
+}
+.retention-preset input {
+  /* Hidden — the card itself is the click target. Still focusable
+   * via tab for keyboard a11y; outline lands on the card via
+   * focus-within below. */
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.retention-preset:has(input:focus-visible) {
+  outline: 2px solid var(--quill);
+  outline-offset: 2px;
+}
+.retention-preset-label {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1rem;
+}
+.retention-preset-blurb {
+  font-size: 0.86rem;
+  color: var(--ink-mute);
+  font-style: italic;
+  line-height: 1.45;
+}

@@ -586,3 +586,11 @@ def init() -> None:
                           fsrs_state = CASE WHEN step >= 1 THEN 2 ELSE 1 END
                     WHERE stability IS NULL"""
             )
+
+        # 19. Per-user FSRS desired-retention. NULL means "use the
+        #     algorithm default (0.90)"; explicit values land in
+        #     [0.70, 0.97]. Surfaces in /settings/srs as a small set
+        #     of preset bands; the slider lives in the route handler.
+        ucols2 = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "desired_retention" not in ucols2:
+            c.execute("ALTER TABLE users ADD COLUMN desired_retention REAL")
