@@ -24,7 +24,8 @@ export PREP_DEV ?= 1
 
 .PHONY: help setup tools deps build dev run-app run-worker run-temporal \
         lint format hooks clean wipe-temporal-state test e2e ci \
-        deploy-stag deploy-prod promote logs-stag logs-prod down-stag down-prod
+        deploy-stag deploy-prod promote logs-stag logs-prod down-stag down-prod \
+        deploy-vps promote-vps logs-vps
 
 help:
 	@echo "Local dev (no docker):"
@@ -47,6 +48,11 @@ help:
 	@echo "  make logs-prod             — tail the 'prod' stack"
 	@echo "  make down-stag             — stop 'stag' (data volumes preserved)"
 	@echo "  make down-prod             — stop 'prod' (data volumes preserved)"
+	@echo ""
+	@echo "Public VPS (prepcards.app):"
+	@echo "  make deploy-vps            — deploy the tag in .vps-version to the Hetzner VPS"
+	@echo "  make promote-vps v=v0.X.Y  — write v to .vps-version, commit, push, deploy-vps"
+	@echo "  make logs-vps              — tail the prepcards.app container"
 
 setup: tools deps build hooks
 
@@ -274,3 +280,80 @@ down-stag:
 
 down-prod:
 	docker compose -p prod down
+
+# ----- prepcards.app on the Hetzner VPS -----
+# The public-internet prep deploy. Lives on the VPS (SSH alias `vps`,
+# defined in ~/.ssh/config), not the Mac mini, since the Mac mini is
+# tailnet-only. Nginx terminates SSL at prepcards.app and reverse-
+# proxies to the prep container on :8082.
+#
+# Layout on the VPS (set up 2026-04-20 with the admin/apps/dema user split):
+#   /home/apps/projects/prep    — git checkout, owned by apps (non-sudoer)
+#   /home/apps/projects/prep/.env — secrets (CLERK_*, PREP_INTERNAL_TOKEN,
+#                                   PREP_KEY_ENCRYPTION_SECRET, …), root:0600
+#                                   compose auto-loads it from the project dir
+#   /etc/nginx/sites-enabled/multi-project — server block for prepcards.app
+#
+# Deploy model mirrors the local two-stack flow:
+#   .vps-version is the source of truth for "what's running on prepcards.app".
+#   `make deploy-vps` is idempotent: re-running on the same version is a
+#   no-op (cached build, container already on that image).
+#   `make promote-vps v=v0.X.Y` bumps the pin, commits + pushes, deploys.
+#
+# Why git pull + build on the VPS (rather than build locally + push image):
+# the VPS already has docker + buildkit set up, the prep image's build
+# context isn't huge, and avoiding a private registry keeps ops simple.
+# Trade-off accepted: build CPU runs on the VPS during deploy. The
+# 2-core Hetzner CX22 builds prep in ~90s warm, ~3min cold.
+
+VPS_HOST       ?= vps
+VPS_PROJECT    ?= /home/apps/projects/prep
+DEPLOY_VPS_TAG := $(shell test -f .vps-version && tr -d '[:space:]' < .vps-version)
+
+# Wraps an SSH'd command. The remote shell is bash so we can chain
+# with && / use heredocs cleanly. -o BatchMode=yes refuses interactive
+# password prompts — if the alias isn't keyed up, surface a fast fail
+# rather than hanging on a TTY prompt that wouldn't work anyway.
+SSH_VPS := ssh -o BatchMode=yes $(VPS_HOST)
+
+deploy-vps:
+	@if [ -z "$(DEPLOY_VPS_TAG)" ]; then \
+	  echo "no .vps-version — write a tag (e.g. \`echo v0.39.0 > .vps-version\`) first"; exit 1; fi
+	@if ! git rev-parse --verify "$(DEPLOY_VPS_TAG)" >/dev/null 2>&1; then \
+	  echo "tag $(DEPLOY_VPS_TAG) not found locally — try \`git fetch --tags\`"; exit 1; fi
+	@echo "→ deploy-vps (tag=$(DEPLOY_VPS_TAG), host=$(VPS_HOST), path=$(VPS_PROJECT))"
+	@# git fetch + checkout the tag on the VPS. Done as the `apps` user
+	@# (the owner of the project dir, non-sudoer per the security split).
+	@# The container itself runs as root under sudo'd docker compose since
+	@# apps isn't in the docker group.
+	$(SSH_VPS) "sudo -u apps -H bash -c 'cd $(VPS_PROJECT) && git fetch --tags --force && git checkout $(DEPLOY_VPS_TAG)'"
+	@# Build + up. --wait blocks until the healthcheck passes so a boot
+	@# failure surfaces here instead of in a follow-up logs tail.
+	$(SSH_VPS) "sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) up -d --build --wait --remove-orphans"
+	@# Smoke check: hit the prepcards.app health surface from the VPS so
+	@# we verify nginx → container path, not just container health.
+	@$(SSH_VPS) "curl -sS -o /dev/null -w 'prepcards.app / → %{http_code}\\n' --max-time 10 https://prepcards.app/ || true"
+
+promote-vps:
+	@if [ -z "$(v)" ]; then echo "usage: make promote-vps v=v0.X.Y"; exit 1; fi
+	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
+	  echo "tag $(v) doesn't exist — create it first: \`git tag -a $(v) && git push --tags\`"; exit 1; fi
+	@# Same pre-flight as `make promote`: rebuild staging from the tag,
+	@# lint + test + e2e before mutating the VPS pin. Catches anything
+	@# the contributor's working-tree dropped on the floor.
+	@echo "→ pre-flight: redeploy staging from tag $(v) so e2e runs against the same code we'll ship"
+	$(MAKE) deploy-stag-from-tag v=$(v)
+	@echo "→ pre-flight: lint + python tests"
+	$(MAKE) lint
+	$(MAKE) test
+	@echo "→ pre-flight: e2e against staging"
+	$(MAKE) e2e
+	@echo "→ promoting $(v) to prepcards.app"
+	@echo "$(v)" > .vps-version
+	git add .vps-version
+	git commit -m "promote $(v) to prepcards.app"
+	git push origin main
+	$(MAKE) deploy-vps
+
+logs-vps:
+	$(SSH_VPS) "sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) logs -f --tail=200"
