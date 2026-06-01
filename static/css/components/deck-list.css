@@ -20,21 +20,28 @@
   background: var(--paper);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  transition: box-shadow 250ms ease, border-color 250ms ease;
-  /* fade-in (not rise) so no transform is left on the card after the
-   * animation completes. Cards used to use the shared `rise` keyframe,
-   * but its `to: translateY(0)` post-state — kept around by
-   * animation-fill-mode: both — turns every card into its own
-   * stacking context. Once that's true, an overflow popover from one
-   * card cannot paint above its siblings without elaborate JS-managed
-   * z-index lifts, and iOS Safari computes the order inconsistently
-   * besides. Opacity-only fade-in leaves the card with no transform
-   * and no stacking context; the popover's z-index 5 then naturally
-   * paints above sibling cards (which are at z-index auto). */
+  transition: transform 250ms cubic-bezier(.2,.7,.2,1), box-shadow 250ms ease, border-color 250ms ease;
+  /* fade-in (not rise) so the entry animation doesn't leave a
+   * permanent transform on every card. Sibling cards being stacking
+   * contexts in their default state was making the overflow popover
+   * cross-card painting unpredictable. The hover transform below
+   * still creates a TRANSIENT stacking context on tap; the open-card
+   * z-index lift handles that case, see .is-overflow-open. */
   animation: fade-in 600ms cubic-bezier(.2,.7,.2,1) both;
   animation-delay: calc(var(--i, 1) * 60ms);
   /* Anchors the absolutely-positioned per-card overflow menu. */
   position: relative;
+}
+/* When a card's overflow menu is open, lift it to z-index 10 so it
+ * paints in the parent's "z-index > 0" group, above sibling cards
+ * (which paint in the z-index auto group, in tree order). The
+ * popover is a descendant of this card, so it paints within the
+ * lifted stacking context — beats every sibling, every time, even
+ * when the open card's :hover transform creates a transient
+ * stacking context of its own. JS in modules/row-overflow.js sets
+ * the class on toggle. */
+.deck-card.is-overflow-open {
+  z-index: 10;
 }
 .deck-card:hover {
   transform: translateY(-2px);

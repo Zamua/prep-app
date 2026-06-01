@@ -8,6 +8,11 @@
  * the shared chrome.
  */
 
+/* Mirror of .deck-card.is-overflow-open — see row-overflow.js for
+ * the toggle wiring. */
+.session-card.is-overflow-open {
+  z-index: 10;
+}
 .session-menu-row {
   display: flex;
   align-items: center;
