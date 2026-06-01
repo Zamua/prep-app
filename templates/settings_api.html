@@ -132,15 +132,26 @@
      user can paste straight into their AI client (Claude Code,
      Claude Desktop, Telegram-bot Claude, etc.).  The AI then runs
      `claude mcp add` (or edits its config file) and verifies via
-     prep_list_decks.  Saves a separate visit to /settings/agent. #}
+     prep_list_decks.  Saves a separate visit to /settings/agent.
+
+     The token is embedded inline — flagged prominently in the UI so
+     the user knows whatever they paste this into has access to
+     their account. #}
   <p class="form-hint" style="margin-block-end: 0.5rem;">
     Or paste this whole prompt into your AI client — it'll wire prep
     up and confirm the connection in one shot:
   </p>
   <div class="new-token-prompt">
     <span class="new-token-prompt-preview">
-      Add prep as an MCP server using <code>claude mcp add</code>…
-      <em>(full prompt + token, ~280 chars)</em>
+      <span class="new-token-prompt-headline">
+        {{ icon('key', class_='icon icon-inline') }}
+        Setup prompt for your AI
+      </span>
+      <span class="new-token-prompt-warn">
+        <strong>Includes your token.</strong>
+        Only paste into clients you trust — anywhere this clipboard
+        lands gets access to your account until you revoke.
+      </span>
     </span>
     <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy-prompt">
       Copy setup prompt

@@ -115,30 +115,42 @@
 .new-token-prompt {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  background: var(--tint);
-  border: 1px solid var(--rule);
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  background: color-mix(in srgb, var(--wrong) 8%, var(--tint));
+  border: 1px solid color-mix(in srgb, var(--wrong) 35%, var(--rule));
   border-radius: 8px;
   margin-block-end: 1rem;
-  font-size: 0.83rem;
+  font-size: 0.85rem;
 }
 .new-token-prompt-preview {
   flex: 1;
-  color: var(--ink-mute);
-  font-style: italic;
+  display: grid;
+  gap: 0.2rem;
   line-height: 1.4;
 }
-.new-token-prompt-preview code {
-  font-style: normal;
-  font-family: var(--mono, monospace);
-  font-size: 0.95em;
+.new-token-prompt-headline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--serif);
+  font-weight: 500;
   color: var(--ink);
 }
-.new-token-prompt-preview em {
-  display: block;
+.new-token-prompt-headline .icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--quill);
+}
+.new-token-prompt-warn {
+  color: var(--ink-mute);
   font-size: 0.78rem;
-  margin-top: 0.15rem;
+  line-height: 1.45;
+}
+.new-token-prompt-warn strong {
+  color: var(--wrong);
+  font-style: normal;
+  font-weight: 500;
 }
 .new-token-prompt .btn {
   flex-shrink: 0;
