@@ -25,6 +25,7 @@
     <details class="deck-overflow-menu">
       <summary title="More actions" aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
       <div class="deck-overflow-body">
+        {% set has_cards = (questions|length) > 0 %}
         {% include "partials/deck_overflow_menu.html" %}
       </div>
     </details>
