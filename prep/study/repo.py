@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from prep.domain.srs import Verdict, advance_step, interval_for_step
+from prep.domain.srs import CardSRSState, Verdict, schedule_review
 from prep.infrastructure.db import cursor, now
 from prep.study.entities import (
     CardState,
@@ -499,24 +499,52 @@ class ReviewRepo:
             owner = c.execute("SELECT user_id FROM questions WHERE id = ?", (qid,)).fetchone()
             if not owner or owner["user_id"] != user_id:
                 raise ValueError(f"question {qid} not owned by {user_id}")
-            row = c.execute("SELECT step FROM cards WHERE question_id = ?", (qid,)).fetchone()
+            row = c.execute(
+                "SELECT step, stability, difficulty, fsrs_state, last_review "
+                "FROM cards WHERE question_id = ?",
+                (qid,),
+            ).fetchone()
             if not row:
                 raise ValueError(f"no card for question {qid}")
-            step = row["step"]
-            new_step = advance_step(step, verdict)
-            interval_td = interval_for_step(new_step)
-            interval = int(interval_td.total_seconds() // 60)
-            next_due = (ts + interval_td).isoformat()
+            last_review = None
+            if row["last_review"]:
+                last_review = datetime.fromisoformat(row["last_review"])
+                if last_review.tzinfo is None:
+                    last_review = last_review.replace(tzinfo=timezone.utc)
+            state = CardSRSState(
+                stability=row["stability"],
+                difficulty=row["difficulty"],
+                fsrs_state=row["fsrs_state"] or 1,
+                last_review=last_review,
+            )
+            scheduled = schedule_review(state, verdict, now=ts)
+            interval_minutes = max(1, scheduled.interval_seconds // 60)
+            next_due_iso = scheduled.next_due.isoformat()
             c.execute(
                 "INSERT INTO reviews (question_id, ts, result, user_answer, grader_notes) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (qid, ts.isoformat(), result, user_answer, notes),
             )
             c.execute(
-                "UPDATE cards SET step = ?, next_due = ?, last_review = ? WHERE question_id = ?",
-                (new_step, next_due, ts.isoformat(), qid),
+                """UPDATE cards
+                      SET step = ?, next_due = ?, last_review = ?,
+                          stability = ?, difficulty = ?, fsrs_state = ?
+                    WHERE question_id = ?""",
+                (
+                    scheduled.step_bucket,
+                    next_due_iso,
+                    ts.isoformat(),
+                    scheduled.state.stability,
+                    scheduled.state.difficulty,
+                    scheduled.state.fsrs_state,
+                    qid,
+                ),
             )
-        return CardState(step=new_step, next_due=next_due, interval_minutes=interval)
+        return CardState(
+            step=scheduled.step_bucket,
+            next_due=next_due_iso,
+            interval_minutes=interval_minutes,
+        )
 
     def get_last_user_answer(self, qid: int) -> str | None:
         """Most recent user_answer recorded for `qid` across the

@@ -164,20 +164,29 @@ def test_device_label_from_ua(session_repo: SessionRepo, initialized_db: str):
 
 
 def test_record_review_advances_step(review_repo: ReviewRepo, seeded_deck):
+    """First correct review on a fresh card. FSRS keeps the card in
+    Learning (sub-day interval) until it graduates after a couple
+    Good reviews — so we don't pin a specific number, just that
+    next_due is in the future and step_bucket stays low."""
     user, _, qid = seeded_deck
     state = review_repo.record(user, qid, "right", user_answer="A")
     assert isinstance(state, CardState)
-    assert state.step == 1  # was 0, advances to 1 on right
     assert state.next_due
-    assert state.interval_minutes == 24 * 60  # step 1 = 1 day
+    assert state.interval_minutes >= 1
+    # Fresh card hasn't built enough stability to leave the
+    # short-interval bucket.
+    assert state.step <= 1
 
 
-def test_record_review_wrong_resets_to_zero(review_repo: ReviewRepo, seeded_deck):
+def test_record_review_wrong_keeps_short_interval(review_repo: ReviewRepo, seeded_deck):
+    """A failure returns the card to short-interval rehearsal — the
+    FSRS analogue of the old ladder's 'reset to 10 min'. We don't
+    pin the exact number, just the shape (sub-day, low bucket)."""
     user, _, qid = seeded_deck
-    review_repo.record(user, qid, "right", user_answer="A")  # → step 1
+    review_repo.record(user, qid, "right", user_answer="A")
     state = review_repo.record(user, qid, "wrong", user_answer="B")
     assert state.step == 0
-    assert state.interval_minutes == 10  # step 0 = 10 min
+    assert state.interval_minutes <= 24 * 60
 
 
 def test_record_review_other_users_question_raises(review_repo: ReviewRepo, seeded_deck):

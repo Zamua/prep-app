@@ -107,7 +107,12 @@ def init() -> None:
                 question_id INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,
                 step        INTEGER NOT NULL DEFAULT 0,
                 next_due    TEXT NOT NULL,
-                last_review TEXT
+                last_review TEXT,
+                -- FSRS-6 state (migration 18). Nullable on new cards;
+                -- the first review initializes via the scheduler.
+                stability   REAL,
+                difficulty  REAL,
+                fsrs_state  INTEGER NOT NULL DEFAULT 1
             );
 
             CREATE TABLE IF NOT EXISTS reviews (
@@ -545,3 +550,39 @@ def init() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
         """)
+
+        # 18. FSRS scheduler swap. The ladder (10m → 1d → ... → 30d)
+        #     gave way to FSRS-6: each card carries `stability` (days
+        #     the memory is expected to last), `difficulty` (1–10,
+        #     how hard for the learner), and an FSRS phase
+        #     (1=Learning, 2=Review, 3=Relearning). `last_review` was
+        #     already on cards. Existing rows get seeded from their
+        #     ladder step so in-flight cards keep working — anyone at
+        #     step ≥ 1 lands with a stability matching their old
+        #     interval, difficulty=5 (the FSRS paper midpoint),
+        #     state=Review.
+        ccols = {r["name"] for r in c.execute("PRAGMA table_info(cards)").fetchall()}
+        if "stability" not in ccols:
+            c.execute("ALTER TABLE cards ADD COLUMN stability REAL")
+        if "difficulty" not in ccols:
+            c.execute("ALTER TABLE cards ADD COLUMN difficulty REAL")
+        if "fsrs_state" not in ccols:
+            c.execute("ALTER TABLE cards ADD COLUMN fsrs_state INTEGER NOT NULL DEFAULT 1")
+            # Backfill existing reviewed cards. Mapping mirrors the
+            # ladder's intervals (1d/3d/7d/14d/30d) → FSRS stability
+            # in days. Step 0 cards stay fresh (stability NULL); their
+            # first review will let FSRS initialize the values.
+            c.execute(
+                """UPDATE cards
+                      SET stability = CASE step
+                                        WHEN 1 THEN 1.0
+                                        WHEN 2 THEN 3.0
+                                        WHEN 3 THEN 7.0
+                                        WHEN 4 THEN 14.0
+                                        WHEN 5 THEN 30.0
+                                        ELSE NULL
+                                      END,
+                          difficulty = CASE WHEN step >= 1 THEN 5.0 ELSE NULL END,
+                          fsrs_state = CASE WHEN step >= 1 THEN 2 ELSE 1 END
+                    WHERE stability IS NULL"""
+            )
