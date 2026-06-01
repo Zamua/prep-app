@@ -88,7 +88,18 @@ async def settings_api_create(request: Request, user: dict = Depends(current_use
     include_in_schema=False,
 )
 def settings_api_delete(token_id: int, request: Request, user: dict = Depends(current_user)):
+    """Revoke a token. Two response shapes:
+
+    - htmx caller (HX-Request header set): empty 200 — the form has
+      `hx-target="closest tr" hx-swap="outerHTML"`, so the row gets
+      replaced with the empty body and visually disappears in place
+      without scrolling to the top of the page.
+    - non-JS fallback: re-render the full /settings/api page with a
+      flash message. Same shape the original form post used.
+    """
     ApiTokenRepo().delete(user_id=user["tailscale_login"], token_id=token_id)
+    if request.headers.get("hx-request"):
+        return HTMLResponse("", status_code=200)
     return _render_api_settings(request, user, flash="Token revoked.")
 
 

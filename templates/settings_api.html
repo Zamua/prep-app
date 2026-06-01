@@ -85,8 +85,16 @@
               {% if t.last_used_at %}{{ t.last_used_at[:10] }}{% else %}<em>never</em>{% endif %}
             </td>
             <td>
+              {# Revoke posts via htmx and swaps out just this row, so
+                 the page doesn't jump to the top. Non-JS fallback hits
+                 the same route via the form action; the route 303s
+                 back to /settings/api so it still works without JS. #}
               <form method="post"
                     action="{{ _root }}/settings/api/tokens/{{ t.id }}/delete"
+                    hx-post="{{ _root }}/settings/api/tokens/{{ t.id }}/delete"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML swap:120ms"
+                    hx-confirm="Revoke this token? Any client using it will start getting 401s."
                     style="margin: 0;">
                 <button type="submit" class="btn btn-quiet btn-tiny">Revoke</button>
               </form>
