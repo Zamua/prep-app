@@ -1,0 +1,69 @@
+{# Shared deck-overflow menu — the ⋯ popover on the deck-hero band.
+
+   Used by both SRS and trivia decks so the action surface is identical
+   regardless of type; type-specific bits (notification editor shape,
+   topic-prompt jump) gate inline.
+
+   Inputs:
+     deck_name        — string, the deck's URL slug
+     deck_type        — "srs" | "trivia"
+     deck_meta        — DeckMeta entity (pinned, notifications_enabled, ...)
+     questions        — list of cards (used to gate the Split entry)
+     agent_available  — bool, gates the "Edit with AI" entry
+#}
+{%- set _root = request.scope.get('root_path','') -%}
+{%- set pinned = deck_meta.pinned -%}
+
+{# Pin/Unpin. Form-shaped because it POSTs, but styled as a plain row
+   so it visually matches the anchor + button entries below. #}
+<form method="post" action="{{ _root }}/deck/{{ deck_name }}/pin" class="deck-pin-menu-form">
+  <input type="hidden" name="pinned" value="{{ 'off' if pinned else 'on' }}">
+  <button type="submit" class="deck-overflow-action">
+    {{ icon('push-pin' if pinned else 'push-pin-simple', class_='icon icon-inline') }}
+    <span>{{ 'Unpin' if pinned else 'Pin' }}</span>
+  </button>
+</form>
+
+{# Notifications. Trivia needs the interval editor (notif_edit.html);
+   SRS just needs a one-tap on/off toggle. Same row position in both. #}
+{% if deck_type == 'trivia' %}
+  {% include "partials/notif_edit.html" %}
+{% else %}
+  <form method="post" action="{{ _root }}/deck/{{ deck_name }}/notifications" class="notif-pill-form">
+    <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
+    <button type="submit" class="deck-overflow-action">
+      {% if deck_meta.notifications_enabled %}
+        {{ icon('bell', class_='icon icon-inline') }}<span>Pause notifications</span>
+      {% else %}
+        {{ icon('bell-slash', class_='icon icon-inline') }}<span>Resume notifications</span>
+      {% endif %}
+    </button>
+  </form>
+{% endif %}
+
+<a href="{{ _root }}/deck/{{ deck_name }}/question/new" class="deck-overflow-action">
+  {{ icon('plus', class_='icon icon-inline') }}<span>Add card</span>
+</a>
+
+{% if agent_available %}
+  <a href="{{ _root }}/deck/{{ deck_name }}/edit-with-claude" class="deck-overflow-action">
+    {{ icon('sparkle', class_='icon icon-inline') }}<span>Edit with AI</span>
+  </a>
+{% endif %}
+
+<a href="{{ _root }}/deck/{{ deck_name }}/export.csv" class="deck-overflow-action">
+  {{ icon('download-simple', class_='icon icon-inline') }}<span>Export CSV</span>
+</a>
+<a href="{{ _root }}/deck/{{ deck_name }}/export.apkg" class="deck-overflow-action">
+  {{ icon('package', class_='icon icon-inline') }}<span>Export Anki deck</span>
+</a>
+
+{% if questions %}
+  <a href="{{ _root }}/deck/{{ deck_name }}/split" class="deck-overflow-action">
+    {{ icon('arrow-up-right', class_='icon icon-inline') }}<span>Split deck</span>
+  </a>
+{% endif %}
+
+<button type="button" id="open-delete-dialog" class="deck-overflow-action deck-overflow-action-danger">
+  {{ icon('trash', class_='icon icon-inline') }}<span>Delete deck</span>
+</button>

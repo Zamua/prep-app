@@ -197,17 +197,18 @@ def test_trivia_deck_renders_mastery_bar_with_breakdown(client: TestClient, init
     assert "1</strong> wrong" in r.text
 
 
-def test_deck_view_renders_add_and_split_pills(client: TestClient, initialized_db: str):
-    """Deck-action pills mirror the index page pattern — each action gets
-    its own pill. "add" is a direct link to /question/new (no panel
-    toggle); "edit with claude" only renders when an agent is configured;
-    "split" is a direct link too. There's no longer a single "edit" pill
-    that hides both manual + AI behind one toggle."""
+def test_deck_view_renders_overflow_menu_actions(client: TestClient, initialized_db: str):
+    """The deck-hero band carries a single ⋯ overflow menu housing every
+    deck-level action — Add card, Edit with AI (when an agent is
+    configured), Export CSV / Anki, Split, Delete. Both SRS and trivia
+    decks use the same shared partial."""
     DeckRepo().create(initialized_db, "go-systems")
     r = client.get("/deck/go-systems")
     assert r.status_code == 200
-    assert "edit-pill" in r.text
-    # "add" pill links straight to the question-new form.
+    # Hero band + overflow menu shape.
+    assert "deck-overflow-menu" in r.text
+    assert "deck-overflow-body" in r.text
+    # "Add card" entry routes to /question/new directly.
     assert "/deck/go-systems/question/new" in r.text
 
 
@@ -603,8 +604,9 @@ def test_trivia_notifications_toggle_404_for_unknown_deck(client: TestClient, in
 
 
 def test_deck_notifications_toggle_works_for_srs_deck(client: TestClient, initialized_db: str):
-    """SRS decks now also expose the per-deck notification toggle.
-    Pausing redirects back to the deck page, pill flips to paused state."""
+    """SRS decks expose the per-deck notification toggle via the overflow
+    menu. Pausing redirects back to the deck page; the menu entry flips
+    to the 'Resume notifications' label."""
     DeckRepo().create(initialized_db, "regular-srs")
     r = client.post(
         "/deck/regular-srs/notifications",
@@ -613,8 +615,7 @@ def test_deck_notifications_toggle_works_for_srs_deck(client: TestClient, initia
     )
     assert r.status_code == 303
     page = client.get("/deck/regular-srs").text
-    assert "notif-pill-paused" in page
-    assert ">paused<" in page
+    assert "Resume notifications" in page
 
 
 def test_deck_notifications_toggle_404_for_unknown(client: TestClient, initialized_db: str):

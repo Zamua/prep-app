@@ -4,74 +4,55 @@
 {% import "macros/mastery.html" as mastery with context %}
 {% block main %}
 
-{% if deck_type == 'trivia' %}
-  {# Trivia decks: hero-band layout. Eyebrow + name + Start-session
-     button live inside a treated band (horizontal rules above/below);
-     all deck management (pin/notif/add/edit/split/edit-topic/delete)
-     hides behind a top-right ⋯ menu so the band stays uncluttered.
-     Stats render below the band as compact data. #}
-  <section class="deck-header deck-header-hero">
-    <div class="deck-hero-topbar">
-      <a href="{{ request.scope.get('root_path','') }}/" class="back" aria-label="Back to all decks">{{ icon('arrow-left', class_='icon icon-inline') }}</a>
-      <details class="deck-overflow-menu">
-        <summary title="More actions" aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
-        <div class="deck-overflow-body">
-          {# Pin lives in the menu because it's a clean 1-tap toggle.
-             Topic prompt + notification schedule are NOT here — they
-             each render as their own inline section below the hero
-             with their own edit affordances (pencil + collapsible
-             popover). Mirroring "no duplicate entry points" rule:
-             a setting that's already inline-editable doesn't need a
-             menu shortcut. #}
-          {% set pinned = deck_meta.pinned %}
-          {# Render the pin toggle as a plain menu item (matches the
-             shape of Add card / Edit with AI / Split / Delete)
-             rather than including pin_form.html, whose `.tag-pin`
-             chip styling fights against the menu's row layout. #}
-          <form method="post"
-                action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/pin"
-                class="deck-pin-menu-form">
-            <input type="hidden" name="pinned" value="{{ 'off' if pinned else 'on' }}">
-            <button type="submit" class="deck-overflow-action">
-              {{ icon('push-pin' if pinned else 'push-pin-simple', class_='icon icon-inline') }}
-              <span>{{ 'Unpin' if pinned else 'Pin' }}</span>
-            </button>
-          </form>
-          {% include "partials/notif_edit.html" %}
-          <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new" class="deck-overflow-action">{{ icon('plus', class_='icon icon-inline') }}<span>Add card</span></a>
-          {% if agent_available %}
-            <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/edit-with-claude" class="deck-overflow-action">{{ icon('sparkle', class_='icon icon-inline') }}<span>Edit with AI</span></a>
-          {% endif %}
-          <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/export.csv" class="deck-overflow-action">{{ icon('download-simple', class_='icon icon-inline') }}<span>Export CSV</span></a>
-          <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/export.apkg" class="deck-overflow-action">{{ icon('package', class_='icon icon-inline') }}<span>Export Anki deck</span></a>
-          {% if questions %}
-            <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split" class="deck-overflow-action">{{ icon('arrow-up-right', class_='icon icon-inline') }}<span>Split deck</span></a>
-          {% endif %}
-          <button type="button" id="open-delete-dialog" class="deck-overflow-action deck-overflow-action-danger">{{ icon('trash', class_='icon icon-inline') }}<span>Delete deck</span></button>
-        </div>
+{# Unified deck-header hero band. Shared shape for both SRS and trivia
+   decks — back arrow + ⋯ menu in the topbar, eyebrow + title + rename
+   in the hero body, primary CTA right below, type-specific stats
+   underneath. The only deck-type branches:
+
+   - CTA: SRS posts to /study/<name>/begin (with due count or disabled
+     "nothing due" state); trivia links to /trivia/session/<name>.
+   - Stats: SRS shows due/total figures; trivia shows the mastery bar.
+   - Overflow menu's notifications entry: trivia opens an interval
+     editor; SRS gets a one-tap toggle. That branch lives inside
+     partials/deck_overflow_menu.html.
+
+   Everything else — pin, add, edit-with-AI, exports, split, delete —
+   is identical across both surfaces and lives in the shared partial.
+#}
+<section class="deck-header deck-header-hero">
+  <div class="deck-hero-topbar">
+    <a href="{{ request.scope.get('root_path','') }}/" class="back" aria-label="Back to all decks">{{ icon('arrow-left', class_='icon icon-inline') }}</a>
+    <details class="deck-overflow-menu">
+      <summary title="More actions" aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
+      <div class="deck-overflow-body">
+        {% include "partials/deck_overflow_menu.html" %}
+      </div>
+    </details>
+  </div>
+  <div class="deck-hero">
+    <p class="deck-type-eyebrow">{{ deck_type }}</p>
+    <div class="deck-title-row deck-title-row-hero">
+      <h1 class="display deck-title">{{ deck_name }}</h1>
+      <details class="deck-rename">
+        <summary class="deck-rename-trigger" title="Rename deck">
+          {{ icon('pencil-simple-line', class_='icon icon-inline') }}
+          <span class="visually-hidden">Rename deck</span>
+        </summary>
+        <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/rename"
+              class="deck-rename-form">
+          <label class="form-label">Rename deck</label>
+          <input type="text" name="new_name" value="{{ deck_name }}" required
+                 pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
+                 autocapitalize="none" autocorrect="off"
+                 class="deck-rename-input">
+          <button type="submit" class="btn btn-quiet">Save</button>
+          <p class="form-hint">2–30 chars, lowercase letters/digits/hyphens.</p>
+        </form>
       </details>
     </div>
-    <div class="deck-hero">
-      <p class="deck-type-eyebrow">{{ deck_type }}</p>
-      <div class="deck-title-row deck-title-row-hero">
-        <h1 class="display deck-title">{{ deck_name }}</h1>
-        <details class="deck-rename">
-          <summary class="deck-rename-trigger" title="Rename deck">
-            {{ icon('pencil-simple-line', class_='icon icon-inline') }}
-            <span class="visually-hidden">Rename deck</span>
-          </summary>
-          <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/rename"
-                class="deck-rename-form">
-            <label class="form-label">Rename deck</label>
-            <input type="text" name="new_name" value="{{ deck_name }}" required
-                   pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
-                   autocapitalize="none" autocorrect="off"
-                   class="deck-rename-input">
-            <button type="submit" class="btn btn-quiet">Save</button>
-            <p class="form-hint">2–30 chars, lowercase letters/digits/hyphens.</p>
-          </form>
-        </details>
-      </div>
+
+    {# Primary CTA — type-specific shape, same visual position. #}
+    {% if deck_type == 'trivia' %}
       <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}"
          class="btn btn-primary deck-hero-cta">
         <span>Start session</span>
@@ -79,136 +60,38 @@
           <span class="btn-aside">{{ trivia_stats.unanswered }} fresh</span>
         {% endif %}
       </a>
-    </div>
-    {% if trivia_stats %}
-      {% set _t = trivia_stats.total or 1 %}
-      {% set _pct = (100 * trivia_stats.mastered / _t) | round | int %}
-      <div class="deck-mastery deck-mastery-hero">
-        <div class="deck-mastery-line">
-          <strong>{{ trivia_stats.unanswered }}</strong> fresh<span class="sep">·</span>
-          <strong>{{ trivia_stats.wrong }}</strong> wrong<span class="sep">·</span>
-          <strong>{{ trivia_stats.mastered }}/{{ trivia_stats.total }}</strong> mastered<span class="sep">·</span>
-          {{ _pct }}%
-        </div>
-        {{ mastery.bar(trivia_stats.mastered, trivia_stats.wrong, trivia_stats.total) }}
-      </div>
-    {% endif %}
-  </section>
-{% else %}
-<section class="deck-header">
-  <p class="eyebrow"><a href="{{ request.scope.get('root_path','') }}/" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} all decks</a></p>
-  <p class="deck-type-eyebrow">{{ deck_type }}</p>
-  <div class="deck-title-row">
-    <h1 class="display deck-title">{{ deck_name }}</h1>
-    {# Small in-place rename affordance. Pencil → popover with a name
-       input + Save. Pure HTML + form POST; the route validates the
-       new name and 303-redirects to /deck/<new_name> on success. #}
-    <details class="deck-rename">
-      <summary class="deck-rename-trigger" title="Rename deck">
-        {{ icon('pencil-simple-line', class_='icon icon-inline') }}
-        <span class="visually-hidden">Rename deck</span>
-      </summary>
-      <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/rename"
-            class="deck-rename-form">
-        <label class="form-label">Rename deck</label>
-        <input type="text" name="new_name" value="{{ deck_name }}" required
-               pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
-               autocapitalize="none" autocorrect="off"
-               class="deck-rename-input">
-        <button type="submit" class="btn btn-quiet">Save</button>
-        <p class="form-hint">2–30 chars, lowercase letters/digits/hyphens.</p>
-      </form>
-    </details>
-  </div>
-  {# Pill row sits BELOW the title — type tag + notif toggle + edit
-     trigger share a single row, all subtle italic pills. Below-vs-
-     beside keeps the title visually dominant and the pills feel like
-     metadata rather than competing for attention. #}
-  <div class="deck-pill-row">
-    {# Pin toggle. POSTs to /deck/<name>/pin with `pinned=on|off` —
-       on flips pinned_at to now() (deck floats to top of index),
-       off clears it. Active state gets a filled pin icon + accent
-       color so paused/pinned/etc. read at a glance. #}
-    {% set pinned = deck_meta.pinned %}
-    {% include "partials/pin_form.html" %}
-    {% if deck_type == 'trivia' %}
-      {% include "partials/notif_edit.html" %}
     {% else %}
-      {# SRS decks: keep the original single-tap toggle — no interval
-         to set, just on/off. #}
-      <form method="post"
-            action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/notifications"
-            class="notif-pill-form">
-        <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
-        <button class="notif-pill {% if not deck_meta.notifications_enabled %}notif-pill-paused{% endif %}"
-                type="submit"
-                title="{% if deck_meta.notifications_enabled %}Tap to pause notifications{% else %}Tap to resume notifications{% endif %}">
-          {% if deck_meta.notifications_enabled %}
-            {{ icon('pause', class_='icon icon-inline') }}
-            <span>notifications on</span>
-          {% else %}
-            {{ icon('play', class_='icon icon-inline') }}
-            <span>paused</span>
-          {% endif %}
-        </button>
-      </form>
+      {% if due_count > 0 %}
+        <form method="post" action="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}/begin" style="margin:0">
+          <button class="btn btn-primary deck-hero-cta" type="submit">
+            <span>Begin study session</span>
+            <span class="btn-aside">{{ due_count }} due</span>
+          </button>
+        </form>
+      {% else %}
+        <span class="btn btn-disabled deck-hero-cta" aria-disabled="true">
+          <span>Nothing due right now</span>
+        </span>
+      {% endif %}
     {% endif %}
-    {# Deck-level action pills. Mirrors the index page's "new deck" /
-       "edit with AI" pattern — each action gets its own pill. #}
-    <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/question/new"
-       class="edit-pill" title="Add a card by hand">
-      {{ icon('plus', class_='icon icon-inline') }}
-      <span>add</span>
-    </a>
-    {% if agent_available %}
-      <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/edit-with-claude"
-         class="edit-pill" title="Edit with AI — deck-wide AI prompt">
-        {{ icon('sparkle', class_='icon icon-inline') }}
-        <span>edit with AI</span>
-      </a>
-    {% endif %}
-    {# Split pill: cross-deck reorganize action (not an edit-this-
-       single-deck action). Hidden when there are no cards to split. #}
-    {% if questions %}
-      <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split"
-         class="edit-pill" title="Split into a new deck">
-        {{ icon('arrow-up-right', class_='icon icon-inline') }}
-        <span>split</span>
-      </a>
-    {% endif %}
-    {# Delete pill. Tinted danger color so it's visually separate from
-       the other deck-level actions; opens the same confirm dialog as
-       the old "Danger zone" button. #}
-    <button type="button" class="edit-pill edit-pill-danger"
-            id="open-delete-dialog"
-            title="Delete this deck">
-      {{ icon('trash', class_='icon icon-inline') }}
-      <span>delete</span>
-    </button>
   </div>
+
+  {# Stats below the hero band — mastery bar for trivia, due/total
+     figures for SRS. Same wrapper class so spacing stays consistent. #}
   {% if deck_type == 'trivia' and trivia_stats %}
-    {# Trivia mastery bar: how done am I with this deck? Bar fills
-       --right for mastered cards and --wrong for cards last answered
-       wrong; the unfilled remainder is the unanswered pool. Two
-       chips below give the breakdown. Replaces the SRS-style
-       "n due now · m total" line which doesn't apply here. #}
     {% set _t = trivia_stats.total or 1 %}
     {% set _pct = (100 * trivia_stats.mastered / _t) | round | int %}
-    <div class="deck-mastery">
-      <div class="deck-mastery-row">
-        <span class="deck-mastery-label">{{ trivia_stats.mastered }} of {{ trivia_stats.total }} mastered</span>
-        <span class="deck-mastery-pct">{{ _pct }}%</span>
+    <div class="deck-mastery deck-mastery-hero">
+      <div class="deck-mastery-line">
+        <strong>{{ trivia_stats.unanswered }}</strong> fresh<span class="sep">·</span>
+        <strong>{{ trivia_stats.wrong }}</strong> wrong<span class="sep">·</span>
+        <strong>{{ trivia_stats.mastered }}/{{ trivia_stats.total }}</strong> mastered<span class="sep">·</span>
+        {{ _pct }}%
       </div>
       {{ mastery.bar(trivia_stats.mastered, trivia_stats.wrong, trivia_stats.total) }}
-      <div class="deck-mastery-chips">
-        <span class="deck-mastery-chip deck-mastery-chip-unans">{{ trivia_stats.unanswered }} unanswered</span>
-        {% if trivia_stats.wrong %}
-          <span class="deck-mastery-chip deck-mastery-chip-wrong">{{ trivia_stats.wrong }} wrong</span>
-        {% endif %}
-      </div>
     </div>
-  {% else %}
-    <p class="deck-meta">
+  {% elif deck_type != 'trivia' %}
+    <p class="deck-meta deck-meta-hero">
       <span class="meta-figure {% if due_count > 0 %}is-active{% endif %}">
         <span class="figure">{{ due_count }}</span>
         <span class="figure-label">due now</span>
@@ -221,26 +104,6 @@
     </p>
   {% endif %}
 </section>
-
-{# Primary action for SRS decks. /begin auto-resumes any active session
-   on this deck, otherwise creates a fresh one. (Trivia decks render
-   their Start-session button inside the hero band above, so this
-   block is wrapped in the {% else %} branch of the deck_type check.) #}
-<section class="primary-action">
-  {% if due_count > 0 %}
-    <form method="post" action="{{ request.scope.get('root_path','') }}/study/{{ deck_name }}/begin" style="margin:0">
-      <button class="btn btn-primary" type="submit" style="width:100%">
-        <span>Begin study session</span>
-        <span class="btn-aside">{{ due_count }} due</span>
-      </button>
-    </form>
-  {% else %}
-    <span class="btn btn-disabled" aria-disabled="true">
-      <span>Nothing due right now</span>
-    </span>
-  {% endif %}
-</section>
-{% endif %}{# end of trivia/SRS deck-header split #}
 
 {# Trivia topic prompt — drives future batch generation. Surfaces as
    its own per-element edit affordance (small pencil + collapsible
