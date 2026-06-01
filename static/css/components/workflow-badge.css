@@ -67,6 +67,13 @@
   animation: workflow-spin 1.5s linear infinite;
 }
 @keyframes workflow-spin { to { transform: rotate(360deg); } }
+/* When every row is terminal, swap the meaning of the chip: no spin,
+ * and the check glyph color picks up the right/done accent so the eye
+ * reads "done" instead of "still working." */
+.workflow-indicator--done .workflow-chip-icon {
+  animation: none;
+  color: var(--right, currentColor);
+}
 .workflow-chip-count {
   line-height: 1;
   /* Reserve enough width for two-digit counts so the chip doesn't

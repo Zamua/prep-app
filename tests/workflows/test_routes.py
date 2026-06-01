@@ -117,6 +117,75 @@ def test_badge_response_includes_polling_attributes(client: TestClient, initiali
     assert 'hx-trigger="every 5s"' in r.text
 
 
+def test_badge_swaps_to_done_state_when_all_terminal(client: TestClient, initialized_db: str):
+    """When every row in the popover is terminal (rejected/done/failed/
+    cancelled), the chip should drop the spinner and the popover head
+    should read 'recently completed' instead of lying about 'active
+    operations'."""
+    repo = ActiveWorkflowsRepo()
+    repo.register(
+        workflow_id="t-done",
+        user_login=initialized_db,
+        workflow_type=WorkflowType.TRANSFORM,
+        deck_id=1,
+        deck_name="go-systems",
+        url_path="/transform/t-done",
+    )
+    repo.update_status("t-done", "rejected")
+    repo.register(
+        workflow_id="p-done",
+        user_login=initialized_db,
+        workflow_type=WorkflowType.PLAN,
+        deck_id=1,
+        deck_name="go-systems",
+        url_path="/plan/p-done",
+    )
+    repo.update_status("p-done", "rejected")
+
+    r = client.get("/api/active-workflows-badge")
+    assert r.status_code == 200
+    body = r.text
+    # The chip carries a marker class so CSS can drop the spinner.
+    assert "workflow-indicator--done" in body
+    # Header copy switches.
+    assert "recently completed" in body
+    assert "active operation" not in body
+
+
+def test_badge_mixed_active_and_terminal(client: TestClient, initialized_db: str):
+    """One in-progress + one just-terminal — the header should
+    differentiate, and the spinner should keep running because work
+    is still active."""
+    repo = ActiveWorkflowsRepo()
+    repo.register(
+        workflow_id="t-running",
+        user_login=initialized_db,
+        workflow_type=WorkflowType.TRANSFORM,
+        deck_id=1,
+        deck_name="d1",
+        url_path="/transform/t-running",
+    )
+    repo.update_status("t-running", "computing")
+    repo.register(
+        workflow_id="p-done",
+        user_login=initialized_db,
+        workflow_type=WorkflowType.PLAN,
+        deck_id=1,
+        deck_name="d1",
+        url_path="/plan/p-done",
+    )
+    repo.update_status("p-done", "done")
+
+    r = client.get("/api/active-workflows-badge")
+    assert r.status_code == 200
+    body = r.text
+    # Mixed state → spinner stays.
+    assert "workflow-indicator--done" not in body
+    # Header surfaces both counts.
+    assert "1 active" in body
+    assert "1 just done" in body
+
+
 def test_badge_cleanup_drops_stale_terminal_on_read(client: TestClient, initialized_db: str):
     """Hitting the badge route opportunistically prunes long-stale
     terminal rows. The visible workflow count stays accurate."""

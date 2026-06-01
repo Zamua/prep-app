@@ -15,6 +15,8 @@
    in base.html. #}
 {%- set _root = request.scope.get('root_path','') -%}
 {%- set _n = workflows|length -%}
+{%- set _n_active = workflows|rejectattr('is_terminal')|list|length -%}
+{%- set _all_done = _n > 0 and _n_active == 0 -%}
 <div id="workflow-badge"
      class="workflow-badge"
      hx-get="{{ _root }}/api/active-workflows-badge"
@@ -22,16 +24,26 @@
      hx-swap="outerHTML"
      {% if _n == 0 %}data-empty="1"{% endif %}>
   {% if _n > 0 %}
-    <details class="workflow-indicator">
-      <summary class="workflow-chip" aria-label="active workflows ({{ _n }})">
+    <details class="workflow-indicator {% if _all_done %}workflow-indicator--done{% endif %}">
+      <summary class="workflow-chip" aria-label="{% if _all_done %}recently completed operations ({{ _n }}){% else %}active workflows ({{ _n_active }} of {{ _n }}){% endif %}">
         <span class="workflow-chip-inner" aria-hidden="true">
-          {{ icon('circle-notch', class_='icon icon-inline workflow-chip-icon') }}
+          {% if _all_done %}
+            {{ icon('check', class_='icon icon-inline workflow-chip-icon') }}
+          {% else %}
+            {{ icon('circle-notch', class_='icon icon-inline workflow-chip-icon') }}
+          {% endif %}
           <span class="workflow-chip-count">{{ _n }}</span>
         </span>
       </summary>
       <div class="workflow-panel" data-details-body>
         <p class="workflow-panel-head">
-          {{ _n }} active operation{{ '' if _n == 1 else 's' }}
+          {% if _all_done %}
+            {{ _n }} recently completed
+          {% elif _n_active == _n %}
+            {{ _n }} active operation{{ '' if _n == 1 else 's' }}
+          {% else %}
+            {{ _n_active }} active · {{ _n - _n_active }} just done
+          {% endif %}
         </p>
         <ul class="workflow-list">
           {% for w in workflows %}
