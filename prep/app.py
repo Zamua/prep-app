@@ -67,6 +67,20 @@ if not _log.handlers:
     _log.propagate = False
 _log.setLevel(_PREP_LOG_LEVEL)
 
+# Defense-in-depth: scrub Anthropic OAuth tokens + API keys from every
+# log line our logger emits. We don't *intentionally* log secrets, but
+# accident routes exist (exception traces echoing a request body, a
+# library debug log that includes headers). See prep/web/log_redaction.py.
+from prep.web.log_redaction import install_on as _install_redaction
+
+_install_redaction(_log)
+# uvicorn's own loggers handle the request path (`--no-access-log` is
+# on in prod so they're mostly quiet, but error-level lines from
+# uvicorn.error still flow to stdout). Wrap them too — same accident
+# routes apply.
+_install_redaction(logging.getLogger("uvicorn"))
+_install_redaction(logging.getLogger("uvicorn.error"))
+
 # Boot-time agent probe so the templates context_processor + AI-gating
 # route guards share one source of truth.
 _agent_mod.init_availability()
