@@ -592,6 +592,17 @@ class QuestionRepo:
                 (1 if suspended else 0, qid, user_id),
             )
 
+    def delete(self, user_id: str, qid: int) -> bool:
+        """Delete a single question. FK CASCADE drops the cards +
+        reviews rows. Returns True if a row was deleted (cross-user
+        attempts return False; same shape as not-found)."""
+        with cursor() as c:
+            cur = c.execute(
+                "DELETE FROM questions WHERE id = ? AND user_id = ?",
+                (qid, user_id),
+            )
+            return cur.rowcount > 0
+
 
 # ---- row-to-entity helpers ----------------------------------------------
 
