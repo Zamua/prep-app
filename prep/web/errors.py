@@ -40,20 +40,31 @@ _ERROR_COPY = {
 }
 
 
+# Suffix forms include the /notify/ prefix so a deck named "test"
+# (or "subscribe", "prefs", …) under /trivia/session/<name> does NOT
+# match. `endswith` instead of `==` keeps things working under a
+# ROOT_PATH prefix on the mac-mini staging deploy where the path is
+# `/prep-staging/notify/test` rather than `/notify/test`.
+_JSON_ENDPOINT_SUFFIXES = (
+    "/notify/subscribe",
+    "/notify/unsubscribe",
+    "/notify/test",
+    "/notify/prefs",
+    "/notify/vapid-public-key",
+)
+
+
 def _wants_json(request: Request) -> bool:
     accept = request.headers.get("accept", "")
     if "application/json" in accept and "text/html" not in accept:
         return True
-    # Any /notify/* JSON endpoint should not get an HTML error page on its
-    # POST responses — the JS code on the demo / settings page expects JSON.
+    # /notify/* JSON endpoints don't get an HTML error page — the
+    # demo / settings JS expects JSON. The previous `endswith("/test")`
+    # rule wrongly matched any deck named "test" (so
+    # /trivia/session/test returned `{"detail": "not authenticated"}`
+    # to a browser instead of a Clerk redirect). Hit 2026-06-01.
     path = request.url.path
-    if (
-        path.endswith("/subscribe")
-        or path.endswith("/unsubscribe")
-        or path.endswith("/test")
-        or path.endswith("/prefs")
-        or path.endswith("/vapid-public-key")
-    ):
+    if any(path.endswith(s) for s in _JSON_ENDPOINT_SUFFIXES):
         return True
     return False
 
