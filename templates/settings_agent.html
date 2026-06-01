@@ -49,9 +49,15 @@
         class="agent-connect-form" autocomplete="off">
     <label class="freetext">
       <span class="freetext-label">{% if byok %}Replace key{% else %}API key{% endif %}</span>
-      <input type="password" name="api_key" required spellcheck="false"
-             autocapitalize="off" autocorrect="off"
-             placeholder="sk-ant-api03-…" style="font-family: var(--mono); width: 100%;">
+      {# type=text + autocomplete=off so password managers don't try to
+         intercept (1Password's overlay icon looked broken on dark
+         theme); the key is the same shape as a token, not a login
+         secret, and users want to see what they pasted. The textarea
+         element picks up the standard `.freetext` styling and matches
+         the OAuth form below it. #}
+      <textarea name="api_key" rows="2" required spellcheck="false"
+                autocomplete="off" autocapitalize="off" autocorrect="off"
+                placeholder="sk-ant-api03-…"></textarea>
       <span class="freetext-hint">
         Get a key at
         <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a>.
