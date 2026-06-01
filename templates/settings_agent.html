@@ -1,176 +1,291 @@
 {% extends "base.html" %}
-{% block title %}AI agent · settings · prep{% endblock %}
+{% block title %}AI · settings · prep{% endblock %}
 {% block page_class %}settings settings-agent{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}
 
 {{ nav.back("/", "back") }}
 
-{# Is any provider connected? — used for the headline + the prelude
-   lede. A "connected" deploy means either a BYOK row exists OR the
-   shared subscription OAuth path is active. #}
+{# Is any provider connected? — used to default the toggle to the
+   "embed" direction when nothing's set up yet, so new users see the
+   onboarding side first. #}
 {% set any_byok_connected = byok_sections and (byok_sections | selectattr('metadata') | list | length) %}
 {% set any_connected = any_byok_connected or status.logged_in %}
+{%- set _root = request.scope.get('root_path','') -%}
 
 <section class="prelude">
-  <p class="eyebrow">AI agent</p>
-  <h1 class="display">{% if any_connected %}<em>Connected</em>.{% else %}Bring your <em>own</em> agent.{% endif %}</h1>
+  <p class="eyebrow">AI</p>
+  <h1 class="display">Prep <em>↔</em> AI.</h1>
   <p class="lede">
-    Prep can use an AI agent to generate cards, grade short answers,
-    and run deck transforms. The app works without it (manual cards
-    + self-grading); AI features light up once you add a key from
-    any of the providers below.
+    Two directions, same idea. <strong>Embed an agent inside prep</strong>
+    so it can draft and grade cards for you — or <strong>let an outside
+    agent use prep</strong>, managing decks from wherever you work.
   </p>
+
+  {# Direction switcher.  JS below sets `is-active` on whichever pill
+     was tapped and toggles `hidden` on the corresponding section.
+     Defaults to the "embed" direction so first-time users land on
+     the onboarding path; if a key/token was already saved, the
+     server can pre-select via the data-default below. #}
+  <div class="direction-switcher" role="tablist" aria-label="Direction"
+       data-default="embed">
+    <button type="button" class="direction-pill is-active"
+            data-direction="embed"
+            role="tab" aria-selected="true" aria-controls="direction-embed">
+      <span class="direction-arrow" aria-hidden="true">→</span>
+      <span class="direction-label">Embed an agent</span>
+      <span class="direction-sub">prep uses AI to draft + grade cards</span>
+    </button>
+    <button type="button" class="direction-pill"
+            data-direction="external"
+            role="tab" aria-selected="false" aria-controls="direction-external">
+      <span class="direction-arrow" aria-hidden="true">←</span>
+      <span class="direction-label">Let an agent use prep</span>
+      <span class="direction-sub">your AI manages decks via MCP</span>
+    </button>
+  </div>
 </section>
 
-{% if byok_error %}
-  <p class="form-error">{{ byok_error }}</p>
-{% endif %}
-{% if byok_flash %}
-  <p class="notify-status" data-kind="ok">{{ byok_flash }}</p>
-{% endif %}
+{# ---- Embed-an-agent direction: BYOK + subscription path ---- #}
+<div id="direction-embed" class="direction-view" role="tabpanel"
+     aria-labelledby="direction-embed">
 
-{# ---- One section per supported BYOK provider ---- #}
-{% for s in byok_sections %}
-{% set p = s.info %}
-{% set m = s.metadata %}
-<section class="agent-panel">
-  <p class="section-eyebrow">
-    <span>{{ p.label }}{% if s.is_active %} <span class="byok-active-badge">Active</span>{% endif %}</span>
-    <span class="rule"></span>
-  </p>
-
-  {% if m %}
-    <p class="agent-status" data-state="on">
-      {{ icon('check-circle', class_='icon icon-inline') }}
-      <strong>Connected</strong> · <code>{{ m.key_prefix }}</code>
-      <span class="form-hint">
-        added {{ m.created_at[:10] }}{% if m.last_used_at %} · last used {{ m.last_used_at[:10] }}{% else %} · not yet used{% endif %}
-      </span>
-    </p>
-    {% if not s.is_active %}
-      <form method="post"
-            action="{{ request.scope.get('root_path','') }}/settings/agent/byok/{{ s.provider }}/use"
-            class="byok-use-form" style="margin-block-start: 0.85rem;">
-        <button type="submit" class="btn btn-quiet">Use {{ p.label }} for AI calls</button>
-      </form>
-    {% endif %}
-  {% else %}
-    <p class="agent-status" data-state="off">
-      {{ icon('warning-circle', class_='icon icon-inline') }}
-      <strong>Not configured</strong>
-    </p>
+  {% if byok_error %}
+    <p class="form-error">{{ byok_error }}</p>
+  {% endif %}
+  {% if byok_flash %}
+    <p class="notify-status" data-kind="ok">{{ byok_flash }}</p>
   {% endif %}
 
-  <form method="post"
-        action="{{ request.scope.get('root_path','') }}/settings/agent/byok/{{ s.provider }}/connect"
-        class="agent-connect-form" autocomplete="off">
-    <label class="freetext">
-      <span class="freetext-label">{% if m %}Replace {{ p.label }} key{% else %}{{ p.label }} API key{% endif %}</span>
-      <textarea name="api_key" rows="2" required spellcheck="false"
-                autocomplete="off" autocapitalize="off" autocorrect="off"
-                placeholder="{{ p.key_prefixes[0] }}…"></textarea>
-      <span class="freetext-hint">
-        Get a key at
-        <a href="{{ p.console_url }}" target="_blank" rel="noopener">{{ p.console_url|replace('https://', '') }}</a>.
-        Encrypted at rest, only used for your own AI calls.
-      </span>
-    </label>
-    <div class="study-actions">
-      <button type="submit" class="btn btn-primary">
-        {% if m %}Replace{% else %}Save key{% endif %}
-      </button>
-    </div>
-  </form>
+  {% for s in byok_sections %}
+  {% set p = s.info %}
+  {% set m = s.metadata %}
+  <section class="agent-panel">
+    <p class="section-eyebrow">
+      <span>{{ p.label }}{% if s.is_active %} <span class="byok-active-badge">Active</span>{% endif %}</span>
+      <span class="rule"></span>
+    </p>
 
-  {% if m %}
-    <form method="post"
-          action="{{ request.scope.get('root_path','') }}/settings/agent/byok/{{ s.provider }}/disconnect"
-          class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
-      <button type="submit" class="btn btn-quiet">Remove key</button>
-    </form>
-  {% endif %}
-</section>
-{% endfor %}
-
-{# ---- Subscription path (deploy-shared OAuth token, secondary) ---- #}
-<details class="agent-panel" {% if not any_byok_connected and status.logged_in %}open{% endif %}>
-  <summary class="section-eyebrow" style="cursor: pointer; list-style: none;">
-    <span>Or: connect a Claude subscription token</span><span class="rule"></span>
-  </summary>
-
-  <p class="form-hint" style="margin-block-start: 0.85rem;">
-    The subscription path uses a single OAuth token shared across all
-    users on this deploy. Suitable when one operator wants to fund
-    everyone's AI usage from their own Max subscription.
-  </p>
-
-  <p class="agent-status" data-state="{{ 'on' if status.logged_in else 'off' }}" style="margin-block-start: 0.85rem;">
-    {% if status.logged_in %}
-      {{ icon('check-circle', class_='icon icon-inline') }}
-      <strong>Connected</strong> · in-process SDK
+    {% if m %}
+      <p class="agent-status" data-state="on">
+        {{ icon('check-circle', class_='icon icon-inline') }}
+        <strong>Connected</strong> · <code>{{ m.key_prefix }}</code>
+        <span class="form-hint">
+          added {{ m.created_at[:10] }}{% if m.last_used_at %} · last used {{ m.last_used_at[:10] }}{% else %} · not yet used{% endif %}
+        </span>
+      </p>
+      {% if not s.is_active %}
+        <form method="post"
+              action="{{ _root }}/settings/agent/byok/{{ s.provider }}/use"
+              class="byok-use-form" style="margin-block-start: 0.85rem;">
+          <button type="submit" class="btn btn-quiet">Use {{ p.label }} for AI calls</button>
+        </form>
+      {% endif %}
     {% else %}
-      {{ icon('warning-circle', class_='icon icon-inline') }}
-      <strong>Not connected</strong>{% if status.reason and status.kind != 'unconfigured' %} · {{ status.reason }}{% endif %}
+      <p class="agent-status" data-state="off">
+        {{ icon('warning-circle', class_='icon icon-inline') }}
+        <strong>Not configured</strong>
+      </p>
     {% endif %}
-  </p>
 
-  {% if error %}
-    <p class="form-error">{{ error }}</p>
-  {% endif %}
-  {% if flash %}
-    <p class="notify-status" data-kind="ok">{{ flash }}</p>
-  {% endif %}
-
-  {% if not status.logged_in %}
-    <ol class="agent-steps">
-      <li>
-        On any machine where you have Claude Code installed and signed
-        in, run:
-        <pre class="reproduction agent-cmd"><code id="agent-cmd-copy">claude setup-token</code></pre>
-        <button type="button" class="btn btn-quiet btn-tiny" id="copy-agent-cmd">Copy command</button>
-      </li>
-      <li>
-        Authenticate in the browser when it opens, then copy the token
-        it prints to the terminal. Starts with <code>sk-ant-oat01-</code>; valid for a year.
-      </li>
-      <li>
-        Paste the token here and click <strong>Connect</strong>.
-      </li>
-    </ol>
-
-    <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
+    <form method="post"
+          action="{{ _root }}/settings/agent/byok/{{ s.provider }}/connect"
+          class="agent-connect-form" autocomplete="off">
       <label class="freetext">
-        <span class="freetext-label">Token</span>
-        <textarea name="token" rows="3" required spellcheck="false"
-                  autocapitalize="off" autocorrect="off"
-                  placeholder="sk-ant-oat01-…"></textarea>
+        <span class="freetext-label">{% if m %}Replace {{ p.label }} key{% else %}{{ p.label }} API key{% endif %}</span>
+        <textarea name="api_key" rows="2" required spellcheck="false"
+                  autocomplete="off" autocapitalize="off" autocorrect="off"
+                  placeholder="{{ p.key_prefixes[0] }}…"></textarea>
+        <span class="freetext-hint">
+          Get a key at
+          <a href="{{ p.console_url }}" target="_blank" rel="noopener">{{ p.console_url|replace('https://', '') }}</a>.
+          Encrypted at rest, only used for your own AI calls.
+        </span>
       </label>
       <div class="study-actions">
-        <button type="submit" class="btn btn-primary">Connect</button>
+        <button type="submit" class="btn btn-primary">
+          {% if m %}Replace{% else %}Save key{% endif %}
+        </button>
       </div>
     </form>
-  {% else %}
-    <form method="post" action="{{ request.scope.get('root_path','') }}/settings/agent/disconnect" class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
-      <button type="submit" class="btn btn-quiet">Disconnect</button>
-    </form>
-  {% endif %}
-</details>
+
+    {% if m %}
+      <form method="post"
+            action="{{ _root }}/settings/agent/byok/{{ s.provider }}/disconnect"
+            class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
+        <button type="submit" class="btn btn-quiet">Remove key</button>
+      </form>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  {# Subscription path (deploy-shared OAuth token, secondary) #}
+  <details class="agent-panel" {% if not any_byok_connected and status.logged_in %}open{% endif %}>
+    <summary class="section-eyebrow" style="cursor: pointer; list-style: none;">
+      <span>Or: connect a Claude subscription token</span><span class="rule"></span>
+    </summary>
+
+    <p class="form-hint" style="margin-block-start: 0.85rem;">
+      The subscription path uses a single OAuth token shared across all
+      users on this deploy. Suitable when one operator wants to fund
+      everyone's AI usage from their own Max subscription.
+    </p>
+
+    <p class="agent-status" data-state="{{ 'on' if status.logged_in else 'off' }}" style="margin-block-start: 0.85rem;">
+      {% if status.logged_in %}
+        {{ icon('check-circle', class_='icon icon-inline') }}
+        <strong>Connected</strong> · in-process SDK
+      {% else %}
+        {{ icon('warning-circle', class_='icon icon-inline') }}
+        <strong>Not connected</strong>{% if status.reason and status.kind != 'unconfigured' %} · {{ status.reason }}{% endif %}
+      {% endif %}
+    </p>
+
+    {% if error %}
+      <p class="form-error">{{ error }}</p>
+    {% endif %}
+    {% if flash %}
+      <p class="notify-status" data-kind="ok">{{ flash }}</p>
+    {% endif %}
+
+    {% if not status.logged_in %}
+      <ol class="agent-steps">
+        <li>
+          On any machine where you have Claude Code installed and signed
+          in, run:
+          <pre class="reproduction agent-cmd"><code id="agent-cmd-copy">claude setup-token</code></pre>
+          <button type="button" class="btn btn-quiet btn-tiny" id="copy-agent-cmd">Copy command</button>
+        </li>
+        <li>
+          Authenticate in the browser when it opens, then copy the token
+          it prints to the terminal. Starts with <code>sk-ant-oat01-</code>; valid for a year.
+        </li>
+        <li>
+          Paste the token here and click <strong>Connect</strong>.
+        </li>
+      </ol>
+
+      <form method="post" action="{{ _root }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
+        <label class="freetext">
+          <span class="freetext-label">Token</span>
+          <textarea name="token" rows="3" required spellcheck="false"
+                    autocapitalize="off" autocorrect="off"
+                    placeholder="sk-ant-oat01-…"></textarea>
+        </label>
+        <div class="study-actions">
+          <button type="submit" class="btn btn-primary">Connect</button>
+        </div>
+      </form>
+    {% else %}
+      <form method="post" action="{{ _root }}/settings/agent/disconnect" class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
+        <button type="submit" class="btn btn-quiet">Disconnect</button>
+      </form>
+    {% endif %}
+  </details>
+</div>
+
+{# ---- Let-an-agent-use-prep direction: MCP setup ---- #}
+<div id="direction-external" class="direction-view" role="tabpanel" hidden
+     aria-labelledby="direction-external">
+
+  <section class="agent-panel">
+    <p class="section-eyebrow"><span>Connect via MCP</span><span class="rule"></span></p>
+    <p>
+      Your AI agent talks to prep over HTTP via the
+      <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a>.
+      Three steps:
+    </p>
+
+    <ol class="agent-steps">
+      <li>
+        <strong>Mint a token</strong> on the
+        <a href="{{ _root }}/settings/api">API tokens page</a>.
+        The full token is shown once; copy it before leaving.
+      </li>
+      <li>
+        <strong>Add prep as an MCP server</strong> in your client.
+        <details class="mcp-client" open>
+          <summary>Claude Code (CLI)</summary>
+          <pre class="reproduction" style="margin-top: 0.5rem;"><code>claude mcp add --transport http prep \
+  https://prepcards.app/mcp \
+  --header "Authorization: Bearer prep_pat_..."</code></pre>
+        </details>
+        <details class="mcp-client">
+          <summary>Claude Desktop</summary>
+          <p class="form-hint" style="margin-top: 0.4rem;">
+            Edit <code>claude_desktop_config.json</code> (Settings → Developer → Edit config) and add:
+          </p>
+          <pre class="reproduction" style="margin-top: 0.4rem;"><code>{
+  "mcpServers": {
+    "prep": {
+      "url": "https://prepcards.app/mcp",
+      "headers": {
+        "Authorization": "Bearer prep_pat_..."
+      }
+    }
+  }
+}</code></pre>
+          <p class="form-hint">Restart Claude Desktop after saving.</p>
+        </details>
+        <details class="mcp-client">
+          <summary>Other MCP-aware clients</summary>
+          <p class="form-hint" style="margin-top: 0.4rem;">
+            Point the client at <code>https://prepcards.app/mcp</code>
+            (HTTP transport, JSON-RPC 2.0). Pass the token as
+            <code>Authorization: Bearer prep_pat_…</code>.
+          </p>
+        </details>
+      </li>
+      <li>
+        <strong>Use it.</strong> Your agent gets a tool catalog covering
+        nearly every read/write on your decks + cards — imports, exports,
+        rename, pin, suspend, the lot.
+        Full reference is in
+        <a href="{{ _root }}/llms.txt">/llms.txt</a> (the agent-discovery
+        manifest) and <a href="{{ _root }}/docs">/docs</a> (Swagger UI).
+      </li>
+    </ol>
+  </section>
+</div>
 
 <script>
 (function () {
+  /* Copy-command button on the subscription-path step. */
   const btn = document.getElementById('copy-agent-cmd');
   const src = document.getElementById('agent-cmd-copy');
-  if (!btn || !src) return;
-  btn.addEventListener('click', async () => {
-    const original = btn.textContent;
-    try {
-      await navigator.clipboard.writeText(src.textContent.trim());
-      btn.textContent = 'copied';
-    } catch (e) {
-      btn.textContent = 'failed';
-    }
-    setTimeout(() => { btn.textContent = original; }, 1400);
+  if (btn && src) {
+    btn.addEventListener('click', async () => {
+      const original = btn.textContent;
+      try {
+        await navigator.clipboard.writeText(src.textContent.trim());
+        btn.textContent = 'copied';
+      } catch (e) {
+        btn.textContent = 'failed';
+      }
+      setTimeout(() => { btn.textContent = original; }, 1400);
+    });
+  }
+
+  /* Direction switcher: hide/show the inactive view. */
+  const pills = document.querySelectorAll('.direction-pill');
+  const views = {
+    embed: document.getElementById('direction-embed'),
+    external: document.getElementById('direction-external'),
+  };
+  pills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      const target = pill.dataset.direction;
+      pills.forEach(p => {
+        const active = p.dataset.direction === target;
+        p.classList.toggle('is-active', active);
+        p.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      Object.entries(views).forEach(([k, el]) => {
+        if (!el) return;
+        if (k === target) el.removeAttribute('hidden');
+        else el.setAttribute('hidden', '');
+      });
+    });
   });
 })();
 </script>

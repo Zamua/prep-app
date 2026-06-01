@@ -1,0 +1,86 @@
+/* /settings/agent — the bi-directional AI integration page.
+ *
+ * The direction switcher up top is a segmented control of two pills.
+ * JS in the template's inline script toggles `is-active` on the
+ * tapped pill and `hidden` on the inactive view.  Hide-only-active
+ * (not opacity); the two views are distinct flows.
+ */
+
+.direction-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1.4rem;
+  padding: 0.4rem;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--tint);
+}
+
+.direction-pill {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 10px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-mute);
+  text-align: left;
+  border: none;
+  font: inherit;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+.direction-pill.is-active {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+.direction-pill:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 2px;
+}
+
+.direction-arrow {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--quill);
+  margin-bottom: 0.15rem;
+}
+.direction-label {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+.direction-sub {
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--ink-mute);
+  line-height: 1.3;
+}
+
+/* MCP-client setup accordions inside the second direction's panel.
+ * Subtle quill highlight on the open one so the active snippet is
+ * obvious. */
+.mcp-client {
+  padding: 0.85rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--tint);
+  margin-top: 0.6rem;
+}
+.mcp-client[open] {
+  border-color: var(--quill);
+}
+.mcp-client > summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.mcp-client > summary::-webkit-details-marker { display: none; }
+.mcp-client > summary::marker { content: ""; }
+.mcp-client > summary:hover { color: var(--quill); }
