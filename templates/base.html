@@ -66,6 +66,45 @@
      no-JS fallback still works. Loaded from <head> with `defer` so it
      wires up before user interaction without blocking parse. #}
   <script src="{{ root }}/static/js/vendor/htmx-2.0.4.min.js?v={{ static_css_mtime|default(0) }}" defer></script>
+
+  {# ClerkJS bootstrap — only emitted when the active provider is Clerk
+     (the `clerk_publishable_key` + `clerk_frontend_api_host` globals
+     are set by the prep.web.templates context_processor on
+     PREP_AUTH_MODE=clerk deploys; None on Tailscale).
+
+     Loading on EVERY page (not just landing) is the fix for the
+     2026-06-01 bug where /settings/agent worked on first arrival but
+     a form POST minutes later 401'd: Clerk JWTs are short-lived (~60s)
+     and only ClerkJS-on-page silently refreshes them. Without this
+     script, leaving any tab open past the JWT TTL and then posting
+     a form would bounce through Clerk sign-in and lose the form data.
+
+     The bootstrap is fire-and-forget — `Clerk.load()` reads
+     `__client_uat`, fetches a fresh `__session` JWT from
+     clerk.<domain>, sets the apex cookie, and quietly refreshes it on
+     a timer thereafter. No reload here (the landing page's reload
+     dance is specifically for first-time-after-signup; mid-session
+     refreshes are seamless). #}
+  {% if clerk_publishable_key and clerk_frontend_api_host %}
+  <script async crossorigin="anonymous"
+          data-clerk-publishable-key="{{ clerk_publishable_key }}"
+          src="https://{{ clerk_frontend_api_host }}/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+          type="text/javascript"></script>
+  <script>
+    (async function () {
+      let waited = 0;
+      while (!window.Clerk && waited < 5000) {
+        await new Promise(r => setTimeout(r, 50));
+        waited += 50;
+      }
+      if (window.Clerk) {
+        try { await window.Clerk.load(); } catch (e) {
+          console.warn("Clerk bootstrap failed:", e);
+        }
+      }
+    })();
+  </script>
+  {% endif %}
 </head>
 <body class="page-{% block page_class %}default{% endblock %}"
       {% if user and user.editor_input_mode %}data-editor-mode="{{ user.editor_input_mode }}"{% endif %}>

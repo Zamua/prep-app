@@ -14,9 +14,6 @@ alongside.
 
 from __future__ import annotations
 
-import base64
-import os
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -29,25 +26,6 @@ from prep.trivia.session_state import format_done
 from prep.web.templates import templates
 
 router = APIRouter()
-
-
-def _clerk_frontend_api_host() -> str | None:
-    """Decode Clerk publishable key to find the Frontend API host.
-
-    `pk_<env>_<base64>` where base64 is `<host>$` — e.g.
-    `pk_live_Y2xlcmsucHJlcGNhcmRzLmFwcCQ` → `clerk.prepcards.app`.
-    Returns None when no key is set (Tailscale-mode or misconfig)."""
-    pk = (os.environ.get("CLERK_PUBLISHABLE_KEY") or "").strip()
-    if not pk or "_" not in pk:
-        return None
-    encoded = pk.split("_", 2)[-1]
-    try:
-        # Clerk pads with trailing `$` instead of `=`; tolerate either.
-        padded = encoded + "=" * (-len(encoded) % 4)
-        decoded = base64.b64decode(padded).decode("ascii", errors="ignore")
-    except Exception:  # noqa: BLE001
-        return None
-    return decoded.rstrip("$").strip() or None
 
 
 @router.get("/healthz", include_in_schema=False)
@@ -77,22 +55,16 @@ def index(
     user = optional_current_user(request)
     if user is None:
         urls = get_provider().urls()
+        # ClerkJS itself is loaded by base.html on every page (see
+        # _clerk_bootstrap_context in prep.web.templates). The landing
+        # template uses `clerk_publishable_key` (also context-processor
+        # supplied) only to gate its one-shot post-signup reload.
         return templates.TemplateResponse(
             "landing.html",
             {
                 "request": request,
                 "user": None,
                 "sign_in_url": urls.sign_in,
-                # ClerkJS bootstrap config — when set, the landing
-                # page loads Clerk's browser SDK, which exchanges the
-                # `__client_uat` apex cookie for a `__session` JWT
-                # cookie and reloads so the server sees the session.
-                # Without this step the user signs in, lands back
-                # here, and stays stuck on the landing page because
-                # only ClerkJS can mint the apex __session cookie.
-                "clerk_publishable_key": (os.environ.get("CLERK_PUBLISHABLE_KEY") or "").strip()
-                or None,
-                "clerk_frontend_api_host": _clerk_frontend_api_host(),
             },
         )
     uid = user["tailscale_login"]

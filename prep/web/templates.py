@@ -64,6 +64,36 @@ def _assets_context(request: Request) -> dict:
     return {"static_css_mtime": _STATIC_BUILD_VERSION}
 
 
+def _clerk_bootstrap_context(request: Request) -> dict:
+    """Expose Clerk publishable key + frontend API host to base.html
+    so it can load ClerkJS on every page (not just the landing). The
+    JS keeps the short-lived `__session` cookie refreshed in the
+    background — without it, an idle tab's POST would 401 → bounce
+    through Clerk sign-in and lose form data (the 2026-06-01 bug).
+
+    Returns Nones on Tailscale-mode deploys; base.html's `{% if %}`
+    guard then renders nothing.
+    """
+    import base64
+    import os
+
+    if (os.environ.get("PREP_AUTH_MODE") or "").strip() != "clerk":
+        return {"clerk_publishable_key": None, "clerk_frontend_api_host": None}
+    pk = (os.environ.get("CLERK_PUBLISHABLE_KEY") or "").strip()
+    if not pk or "_" not in pk:
+        return {"clerk_publishable_key": None, "clerk_frontend_api_host": None}
+    # pk_<env>_<base64-encoded-frontend-api-host with trailing $>
+    encoded = pk.split("_", 2)[-1]
+    try:
+        padded = encoded + "=" * (-len(encoded) % 4)
+        host = base64.b64decode(padded).decode("ascii", errors="ignore").rstrip("$").strip()
+    except Exception:  # noqa: BLE001
+        host = ""
+    if not host:
+        return {"clerk_publishable_key": None, "clerk_frontend_api_host": None}
+    return {"clerk_publishable_key": pk, "clerk_frontend_api_host": host}
+
+
 def _notif_unseen_context(request: Request) -> dict:
     """Drives the masthead's "Notification log" badge — count of
     notifications the user hasn't viewed since they last opened the
@@ -86,6 +116,7 @@ templates = Jinja2Templates(
         _user_context,
         _agent_context,
         _assets_context,
+        _clerk_bootstrap_context,
         _notif_unseen_context,
     ],
 )
