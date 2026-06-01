@@ -12,5 +12,9 @@ temporal: sh -c 'mkdir -p /data/temporal /data/prep && exec temporal server star
 # ROOT_PATH="" deploy (root-domain shape, e.g. prepcards.app) used to
 # crash on boot. The ${VAR:+...} expansion drops the whole flag when
 # unset, keeps it when set (e.g. /prep or /prep-staging).
-app: sh -c '.venv/bin/uvicorn prep.app:app --host $HOST --port $PORT --no-access-log ${ROOT_PATH:+--root-path "$ROOT_PATH"}'
+# --proxy-headers + --forwarded-allow-ips so request.url.scheme returns
+# `https` when tailscale-serve / nginx terminate TLS upstream. Without
+# these, FastAPI sees `http` and any absolute-URL we render (e.g. the
+# "Copy setup prompt" base) ends up with the wrong scheme.
+app: sh -c '.venv/bin/uvicorn prep.app:app --host $HOST --port $PORT --no-access-log --proxy-headers --forwarded-allow-ips "*" ${ROOT_PATH:+--root-path "$ROOT_PATH"}'
 worker: ./worker-go/bin/worker
