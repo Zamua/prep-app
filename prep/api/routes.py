@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from prep.api.auth import bearer_user
 from prep.api.entities import ApiTokenMetadata
+from prep.api.mcp import router as mcp_router
 from prep.api.repo import ApiTokenRepo
 from prep.auth import current_user
 from prep.decks.io import csv_to_deck, deck_to_csv
@@ -37,6 +38,11 @@ from prep.web.templates import templates
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Mount the MCP-over-HTTP server (POST /mcp) as a child router. Same
+# bearer-token auth; same per-user repo scoping. Lives in its own
+# module so the JSON-RPC plumbing doesn't clutter routes.py.
+router.include_router(mcp_router)
 
 
 # ---- /settings/api — management UI -------------------------------------
@@ -88,9 +94,9 @@ def settings_api_delete(token_id: int, request: Request, user: dict = Depends(cu
 class _DeckSummaryJson(BaseModel):
     name: str
     type: str
-    created_at: str
-    context_prompt: str | None = None
     card_count: int
+    due: int = 0
+    pinned: bool = False
 
 
 class _CardJson(BaseModel):
@@ -115,17 +121,16 @@ class _NewDeckBody(BaseModel):
 def api_list_decks(user: dict = Depends(bearer_user)):
     uid = user["tailscale_login"]
     summaries = DeckRepo().list_summaries(uid)
-    out = []
-    for s in summaries:
-        out.append(
-            _DeckSummaryJson(
-                name=s.name,
-                type=s.deck_type.value if s.deck_type else "srs",
-                created_at=s.created_at,
-                context_prompt=s.context_prompt,
-                card_count=s.total,
-            )
+    out = [
+        _DeckSummaryJson(
+            name=s.name,
+            type=s.deck_type.value if s.deck_type else "srs",
+            card_count=s.total,
+            due=s.due,
+            pinned=s.pinned,
         )
+        for s in summaries
+    ]
     return {"decks": [d.model_dump() for d in out]}
 
 
