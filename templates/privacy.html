@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}privacy · prep{% endblock %}
+{% block page_class %}privacy{% endblock %}
+{% block main %}
+
+<section class="prelude">
+  <p class="eyebrow">Privacy</p>
+  <h1 class="display">What we keep, <em>and what we don't</em>.</h1>
+  <p class="lede">
+    Plain English. No tracking pixels, no data brokers, no
+    surprises. If anything here is unclear or sounds wrong, email
+    <a href="mailto:hello@prepcards.app">hello@prepcards.app</a>
+    and we'll fix the page.
+  </p>
+</section>
+
+<article class="prose">
+
+<h2>What we collect</h2>
+
+<p>Only what's necessary to run the product:</p>
+
+<ul>
+  <li><strong>Account identity</strong> — your email and a Clerk-issued
+    user id. We use <a href="https://clerk.com" target="_blank" rel="noopener">Clerk</a>
+    for sign-in; their privacy policy covers what they store on their
+    end. We get back a stable id and your email, no more.</li>
+  <li><strong>Your decks and cards</strong> — every question, answer,
+    topic prompt, and review history you create. Stored in a SQLite
+    database on the prep server.</li>
+  <li><strong>Push subscription endpoints</strong> — when you enable
+    notifications, your device's push endpoint URL + keys. Used only
+    to deliver the notifications you ask for.</li>
+  <li><strong>Your AI provider key, if you supply one</strong> —
+    encrypted at rest. See the next section.</li>
+</ul>
+
+<h2>Your AI key, if you bring one</h2>
+
+<p>
+  On <a href="/settings/agent">your agent settings page</a> you can
+  paste an Anthropic API key. The key is encrypted with
+  <strong>AES-256-GCM</strong> before it's written to the database;
+  the master key needed to decrypt it lives in a separate
+  permission-restricted file on the server, outside the database
+  volume.
+</p>
+<p>
+  When you trigger an AI feature, the encrypted blob is decrypted
+  just before the call to Anthropic. The plaintext key only exists
+  in memory for the duration of that single request — it's never
+  logged, never sent anywhere except <code>api.anthropic.com</code>,
+  and never returned to your browser after you save it. Your AI
+  prompts and the model's responses go straight between the prep
+  server and Anthropic; we don't proxy them through any third party.
+</p>
+<p>
+  You can rotate the key any time by pasting a new one (the old row
+  is replaced), or delete it with the Remove key button.
+</p>
+
+<h2>What we don't collect</h2>
+
+<ul>
+  <li><strong>No analytics</strong> — no Google Analytics, no
+    Plausible, no Mixpanel, no first-party tracking pixels. The
+    server logs HTTP request paths and timings for debugging; it
+    doesn't tie those to your account or build a profile.</li>
+  <li><strong>No advertising</strong> — we don't run ads and we
+    don't sell anything to ad networks.</li>
+  <li><strong>No payment data</strong> — there's nothing to charge
+    for. If that changes we'd add a notice here and never store card
+    numbers on our servers.</li>
+</ul>
+
+<h2>Who else sees your data</h2>
+
+<ul>
+  <li><strong>Clerk</strong> handles sign-in. Your email + a hashed
+    password (or your Google OAuth identity if you sign in that
+    way) live in their system. They don't see your decks or AI
+    keys.</li>
+  <li><strong>Anthropic</strong> sees the prompts and responses for
+    your AI calls — that's the whole point of bringing your key.
+    Their data-retention terms apply to those calls under your
+    account, not ours.</li>
+  <li><strong>Nobody else.</strong> We don't share or sell your data
+    to anyone.</li>
+</ul>
+
+<h2>Where the servers live</h2>
+
+<p>
+  Prep runs on a single Hetzner-hosted Linux server in the United
+  States. The database is local sqlite. Backups are pulled by the
+  same operator who runs the box, encrypted at rest.
+</p>
+
+<h2>Deleting your data</h2>
+
+<p>
+  Delete your account through Clerk's account portal. When you do,
+  Clerk sends prep a <code>user.deleted</code> webhook; prep
+  cascades that into a delete across every table that references
+  your user id, including your decks, cards, reviews, push
+  subscriptions, and any stored AI key. The database is purged of
+  your rows during that cascade.
+</p>
+
+<h2>Changes</h2>
+
+<p>
+  If this page changes materially we'll surface a banner on the
+  homepage and link to the diff. The history is in our public git
+  repository.
+</p>
+
+<p class="form-hint" style="margin-block-start: 2rem;">
+  Last updated: 2026-06-01.
+</p>
+
+</article>
+
+{% endblock %}

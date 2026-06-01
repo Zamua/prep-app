@@ -43,6 +43,7 @@ from prep.study.routes import router as study_router
 from prep.trivia.routes import router as trivia_router
 from prep.web import errors as _errors_mod
 from prep.web.index import router as index_router
+from prep.web.legal import router as legal_router
 from prep.web.pwa import router as pwa_router
 from prep.web.templates import templates
 from prep.workflows.routes import router as workflows_router
@@ -298,6 +299,7 @@ app.include_router(notify_router)
 app.include_router(agent_router)
 app.include_router(auth_router)
 app.include_router(index_router)
+app.include_router(legal_router)
 app.include_router(pwa_router)
 app.include_router(workflows_router)
 
