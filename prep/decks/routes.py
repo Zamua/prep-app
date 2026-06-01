@@ -1600,6 +1600,33 @@ def deck_export_csv(
     )
 
 
+@router.get("/deck/{name}/export.apkg", include_in_schema=False)
+def deck_export_apkg(
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Download every question in `name` as an Anki .apkg file.
+    Drops review state (cards arrive fresh) and flattens all four
+    question types to Basic notes — see anki_export.py for the
+    structure choices."""
+    from prep.decks.anki_export import deck_to_apkg
+
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    body = deck_to_apkg(uid, deck_id, name)
+    return Response(
+        content=body,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}.apkg"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.get("/decks/import-csv", response_class=HTMLResponse)
 def decks_import_csv_form(request: Request, user: dict = Depends(current_user)):
     """Render the CSV upload page. Posts to the same path."""

@@ -43,6 +43,7 @@
             <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/edit-with-claude" class="deck-overflow-action">{{ icon('sparkle', class_='icon icon-inline') }}<span>Edit with AI</span></a>
           {% endif %}
           <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/export.csv" class="deck-overflow-action">{{ icon('download-simple', class_='icon icon-inline') }}<span>Export CSV</span></a>
+          <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/export.apkg" class="deck-overflow-action">{{ icon('package', class_='icon icon-inline') }}<span>Export Anki deck</span></a>
           {% if questions %}
             <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/split" class="deck-overflow-action">{{ icon('arrow-up-right', class_='icon icon-inline') }}<span>Split deck</span></a>
           {% endif %}
