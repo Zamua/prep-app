@@ -1564,3 +1564,103 @@ async def plan_reject(
 
     await service.reject_plan(temporal_client, wid)
     return await _render_plan_fragment(request, wid, deck_name, user)
+
+
+# ---- CSV import / export ----------------------------------------------
+
+
+@router.get("/deck/{name}/export.csv", include_in_schema=False)
+def deck_export_csv(
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Download every question in `name` as a CSV file. Wire format
+    lives in `prep.decks.io.CSV_COLUMNS` — same shape the public API
+    + future MCP server emit. 404 if the deck doesn't exist for this
+    user (cross-user IDOR via guessed name returns same shape)."""
+    from fastapi.responses import Response
+
+    from prep.decks.io import deck_to_csv
+
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    body = deck_to_csv(uid, deck_id)
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}.csv"',
+            # CSV files should not be cached — a re-download right after
+            # adding a card needs to see the new row.
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/decks/import-csv", response_class=HTMLResponse)
+def decks_import_csv_form(request: Request, user: dict = Depends(current_user)):
+    """Render the CSV upload page. Posts to the same path."""
+    return templates.TemplateResponse(
+        "deck_import_csv.html",
+        {"request": request, "user": user, "outcome": None, "error": None},
+    )
+
+
+@router.post("/decks/import-csv", response_class=HTMLResponse)
+async def decks_import_csv_submit(
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Multipart-form upload: a CSV file + an optional deck name.
+    Creates a new deck or appends to an existing one. Returns the
+    same template with an `outcome` block (inserted / skipped /
+    errors)."""
+    from prep.decks.io import csv_to_deck
+
+    uid = user["tailscale_login"]
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return templates.TemplateResponse(
+            "deck_import_csv.html",
+            {
+                "request": request,
+                "user": user,
+                "outcome": None,
+                "error": "Pick a CSV file to upload.",
+            },
+            status_code=400,
+        )
+
+    try:
+        clean = _validate_deck_name(name)
+    except HTTPException as e:
+        return templates.TemplateResponse(
+            "deck_import_csv.html",
+            {"request": request, "user": user, "outcome": None, "error": e.detail},
+            status_code=400,
+        )
+
+    raw = await upload.read()
+    try:
+        csv_text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        csv_text = raw.decode("utf-8", errors="replace")
+
+    outcome = csv_to_deck(
+        uid,
+        clean,
+        csv_text,
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+    )
+    return templates.TemplateResponse(
+        "deck_import_csv.html",
+        {"request": request, "user": user, "outcome": outcome, "error": None},
+    )

@@ -36,6 +36,16 @@
       <span class="deck-arrow">{{ icon('arrow-right') }}</span>
     </a>
   </li>
+  <li>
+    <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/import-csv">
+      {{ icon('upload-simple', class_='deck-type-card-icon') }}
+      <span class="deck-type-card-body">
+        <span class="deck-type-card-title">Import CSV</span>
+        <span class="deck-type-card-sub">Bring cards from a spreadsheet or Anki export.</span>
+      </span>
+      <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+    </a>
+  </li>
 </ul>
 
 {% endblock %}
