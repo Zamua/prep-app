@@ -136,7 +136,7 @@
         <div class="trivia-discs">
           <div class="trivia-disc-row">
             {% if q.explanation %}
-              <details class="trivia-disc trivia-disc-explain">
+              <details class="trivia-disc trivia-disc-explain" name="trivia-disc-{{ q.id }}">
                 <summary>
                   <span>Explain</span>
                   {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
@@ -144,7 +144,7 @@
               </details>
             {% endif %}
             {% if handoff_urls %}
-              <details class="trivia-disc trivia-disc-explore">
+              <details class="trivia-disc trivia-disc-explore" name="trivia-disc-{{ q.id }}">
                 <summary>
                   <span>Explore</span>
                   {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
@@ -158,7 +158,7 @@
                  live in the body (sibling of .trivia-disc-row inside
                  .trivia-discs), revealed by the :has() selector when
                  this <details> is open. #}
-              <details class="trivia-disc trivia-disc-dispute">
+              <details class="trivia-disc trivia-disc-dispute" name="trivia-disc-{{ q.id }}">
                 <summary>
                   <span>Dispute</span>
                   {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
