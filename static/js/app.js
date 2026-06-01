@@ -12,11 +12,13 @@ import {init as initDetailsToggle} from "@/modules/details-toggle.js";
 import {attachDeclarative as attachDialogs} from "@/modules/dialog.js";
 import {attachDeclarative as attachSubmitPending} from "@/modules/submit-pending.js";
 import {attachDeclarative as attachSheets} from "@/modules/sheet.js";
+import {init as initPwaInstall} from "@/modules/pwa-install.js";
 
 initDetailsToggle();
 attachDialogs();
 attachSubmitPending();
 attachSheets();
+initPwaInstall();
 
 // Workflow polling pages (transform, plan, grading, trivia gen) now
 // drive their polling via htmx's `hx-trigger="every Ns"` on a fragment

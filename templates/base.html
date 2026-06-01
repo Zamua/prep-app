@@ -151,6 +151,11 @@
     <main class="folio">
       {% block main %}{% endblock %}
     </main>
+    {# PWA install nudge — pill + modal. JS in modules/pwa-install.js
+       handles platform detection + lifecycle. Sits outside .folio so
+       it's not affected by main-content layout rules. The module
+       no-ops on already-installed PWAs and on dismissed/hidden state. #}
+    {% include "partials/pwa_install_nudge.html" %}
     <footer class="colophon">
       <span class="rule"></span>
       {% if clerk_publishable_key %}

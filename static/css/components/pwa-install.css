@@ -1,0 +1,136 @@
+/* PWA install nudge — bottom-anchored pill that opens a modal with
+ * platform-specific instructions. Uses the existing `<dialog>`
+ * + `data-dialog` chrome (backdrop-click closes) so it matches the
+ * snooze / mute / discuss patterns elsewhere in prep.
+ */
+
+.pwa-install-pill {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1.1rem);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 1.1rem;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+  color: var(--paper);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 250ms ease, transform 250ms ease;
+  z-index: 1500;
+  -webkit-tap-highlight-color: transparent;
+}
+.pwa-install-pill.is-visible { opacity: 1; }
+.pwa-install-pill:hover { transform: translateX(-50%) translateY(-1px); }
+
+/* Hide the pill on focused screens — study, result, grading,
+ * generation. The colophon hides on the same surfaces; same intent. */
+.page-study .pwa-install-pill,
+.page-study-empty .pwa-install-pill,
+.page-result .pwa-install-pill,
+.page-result-right .pwa-install-pill,
+.page-result-wrong .pwa-install-pill,
+.page-grading .pwa-install-pill,
+.page-generation .pwa-install-pill {
+  display: none !important;
+}
+
+.pwa-install-dialog {
+  /* Anchor to the bottom of the viewport (drawer-style) so it covers
+   * the iOS Share-button area visually — matches the "look down here"
+   * direction of the instruction text. */
+  position: fixed;
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  max-width: 24rem;
+  width: calc(100% - 1.5rem);
+  height: auto;
+  border: none;
+  border-radius: 18px 18px 0 0;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 1.5rem 1.4rem calc(env(safe-area-inset-bottom, 0px) + 1.4rem);
+  box-shadow: 0 -16px 40px -8px rgba(45, 30, 18, 0.25);
+}
+.pwa-install-dialog::backdrop {
+  background: rgba(20, 14, 8, 0.35);
+  backdrop-filter: blur(2px);
+}
+.pwa-install-dialog[open] {
+  animation: pwa-install-rise 220ms ease-out;
+}
+@keyframes pwa-install-rise {
+  from { transform: translateY(20%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.pwa-install-close-form {
+  margin: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+.pwa-install-close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.25rem;
+  margin: -0.4rem -0.4rem 0 0;
+}
+.pwa-install-close:hover { color: var(--ink); }
+
+.pwa-install-headline {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 40, "SOFT" 50;
+  font-weight: 420;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  margin: 0.2rem 0 0.4rem;
+}
+.pwa-install-headline em {
+  font-style: italic;
+  color: var(--quill);
+  font-variation-settings: "opsz" 40, "SOFT" 80, "WONK" 1;
+}
+.pwa-install-blurb {
+  margin: 0 0 1rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+.pwa-install-steps {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.pwa-install-steps li { margin: 0.35rem 0; }
+.pwa-install-steps strong { color: var(--ink); }
+
+.pwa-install-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.pwa-install-dont-show {
+  color: var(--ink-mute);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.pwa-install-dont-show:hover {
+  color: var(--ink-soft);
+  text-decoration: underline;
+}
