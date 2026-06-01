@@ -146,3 +146,27 @@ class UserRepo:
                 "UPDATE users SET notification_prefs = ? WHERE tailscale_login = ?",
                 (json.dumps(prefs), user_id),
             )
+
+    # ---- BYOK provider preference ----------------------------------------
+
+    def get_active_byok_provider(self, user_id: str) -> str | None:
+        """The user's explicitly-chosen BYOK provider (enum value), or
+        None when they haven't picked one — the selector then falls
+        back to its built-in precedence order."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT active_byok_provider FROM users WHERE tailscale_login = ?",
+                (user_id,),
+            ).fetchone()
+        return (row["active_byok_provider"] if row else None) or None
+
+    def set_active_byok_provider(self, user_id: str, provider: str | None) -> None:
+        """Persist (or clear with `None`) the user's preferred BYOK
+        provider. Caller is responsible for validating the value is a
+        real Provider enum value AND that the user has a stored key
+        for it."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE users SET active_byok_provider = ? WHERE tailscale_login = ?",
+                (provider, user_id),
+            )

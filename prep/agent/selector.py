@@ -131,14 +131,34 @@ def agent_for_user(user_id: str | None) -> AgentPort:
     if _factory_override is not None:
         return _factory_override(user_id)
 
-    # 1. BYOK first — user's own key wins.
+    # 1. BYOK first — user's own key wins. Honor the user's explicit
+    # provider choice (active_byok_provider on the users row) when
+    # set, before falling back to the built-in precedence order.
     if user_id:
         try:
+            from prep.auth.repo import UserRepo
             from prep.byok.repo import BYOKRepo
 
-            repo = BYOKRepo()
-            for provider in _BYOK_PROVIDER_ORDER:
-                secret = repo.get_secret(user_id=user_id, provider=provider)
+            byok_repo = BYOKRepo()
+
+            chosen = UserRepo().get_active_byok_provider(user_id)
+            order: list[Provider] = []
+            if chosen:
+                try:
+                    chosen_p = Provider(chosen)
+                    if chosen_p in _BYOK_PROVIDER_ORDER:
+                        order.append(chosen_p)
+                except ValueError:
+                    # Stale / unknown enum value on the row — skip and
+                    # fall through to defaults. We don't clear it here;
+                    # the /settings/agent render path handles cleanup.
+                    pass
+            for p in _BYOK_PROVIDER_ORDER:
+                if p not in order:
+                    order.append(p)
+
+            for provider in order:
+                secret = byok_repo.get_secret(user_id=user_id, provider=provider)
                 if secret:
                     logger.debug("agent: using BYOK %s for user %s", provider.value, user_id)
                     return _build_byok_adapter(provider, secret)

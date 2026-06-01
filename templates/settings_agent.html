@@ -35,7 +35,10 @@
 {% set p = s.info %}
 {% set m = s.metadata %}
 <section class="agent-panel">
-  <p class="section-eyebrow"><span>{{ p.label }}</span><span class="rule"></span></p>
+  <p class="section-eyebrow">
+    <span>{{ p.label }}{% if s.is_active %} <span class="byok-active-badge">Active</span>{% endif %}</span>
+    <span class="rule"></span>
+  </p>
 
   {% if m %}
     <p class="agent-status" data-state="on">
@@ -45,6 +48,13 @@
         added {{ m.created_at[:10] }}{% if m.last_used_at %} · last used {{ m.last_used_at[:10] }}{% else %} · not yet used{% endif %}
       </span>
     </p>
+    {% if not s.is_active %}
+      <form method="post"
+            action="{{ request.scope.get('root_path','') }}/settings/agent/byok/{{ s.provider }}/use"
+            class="byok-use-form" style="margin-block-start: 0.85rem;">
+        <button type="submit" class="btn btn-quiet">Use {{ p.label }} for AI calls</button>
+      </form>
+    {% endif %}
   {% else %}
     <p class="agent-status" data-state="off">
       {{ icon('warning-circle', class_='icon icon-inline') }}

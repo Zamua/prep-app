@@ -515,3 +515,14 @@ def init() -> None:
                 PRIMARY KEY (user_id, provider)
             );
         """)
+
+        # 16. Active BYOK provider — when a user has keys for multiple
+        #     providers, this column records which one they explicitly
+        #     picked. NULL means "no preference, fall back to selector
+        #     precedence" — the original behavior. The selector reads
+        #     this first; on a stale value (provider had a key, user
+        #     deleted it) it gracefully falls back, then we clear the
+        #     column on the next /settings/agent render.
+        ucols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "active_byok_provider" not in ucols:
+            c.execute("ALTER TABLE users ADD COLUMN active_byok_provider TEXT")

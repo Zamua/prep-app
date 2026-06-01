@@ -104,3 +104,39 @@ def test_all_providers_have_metadata():
         assert info.key_prefixes
         assert info.console_url.startswith("https://")
         assert info.default_model
+
+
+def test_selector_honors_explicit_choice_over_precedence(initialized_db, _byok_master):
+    """User has Anthropic + OpenAI saved. Anthropic wins by precedence
+    by default. Setting active_byok_provider=openai-api should flip
+    the selector to OpenAI even though Anthropic is still configured."""
+    from prep.auth.repo import UserRepo
+
+    uid = "explicit@example.com"
+    UserRepo().upsert(external_id=uid, email=uid)
+    repo = BYOKRepo()
+    repo.store(user_id=uid, provider=Provider.ANTHROPIC_API, secret="sk-ant-api03-zzz")
+    repo.store(user_id=uid, provider=Provider.OPENAI_API, secret="sk-proj-aaa")
+
+    # Default: Anthropic wins.
+    assert isinstance(selector.agent_for_user(uid), AnthropicApiAdapter)
+
+    # Explicit choice flips it.
+    UserRepo().set_active_byok_provider(uid, Provider.OPENAI_API.value)
+    assert isinstance(selector.agent_for_user(uid), OpenAIAdapter)
+
+
+def test_selector_falls_back_when_active_provider_has_no_key(initialized_db, _byok_master):
+    """If active_byok_provider points at a provider the user no longer
+    has a key for (e.g. they deleted it without our cleanup running),
+    the selector skips it and uses the next configured provider."""
+    from prep.auth.repo import UserRepo
+
+    uid = "stale-active@example.com"
+    UserRepo().upsert(external_id=uid, email=uid)
+    BYOKRepo().store(user_id=uid, provider=Provider.ANTHROPIC_API, secret="sk-ant-api03-zzz")
+    # Point active at a provider the user has no key for.
+    UserRepo().set_active_byok_provider(uid, Provider.OPENAI_API.value)
+
+    # Should still get the configured one.
+    assert isinstance(selector.agent_for_user(uid), AnthropicApiAdapter)

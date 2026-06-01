@@ -226,3 +226,22 @@
   margin: 0 0 0.6rem;
 }
 
+/* "Active" badge next to a provider label in /settings/agent — the
+ * provider the selector will use for this user's AI calls. Sits
+ * inline with the section eyebrow so it reads as a status, not a
+ * separate row. */
+.byok-active-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--quill);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+

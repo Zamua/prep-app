@@ -114,24 +114,36 @@ def _refresh_agent_status() -> dict:
 
 def _byok_sections_for(user_id: str):
     """Surface every supported BYOK provider as a list of dicts the
-    settings template can render. Each entry carries the static
-    `info` (label, key-prefix hint, console URL) plus the user's
-    current `metadata` (None when they haven't configured this
-    provider).
+    settings template can render. Each entry carries:
+      - `info`: static metadata (label, prefixes, console URL)
+      - `metadata`: the user's stored credential (None if not set)
+      - `is_active`: True if this provider is the user's explicit
+        choice OR it's the implicit pick (first configured provider in
+        precedence order when no explicit choice is set)
+
+    Side effect: if the user's `active_byok_provider` points at a
+    provider whose key has been removed, clear the column here so the
+    next render lands on a clean state. Don't surface this as an
+    error; users delete keys all the time and the implicit fallback
+    is the right behavior.
 
     A single bad PREP_KEY_ENCRYPTION_SECRET shouldn't blank the entire
     settings page — we fall back to `metadata=None` per provider and
     keep rendering."""
+    from prep.auth.repo import UserRepo
     from prep.byok.entities import PROVIDERS
     from prep.byok.repo import BYOKRepo
 
-    sections = []
     repo = None
     try:
         repo = BYOKRepo()
     except Exception:  # noqa: BLE001 — bad master key, etc.
         logger.exception("byok repo init failed for %s", user_id)
 
+    user_repo = UserRepo()
+    chosen = user_repo.get_active_byok_provider(user_id)
+
+    raw: list[dict] = []
     for provider, info in PROVIDERS.items():
         metadata = None
         if repo is not None:
@@ -139,14 +151,39 @@ def _byok_sections_for(user_id: str):
                 metadata = repo.metadata(user_id=user_id, provider=provider)
             except Exception:  # noqa: BLE001
                 logger.exception("byok metadata lookup failed for %s / %s", user_id, provider.value)
-        sections.append(
+        raw.append(
             {
                 "provider": provider.value,
                 "info": info,
                 "metadata": metadata,
+                "is_active": False,
             }
         )
-    return sections
+
+    # Resolve active: explicit choice wins if its key is still saved;
+    # otherwise the first configured provider in display order is the
+    # implicit active one. Display order matches PROVIDERS dict order
+    # (Anthropic, OpenAI, OpenRouter).
+    active_idx: int | None = None
+    if chosen:
+        for i, s in enumerate(raw):
+            if s["provider"] == chosen and s["metadata"]:
+                active_idx = i
+                break
+        if active_idx is None:
+            # Stale choice — the user deleted the key. Clear the
+            # column so we don't keep trying to honor a ghost.
+            user_repo.set_active_byok_provider(user_id, None)
+    if active_idx is None:
+        for i, s in enumerate(raw):
+            if s["metadata"]:
+                active_idx = i
+                break
+
+    if active_idx is not None:
+        raw[active_idx]["is_active"] = True
+
+    return raw
 
 
 def _render_settings(
@@ -328,19 +365,59 @@ async def settings_byok_connect(
 def settings_byok_disconnect(provider: str, request: Request, user: dict = Depends(current_user)):
     """Delete the user's BYOK row for `provider`. Idempotent: missing
     key → still 200. Selector falls back to the next provider in the
-    precedence order, or the subscription path, or Noop after this."""
+    precedence order, or the subscription path, or Noop after this.
+
+    If the user had explicitly marked this provider active, clear the
+    `active_byok_provider` column so the next render's implicit
+    fallback isn't fighting a ghost choice."""
+    from prep.auth.repo import UserRepo
     from prep.byok.repo import BYOKRepo
 
     p = _parse_provider(provider)
+    uid = user["tailscale_login"]
     try:
-        BYOKRepo().delete(user_id=user["tailscale_login"], provider=p)
+        BYOKRepo().delete(user_id=uid, provider=p)
     except Exception:  # noqa: BLE001
         logger.exception("byok delete failed")
         # Still render the page — even if the delete blew up, the
         # user's intent ("get rid of it") matters most. Stale row
         # will be cleaned up on master rotation / user delete.
+
+    user_repo = UserRepo()
+    if user_repo.get_active_byok_provider(uid) == p.value:
+        user_repo.set_active_byok_provider(uid, None)
+
     return _render_settings(
         request,
         user,
         byok_flash="API key removed.",
+    )
+
+
+@router.post("/settings/agent/byok/{provider}/use", response_class=HTMLResponse)
+def settings_byok_use(provider: str, request: Request, user: dict = Depends(current_user)):
+    """Mark `provider` as the user's active BYOK choice. Refuses if
+    the user doesn't have a stored key for that provider (UX
+    invariant: the 'Use this one' button only appears for configured
+    rows, so this is mostly defense against a stale form post)."""
+    from prep.auth.repo import UserRepo
+    from prep.byok.entities import PROVIDERS
+    from prep.byok.repo import BYOKRepo
+
+    p = _parse_provider(provider)
+    uid = user["tailscale_login"]
+
+    if BYOKRepo().metadata(user_id=uid, provider=p) is None:
+        return _render_settings(
+            request,
+            user,
+            byok_error=(f"Add a {PROVIDERS[p].label} key before making it active."),
+            status_code=400,
+        )
+
+    UserRepo().set_active_byok_provider(uid, p.value)
+    return _render_settings(
+        request,
+        user,
+        byok_flash=f"{PROVIDERS[p].label} is now your active provider.",
     )

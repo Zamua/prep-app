@@ -216,3 +216,51 @@ def test_byok_connect_rejects_wrong_prefix_per_provider(
         data={"api_key": "sk-or-v1-routerkey"},  # wrong provider entirely
     )
     assert r.status_code == 400
+
+
+def test_byok_use_marks_active_provider(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """POST /byok/<provider>/use sets the user's active provider when
+    they have a stored key for it."""
+    from prep.auth.repo import UserRepo
+
+    # Save an OpenAI key first.
+    r = client.post(
+        "/settings/agent/byok/openai-api/connect",
+        data={"api_key": "sk-proj-zzzz1111aaaa2222"},
+    )
+    assert r.status_code == 200
+
+    r2 = client.post("/settings/agent/byok/openai-api/use")
+    assert r2.status_code == 200
+    assert UserRepo().get_active_byok_provider("testuser@example.com") == "openai-api"
+
+
+def test_byok_use_refuses_when_no_key_saved(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """Defense against a stale form post — `/use` requires a stored
+    key for the provider. UX-wise the button isn't even rendered
+    when there's no key, so this only fires on a stale tab."""
+    r = client.post("/settings/agent/byok/anthropic-api/use")
+    assert r.status_code == 400
+
+
+def test_byok_disconnect_clears_active_when_it_was_chosen(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """If the user disconnects the provider they had marked active,
+    the active_byok_provider column gets cleared so the selector
+    falls back to its built-in precedence on the next call."""
+    from prep.auth.repo import UserRepo
+
+    client.post(
+        "/settings/agent/byok/openrouter-api/connect",
+        data={"api_key": "sk-or-v1-aaaabbbbccccdddd"},
+    )
+    client.post("/settings/agent/byok/openrouter-api/use")
+    assert UserRepo().get_active_byok_provider("testuser@example.com") == "openrouter-api"
+
+    client.post("/settings/agent/byok/openrouter-api/disconnect")
+    assert UserRepo().get_active_byok_provider("testuser@example.com") is None
