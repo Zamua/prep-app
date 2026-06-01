@@ -286,7 +286,31 @@ def _versioned_js(build: str, path: str):
     return FileResponse(target, media_type="application/javascript", headers=headers)
 
 
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+class _RevalidatingStaticFiles(StaticFiles):
+    """StaticFiles with `Cache-Control: no-cache` on every response.
+
+    Without this header, browsers (notably iOS Safari) fall back to
+    heuristic caching for `/static/*` — they reuse the prior copy of
+    `index.css` for a guess-based interval after a deploy, so the user
+    sees stale CSS even though the new bytes are sitting on disk.
+
+    `no-cache` doesn't mean "don't cache" — it means "revalidate via
+    etag/last-modified before reusing." Starlette's StaticFiles emits
+    strong etags, so unchanged files come back as 304 (no body) and
+    changed files come back as 200 with the fresh bytes. Both round
+    trips are tiny on a tailnet/Clerk-hosted single-region deploy.
+
+    Hashed assets (the `/static/js/v<build>/...` route above) bypass
+    this mount entirely and serve their own `immutable` Cache-Control.
+    """
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", _RevalidatingStaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 _errors_mod.register(app)
 

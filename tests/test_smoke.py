@@ -114,16 +114,18 @@ def test_manifest_is_no_cache(client: TestClient):
     assert "no-cache" in cc, f"expected no-cache on manifest, got: {cc!r}"
 
 
-def test_static_css_still_cacheable(client: TestClient):
-    """Inverse of the HTML test: hashed/versioned assets MUST NOT get
-    the HTML middleware's no-cache stamped on them, otherwise the
-    cache-bust dance breaks down (every browser refetches every CSS
-    file on every nav). Pin the boundary so future middleware changes
-    don't silently regress it."""
+def test_static_css_revalidates(client: TestClient):
+    """CSS isn't content-hashed (unlike `/static/js/v<build>/...`), so
+    without an explicit Cache-Control header browsers heuristic-cache
+    it — iOS Safari then shows stale styles after a deploy until the
+    user force-refreshes. The static mount stamps `Cache-Control:
+    no-cache` so browsers revalidate via etag before reusing. 304
+    fast-path keeps the round trip cheap; fresh deploys land
+    immediately."""
     r = client.get("/static/css/index.css")
     assert r.status_code == 200
     cc = r.headers.get("cache-control", "")
-    assert "no-cache" not in cc, f"static CSS unexpectedly no-cache: {cc!r}"
+    assert "no-cache" in cc, f"static CSS missing no-cache: {cc!r}"
 
 
 def test_healthcheck_or_root_responds_quickly(client: TestClient):

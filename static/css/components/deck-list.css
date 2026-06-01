@@ -20,21 +20,21 @@
   background: var(--paper);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  transition: transform 250ms cubic-bezier(.2,.7,.2,1), box-shadow 250ms ease, border-color 250ms ease;
-  animation: rise 600ms cubic-bezier(.2,.7,.2,1) both;
+  transition: box-shadow 250ms ease, border-color 250ms ease;
+  /* fade-in (not rise) so no transform is left on the card after the
+   * animation completes. Cards used to use the shared `rise` keyframe,
+   * but its `to: translateY(0)` post-state — kept around by
+   * animation-fill-mode: both — turns every card into its own
+   * stacking context. Once that's true, an overflow popover from one
+   * card cannot paint above its siblings without elaborate JS-managed
+   * z-index lifts, and iOS Safari computes the order inconsistently
+   * besides. Opacity-only fade-in leaves the card with no transform
+   * and no stacking context; the popover's z-index 5 then naturally
+   * paints above sibling cards (which are at z-index auto). */
+  animation: fade-in 600ms cubic-bezier(.2,.7,.2,1) both;
   animation-delay: calc(var(--i, 1) * 60ms);
   /* Anchors the absolutely-positioned per-card overflow menu. */
   position: relative;
-}
-/* When a card's overflow menu is open, lift the WHOLE card (popover
- * included) above its siblings. Without this, the rise-animation
- * transform on adjacent cards creates per-card stacking contexts that
- * paint over the popover. JS in modules/row-overflow.js sets
- * `.is-overflow-open` on toggle; we don't use :has() because iOS
- * Safari can sort transformed-sibling stacking contexts differently
- * and the explicit class is just more robust. */
-.deck-card.is-overflow-open {
-  z-index: 10;
 }
 .deck-card:hover {
   transform: translateY(-2px);

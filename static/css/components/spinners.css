@@ -54,6 +54,18 @@
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+/* opacity-only variant of rise. Used by elements that need to host
+ * absolutely-positioned popovers/menus whose painting must escape
+ * the element's box. Any non-`none` transform creates a stacking
+ * context — including `translateY(0)`, the `to` state of rise with
+ * `animation-fill-mode: both`. Sibling stacking contexts then trap
+ * the popover regardless of the parent's z-index lift, with
+ * particularly inconsistent behavior on iOS Safari. fade-in skips
+ * the transform so no stacking context is created. */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 @keyframes stamp {
   from { opacity: 0; transform: scale(0.6) rotate(-6deg); }
   60%  { opacity: 1; transform: scale(1.04) rotate(-2deg); }

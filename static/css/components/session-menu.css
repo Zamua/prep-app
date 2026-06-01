@@ -8,11 +8,6 @@
  * the shared chrome.
  */
 
-/* Same-card lift when open, matching the .deck-card pattern. See
- * modules/row-overflow.js — `.is-overflow-open` is set on toggle. */
-.session-card.is-overflow-open {
-  z-index: 10;
-}
 .session-menu-row {
   display: flex;
   align-items: center;
