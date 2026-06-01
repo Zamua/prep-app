@@ -216,7 +216,9 @@
       'Server (streamable HTTP): ' + mcp_url,
       'Authorization header: Bearer ' + token,
       '',
-      "Register this server in whatever way is appropriate for your harness, then verify the connection. If your harness requires action from me to surface the new tools (e.g. restarting your session), tell me what's needed. Once you can call prep tools, run prep_list_decks and tell me which decks I have.",
+      "Register this server at user / global scope (NOT project scope) so it's available across every session of yours regardless of working directory. In Claude Code, that's `claude mcp add -s user ...`; in other harnesses, pick the equivalent — config file in your user dir, global settings page, etc.",
+      '',
+      "After registering, verify the connection. If your harness needs me to do something to surface the new tools (e.g. restart your session), tell me what's needed. Once you can call prep tools, run prep_list_decks and tell me which decks I have.",
       '',
       'Tool reference: ' + base + '/llms.txt',
     ].join('\n');
