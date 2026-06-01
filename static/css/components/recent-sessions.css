@@ -27,10 +27,13 @@
 .session-card:hover { border-color: var(--rule); }
 .session-link {
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* Single column now that the trailing arrow is retired — the whole
+   * row is the click target, ⋯ menu sits absolutely in the top-right. */
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 0.8rem;
-  padding: 0.85rem 1.05rem;
+  /* Reserve right padding for the absolute ⋯ trigger. */
+  padding: 0.85rem 3rem 0.85rem 1.05rem;
   text-decoration: none;
   color: inherit;
 }
@@ -54,7 +57,6 @@
 }
 .session-state { color: var(--quill); font-style: italic; }
 .session-divider { color: var(--rule); }
-.session-link .deck-arrow { grid-column: 2; grid-row: 1 / span 2; }
 
 /* Position context for the overflow-menu popover (anchored
  * absolute inside the card). Discard button + its styles moved to

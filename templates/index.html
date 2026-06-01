@@ -87,7 +87,6 @@
           <span class="session-meta">
             <span class="session-state">{{ s.remaining }} of {{ s.total }} cards left</span>
           </span>
-          <span class="deck-arrow">{{ icon('arrow-right') }}</span>
         </a>
       </li>
     {% endfor %}
@@ -115,7 +114,6 @@
             {% endif %}
             {% if s.device_label %}<span class="session-divider" aria-hidden="true">·</span><em>{{ s.device_label }}</em>{% endif %}
           </span>
-          <span class="deck-arrow">{{ icon('arrow-right') }}</span>
         </a>
       </li>
     {% endfor %}

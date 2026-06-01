@@ -68,10 +68,14 @@
 
 .deck-link {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /* Numeral + body; the trailing arrow column is gone — the ⋯ menu
+   * in the card's top-right corner is the only trailing affordance. */
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 1.25rem;
-  padding: 1.25rem 1.4rem;
+  /* Reserve right padding for the absolutely-positioned ⋯ trigger so
+   * a long deck name doesn't crowd it. */
+  padding: 1.25rem 3rem 1.25rem 1.4rem;
   text-decoration: none;
   color: inherit;
   min-height: 5.5rem;
