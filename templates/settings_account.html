@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Account · prep{% endblock %}
+{% block page_class %}settings{% endblock %}
+{% block main %}
+
+<section class="prelude">
+  <p class="eyebrow">Account</p>
+  <h1 class="display">Your <em>data</em>.</h1>
+  <p class="lede">
+    Your prep data — decks, cards, study history, push subscriptions, and any
+    BYOK keys you stored — lives in a single account row.  Delete the row and
+    everything else cascades.
+  </p>
+</section>
+
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Profile</span><span class="rule"></span></p>
+  <p>
+    Signed in as <code>{{ user.tailscale_login }}</code>{% if user.display_name %} ({{ user.display_name }}){% endif %}.
+  </p>
+</section>
+
+<section class="agent-panel danger-zone">
+  <p class="section-eyebrow"><span>Danger zone</span><span class="rule"></span></p>
+  <p>
+    Deleting your account is <strong>permanent</strong>.  It removes your
+    record at the auth provider and cascades through every deck, card, review,
+    session, push subscription, and saved API key.  There's no undo, and no
+    backup we can restore from.
+  </p>
+
+  {% if error %}
+    <p class="form-error" style="margin-top: 0.8rem;">{{ error }}</p>
+  {% endif %}
+
+  <form method="post"
+        action="{{ request.scope.get('root_path','') }}/settings/account/delete"
+        class="deck-new-form" autocomplete="off"
+        data-submit-pending
+        style="margin-top: 1rem;">
+    <label class="form-field">
+      <span class="form-label">Type your account ID to confirm</span>
+      <input type="text" name="confirm" required
+             placeholder="{{ user.tailscale_login }}"
+             autocapitalize="none" autocorrect="off" spellcheck="false"
+             style="font-family: var(--mono, monospace);">
+      <span class="form-hint">
+        It's the value above: <code>{{ user.tailscale_login }}</code>.
+        Typing it exactly is the safety check that prevents an accidental click here.
+      </span>
+    </label>
+    <div class="study-actions">
+      <button type="submit" class="btn btn-danger" data-pending-label="Deleting…">
+        Delete my account
+      </button>
+      <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/">Cancel</a>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

@@ -151,3 +151,100 @@ def editor_settings_save(
             "saved": True,
         },
     )
+
+
+# ---- /settings/account — delete-account flow ---------------------------
+#
+# Clerk-mode only. On Tailscale-mode deploys the user's identity comes
+# from the proxy, not a Clerk account; "delete the user" doesn't have
+# a coherent meaning (the next request from the same tailnet identity
+# would just recreate the row). Return 404 there.
+#
+# The actual delete goes through Clerk's Backend API. Clerk fires
+# `user.deleted` back to /webhooks/clerk, which the existing handler
+# in prep.auth.webhooks_clerk uses to DELETE the local users row —
+# the FK CASCADE chain then wipes decks → questions → cards → reviews
+# → sessions → push subscriptions → BYOK keys etc. One source of
+# truth (Clerk webhook) drives both sides; the in-app button just
+# kicks off the upstream delete.
+
+
+@router.get("/settings/account", response_class=HTMLResponse)
+def account_settings(request: Request, user: dict = Depends(current_user)):
+    provider = get_provider()
+    if provider.name != "clerk":
+        raise HTTPException(404, "this deploy has no in-app account-delete flow")
+    return templates.TemplateResponse(
+        "settings_account.html",
+        {"request": request, "user": user, "error": None},
+    )
+
+
+@router.post("/settings/account/delete", response_class=HTMLResponse)
+def account_settings_delete(
+    request: Request,
+    confirm: str = Form(""),
+    user: dict = Depends(current_user),
+):
+    """Delete the caller's Clerk user. Webhook cascades the DB wipe.
+
+    Requires the user to type their own login (the value the chip
+    shows on every page) into the `confirm` field — same defense the
+    Github "delete repo" prompt uses, prevents a stray click from
+    nuking an account.
+    """
+    provider = get_provider()
+    if provider.name != "clerk":
+        raise HTTPException(404, "this deploy has no in-app account-delete flow")
+
+    expected = (user.get("tailscale_login") or "").strip()
+    if (confirm or "").strip() != expected:
+        return templates.TemplateResponse(
+            "settings_account.html",
+            {
+                "request": request,
+                "user": user,
+                "error": "That doesn't match your account ID. Type it exactly as shown to confirm.",
+            },
+            status_code=400,
+        )
+
+    import httpx
+
+    clerk_user_id = expected  # tailscale_login is the Clerk user_id under clerk-mode
+    try:
+        r = httpx.delete(
+            f"https://api.clerk.com/v1/users/{clerk_user_id}",
+            headers={"Authorization": f"Bearer {provider.secret_key}"},
+            timeout=15.0,
+        )
+    except httpx.RequestError as e:
+        return templates.TemplateResponse(
+            "settings_account.html",
+            {
+                "request": request,
+                "user": user,
+                "error": f"Couldn't reach the auth provider: {e}. Try again in a minute.",
+            },
+            status_code=502,
+        )
+    if r.status_code not in (200, 204):
+        return templates.TemplateResponse(
+            "settings_account.html",
+            {
+                "request": request,
+                "user": user,
+                "error": (
+                    f"Auth provider refused the delete (HTTP {r.status_code}). "
+                    "Sign out, sign back in, and retry — or use the dashboard at "
+                    "accounts.prepcards.app to delete the account directly."
+                ),
+            },
+            status_code=502,
+        )
+    # Clerk returned 2xx → user is gone upstream + the user.deleted
+    # webhook will arrive within a few seconds to wipe the local row.
+    # Redirect to the provider's sign-out URL so the browser session
+    # is cleared cleanly.
+    urls = provider.urls()
+    return RedirectResponse(urls.sign_out or "/", status_code=303)

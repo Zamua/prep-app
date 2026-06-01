@@ -49,6 +49,18 @@
   color: var(--ink);
 }
 
+/* Destructive primary — for delete-account, delete-deck-confirm,
+ * and similar.  Wrong-bg base, paper foreground for contrast. */
+.btn-danger {
+  background: var(--wrong);
+  color: var(--paper);
+  border-color: var(--wrong);
+}
+.btn-danger:hover {
+  filter: brightness(0.92);
+  color: var(--paper);
+}
+
 .btn-ghost {
   background: var(--paper);
   border-color: var(--ink-soft);

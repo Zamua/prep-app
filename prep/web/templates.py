@@ -64,6 +64,17 @@ def _assets_context(request: Request) -> dict:
     return {"static_css_mtime": _STATIC_BUILD_VERSION}
 
 
+def _auth_provider_context(request: Request) -> dict:
+    """Expose the active PREP_AUTH_MODE to templates as `auth_provider`.
+    Used by the user-menu to conditionally show entries that only make
+    sense on a provider with first-class user accounts (e.g. account
+    delete on Clerk; Tailscale identity is proxy-managed, no upstream
+    user to delete)."""
+    import os
+
+    return {"auth_provider": (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower()}
+
+
 def _clerk_bootstrap_context(request: Request) -> dict:
     """Expose Clerk publishable key + frontend API host to base.html
     so it can load ClerkJS on every page (not just the landing). The
@@ -116,6 +127,7 @@ templates = Jinja2Templates(
         _user_context,
         _agent_context,
         _assets_context,
+        _auth_provider_context,
         _clerk_bootstrap_context,
         _notif_unseen_context,
     ],

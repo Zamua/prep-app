@@ -147,6 +147,12 @@
               <li><a href="{{ root }}/notify">Notifications {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               <li><a href="{{ root }}/settings/api">API tokens {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               <li><a href="{{ root }}/notify/log">Notification log{% if notif_unseen_count %} <span class="notif-unseen-badge">{{ notif_unseen_count }}</span>{% endif %} {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+              {# Clerk-mode only: the account-delete flow needs an upstream
+                 user to delete. Tailscale-mode has no notion of "delete
+                 the user" — identity comes from the proxy. #}
+              {% if auth_provider == 'clerk' %}
+                <li><a href="{{ root }}/settings/account">Account {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+              {% endif %}
             </ul>
           </div>
         </details>
