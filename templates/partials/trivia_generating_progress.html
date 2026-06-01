@@ -42,7 +42,7 @@
       <span id="trivia-gen-label">{{ _label }}</span>
       <span class="trivia-gen-status-counts" id="trivia-gen-counts">
         {%- if _status == 'generating' and _total -%}
-          asking for {{ _total }}
+          up to {{ _total }}
         {%- elif _status == 'applying' and _total -%}
           {{ _inserted or _generated }} / {{ _total }}
         {%- elif _status == 'done' -%}
