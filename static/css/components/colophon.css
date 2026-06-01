@@ -21,6 +21,25 @@
 }
 .colophon-text em { color: var(--ink-soft); }
 
+/* Clerk-mode footer — conventional Privacy / Source links. Not italic
+ * (it's navigation now, not a colophon signature) and a touch more
+ * room around the dot separators. */
+.colophon-links {
+  font-style: normal;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+.colophon-links a {
+  color: var(--ink-mute);
+  text-decoration: none;
+}
+.colophon-links a:hover {
+  color: var(--ink-soft);
+  text-decoration: underline;
+}
+
 /* Focused screens (study, result, grading, generation) hide the colophon
  * to keep attention on the card. The literary mood lives on index/deck. */
 .page-study .colophon,

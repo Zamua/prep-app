@@ -153,12 +153,21 @@
     </main>
     <footer class="colophon">
       <span class="rule"></span>
-      <span class="colophon-text">
-        set in <em>Fraunces</em> &amp; <em>JetBrains&nbsp;Mono</em>
-        {% if clerk_publishable_key %}
-          &nbsp;·&nbsp;<a href="{{ root }}/privacy">privacy</a>
-        {% endif %}
-      </span>
+      {% if clerk_publishable_key %}
+        {# Clerk-mode (public deploys, e.g. prepcards.app): conventional
+           legal/source footer, no signature aesthetic. #}
+        <nav class="colophon-links" aria-label="Footer">
+          <a href="{{ root }}/privacy">Privacy</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://github.com/Zamua/prep-app" target="_blank" rel="noopener">Source</a>
+        </nav>
+      {% else %}
+        {# Tailscale-mode (single-user mac-mini install): keep the
+           craft colophon — no legal pages exist on this deploy. #}
+        <span class="colophon-text">
+          set in <em>Fraunces</em> &amp; <em>JetBrains&nbsp;Mono</em>
+        </span>
+      {% endif %}
     </footer>
   </div>
 </body>
