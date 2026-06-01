@@ -85,16 +85,11 @@
   https://prepcards.app/api/v1/decks</code></pre>
 
   <p style="margin-block-start: 1rem;">
-    Endpoints in v1:
+    Full endpoint reference + try-it-now console live at
+    <a href="{{ request.scope.get('root_path','') }}/docs">/docs</a> (Swagger UI)
+    or <a href="{{ request.scope.get('root_path','') }}/redoc">/redoc</a>.
+    Raw schema at <a href="{{ request.scope.get('root_path','') }}/openapi.json">/openapi.json</a>.
   </p>
-  <ul class="agent-steps">
-    <li><code>GET&nbsp; /api/v1/decks</code> — list your decks</li>
-    <li><code>POST /api/v1/decks</code> — create a deck (<code>{ "name": "...", "context_prompt": "..." }</code>)</li>
-    <li><code>GET&nbsp; /api/v1/decks/&lt;name&gt;</code> — deck metadata</li>
-    <li><code>GET&nbsp; /api/v1/decks/&lt;name&gt;/cards</code> — list cards as JSON</li>
-    <li><code>GET&nbsp; /api/v1/decks/&lt;name&gt;/export.csv</code> — download CSV</li>
-    <li><code>POST /api/v1/decks/&lt;name&gt;/import-csv</code> — append CSV body (<code>Content-Type: text/csv</code>); returns <code>{inserted, skipped_duplicates, errors}</code></li>
-  </ul>
 </section>
 
 {% endblock %}
