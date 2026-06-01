@@ -134,3 +134,10 @@
   color: var(--ink-soft);
   text-decoration: underline;
 }
+
+/* `[hidden]` is supposed to be display:none by spec, but the buttons
+ * inside .pwa-install-actions inherit `.btn` rules (display: inline-
+ * flex) that out-specificity the user-agent stylesheet on some browsers.
+ * Force it back so the JS-driven hide actually hides. Without this,
+ * the Android-only Install button showed on iOS too. */
+.pwa-install-dialog [hidden] { display: none !important; }
