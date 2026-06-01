@@ -32,16 +32,26 @@
   /* Anchors the absolutely-positioned per-card overflow menu. */
   position: relative;
 }
-/* When a card's overflow menu is open, lift it to z-index 10 so it
- * paints in the parent's "z-index > 0" group, above sibling cards
- * (which paint in the z-index auto group, in tree order). The
- * popover is a descendant of this card, so it paints within the
- * lifted stacking context — beats every sibling, every time, even
- * when the open card's :hover transform creates a transient
- * stacking context of its own. JS in modules/row-overflow.js sets
- * the class on toggle. */
+/* When a card's overflow menu is open:
+ *
+ *   - lift to z-index 10 so the open card paints in the parent's
+ *     "z-index > 0" group, above every sibling (which sit in the
+ *     "z-index auto" group, painted in tree order).
+ *   - cancel the :hover translateY(-2px). On touch devices :hover
+ *     sticks on tap, and any non-`none` transform creates a
+ *     transient stacking context that the popover's descendant
+ *     z-index can't always escape on iOS Safari — neutralizing the
+ *     transform removes that variable entirely.
+ *   - cancel the transform transition so the cancel above doesn't
+ *     animate down on tap (jittery feedback).
+ *
+ * Both are belt+suspenders for the same goal: under no combination
+ * of CSS state does the open card's popover paint behind a sibling.
+ * JS in modules/row-overflow.js sets the class on toggle. */
 .deck-card.is-overflow-open {
   z-index: 10;
+  transform: none;
+  transition: box-shadow 250ms ease, border-color 250ms ease;
 }
 .deck-card:hover {
   transform: translateY(-2px);
