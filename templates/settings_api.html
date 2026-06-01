@@ -153,7 +153,16 @@
         lands gets access to your account until you revoke.
       </span>
     </span>
-    <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy-prompt">
+    {# Build the absolute base URL server-side so the JS doesn't have
+       to derive it from window.location (which lands on the POST
+       endpoint /settings/api/tokens, not the app root). request.base_url
+       is the host root; we append root_path so deploys under /prep/ or
+       /prep-staging/ get the right prefix. #}
+    {%- set _scheme = request.url.scheme -%}
+    {%- set _host = request.url.netloc -%}
+    {%- set _app_base = _scheme ~ '://' ~ _host ~ _root -%}
+    <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy-prompt"
+            data-app-base="{{ _app_base }}">
       Copy setup prompt
     </button>
   </div>
@@ -188,12 +197,19 @@
 
   /* Setup-prompt: natural-language instruction the user pastes into
    * their AI client.  Embeds the bearer token + the canonical mount
-   * URL so the agent can `claude mcp add` itself and verify. */
+   * URL so the agent can `claude mcp add` itself and verify.
+   *
+   * The base URL is computed server-side and stamped into a data-
+   * attribute below — we used to derive it via window.location with
+   * a regex strip, but the POST response landed on /settings/api/
+   * tokens (a sibling path) which the regex didn't match, baking
+   * /settings/api/tokens/mcp into the prompt. Server-rendered base
+   * URL is the only reliable source. */
   const promptBtn = document.getElementById('new-token-copy-prompt');
   if (promptBtn && src) {
     const token = src.textContent.trim();
-    const origin = window.location.origin + window.location.pathname.replace(/\/settings\/api\/?$/, '');
-    const mcp_url = origin.replace(/\/$/, '') + '/mcp';
+    const base = (promptBtn.dataset.appBase || '').replace(/\/$/, '');
+    const mcp_url = base + '/mcp';
     const prompt = [
       'Please add prep as an MCP server so I can manage my flashcards from here.',
       '',
@@ -205,7 +221,7 @@
       '',
       'Then verify by calling prep_list_decks and reporting which decks I have.',
       '',
-      'Full tool catalog: ' + origin.replace(/\/$/, '') + '/llms.txt',
+      'Full tool catalog: ' + base + '/llms.txt',
     ].join('\n');
     promptBtn.addEventListener('click', async () => {
       const orig = promptBtn.textContent;
