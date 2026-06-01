@@ -112,6 +112,38 @@
   word-break: break-all;
   user-select: all;
 }
+.new-token-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--tint);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin-block-end: 1rem;
+  font-size: 0.83rem;
+}
+.new-token-prompt-preview {
+  flex: 1;
+  color: var(--ink-mute);
+  font-style: italic;
+  line-height: 1.4;
+}
+.new-token-prompt-preview code {
+  font-style: normal;
+  font-family: var(--mono, monospace);
+  font-size: 0.95em;
+  color: var(--ink);
+}
+.new-token-prompt-preview em {
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+.new-token-prompt .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .new-token-actions {
   display: flex;
   justify-content: flex-end;

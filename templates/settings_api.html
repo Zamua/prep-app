@@ -127,6 +127,26 @@
       Copy
     </button>
   </div>
+
+  {# Setup-prompt button — copies a natural-language instruction the
+     user can paste straight into their AI client (Claude Code,
+     Claude Desktop, Telegram-bot Claude, etc.).  The AI then runs
+     `claude mcp add` (or edits its config file) and verifies via
+     prep_list_decks.  Saves a separate visit to /settings/agent. #}
+  <p class="form-hint" style="margin-block-end: 0.5rem;">
+    Or paste this whole prompt into your AI client — it'll wire prep
+    up and confirm the connection in one shot:
+  </p>
+  <div class="new-token-prompt">
+    <span class="new-token-prompt-preview">
+      Add prep as an MCP server using <code>claude mcp add</code>…
+      <em>(full prompt + token, ~280 chars)</em>
+    </span>
+    <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy-prompt">
+      Copy setup prompt
+    </button>
+  </div>
+
   <div class="new-token-actions">
     <form method="dialog" style="margin: 0;">
       <button type="submit" class="btn btn-primary">Done</button>
@@ -141,16 +161,47 @@
   if (!dlg.open && dlg.showModal) dlg.showModal();
   const copyBtn = document.getElementById('new-token-copy');
   const src = document.getElementById('new-token-plaintext');
+  function flash(btn, label, original) {
+    btn.textContent = label;
+    setTimeout(() => { btn.textContent = original; }, 1400);
+  }
   if (copyBtn && src) {
     copyBtn.addEventListener('click', async () => {
-      const original = copyBtn.textContent;
+      const orig = copyBtn.textContent;
       try {
         await navigator.clipboard.writeText(src.textContent.trim());
-        copyBtn.textContent = 'Copied ✓';
-      } catch (e) {
-        copyBtn.textContent = 'Copy failed';
-      }
-      setTimeout(() => { copyBtn.textContent = original; }, 1400);
+        flash(copyBtn, 'Copied ✓', orig);
+      } catch (e) { flash(copyBtn, 'Copy failed', orig); }
+    });
+  }
+
+  /* Setup-prompt: natural-language instruction the user pastes into
+   * their AI client.  Embeds the bearer token + the canonical mount
+   * URL so the agent can `claude mcp add` itself and verify. */
+  const promptBtn = document.getElementById('new-token-copy-prompt');
+  if (promptBtn && src) {
+    const token = src.textContent.trim();
+    const origin = window.location.origin + window.location.pathname.replace(/\/settings\/api\/?$/, '');
+    const mcp_url = origin.replace(/\/$/, '') + '/mcp';
+    const prompt = [
+      'Please add prep as an MCP server so I can manage my flashcards from here.',
+      '',
+      'Run:',
+      '',
+      '  claude mcp add --transport http prep \\',
+      '    ' + mcp_url + ' \\',
+      '    --header "Authorization: Bearer ' + token + '"',
+      '',
+      'Then verify by calling prep_list_decks and reporting which decks I have.',
+      '',
+      'Full tool catalog: ' + origin.replace(/\/$/, '') + '/llms.txt',
+    ].join('\n');
+    promptBtn.addEventListener('click', async () => {
+      const orig = promptBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(prompt);
+        flash(promptBtn, 'Copied ✓', orig);
+      } catch (e) { flash(promptBtn, 'Copy failed', orig); }
     });
   }
 })();
