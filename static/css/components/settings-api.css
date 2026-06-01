@@ -1,0 +1,118 @@
+/* /settings/api — single-card token surface.
+ *
+ * Create-token row sits on top of a table of existing tokens; the
+ * page no longer fragments into 3-4 small cards. Generating a token
+ * pops a <dialog> modal (see new-token-dialog) so the user doesn't
+ * lose their scroll position to a full-page rerender.
+ */
+
+.api-token-create-form {
+  margin-block-end: 1rem;
+}
+.api-token-create-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+.api-token-create-row input[type="text"] {
+  width: 100%;
+}
+.api-token-create-row .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Tokens table. Subtle row dividers, monospace key_prefix, italic
+ * label below each token's masked prefix. */
+.api-token-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block-start: 0.5rem;
+  font-size: 0.9rem;
+}
+.api-token-table th {
+  text-align: left;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-style: italic;
+  color: var(--ink-mute);
+  border-block-end: 1px dashed var(--hairline);
+  padding: 0.4rem 0.7rem 0.5rem;
+  white-space: nowrap;
+}
+.api-token-table td {
+  padding: 0.7rem 0.7rem;
+  vertical-align: top;
+  border-block-end: 1px solid var(--hairline);
+}
+.api-token-table tr:last-child td { border-block-end: none; }
+.api-token-table code {
+  font-size: 0.88em;
+}
+.api-token-label {
+  font-style: italic;
+  color: var(--ink-mute);
+  font-size: 0.82rem;
+  margin-block-start: 0.15rem;
+}
+.api-token-date {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-mute);
+  font-style: italic;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+@media (max-width: 500px) {
+  /* Narrow phones — hide the last-used column to keep the row from
+   * wrapping awkwardly. Power users on desktop see the full set. */
+  .api-token-table th:nth-child(3),
+  .api-token-table td:nth-child(3) { display: none; }
+}
+
+/* New-token modal — surfaced after a successful mint. */
+.new-token-dialog {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 1.2rem 1.25rem 1.1rem;
+  max-width: 28rem;
+  width: min(90vw, 28rem);
+  box-shadow: var(--shadow-md);
+}
+.new-token-dialog::backdrop {
+  background: rgba(20, 14, 8, 0.45);
+  backdrop-filter: blur(2px);
+}
+.new-token-dialog h3 {
+  margin: 0 0 0.4rem;
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+.new-token-dialog .form-hint {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0 0 0.85rem;
+}
+.new-token-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--tint);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin-block-end: 1rem;
+}
+.new-token-value code {
+  flex: 1;
+  font-family: var(--mono, monospace);
+  font-size: 0.85rem;
+  word-break: break-all;
+  user-select: all;
+}
+.new-token-actions {
+  display: flex;
+  justify-content: flex-end;
+}

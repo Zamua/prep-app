@@ -4,6 +4,7 @@
 {% import "macros/nav.html" as nav with context %}
 {% block main %}
 {{ nav.back("/", "back") }}
+{%- set _root = request.scope.get('root_path','') -%}
 
 <section class="prelude">
   <p class="eyebrow">API tokens</p>
@@ -16,65 +17,9 @@
   </p>
 </section>
 
-{% if created_plaintext %}
-<section class="agent-panel">
-  <p class="section-eyebrow"><span>Copy this once</span><span class="rule"></span></p>
-  <p class="form-hint">
-    Your new token is shown below — this is the only time prep will
-    display it. Store it in a password manager or paste it into your
-    AI assistant's config now. Refresh the page and it's gone.
-  </p>
-  <pre class="reproduction agent-cmd" style="user-select: all;"><code>{{ created_plaintext }}</code></pre>
-</section>
-{% endif %}
-
-{% if flash %}<p class="notify-status" data-kind="ok">{{ flash }}</p>{% endif %}
-
-<section class="agent-panel">
-  <p class="section-eyebrow"><span>Your tokens</span><span class="rule"></span></p>
-  {% if tokens %}
-  <ul class="agent-steps" style="list-style: none; padding-left: 0;">
-    {% for t in tokens %}
-      <li style="display: flex; align-items: baseline; gap: 1rem; justify-content: space-between;">
-        <span>
-          <code>{{ t.key_prefix }}</code>
-          {% if t.label %} · <em>{{ t.label }}</em>{% endif %}
-          <span class="form-hint">
-            added {{ t.created_at[:10] }}{% if t.last_used_at %} · last used {{ t.last_used_at[:10] }}{% else %} · never used{% endif %}
-          </span>
-        </span>
-        <form method="post"
-              action="{{ request.scope.get('root_path','') }}/settings/api/tokens/{{ t.id }}/delete"
-              style="margin: 0;">
-          <button type="submit" class="btn btn-quiet btn-tiny">Revoke</button>
-        </form>
-      </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-    <p class="form-hint">No tokens yet. Mint one below.</p>
-  {% endif %}
-</section>
-
-<section class="agent-panel">
-  <p class="section-eyebrow"><span>Mint a token</span><span class="rule"></span></p>
-  <form method="post" action="{{ request.scope.get('root_path','') }}/settings/api/tokens"
-        class="agent-connect-form" autocomplete="off">
-    <label class="freetext">
-      <span class="freetext-label">Label <small>(optional)</small></span>
-      <input type="text" name="label" maxlength="60"
-             placeholder="e.g. claude desktop, my laptop">
-      <span class="freetext-hint">
-        For your own reference — shown on this page so you can tell
-        which token is which.
-      </span>
-    </label>
-    <div class="study-actions">
-      <button type="submit" class="btn btn-primary">Generate token</button>
-    </div>
-  </form>
-</section>
-
+{# How to use — placed FIRST so context is established before the
+   create-token form, per the design feedback. The form lives in the
+   "Tokens" card below. #}
 <section class="agent-panel">
   <p class="section-eyebrow"><span>How to use</span><span class="rule"></span></p>
 
@@ -86,10 +31,122 @@
 
   <p style="margin-block-start: 1rem;">
     Full endpoint reference + try-it-now console live at
-    <a href="{{ request.scope.get('root_path','') }}/docs">/docs</a> (Swagger UI)
-    or <a href="{{ request.scope.get('root_path','') }}/redoc">/redoc</a>.
-    Raw schema at <a href="{{ request.scope.get('root_path','') }}/openapi.json">/openapi.json</a>.
+    <a href="{{ _root }}/docs">/docs</a> (Swagger UI)
+    or <a href="{{ _root }}/redoc">/redoc</a>.
+    Raw schema at <a href="{{ _root }}/openapi.json">/openapi.json</a>.
+  </p>
+  <p style="margin-block-start: 0.5rem;">
+    Setting prep up as an MCP server in Claude or other AI clients:
+    walk-through at <a href="{{ _root }}/settings/agent">/settings/agent</a>.
   </p>
 </section>
+
+{% if flash %}<p class="notify-status" data-kind="ok">{{ flash }}</p>{% endif %}
+
+{# Single tokens card — create form on top, table of existing tokens
+   below. Replaces the previous split-into-three-cards layout. #}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Tokens</span><span class="rule"></span></p>
+
+  <form method="post" action="{{ _root }}/settings/api/tokens"
+        class="api-token-create-form" autocomplete="off"
+        data-submit-pending>
+    <div class="api-token-create-row">
+      <label class="freetext" style="flex: 1; margin: 0;">
+        <span class="visually-hidden">Token label</span>
+        <input type="text" name="label" maxlength="60"
+               placeholder="Label (optional) — e.g. claude desktop, laptop">
+      </label>
+      <button type="submit" class="btn btn-primary" data-pending-label="Generating…">
+        Generate
+      </button>
+    </div>
+  </form>
+
+  {% if tokens %}
+    <table class="api-token-table">
+      <thead>
+        <tr>
+          <th scope="col">Token</th>
+          <th scope="col">Created</th>
+          <th scope="col">Last used</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tokens %}
+          <tr>
+            <td>
+              <code>{{ t.key_prefix }}</code>
+              {% if t.label %}<div class="api-token-label">{{ t.label }}</div>{% endif %}
+            </td>
+            <td class="api-token-date">{{ t.created_at[:10] }}</td>
+            <td class="api-token-date">
+              {% if t.last_used_at %}{{ t.last_used_at[:10] }}{% else %}<em>never</em>{% endif %}
+            </td>
+            <td>
+              <form method="post"
+                    action="{{ _root }}/settings/api/tokens/{{ t.id }}/delete"
+                    style="margin: 0;">
+                <button type="submit" class="btn btn-quiet btn-tiny">Revoke</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="form-hint" style="margin-block-start: 1rem;">No tokens yet. Generate one above.</p>
+  {% endif %}
+</section>
+
+{# Modal: when a new token was just minted, the plaintext lands here
+   with a Copy button. JS auto-opens on page render. The form re-POSTs
+   to the same URL so server-side rendering populates this; reloading
+   the page wipes the dialog (the plaintext is only on the response,
+   never stored). #}
+{% if created_plaintext %}
+<dialog id="new-token-dialog" data-dialog class="new-token-dialog"
+        aria-labelledby="new-token-heading">
+  <h3 id="new-token-heading">Your new token</h3>
+  <p class="form-hint">
+    This is the <strong>only time</strong> prep will show this value.
+    Copy it now and paste it into your AI client's config or password manager.
+  </p>
+  <div class="new-token-value">
+    <code id="new-token-plaintext">{{ created_plaintext }}</code>
+    <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy">
+      Copy
+    </button>
+  </div>
+  <div class="new-token-actions">
+    <form method="dialog" style="margin: 0;">
+      <button type="submit" class="btn btn-primary">Done</button>
+    </form>
+  </div>
+</dialog>
+<script>
+(function () {
+  const dlg = document.getElementById('new-token-dialog');
+  if (!dlg) return;
+  /* Auto-open on render so the user doesn't have to chase the value. */
+  if (!dlg.open && dlg.showModal) dlg.showModal();
+  const copyBtn = document.getElementById('new-token-copy');
+  const src = document.getElementById('new-token-plaintext');
+  if (copyBtn && src) {
+    copyBtn.addEventListener('click', async () => {
+      const original = copyBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(src.textContent.trim());
+        copyBtn.textContent = 'Copied ✓';
+      } catch (e) {
+        copyBtn.textContent = 'Copy failed';
+      }
+      setTimeout(() => { copyBtn.textContent = original; }, 1400);
+    });
+  }
+})();
+</script>
+{% endif %}
 
 {% endblock %}
