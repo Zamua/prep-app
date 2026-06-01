@@ -33,3 +33,14 @@
   color: var(--ink-mute);
   max-width: 22rem;
 }
+
+/* Onboarding-specific tweaks for the index empty state — bigger
+ * vertical breathing room above the CTA, primary button sized up so
+ * it reads as THE action on the page. */
+.index-empty-state {
+  padding-block: 2rem 4rem;
+}
+.index-empty-cta {
+  margin-block-start: 1.5rem;
+  padding-inline: 1.6rem;
+}

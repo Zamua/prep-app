@@ -3,13 +3,20 @@
 {% block page_class %}index{% endblock %}
 {% import "macros/deck_card.html" as deck_card_macro with context %}
 {% block main %}
+{# Detect a brand-new user (no decks AND no in-flight sessions) so
+   the prelude lede + the deck-list area can switch to onboarding
+   copy. Once a user has any content, they're past first-impression
+   and the dashboard reads normally. #}
+{% set is_new_user = not (decks or pinned_decks or recent_sessions or active_trivia_sessions or snoozed_sessions) %}
 <section class="prelude">
-  <p class="eyebrow">The decks</p>
+  <p class="eyebrow">{% if is_new_user %}Welcome{% else %}The decks{% endif %}</p>
   <h1 class="display">A standing library<br><em>of questions</em>.</h1>
   <p class="lede">
-    Pick a deck to study what's due{% if agent_available %}, or generate a fresh batch{% endif %}. Cards
-    re-surface on a forgetting curve — the more you remember, the longer
-    they sleep.
+    {% if is_new_user -%}
+      Type a topic and prep turns it into a deck of flashcards{% if not agent_available %} — or write the cards yourself{% endif %}. Each card re-surfaces on a forgetting curve: the ones you remember fade, the ones you don't quietly come back around.
+    {%- else -%}
+      Pick a deck to study what's due{% if agent_available %}, or generate a fresh batch{% endif %}. Cards re-surface on a forgetting curve — the more you remember, the longer they sleep.
+    {%- endif %}
   </p>
 </section>
 
@@ -266,6 +273,20 @@
 </section>
 {% endif %}
 
+{% if is_new_user %}
+  {# Brand-new user — replace the section header + small empty row
+     with a single centered hero CTA. No "edit with AI" pill (nothing
+     to edit yet); no list shell (no items to list). #}
+  <section class="empty-state index-empty-state">
+    <p class="empty-headline">Start with <em>one deck</em>.</p>
+    <p class="empty-sub">
+      Pick a topic you want to remember — anything from world capitals to a paper you just read. Prep does the rest.
+    </p>
+    <a href="{{ request.scope.get('root_path','') }}/decks/new" class="btn btn-primary index-empty-cta">
+      Create your first deck
+    </a>
+  </section>
+{% else %}
 <section class="decks-section">
   <p class="section-eyebrow"><span>{% if pinned_decks %}Other decks{% elif recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
   {# Deck-level actions sit under the section header as small pills,
@@ -288,9 +309,7 @@
   {% for d in decks %}
     {{ deck_card_macro.card(d, loop.index) }}
   {% endfor %}
-  {% if not decks and not pinned_decks %}
-    <li class="deck-card empty"><p>No decks yet.</p></li>
-  {% endif %}
 </ol>
 </section>
+{% endif %}
 {% endblock %}
