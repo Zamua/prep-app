@@ -26,6 +26,14 @@
   /* Anchors the absolutely-positioned per-card overflow menu. */
   position: relative;
 }
+/* When a card's overflow menu is open, lift the WHOLE card (popover
+ * included) above its siblings. Without this, the rise-animation
+ * transform on adjacent cards creates per-card stacking contexts that
+ * paint over the popover — popover items below the card's bottom edge
+ * end up clipped under the next deck card. */
+.deck-card:has(.deck-card-overflow[open]) {
+  z-index: 10;
+}
 
 /* Per-card overflow menu — sibling of the .deck-link <a>, lives in the
  * top-right corner so its tap target doesn't overlap the link surface.
