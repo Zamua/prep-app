@@ -204,7 +204,30 @@ templates.env.globals["icon"] = icons.icon
 
 # ---- App + mounts ---------------------------------------------------------
 
-app = FastAPI(root_path=ROOT_PATH)
+# FastAPI's auto-docs at /docs (Swagger) + /redoc are publicly visible
+# at the deploy's root_path. The title/description below drives the
+# header users see when they hit those URLs, and the version comes
+# from the deployed image. The tag list groups the schema's routes:
+# "Public API" + "MCP" surfaces (the part agents/scripts care about)
+# sort to the top; everything else is internal.
+app = FastAPI(
+    root_path=ROOT_PATH,
+    title="prep",
+    description=(
+        "Self-hosted spaced-repetition flashcards.\n\n"
+        "This document covers the **public REST API** at `/api/v1/*` and "
+        "the **MCP (Model Context Protocol) server** at `/mcp`. Both "
+        "share the same bearer-token auth — mint a token at "
+        "`/settings/api` and pass it as `Authorization: Bearer prep_pat_…`.\n\n"
+        "Source: https://github.com/Zamua/prep-app — "
+        "AI-agent manifest: [/llms.txt](/llms.txt)"
+    ),
+    version="1.0.0",
+    openapi_tags=[
+        {"name": "Decks API", "description": "Public REST surface for managing decks + cards."},
+        {"name": "MCP", "description": "Model Context Protocol server. JSON-RPC 2.0 over HTTP."},
+    ],
+)
 
 
 # Prometheus metrics. Middleware records per-request latency; the

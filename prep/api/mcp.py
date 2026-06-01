@@ -304,7 +304,19 @@ def _json(value: Any) -> str:
 # ---- route ---------------------------------------------------------------
 
 
-@router.post("/mcp")
+@router.post(
+    "/mcp",
+    tags=["MCP"],
+    summary="MCP JSON-RPC endpoint",
+    description=(
+        "Single endpoint speaking JSON-RPC 2.0 over HTTP — the Model "
+        "Context Protocol's streamable-HTTP transport. Supported methods: "
+        "`initialize`, `tools/list`, `tools/call`, "
+        "`notifications/initialized`. The tool catalog mirrors the REST "
+        "API: list_decks, get_deck, list_cards, export_deck_csv, "
+        "create_deck, import_csv."
+    ),
+)
 async def mcp_endpoint(request: Request, user: dict = Depends(bearer_user)):
     """Handle one JSON-RPC 2.0 message. Auth is identical to the REST
     API — `Authorization: Bearer prep_pat_…`. The same user-scoped

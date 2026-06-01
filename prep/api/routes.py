@@ -64,12 +64,12 @@ def _render_api_settings(
     )
 
 
-@router.get("/settings/api", response_class=HTMLResponse)
+@router.get("/settings/api", response_class=HTMLResponse, include_in_schema=False)
 def settings_api(request: Request, user: dict = Depends(current_user)):
     return _render_api_settings(request, user)
 
 
-@router.post("/settings/api/tokens", response_class=HTMLResponse)
+@router.post("/settings/api/tokens", response_class=HTMLResponse, include_in_schema=False)
 async def settings_api_create(request: Request, user: dict = Depends(current_user)):
     """Mint a token + render it inline on this response. The plaintext
     is NEVER persisted to a session, NEVER put in a query string (would
@@ -82,7 +82,11 @@ async def settings_api_create(request: Request, user: dict = Depends(current_use
     return _render_api_settings(request, user, created_plaintext=token)
 
 
-@router.post("/settings/api/tokens/{token_id}/delete", response_class=HTMLResponse)
+@router.post(
+    "/settings/api/tokens/{token_id}/delete",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
 def settings_api_delete(token_id: int, request: Request, user: dict = Depends(current_user)):
     ApiTokenRepo().delete(user_id=user["tailscale_login"], token_id=token_id)
     return _render_api_settings(request, user, flash="Token revoked.")
@@ -113,11 +117,57 @@ class _CardJson(BaseModel):
 
 
 class _NewDeckBody(BaseModel):
-    name: str = Field(min_length=2, max_length=30)
+    name: str = Field(
+        min_length=2, max_length=30, description="Lowercase letters, digits, hyphens. 2–30 chars."
+    )
+    context_prompt: str | None = Field(
+        default=None, description="Free-form description used as AI context when generating cards."
+    )
+
+
+class _DeckListResponse(BaseModel):
+    decks: list[_DeckSummaryJson]
+
+
+class _DeckMetaResponse(BaseModel):
+    name: str
+    type: str
     context_prompt: str | None = None
+    card_count: int
 
 
-@router.get("/api/v1/decks")
+class _CardListResponse(BaseModel):
+    deck: str
+    cards: list[_CardJson]
+
+
+class _NewDeckResponse(BaseModel):
+    name: str
+    id: int
+
+
+class _CsvImportOutcome(BaseModel):
+    """Result of a CSV upload — same shape `prep.decks.io.ImportOutcome`
+    serializes to. Inserted vs duplicate-skipped vs row-level errors."""
+
+    deck_id: int
+    deck_name: str
+    inserted: int
+    skipped_duplicates: int
+    errors: list[str]
+
+
+# Tag every route under this router (in the schema) so /docs groups
+# them together. The MCP route gets its own tag inside prep/api/mcp.py.
+API_TAGS = ["Decks API"]
+
+
+@router.get(
+    "/api/v1/decks",
+    response_model=_DeckListResponse,
+    tags=API_TAGS,
+    summary="List your decks",
+)
 def api_list_decks(user: dict = Depends(bearer_user)):
     uid = user["tailscale_login"]
     summaries = DeckRepo().list_summaries(uid)
@@ -134,7 +184,13 @@ def api_list_decks(user: dict = Depends(bearer_user)):
     return {"decks": [d.model_dump() for d in out]}
 
 
-@router.post("/api/v1/decks")
+@router.post(
+    "/api/v1/decks",
+    response_model=_NewDeckResponse,
+    tags=API_TAGS,
+    summary="Create a deck",
+    responses={409: {"description": "deck name already in use"}},
+)
 def api_create_deck(body: _NewDeckBody, user: dict = Depends(bearer_user)):
     uid = user["tailscale_login"]
     repo = DeckRepo()
@@ -144,7 +200,13 @@ def api_create_deck(body: _NewDeckBody, user: dict = Depends(bearer_user)):
     return {"name": body.name, "id": deck_id}
 
 
-@router.get("/api/v1/decks/{name}")
+@router.get(
+    "/api/v1/decks/{name}",
+    response_model=_DeckMetaResponse,
+    tags=API_TAGS,
+    summary="Get deck metadata",
+    responses={404: {"description": "deck not found"}},
+)
 def api_deck_meta(name: str, user: dict = Depends(bearer_user)):
     uid = user["tailscale_login"]
     repo = DeckRepo()
@@ -162,7 +224,13 @@ def api_deck_meta(name: str, user: dict = Depends(bearer_user)):
     }
 
 
-@router.get("/api/v1/decks/{name}/cards")
+@router.get(
+    "/api/v1/decks/{name}/cards",
+    response_model=_CardListResponse,
+    tags=API_TAGS,
+    summary="List cards in a deck",
+    responses={404: {"description": "deck not found"}},
+)
 def api_list_cards(name: str, user: dict = Depends(bearer_user)):
     """List every card in the deck. Same field set the CSV exporter
     emits — JSON is the agent-friendly shape, CSV is the spreadsheet-
@@ -194,7 +262,16 @@ def api_list_cards(name: str, user: dict = Depends(bearer_user)):
     return {"deck": name, "cards": [c.model_dump() for c in cards]}
 
 
-@router.get("/api/v1/decks/{name}/export.csv")
+@router.get(
+    "/api/v1/decks/{name}/export.csv",
+    tags=API_TAGS,
+    summary="Download deck as CSV",
+    response_class=Response,
+    responses={
+        200: {"content": {"text/csv": {}}, "description": "CSV with header row"},
+        404: {"description": "deck not found"},
+    },
+)
 def api_deck_export_csv(name: str, user: dict = Depends(bearer_user)):
     uid = user["tailscale_login"]
     deck_id = DeckRepo().find_id(uid, name)
@@ -208,7 +285,20 @@ def api_deck_export_csv(name: str, user: dict = Depends(bearer_user)):
     )
 
 
-@router.post("/api/v1/decks/{name}/import-csv")
+@router.post(
+    "/api/v1/decks/{name}/import-csv",
+    response_model=_CsvImportOutcome,
+    tags=API_TAGS,
+    summary="Import CSV into a deck",
+    description=(
+        "Append CSV rows to `name` (creates the deck if missing). The "
+        "request body MUST be the raw CSV text (Content-Type: text/csv). "
+        "Column shape matches the export — type, topic, prompt, answer, "
+        "choices (newline-joined), rubric, skeleton, language, "
+        "answer_regex, explanation."
+    ),
+    responses={400: {"description": "empty body or malformed CSV"}},
+)
 async def api_deck_import_csv(name: str, request: Request, user: dict = Depends(bearer_user)):
     """Append CSV rows to `name` (creates the deck if missing). Body
     must be text/csv. Returns an ImportOutcome JSON: inserted /

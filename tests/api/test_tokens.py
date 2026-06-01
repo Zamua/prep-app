@@ -147,6 +147,40 @@ def test_api_with_valid_bearer_returns_users_decks(client: TestClient, initializ
     assert "decks" in r2.json()
 
 
+def test_openapi_schema_groups_public_api_under_tags(client: TestClient, initialized_db: str):
+    """The schema should surface the public surface under stable tags
+    so /docs and /redoc render a useful, organized doc. Internal HTML
+    routes shouldn't bleed into the public schema."""
+    r = client.get("/openapi.json")
+    assert r.status_code == 200
+    schema = r.json()
+    assert schema["info"]["title"] == "prep"
+    tag_names = {t["name"] for t in schema.get("tags", [])}
+    assert "Decks API" in tag_names
+    assert "MCP" in tag_names
+
+    paths = schema["paths"]
+    # Every /api/v1/* operation is tagged. (Some paths host multiple
+    # verbs — POST + GET on /decks both live under one key — so we
+    # count operations, not paths.)
+    api_v1_ops = [(verb, p) for p in paths if p.startswith("/api/v1/") for verb in paths[p]]
+    assert len(api_v1_ops) >= 6
+    for verb, p in api_v1_ops:
+        assert "Decks API" in paths[p][verb].get("tags", []), f"{verb} {p} missing Decks API tag"
+
+    # The settings UI routes are HIDDEN from the schema (they're not
+    # part of the public API surface).
+    assert "/settings/api" not in paths
+    assert "/settings/api/tokens" not in paths
+
+
+def test_docs_routes_reachable(client: TestClient, initialized_db: str):
+    """/docs (Swagger) and /redoc both render — FastAPI defaults but
+    pin in case someone disables them by accident."""
+    assert client.get("/docs").status_code == 200
+    assert client.get("/redoc").status_code == 200
+
+
 def test_api_cross_user_idor_returns_404(client: TestClient, initialized_db: str):
     """A bearer token resolves to its owner; that owner asking for a
     deck-name they don't own gets a 404, same shape as not-found.
