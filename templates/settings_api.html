@@ -211,17 +211,14 @@
     const base = (promptBtn.dataset.appBase || '').replace(/\/$/, '');
     const mcp_url = base + '/mcp';
     const prompt = [
-      'Please add prep as an MCP server so I can manage my flashcards from here.',
+      'Please connect prep as an MCP server so I can manage my flashcards from here.',
       '',
-      'Run:',
+      'Server (streamable HTTP): ' + mcp_url,
+      'Authorization header: Bearer ' + token,
       '',
-      '  claude mcp add --transport http prep \\',
-      '    ' + mcp_url + ' \\',
-      '    --header "Authorization: Bearer ' + token + '"',
+      "Register this server in whatever way is appropriate for your harness, then verify the connection. If your harness requires action from me to surface the new tools (e.g. restarting your session), tell me what's needed. Once you can call prep tools, run prep_list_decks and tell me which decks I have.",
       '',
-      'Then verify by calling prep_list_decks and reporting which decks I have.',
-      '',
-      'Full tool catalog: ' + base + '/llms.txt',
+      'Tool reference: ' + base + '/llms.txt',
     ].join('\n');
     promptBtn.addEventListener('click', async () => {
       const orig = promptBtn.textContent;
