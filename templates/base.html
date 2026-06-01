@@ -170,25 +170,18 @@
     {% include "partials/pwa_install_nudge.html" %}
     <footer class="colophon">
       <span class="rule"></span>
-      {% if clerk_publishable_key %}
-        {# Clerk-mode (public deploys, e.g. prepcards.app): conventional
-           legal/source footer, no signature aesthetic. #}
-        <nav class="colophon-links" aria-label="Footer">
-          <a href="{{ root }}/privacy">Privacy</a>
-          <span aria-hidden="true">·</span>
-          <a href="{{ root }}/docs">API docs</a>
-          <span aria-hidden="true">·</span>
-          <a href="{{ root }}/llms.txt">llms.txt</a>
-          <span aria-hidden="true">·</span>
-          <a href="https://github.com/Zamua/prep-app" target="_blank" rel="noopener">Source</a>
-        </nav>
-      {% else %}
-        {# Tailscale-mode (single-user mac-mini install): keep the
-           craft colophon — no legal pages exist on this deploy. #}
-        <span class="colophon-text">
-          set in <em>Fraunces</em> &amp; <em>JetBrains&nbsp;Mono</em>
-        </span>
-      {% endif %}
+      {# Same footer regardless of auth mode — Privacy describes data
+         handling that applies to any deploy, API docs + llms.txt are
+         useful for anyone integrating, Source is canonical. #}
+      <nav class="colophon-links" aria-label="Footer">
+        <a href="{{ root }}/privacy">Privacy</a>
+        <span aria-hidden="true">·</span>
+        <a href="{{ root }}/docs">API docs</a>
+        <span aria-hidden="true">·</span>
+        <a href="{{ root }}/llms.txt">llms.txt</a>
+        <span aria-hidden="true">·</span>
+        <a href="https://github.com/Zamua/prep-app" target="_blank" rel="noopener">Source</a>
+      </nav>
     </footer>
   </div>
 </body>
