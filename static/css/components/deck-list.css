@@ -29,10 +29,11 @@
 /* When a card's overflow menu is open, lift the WHOLE card (popover
  * included) above its siblings. Without this, the rise-animation
  * transform on adjacent cards creates per-card stacking contexts that
- * paint over the popover — popover items below the card's bottom edge
- * end up clipped under the next deck card. Trigger + popover chrome
- * lives in row-overflow-menu.css; this file just anchors the card. */
-.deck-card:has(.row-overflow-menu[open]) {
+ * paint over the popover. JS in modules/row-overflow.js sets
+ * `.is-overflow-open` on toggle; we don't use :has() because iOS
+ * Safari can sort transformed-sibling stacking contexts differently
+ * and the explicit class is just more robust. */
+.deck-card.is-overflow-open {
   z-index: 10;
 }
 .deck-card:hover {

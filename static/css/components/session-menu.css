@@ -8,10 +8,9 @@
  * the shared chrome.
  */
 
-/* Same-card lift when open, matching the .deck-card pattern. Cards
- * with rise-animation transforms create stacking contexts; without
- * this rule the popover paints under the next session card. */
-.session-card:has(.row-overflow-menu[open]) {
+/* Same-card lift when open, matching the .deck-card pattern. See
+ * modules/row-overflow.js — `.is-overflow-open` is set on toggle. */
+.session-card.is-overflow-open {
   z-index: 10;
 }
 .session-menu-row {
