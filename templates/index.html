@@ -28,15 +28,8 @@
    JS handler picks up its submit. #}
 {% macro session_menu(deck_name, snooze_action, discard_action, mute_deck_id=None) %}
 {%- set root = request.scope.get('root_path','') -%}
-<details class="session-menu">
-  <summary aria-label="Session actions">
-    {# dots-three-vertical inline (no static icon yet for this) #}
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <circle cx="12" cy="5"  r="1.6"/>
-      <circle cx="12" cy="12" r="1.6"/>
-      <circle cx="12" cy="19" r="1.6"/>
-    </svg>
-  </summary>
+<details class="session-menu row-overflow-menu">
+  <summary class="row-overflow-trigger" title="Session actions" aria-label="Session actions for {{ deck_name }}"><span aria-hidden="true">⋯</span></summary>
   <div class="session-menu-popover" data-details-body role="menu">
     <a class="session-menu-row" role="menuitem"
        href="{{ root }}/deck/{{ deck_name }}">

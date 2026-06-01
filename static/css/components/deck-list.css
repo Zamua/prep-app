@@ -30,53 +30,10 @@
  * included) above its siblings. Without this, the rise-animation
  * transform on adjacent cards creates per-card stacking contexts that
  * paint over the popover — popover items below the card's bottom edge
- * end up clipped under the next deck card. */
-.deck-card:has(.deck-card-overflow[open]) {
+ * end up clipped under the next deck card. Trigger + popover chrome
+ * lives in row-overflow-menu.css; this file just anchors the card. */
+.deck-card:has(.row-overflow-menu[open]) {
   z-index: 10;
-}
-
-/* Per-card overflow menu — sibling of the .deck-link <a>, lives in the
- * top-right corner so its tap target doesn't overlap the link surface.
- * The popover body floats below using the same .deck-overflow-body
- * styles the hero band uses. */
-.deck-card-overflow {
-  position: absolute;
-  top: 0.55rem;
-  right: 0.65rem;
-  z-index: 2;
-}
-.deck-card-overflow-trigger {
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  color: var(--ink-mute);
-  cursor: pointer;
-  user-select: none;
-  font-size: 1.2rem;
-  line-height: 1;
-}
-.deck-card-overflow-trigger::-webkit-details-marker { display: none; }
-.deck-card-overflow-trigger::marker { content: ""; }
-.deck-card-overflow-trigger:hover,
-.deck-card-overflow[open] .deck-card-overflow-trigger {
-  background: color-mix(in srgb, var(--quill) 18%, transparent);
-  color: var(--ink);
-}
-.deck-card-overflow[open] > .deck-overflow-body {
-  position: absolute;
-  top: calc(100% + 0.3rem);
-  right: 0;
-  min-width: 14rem;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
-  padding: 0.4rem;
-  z-index: 5;
 }
 .deck-card:hover {
   transform: translateY(-2px);

@@ -1,67 +1,18 @@
-/* Session-card overflow menu — the ⋯ button at the right edge of each
- * session card opens a small popover with per-session actions (View
- * deck, Discard session, …). Built on <details> so the open/close
- * state is native; the existing details-toggle.js handles iOS 26
- * pointer-up + outside-click + Esc.
+/* Session-card overflow menu — uses the shared .row-overflow-menu
+ * trigger + popover chrome (see row-overflow-menu.css). This file
+ * keeps only the row-item styles + the confirm-dialog for destructive
+ * actions, since those diverge from the deck menu's link-style rows.
  *
- * Mirrored across trivia and SRS session cards. Replaces the prior
- * left-edge X-button discard (which was SRS-only) with a unified
- * overflow surface that can grow.
+ * The macro applies BOTH `.session-menu` (for outer-click handling
+ * and any session-specific overrides) AND `.row-overflow-menu` for
+ * the shared chrome.
  */
 
-/* The trigger lives on the right edge of the card, mirroring the
- * deck-arrow's position. Keep the card itself positioned so the
- * popover (absolutely positioned to top: 100%) anchors correctly. */
-.session-menu {
-  position: absolute;
-  top: 50%;
-  right: 0.45rem;
-  transform: translateY(-50%);
-  z-index: 2;
-  margin: 0;
-}
-.session-menu[open] {
-  z-index: 5;   /* lift above the link's arrow when open */
-}
-.session-menu > summary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.2rem;
-  height: 2.2rem;
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: var(--ink-mute);
-  opacity: 0.55;
-  cursor: pointer;
-  list-style: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: color 160ms ease, opacity 160ms ease;
-}
-.session-menu > summary::-webkit-details-marker { display: none; }
-.session-menu > summary::marker { content: ""; }
-.session-menu > summary:hover,
-.session-menu > summary:focus-visible,
-.session-menu[open] > summary {
-  color: var(--ink); opacity: 1; outline: none;
-}
-.session-menu > summary svg { width: 1.25rem; height: 1.25rem; }
-
-/* The popover. Anchored below + to the right edge of the trigger.
- * data-details-body on the wrapping div tells details-toggle.js that
- * taps INSIDE shouldn't close the parent <details>. */
-.session-menu-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
-  padding: 0.3rem;
-  min-width: 12rem;
-  font-size: 0.93rem;
+/* Same-card lift when open, matching the .deck-card pattern. Cards
+ * with rise-animation transforms create stacking contexts; without
+ * this rule the popover paints under the next session card. */
+.session-card:has(.row-overflow-menu[open]) {
+  z-index: 10;
 }
 .session-menu-row {
   display: flex;
@@ -98,14 +49,9 @@
 }
 .session-discard-form-inline { margin: 0; }   /* form has no spacing inside popover */
 
-/* The card itself needs room on the right so the deck name doesn't
- * sit under the overflow button. Symmetric to the existing
- * .session-link arrow gutter. */
-.session-card .session-link { padding-right: 2.8rem; }
-.session-card .session-link .deck-arrow {
-  /* nudge the arrow inward so the ⋯ has space on the right */
-  margin-right: 1.8rem;
-}
+/* The overflow trigger now lives in the top-right corner via the
+ * shared .row-overflow-menu chrome; the deck-arrow keeps its
+ * default position. No extra gutter needed. */
 
 /* Confirm dialog for destructive actions (Discard session). Reuses
  * the existing data-dialog backdrop-click-to-close pattern. */
@@ -156,4 +102,3 @@
   border-color: var(--wrong);
 }
 .session-confirm-actions button.danger:hover { filter: brightness(0.92); }
-</content>

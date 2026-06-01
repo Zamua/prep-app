@@ -1,0 +1,70 @@
+/* Shared row-level overflow menu — the ⋯ button that sits in the
+ * top-right corner of a list-item card (deck cards on the index,
+ * session cards on the trivia continue strip).
+ *
+ * Single source of truth for trigger glyph + size + hover state +
+ * popover positioning. Per-card-type wrappers (.deck-card,
+ * .session-card) handle their own position:relative anchoring and
+ * a :has() z-index lift so the popover paints above neighboring
+ * cards whose rise-animation transforms create stacking contexts.
+ *
+ * Inner row content (link/button styling, danger color, etc.) is
+ * NOT shared — it stays in each card type's existing CSS because
+ * the action shapes diverge (deck actions vs session actions).
+ */
+
+.row-overflow-menu {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.65rem;
+  z-index: 2;
+  margin: 0;
+}
+.row-overflow-menu[open] {
+  z-index: 5;
+}
+
+.row-overflow-trigger {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  color: var(--ink-mute);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.row-overflow-trigger::-webkit-details-marker { display: none; }
+.row-overflow-trigger::marker { content: ""; }
+.row-overflow-trigger:hover,
+.row-overflow-trigger:focus-visible,
+.row-overflow-menu[open] .row-overflow-trigger {
+  background: color-mix(in srgb, var(--quill) 18%, transparent);
+  color: var(--ink);
+  outline: none;
+}
+
+/* Popover body. Any direct child <div> of an open menu inherits the
+ * panel chrome — keeps deck (.deck-overflow-body) and session
+ * (.session-menu-popover) markup both working without per-context
+ * duplication. */
+.row-overflow-menu[open] > div {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  min-width: 14rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 0.4rem;
+  z-index: 5;
+}

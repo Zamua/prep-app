@@ -33,6 +33,7 @@
 @import "./components/user-indicator.css" layer(components);
 @import "./components/workflow-badge.css" layer(components);
 @import "./components/recent-sessions.css" layer(components);
+@import "./components/row-overflow-menu.css" layer(components);
 @import "./components/session-menu.css" layer(components);
 @import "./components/sheet.css" layer(components);
 @import "./components/snoozed-group.css" layer(components);

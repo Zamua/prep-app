@@ -45,8 +45,8 @@
      notifications + delete suppressed. Sibling of the .deck-link <a>,
      positioned absolute in the top-right so its click target doesn't
      overlap the link. The shared partial handles the rest. #}
-  <details class="deck-card-overflow">
-    <summary class="deck-card-overflow-trigger" title="More actions" aria-label="More actions for {{ d.name }}"><span aria-hidden="true">⋯</span></summary>
+  <details class="row-overflow-menu">
+    <summary class="row-overflow-trigger" title="More actions" aria-label="More actions for {{ d.name }}"><span aria-hidden="true">⋯</span></summary>
     <div class="deck-overflow-body" data-details-body>
       {% set deck_name = d.name %}
       {% set deck_type = d.deck_type %}
