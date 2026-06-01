@@ -1664,3 +1664,66 @@ async def decks_import_csv_submit(
         "deck_import_csv.html",
         {"request": request, "user": user, "outcome": outcome, "error": None},
     )
+
+
+@router.get("/decks/import-anki", response_class=HTMLResponse)
+def decks_import_anki_form(request: Request, user: dict = Depends(current_user)):
+    """Render the .apkg upload page. POSTs to the same path."""
+    return templates.TemplateResponse(
+        "deck_import_anki.html",
+        {"request": request, "user": user, "outcome": None, "error": None},
+    )
+
+
+@router.post("/decks/import-anki", response_class=HTMLResponse)
+async def decks_import_anki_submit(
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Multipart-form upload: an .apkg file + a deck name. Parses the
+    zipped sqlite collection, drops HTML and media, inserts each note
+    as a short-type card. Returns an outcome block showing
+    inserted / dedup / cloze-skipped / errors."""
+    from prep.decks.anki import apkg_to_deck
+
+    uid = user["tailscale_login"]
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return templates.TemplateResponse(
+            "deck_import_anki.html",
+            {
+                "request": request,
+                "user": user,
+                "outcome": None,
+                "error": "Pick an .apkg file to upload.",
+            },
+            status_code=400,
+        )
+
+    try:
+        clean = _validate_deck_name(name)
+    except HTTPException as e:
+        return templates.TemplateResponse(
+            "deck_import_anki.html",
+            {"request": request, "user": user, "outcome": None, "error": e.detail},
+            status_code=400,
+        )
+
+    raw = await upload.read()
+    try:
+        outcome = apkg_to_deck(uid, clean, raw, deck_repo=deck_repo, question_repo=q_repo)
+    except ValueError as e:
+        return templates.TemplateResponse(
+            "deck_import_anki.html",
+            {"request": request, "user": user, "outcome": None, "error": str(e)},
+            status_code=400,
+        )
+
+    return templates.TemplateResponse(
+        "deck_import_anki.html",
+        {"request": request, "user": user, "outcome": outcome, "error": None},
+    )

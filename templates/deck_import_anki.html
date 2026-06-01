@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Import Anki deck · prep{% endblock %}
+{% block page_class %}deck-new{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/decks/new", "back") }}
+
+<section class="prelude">
+  <p class="eyebrow">Import an Anki deck</p>
+  <h1 class="display">Drop your <em>.apkg</em> in.</h1>
+  <p class="lede">
+    Each note becomes a card — front field for the prompt, back fields
+    joined for the answer. HTML markup is stripped; media and cloze
+    deletions are skipped in this version (the count surfaces below).
+    Card scheduling history isn't imported — new cards start fresh on
+    prep's ladder.
+  </p>
+</section>
+
+{% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+{% if outcome %}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Imported into <code>{{ outcome.deck_name }}</code></span><span class="rule"></span></p>
+  <ul class="agent-steps">
+    <li><strong>{{ outcome.inserted }}</strong> card{{ '' if outcome.inserted == 1 else 's' }} added.</li>
+    {% if outcome.skipped_duplicates %}
+      <li><strong>{{ outcome.skipped_duplicates }}</strong> duplicate{{ '' if outcome.skipped_duplicates == 1 else 's' }} skipped (same prompt already in the deck).</li>
+    {% endif %}
+    {% if outcome.cloze_skipped %}
+      <li><strong>{{ outcome.cloze_skipped }}</strong> cloze deletion{{ '' if outcome.cloze_skipped == 1 else 's' }} skipped — those need Anki's full renderer.</li>
+    {% endif %}
+    {% if outcome.errors %}
+      <li><strong>{{ outcome.errors|length }}</strong> note{{ '' if outcome.errors|length == 1 else 's' }} couldn't be imported:</li>
+    {% endif %}
+  </ul>
+  {% if outcome.errors %}
+    <pre class="reproduction" style="margin-top: 0.6rem; max-height: 12rem; overflow: auto;">{% for err in outcome.errors %}{{ err }}
+{% endfor %}</pre>
+  {% endif %}
+  <div class="study-actions" style="margin-top: 0.8rem;">
+    <a href="{{ request.scope.get('root_path','') }}/deck/{{ outcome.deck_name }}" class="btn btn-primary">Open deck</a>
+    <a href="{{ request.scope.get('root_path','') }}/decks/import-anki" class="btn btn-quiet">Import another</a>
+  </div>
+</section>
+{% else %}
+<form method="post" action="{{ request.scope.get('root_path','') }}/decks/import-anki"
+      enctype="multipart/form-data" class="deck-new-form" autocomplete="off"
+      data-submit-pending>
+  <label class="form-field">
+    <span class="form-label">Deck name</span>
+    <input type="text" name="name" required
+           pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
+           placeholder="e.g. vocab-french, anatomy"
+           autocapitalize="none" autocorrect="off">
+    <span class="form-hint">
+      2–30 chars, lowercase letters/digits/hyphens. If the deck
+      already exists, new notes are appended; duplicates are skipped.
+    </span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">.apkg file</span>
+    <input type="file" name="file" accept=".apkg,application/zip" required>
+    <span class="form-hint">
+      Export from Anki Desktop via File → Export → "Anki Deck Package".
+      Media and per-note-type templates aren't imported in this version.
+    </span>
+  </label>
+
+  <div class="study-actions deck-new-actions">
+    <button type="submit" class="btn btn-primary" data-pending-label="Importing…">
+      Import
+    </button>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/decks/new">Cancel</a>
+  </div>
+</form>
+{% endif %}
+
+{% endblock %}

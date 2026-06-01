@@ -41,7 +41,17 @@
       {{ icon('upload-simple', class_='deck-type-card-icon') }}
       <span class="deck-type-card-body">
         <span class="deck-type-card-title">Import CSV</span>
-        <span class="deck-type-card-sub">Bring cards from a spreadsheet or Anki export.</span>
+        <span class="deck-type-card-sub">Bring cards from a spreadsheet or Anki plain-text export.</span>
+      </span>
+      <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+    </a>
+  </li>
+  <li>
+    <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/import-anki">
+      {{ icon('package', class_='deck-type-card-icon') }}
+      <span class="deck-type-card-body">
+        <span class="deck-type-card-title">Import Anki deck</span>
+        <span class="deck-type-card-sub">Drop an <code>.apkg</code> file — notes land as cards.</span>
       </span>
       <span class="deck-arrow">{{ icon('arrow-right') }}</span>
     </a>
