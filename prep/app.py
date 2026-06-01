@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 
 import mistune
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from markupsafe import Markup
 
@@ -268,15 +268,23 @@ async def _no_cache_html(request, call_next):
 
 
 @app.get("/redoc", include_in_schema=False)
-def custom_redoc():
-    """Replacement for FastAPI's auto-mounted /redoc. Pinned to a
-    stable redoc version so Chromium doesn't Opaque-Response-Block
-    the CDN bundle (the `@next` tag served by jsdelivr trips ORB on
-    prepcards.app; pinning resolves it)."""
+def custom_redoc(request: Request):
+    """Replacement for FastAPI's auto-mounted /redoc.
+
+    Two reasons for the override:
+    1. Pin the redoc bundle (the default `@next` tag served by
+       jsdelivr trips Chromium's Opaque Response Blocking).
+    2. Prepend root_path to the openapi_url. FastAPI's
+       `app.openapi_url` is `/openapi.json` — Swagger UI rewrites
+       this automatically based on `<base>` / root_path, but ReDoc
+       takes the value literally → 404 under a deploy that mounts at
+       `/prep-staging/` or `/prep/`."""
     from fastapi.openapi.docs import get_redoc_html
 
+    root = request.scope.get("root_path", "")
+    openapi_url = f"{root}{app.openapi_url}"
     return get_redoc_html(
-        openapi_url=app.openapi_url,
+        openapi_url=openapi_url,
         title=f"{app.title} - ReDoc",
         redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js",
     )
