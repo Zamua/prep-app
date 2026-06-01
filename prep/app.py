@@ -286,6 +286,39 @@ def _versioned_js(build: str, path: str):
     return FileResponse(target, media_type="application/javascript", headers=headers)
 
 
+# Versioned CSS URL space — same pattern as the JS route above, for
+# the same reason: iOS Safari (and the PWA standalone variant in
+# particular) treats query-only cache busts inconsistently. The
+# pre-existing `?v={{ static_css_mtime }}` on the CSS <link> works
+# for chromium and webkit but isn't reliable on iOS — after a deploy,
+# users had to private-tab or pull-to-refresh to see fresh CSS.
+#
+# A versioned PATH (`/static/css/v<build>/index.css`) is a different
+# URL by Safari's cache-key, full stop. Browsers fetch it fresh
+# every deploy without any per-user dance. CSS @import statements
+# inside index.css use relative URLs (`./components/foo.css`), which
+# the browser resolves to `/static/css/v<build>/components/foo.css`
+# — also handled by this route.
+@app.get("/static/css/v{build}/{path:path}")
+def _versioned_css(build: str, path: str):
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+
+    is_versioned = build.isdigit()
+    if is_versioned:
+        rel = path
+    else:
+        rel = f"v{build}/{path}"
+    target = (BASE_DIR / "static" / "css" / rel).resolve()
+    css_root = (BASE_DIR / "static" / "css").resolve()
+    if css_root not in target.parents and target != css_root:
+        raise HTTPException(status_code=404)
+    if not target.is_file():
+        raise HTTPException(status_code=404)
+    headers = {"cache-control": "public, max-age=31536000, immutable"} if is_versioned else {}
+    return FileResponse(target, media_type="text/css", headers=headers)
+
+
 class _RevalidatingStaticFiles(StaticFiles):
     """StaticFiles with `Cache-Control: no-cache` on every response.
 

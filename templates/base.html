@@ -12,10 +12,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   {# Single CSS entry point. static/css/index.css declares the
-     @layer order and @imports the rest (tokens, reset, base,
-     components, legacy). Cache-bust on the file's mtime so a fresh
-     deploy invalidates browsers that grabbed the old bytes. #}
-  <link rel="stylesheet" href="{{ root }}/static/css/index.css?v={{ static_css_mtime|default(0) }}">
+     @layer order and @imports the rest. Versioned PATH (not query)
+     because iOS Safari treats `?v=` query busts inconsistently —
+     after a deploy, users had to private-tab to see fresh styles.
+     A different URL path is the only thing Safari's disk cache
+     reliably treats as a new resource. Server route at
+     /static/css/v<build>/* strips the version and serves the file
+     with immutable cache headers (see prep/app.py). #}
+  <link rel="stylesheet" href="{{ root }}/static/css/v{{ static_css_mtime|default(0) }}/index.css">
 
   {# PWA install — manifest + iOS-specific meta. iOS doesn't read the
      manifest's icons[]; it reads `apple-touch-icon` instead, and the home
