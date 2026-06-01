@@ -152,7 +152,8 @@
 .plan-item {
   display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.6rem;
   padding: 0.85rem 1rem; border: 1px solid var(--rule);
-  border-radius: 8px; background: var(--code-bg, var(--paper-soft, #f5efe6));
+  border-radius: 8px; background: var(--tint);
+  color: var(--ink);
 }
 .plan-item-num {
   font-family: "Fraunces", Georgia, serif;
