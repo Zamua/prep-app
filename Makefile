@@ -329,7 +329,13 @@ deploy-vps:
 	$(SSH_VPS) "sudo -u apps -H bash -c 'cd $(VPS_PROJECT) && git fetch --tags --force && git checkout $(DEPLOY_VPS_TAG)'"
 	@# Build + up. --wait blocks until the healthcheck passes so a boot
 	@# failure surfaces here instead of in a follow-up logs tail.
-	$(SSH_VPS) "sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) up -d --build --wait --remove-orphans"
+	@# Detect host arch on the VPS (uname -m is x86_64 or aarch64 →
+	@# remap to amd64/arm64 the way Docker expects) and pass it as a
+	@# build-arg so the temporal CLI fetch URL inside the Dockerfile
+	@# resolves to the right binary. The Dockerfile defaults to arm64
+	@# (Mac mini is M-series); without this override the VPS amd64 host
+	@# downloads an arm64 temporal CLI binary → Exec format error.
+	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) up -d --wait --remove-orphans'
 	@# Smoke check: hit the prepcards.app health surface from the VPS so
 	@# we verify nginx → container path, not just container health.
 	@$(SSH_VPS) "curl -sS -o /dev/null -w 'prepcards.app / → %{http_code}\\n' --max-time 10 https://prepcards.app/ || true"
