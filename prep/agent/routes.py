@@ -112,21 +112,41 @@ def _refresh_agent_status() -> dict:
     return s
 
 
-def _byok_metadata_for(user_id: str):
-    """Surface the user's current BYOK Anthropic credential — masked
-    prefix + timestamps — for the settings page. Returns None when
-    BYOK isn't configured (either no row OR no master key in env;
-    we don't differentiate at the UI layer)."""
-    try:
-        from prep.byok.entities import Provider
-        from prep.byok.repo import BYOKRepo
+def _byok_sections_for(user_id: str):
+    """Surface every supported BYOK provider as a list of dicts the
+    settings template can render. Each entry carries the static
+    `info` (label, key-prefix hint, console URL) plus the user's
+    current `metadata` (None when they haven't configured this
+    provider).
 
-        return BYOKRepo().metadata(user_id=user_id, provider=Provider.ANTHROPIC_API)
-    except Exception:  # noqa: BLE001 — bad PREP_KEY_ENCRYPTION_SECRET, etc.
-        # Don't blow up the settings page over a misconfigured master
-        # key. The BYOK section will render as "not configured."
-        logger.exception("byok metadata lookup failed for %s", user_id)
-        return None
+    A single bad PREP_KEY_ENCRYPTION_SECRET shouldn't blank the entire
+    settings page — we fall back to `metadata=None` per provider and
+    keep rendering."""
+    from prep.byok.entities import PROVIDERS
+    from prep.byok.repo import BYOKRepo
+
+    sections = []
+    repo = None
+    try:
+        repo = BYOKRepo()
+    except Exception:  # noqa: BLE001 — bad master key, etc.
+        logger.exception("byok repo init failed for %s", user_id)
+
+    for provider, info in PROVIDERS.items():
+        metadata = None
+        if repo is not None:
+            try:
+                metadata = repo.metadata(user_id=user_id, provider=provider)
+            except Exception:  # noqa: BLE001
+                logger.exception("byok metadata lookup failed for %s / %s", user_id, provider.value)
+        sections.append(
+            {
+                "provider": provider.value,
+                "info": info,
+                "metadata": metadata,
+            }
+        )
+    return sections
 
 
 def _render_settings(
@@ -140,9 +160,9 @@ def _render_settings(
     byok_flash: str | None = None,
     status_code: int = 200,
 ):
-    """One render-helper for all 6 settings routes — keeps the
-    template context shape consistent so a new field added here
-    surfaces everywhere automatically."""
+    """One render-helper for all settings routes — keeps the template
+    context shape consistent so a new field added here surfaces
+    everywhere automatically."""
     s = status if status is not None else _agent_mod.status()
     return templates.TemplateResponse(
         "settings_agent.html",
@@ -151,7 +171,7 @@ def _render_settings(
             "status": s,
             "error": error,
             "flash": flash,
-            "byok": _byok_metadata_for(user["tailscale_login"]),
+            "byok_sections": _byok_sections_for(user["tailscale_login"]),
             "byok_error": byok_error,
             "byok_flash": byok_flash,
         },
@@ -230,46 +250,57 @@ def settings_agent_disconnect(request: Request, user: dict = Depends(current_use
     )
 
 
-# ---- BYOK Anthropic API key routes ------------------------------------
-
-# Anthropic API keys (different from the subscription OAuth tokens
-# above — those are `sk-ant-oat01-…`). Reject anything else so an
-# accidental paste lands on a clear error instead of a downstream
-# auth rejection.
-_BYOK_KEY_PREFIX = "sk-ant-api03-"
+# ---- BYOK provider-agnostic routes ------------------------------------
 
 
-@router.post("/settings/agent/byok/connect", response_class=HTMLResponse)
-async def settings_byok_connect(request: Request, user: dict = Depends(current_user)):
-    """Store the user's Anthropic API key (encrypted) so per-user AI
-    calls go through their own billing account. Belongs alongside
-    the deploy-shared OAuth route — only one of the two needs to be
-    configured; BYOK wins when both are present (see selector)."""
+def _parse_provider(slug: str):
+    """Map a URL slug back to the Provider enum. Slug = enum value
+    (e.g. `anthropic-api`). Raises 404 on anything unknown so an
+    attacker can't probe which providers we support."""
+    from prep.byok.entities import PROVIDERS, Provider
+
+    try:
+        p = Provider(slug)
+    except ValueError as e:
+        raise HTTPException(404, "unknown provider") from e
+    if p not in PROVIDERS:
+        raise HTTPException(404, "unknown provider")
+    return p
+
+
+@router.post("/settings/agent/byok/{provider}/connect", response_class=HTMLResponse)
+async def settings_byok_connect(
+    provider: str, request: Request, user: dict = Depends(current_user)
+):
+    """Store the user's API key for `provider` (encrypted). Key shape
+    is validated against the provider's accepted prefixes; the
+    encrypted row replaces whatever was there before."""
     from prep.byok.crypto import MasterKeyError
-    from prep.byok.entities import Provider
+    from prep.byok.entities import PROVIDERS
     from prep.byok.repo import BYOKRepo
+
+    p = _parse_provider(provider)
+    info = PROVIDERS[p]
 
     form = await request.form()
     secret = (form.get("api_key") or "").strip()
     if not secret:
         return _render_settings(request, user, byok_error="API key is required.", status_code=400)
-    if not secret.startswith(_BYOK_KEY_PREFIX):
+    if not any(secret.startswith(pref) for pref in info.key_prefixes):
+        expected = info.key_prefixes[0]
         return _render_settings(
             request,
             user,
             byok_error=(
-                f"Key must start with {_BYOK_KEY_PREFIX!r}. Generate one at "
-                "https://console.anthropic.com/settings/keys and paste the output here."
+                f"That doesn't look like a {info.label} key — expected one "
+                f"starting with {expected!r}. Generate one at "
+                f"{info.console_url} and paste the output here."
             ),
             status_code=400,
         )
 
     try:
-        BYOKRepo().store(
-            user_id=user["tailscale_login"],
-            provider=Provider.ANTHROPIC_API,
-            secret=secret,
-        )
+        BYOKRepo().store(user_id=user["tailscale_login"], provider=p, secret=secret)
     except MasterKeyError as e:
         # Master key not configured on this deploy — BYOK feature is
         # disabled regardless of what the user pastes. Surface it
@@ -289,20 +320,20 @@ async def settings_byok_connect(request: Request, user: dict = Depends(current_u
     return _render_settings(
         request,
         user,
-        byok_flash="Your API key is saved (encrypted). AI features now use your account.",
+        byok_flash=f"Your {info.label} key is saved. AI features now use your account.",
     )
 
 
-@router.post("/settings/agent/byok/disconnect", response_class=HTMLResponse)
-def settings_byok_disconnect(request: Request, user: dict = Depends(current_user)):
-    """Delete the user's BYOK row. Idempotent: missing key → still 200.
-    Selector falls back to the subscription path (if configured) or
-    Noop after this."""
-    from prep.byok.entities import Provider
+@router.post("/settings/agent/byok/{provider}/disconnect", response_class=HTMLResponse)
+def settings_byok_disconnect(provider: str, request: Request, user: dict = Depends(current_user)):
+    """Delete the user's BYOK row for `provider`. Idempotent: missing
+    key → still 200. Selector falls back to the next provider in the
+    precedence order, or the subscription path, or Noop after this."""
     from prep.byok.repo import BYOKRepo
 
+    p = _parse_provider(provider)
     try:
-        BYOKRepo().delete(user_id=user["tailscale_login"], provider=Provider.ANTHROPIC_API)
+        BYOKRepo().delete(user_id=user["tailscale_login"], provider=p)
     except Exception:  # noqa: BLE001
         logger.exception("byok delete failed")
         # Still render the page — even if the delete blew up, the

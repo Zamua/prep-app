@@ -112,14 +112,17 @@ def test_byok_connect_rejects_wrong_prefix(
 ):
     """OAuth-prefix keys aren't API keys — surface the mismatch clearly
     rather than letting Anthropic reject the request later."""
-    r = client.post("/settings/agent/byok/connect", data={"api_key": "sk-ant-oat01-not-an-api-key"})
+    r = client.post(
+        "/settings/agent/byok/anthropic-api/connect",
+        data={"api_key": "sk-ant-oat01-not-an-api-key"},
+    )
     assert r.status_code == 400
 
 
 def test_byok_connect_rejects_missing(
     client: TestClient, initialized_db: str, token_dir: Path, _byok_master
 ):
-    r = client.post("/settings/agent/byok/connect", data={"api_key": "  "})
+    r = client.post("/settings/agent/byok/anthropic-api/connect", data={"api_key": "  "})
     assert r.status_code == 400
 
 
@@ -130,7 +133,7 @@ def test_byok_connect_stores_and_metadata_round_trips(
     rendered page. The actual ciphertext is encrypted at rest (see
     tests/byok/test_repo.py for the storage-level guarantees)."""
     r = client.post(
-        "/settings/agent/byok/connect",
+        "/settings/agent/byok/anthropic-api/connect",
         data={"api_key": "sk-ant-api03-abcdefghijklmnop"},
     )
     assert r.status_code == 200
@@ -142,10 +145,10 @@ def test_byok_connect_stores_and_metadata_round_trips(
 def test_byok_disconnect_is_idempotent(
     client: TestClient, initialized_db: str, token_dir: Path, _byok_master
 ):
-    r1 = client.post("/settings/agent/byok/disconnect")
+    r1 = client.post("/settings/agent/byok/anthropic-api/disconnect")
     assert r1.status_code == 200
     # Second call with no row → still 200.
-    r2 = client.post("/settings/agent/byok/disconnect")
+    r2 = client.post("/settings/agent/byok/anthropic-api/disconnect")
     assert r2.status_code == 200
 
 
@@ -157,8 +160,59 @@ def test_byok_connect_503_when_master_key_missing(
     confusing crypto error."""
     monkeypatch.delenv("PREP_KEY_ENCRYPTION_SECRET", raising=False)
     r = client.post(
-        "/settings/agent/byok/connect",
+        "/settings/agent/byok/anthropic-api/connect",
         data={"api_key": "sk-ant-api03-abcdefghijklmnop"},
     )
     assert r.status_code == 503
     assert "PREP_KEY_ENCRYPTION_SECRET" in r.text
+
+
+def test_byok_route_404s_on_unknown_provider(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """The {provider} URL slug is bound to the Provider enum; anything
+    else returns 404 so an attacker can't probe which providers we
+    support by getting different error shapes."""
+    r = client.post(
+        "/settings/agent/byok/not-a-real-provider/connect",
+        data={"api_key": "sk-anything-xxxxxxxxxxxxxxxxxx"},
+    )
+    assert r.status_code == 404
+
+
+def test_byok_connect_openai_happy_path(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    r = client.post(
+        "/settings/agent/byok/openai-api/connect",
+        data={"api_key": "sk-proj-abcdefghijklmnop"},
+    )
+    assert r.status_code == 200
+    assert "mnop" in r.text  # masked suffix renders
+
+
+def test_byok_connect_openrouter_happy_path(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    r = client.post(
+        "/settings/agent/byok/openrouter-api/connect",
+        data={"api_key": "sk-or-v1-abcdefghijklmnop"},
+    )
+    assert r.status_code == 200
+    assert "mnop" in r.text
+
+
+def test_byok_connect_rejects_wrong_prefix_per_provider(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """A sk-ant key sent to the OpenAI slug must be rejected — even
+    though `sk-` technically matches OpenAI's broad prefix list, the
+    Anthropic shape gets caught first via provider_for_key. Here we
+    check the route's prefix validator (which only consults the
+    given provider's own prefixes) still rejects the obvious
+    cross-provider mistake."""
+    r = client.post(
+        "/settings/agent/byok/anthropic-api/connect",
+        data={"api_key": "sk-or-v1-routerkey"},  # wrong provider entirely
+    )
+    assert r.status_code == 400

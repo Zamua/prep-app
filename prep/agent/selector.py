@@ -82,12 +82,44 @@ def set_user_agent_factory(fn: Callable[[str | None], AgentPort] | None) -> None
     _factory_override = fn
 
 
+# Provider precedence — when a user has BYOK keys for multiple
+# providers, the first in this list wins. Order chosen so the
+# narrowest / most-specific provider beats the generic chat-completions
+# providers (OpenRouter routes through Anthropic anyway, so direct
+# Anthropic when available; then OpenRouter as the multi-vendor router;
+# then OpenAI as the fallback).
+_BYOK_PROVIDER_ORDER = (
+    Provider.ANTHROPIC_API,
+    Provider.OPENROUTER_API,
+    Provider.OPENAI_API,
+)
+
+
+def _build_byok_adapter(provider: Provider, secret: str) -> AgentPort:
+    """Construct the concrete adapter for a (provider, secret) pair.
+    Late-imports the adapter modules so a Tailscale-mode deploy doesn't
+    pay the httpx-AsyncClient construction cost just for prep.agent
+    to load."""
+    if provider is Provider.ANTHROPIC_API:
+        from prep.agent.anthropic_api import AnthropicApiAdapter
+
+        return AnthropicApiAdapter(secret)
+    if provider is Provider.OPENROUTER_API:
+        from prep.agent.openrouter import OpenRouterAdapter
+
+        return OpenRouterAdapter(secret)
+    if provider is Provider.OPENAI_API:
+        from prep.agent.openai_api import OpenAIAdapter
+
+        return OpenAIAdapter(secret)
+    raise ValueError(f"unsupported BYOK provider: {provider}")
+
+
 def agent_for_user(user_id: str | None) -> AgentPort:
     """Return the AgentPort that should be used for this user's call.
 
     Selection order (first hit wins):
-      1. Per-user BYOK Anthropic API key (decrypted from
-         `byok_credentials`)
+      1. Per-user BYOK key (Anthropic → OpenRouter → OpenAI in order)
       2. Deploy-wide subscription OAuth token
          (`CLAUDE_CODE_OAUTH_TOKEN` env or token file)
       3. `_NoopAgent` whose `.run()` raises AgentUnavailable
@@ -104,12 +136,12 @@ def agent_for_user(user_id: str | None) -> AgentPort:
         try:
             from prep.byok.repo import BYOKRepo
 
-            secret = BYOKRepo().get_secret(user_id=user_id, provider=Provider.ANTHROPIC_API)
-            if secret:
-                from prep.agent.anthropic_api import AnthropicApiAdapter
-
-                logger.debug("agent: using BYOK Anthropic API key for user %s", user_id)
-                return AnthropicApiAdapter(secret)
+            repo = BYOKRepo()
+            for provider in _BYOK_PROVIDER_ORDER:
+                secret = repo.get_secret(user_id=user_id, provider=provider)
+                if secret:
+                    logger.debug("agent: using BYOK %s for user %s", provider.value, user_id)
+                    return _build_byok_adapter(provider, secret)
         except Exception:  # noqa: BLE001
             # BYOK lookup / decryption is fail-loud on the affected
             # request (the noop will raise AgentUnavailable with a
@@ -127,6 +159,6 @@ def agent_for_user(user_id: str | None) -> AgentPort:
 
     # 3. Nothing configured.
     return _NoopAgent(
-        "no AI agent configured — set up a personal API key on /settings/agent, "
+        "no AI agent configured — add a personal API key on /settings/agent, "
         "or the deploy admin can paste a subscription OAuth token."
     )
