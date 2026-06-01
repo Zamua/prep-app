@@ -35,6 +35,7 @@ from prep import agent as _agent_mod
 from prep import icons, notify
 from prep import workflows as _workflows_mod
 from prep.agent.routes import router as agent_router
+from prep.api.routes import router as api_router
 from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
 from prep.dev import preview as dev_preview
@@ -297,6 +298,7 @@ app.include_router(study_router)
 app.include_router(trivia_router)
 app.include_router(notify_router)
 app.include_router(agent_router)
+app.include_router(api_router)
 app.include_router(auth_router)
 app.include_router(index_router)
 app.include_router(legal_router)

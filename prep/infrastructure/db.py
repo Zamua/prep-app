@@ -526,3 +526,22 @@ def init() -> None:
         ucols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
         if "active_byok_provider" not in ucols:
             c.execute("ALTER TABLE users ADD COLUMN active_byok_provider TEXT")
+
+        # 17. Personal access tokens for the public REST API +
+        #     MCP server. The plaintext token is shown to the user
+        #     ONCE at creation; only the sha256 hash is persisted.
+        #     key_prefix is the masked display form (`prep_pat_Aa…x9zT`).
+        #     CASCADE on user delete keeps Clerk's user.deleted webhook
+        #     clean.
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS api_tokens (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       TEXT NOT NULL REFERENCES users(tailscale_login) ON DELETE CASCADE,
+                token_hash    TEXT NOT NULL UNIQUE,
+                label         TEXT,
+                key_prefix    TEXT NOT NULL,
+                created_at    TEXT NOT NULL,
+                last_used_at  TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
+        """)

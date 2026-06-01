@@ -33,7 +33,21 @@ import re
 # `sk-ant-api03-` log line and rejects truncated/redacted variants
 # we ourselves wrote (e.g. the masked `sk-ant-api03-…x9zT` form has
 # the ellipsis, not 20+ chars of base64).
-_SECRET_PATTERN = re.compile(r"(sk-ant-(?:api03|oat01)-)[A-Za-z0-9_-]{20,}")
+_SECRET_PATTERNS = [
+    # Anthropic OAuth tokens + API keys.
+    re.compile(r"(sk-ant-(?:api03|oat01)-)[A-Za-z0-9_-]{20,}"),
+    # Prep's own personal-access tokens — issued at /settings/api,
+    # used as `Authorization: Bearer prep_pat_…` on /api/v1/* and the
+    # MCP transport. Same defense-in-depth concern as the Anthropic
+    # keys; the lookup hashes at rest but accidental log leaks are
+    # how a token would actually escape.
+    re.compile(r"(prep_pat_)[A-Za-z0-9_-]{20,}"),
+    # OpenAI / OpenRouter shapes — sk- prefix without ant/oat.
+    re.compile(r"(sk-or-v1-)[A-Za-z0-9_-]{20,}"),
+    re.compile(r"(sk-proj-)[A-Za-z0-9_-]{20,}"),
+]
+# Kept for backward compat with the old single-pattern API.
+_SECRET_PATTERN = _SECRET_PATTERNS[0]
 
 
 def redact(text: str) -> str:
@@ -44,7 +58,10 @@ def redact(text: str) -> str:
     it somewhere (e.g. an exception message we re-raise) can reach in
     without going through the logging path.
     """
-    return _SECRET_PATTERN.sub(r"\1<REDACTED>", text)
+    out = text
+    for pat in _SECRET_PATTERNS:
+        out = pat.sub(r"\1<REDACTED>", out)
+    return out
 
 
 class SecretRedactingFormatter(logging.Formatter):

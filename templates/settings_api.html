@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}API tokens · settings · prep{% endblock %}
+{% block page_class %}settings settings-api{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/", "back") }}
+
+<section class="prelude">
+  <p class="eyebrow">API tokens</p>
+  <h1 class="display"><em>Manage</em> your prep<br>from anywhere.</h1>
+  <p class="lede">
+    Generate a personal access token to call prep's REST API or wire
+    prep up as an MCP server to your AI coding assistant. Tokens are
+    long-lived and per-account; revoke any one without touching the
+    others.
+  </p>
+</section>
+
+{% if created_plaintext %}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Copy this once</span><span class="rule"></span></p>
+  <p class="form-hint">
+    Your new token is shown below — this is the only time prep will
+    display it. Store it in a password manager or paste it into your
+    AI assistant's config now. Refresh the page and it's gone.
+  </p>
+  <pre class="reproduction agent-cmd" style="user-select: all;"><code>{{ created_plaintext }}</code></pre>
+</section>
+{% endif %}
+
+{% if flash %}<p class="notify-status" data-kind="ok">{{ flash }}</p>{% endif %}
+
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Your tokens</span><span class="rule"></span></p>
+  {% if tokens %}
+  <ul class="agent-steps" style="list-style: none; padding-left: 0;">
+    {% for t in tokens %}
+      <li style="display: flex; align-items: baseline; gap: 1rem; justify-content: space-between;">
+        <span>
+          <code>{{ t.key_prefix }}</code>
+          {% if t.label %} · <em>{{ t.label }}</em>{% endif %}
+          <span class="form-hint">
+            added {{ t.created_at[:10] }}{% if t.last_used_at %} · last used {{ t.last_used_at[:10] }}{% else %} · never used{% endif %}
+          </span>
+        </span>
+        <form method="post"
+              action="{{ request.scope.get('root_path','') }}/settings/api/tokens/{{ t.id }}/delete"
+              style="margin: 0;">
+          <button type="submit" class="btn btn-quiet btn-tiny">Revoke</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="form-hint">No tokens yet. Mint one below.</p>
+  {% endif %}
+</section>
+
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Mint a token</span><span class="rule"></span></p>
+  <form method="post" action="{{ request.scope.get('root_path','') }}/settings/api/tokens"
+        class="agent-connect-form" autocomplete="off">
+    <label class="freetext">
+      <span class="freetext-label">Label <small>(optional)</small></span>
+      <input type="text" name="label" maxlength="60"
+             placeholder="e.g. claude desktop, my laptop">
+      <span class="freetext-hint">
+        For your own reference — shown on this page so you can tell
+        which token is which.
+      </span>
+    </label>
+    <div class="study-actions">
+      <button type="submit" class="btn btn-primary">Generate token</button>
+    </div>
+  </form>
+</section>
+
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>How to use</span><span class="rule"></span></p>
+
+  <p style="margin-block-start: 0.5rem;">
+    Set the token as a Bearer credential on the <code>Authorization</code> header:
+  </p>
+  <pre class="reproduction" style="margin-block-start: 0.5rem;"><code>curl -H "Authorization: Bearer prep_pat_..." \
+  https://prepcards.app/api/v1/decks</code></pre>
+
+  <p style="margin-block-start: 1rem;">
+    Endpoints in v1:
+  </p>
+  <ul class="agent-steps">
+    <li><code>GET&nbsp; /api/v1/decks</code> — list your decks</li>
+    <li><code>POST /api/v1/decks</code> — create a deck (<code>{ "name": "...", "context_prompt": "..." }</code>)</li>
+    <li><code>GET&nbsp; /api/v1/decks/&lt;name&gt;</code> — deck metadata</li>
+    <li><code>GET&nbsp; /api/v1/decks/&lt;name&gt;/cards</code> — list cards as JSON</li>
+    <li><code>GET&nbsp; /api/v1/decks/&lt;name&gt;/export.csv</code> — download CSV</li>
+    <li><code>POST /api/v1/decks/&lt;name&gt;/import-csv</code> — append CSV body (<code>Content-Type: text/csv</code>); returns <code>{inserted, skipped_duplicates, errors}</code></li>
+  </ul>
+</section>
+
+{% endblock %}

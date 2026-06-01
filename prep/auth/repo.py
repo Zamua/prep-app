@@ -147,6 +147,19 @@ class UserRepo:
                 (json.dumps(prefs), user_id),
             )
 
+    def get_by_external_id(self, external_id: str) -> dict | None:
+        """Read-only fetch by external_id. No side effects (no
+        last_seen_at bump, no email overwrite). Used by paths that
+        ARE NOT a fresh authenticated browser request — e.g. the
+        public-API bearer-token resolver, which already validated
+        identity via the token and just needs the user dict."""
+        with cursor() as c:
+            row = c.execute(
+                "SELECT * FROM users WHERE tailscale_login = ?",
+                (external_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
     # ---- BYOK provider preference ----------------------------------------
 
     def get_active_byok_provider(self, user_id: str) -> str | None:
