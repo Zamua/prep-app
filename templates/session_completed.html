@@ -10,8 +10,8 @@
     <p class="empty-headline"><em>Session complete.</em></p>
     <p class="empty-sub">
       No more cards due in <strong>{{ deck_name }}</strong> right now. Cards
-      you got right are sleeping until their next interval; ones you got wrong
-      will resurface in 10 minutes.
+      you got right are sleeping until their next review; ones you got wrong
+      come back sooner so you get another pass while they're still warm.
     </p>
     <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}">Back to deck</a>
   </section>

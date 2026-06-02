@@ -14,7 +14,10 @@ stay short — adding more route handlers here is a smell.
 
 The Temporal worker (worker-go/) handles long-running AI work; this
 module just starts workflows + polls them. All AI calls go through
-the agent-server container (see worker-go/cmd/agent-server) over HTTP.
+the in-process `claude-agent-sdk` adapter (prep.agent.sdk_adapter);
+the Go worker POSTs `/api/agent/run` against its own host to invoke
+it. The retired sidecar container (worker-go/cmd/agent-server) was
+removed during the SDK migration on 2026-05-30.
 """
 
 from __future__ import annotations

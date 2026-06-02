@@ -35,9 +35,9 @@ field in `col`.
   note types out of the box. We flatten everything to a basic two-
   field note. The mcq/multi structure is preserved by joining
   choices into the prompt field.
-- SRS state (ladder step, due times) — Anki uses its own scheduler;
-  exporting our internal state would mislead. New cards in the
-  imported deck.
+- SRS state (FSRS stability/difficulty, due times) — Anki uses its
+  own scheduler; exporting our internal state would mislead. New
+  cards in the imported deck.
 - explanation / rubric / topic — these go inline into the answer
   field as labeled sections so no content is lost.
 

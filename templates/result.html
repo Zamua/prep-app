@@ -7,8 +7,9 @@
   <span class="card-id">№ {{ q.id }}</span>
 {% endcall %}
 
-{# Format `state.interval_minutes` as a friendly duration; mirrors the SRS
-   ladder so units match: 10 min, 1 day, 3 days, 1 week, 2 weeks, 1 month. #}
+{# Format `state.interval_minutes` (FSRS-computed) as a friendly
+   duration. min / hr / day / week / month — picked to match how a
+   person reads a calendar, not the scheduler's underlying floats. #}
 {%- set m = state.interval_minutes -%}
 {%- if m < 60 -%}{% set human = m ~ ' min' %}
 {%- elif m < 24*60 -%}{% set human = (m // 60) ~ ' hr' %}

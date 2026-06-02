@@ -51,7 +51,7 @@ class QuestionType(str, Enum):
 class DeckType(str, Enum):
     """How a deck is consumed.
 
-    `srs` — the original flow: ladder-based spaced repetition,
+    `srs` — the original flow: FSRS-driven spaced repetition,
     user-driven study sessions, no notifications.
 
     `trivia` — notification-driven: deck has a fixed interval

@@ -16,37 +16,42 @@ toward "what's true right now."
               browser (PWA)
                    │
                    ▼
-   ┌──────────────────────────────┐
-   │       prep container         │   FastAPI + uvicorn (HTTP)
-   │  ┌────────────────────────┐  │   Temporal devserver (gRPC)
-   │  │  goreman supervises 3: │  │   Go worker (Temporal task queue)
-   │  │  temporal | uvicorn |  │  │
-   │  │  worker                │  │
-   │  └────────────────────────┘  │
-   └──────────────┬───────────────┘
-                  │ POST /run
-                  ▼
-   ┌──────────────────────────────┐
-   │       agent container        │   Node + Claude Code CLI
-   │  ┌────────────────────────┐  │   Go HTTP wrapper (/run + /healthz +
-   │  │  agent-server (Go)     │  │                    /connect + /disconnect)
-   │  │     │                  │  │   Stores OAuth token in /data/agent-token
-   │  │     ▼  exec.Command    │  │
-   │  │  claude (npm-installed)│  │
-   │  └────────────────────────┘  │
-   └──────────────────────────────┘
+   ┌──────────────────────────────────────────────┐
+   │              prep container                  │
+   │  ┌────────────────────────────────────────┐  │
+   │  │  goreman supervises 3:                 │  │
+   │  │   temporal devserver (gRPC :7233)      │  │
+   │  │   uvicorn / FastAPI (HTTP :8082)       │  │
+   │  │   Go worker (Temporal task queue)      │  │
+   │  └────────────────────────────────────────┘  │
+   │                       │                      │
+   │                       │ POST /api/agent/run  │
+   │                       │ (X-Internal-Token)   │
+   │                       ▼                      │
+   │  ┌────────────────────────────────────────┐  │
+   │  │  prep.agent.sdk_adapter (in-process):  │  │
+   │  │   claude-agent-sdk → anthropic         │  │
+   │  │   auth: CLAUDE_CODE_OAUTH_TOKEN +      │  │
+   │  │         per-user BYOK rows (encrypted) │  │
+   │  └────────────────────────────────────────┘  │
+   └──────────────────────────────────────────────┘
 ```
 
-Two containers, one compose project (`docker-compose.yml`):
+**Single container, one compose project (`docker-compose.yml`).**
+prep owns the HTTP surface, the SQLite DB, durable workflow state,
+AND the in-process AI adapter. Bind the host port (default 8082)
+and you have the app.
 
-- **prep** owns the HTTP surface, the SQLite DB, and the durable
-  workflow state. Bind the host port (default 8082) and you have the
-  app.
-- **agent** is a sidecar that wraps the `claude` CLI. The Go worker
-  inside the prep container POSTs to `agent-server`'s `/run`
-  whenever a workflow needs an LLM call — this keeps the
-  CLAUDE_CODE_OAUTH_TOKEN out of the prep image and lets the user
-  hot-swap auth via `/settings/agent` without rebuilding.
+The Go worker invokes AI work by POSTing `/api/agent/run` against
+its own host (`http://localhost:8082`), gated by an internal-token
+header. That route resolves the per-user adapter via the selector
+(BYOK → deploy-wide subscription → Noop) and runs one
+`claude-agent-sdk` query, returning `{stdout}` — the same wire
+shape the retired sidecar used, so the worker code didn't change.
+
+The retired sidecar (`worker-go/cmd/agent-server/`) and its
+`prep-agent-data` volume were removed during the SDK migration on
+2026-05-30.
 
 The Temporal devserver runs *inside* the prep container (not a
 separate service). The Go worker connects to it on `127.0.0.1:7233`.
@@ -66,7 +71,7 @@ service, and HTTP routes:
 prep/
 ├── app.py                FastAPI() bootstrap; mounts the per-context routers
 ├── domain/               PURE — no I/O, no DB, no FastAPI imports
-│   ├── srs.py            SRS state machine + Verdict + LADDER_MINUTES
+│   ├── srs.py            SRS state machine (FSRS-6) + Verdict + schedule_review
 │   └── grading.py        deterministic mcq/multi/idk grader
 ├── infrastructure/
 │   └── db.py             sqlite connection factory + cursor() + init() + now()
@@ -85,8 +90,14 @@ prep/
 │   ├── repo.py           NotifyPrefsRepo, PushSubsRepo
 │   └── routes.py         /notify/*
 ├── agent/                bounded context: AI integration
+│   ├── port.py           AgentPort Protocol + AgentResult + exception types
+│   ├── sdk_adapter.py    in-process claude-agent-sdk adapter (the prod impl)
+│   ├── anthropic_api.py  per-user BYOK adapter — direct Anthropic Messages API
+│   ├── openai_api.py     per-user BYOK adapter — OpenAI Chat Completions API
+│   ├── openrouter.py     per-user BYOK adapter — OpenRouter (multi-vendor)
+│   ├── selector.py       per-user agent_for_user() → BYOK > subscription > Noop
 │   ├── status.py         probe + structured status() + cached is_available
-│   └── routes.py         /settings/agent + connect/disconnect to agent-server
+│   └── routes.py         /settings/agent + /settings/agent/byok/* + /api/agent/run
 ├── auth/                 bounded context: identity + per-user prefs
 │   ├── identity.py       Tailscale header parsing → current_user dependency
 │   ├── repo.py           UserRepo
@@ -136,7 +147,7 @@ tests/
 │                         initialized_db (fresh schema + upserted user)
 ├── test_smoke.py         5 characterization tests pinning the v0.13.x behavior
 ├── domain/               pure unit tests (no I/O)
-│   ├── test_srs.py       SRS ladder, advance_step, Verdict
+│   ├── test_srs.py       FSRS schedule_review + ladder→FSRS seed migration
 │   └── test_grading.py   mcq/multi/idk paths
 ├── decks/                full pyramid: entities → repo → service → routes
 │   ├── test_entities.py  pydantic validation
@@ -220,29 +231,36 @@ The same shape applies to:
 - `/session/<sid>/submit` for code/short answers (GradeAnswer workflow)
 
 The seam is `worker-go/agent/agent.go` — a `Client` interface with
-`ShellAgent` and `HTTPAgent` implementations. `FromEnv()` picks based
-on whether `PREP_AGENT_URL` (HTTP) or `PREP_AGENT_BIN` (shell) is
-set. The container deploy uses `HTTPAgent` against the agent-server
-sidecar; legacy native dev can use `ShellAgent` against a local
-`claude` binary.
+an `HTTPAgent` implementation that POSTs `http://localhost:8082/api/agent/run`
+(prep's own host) with an `X-Internal-Token` header. The route then
+hands the request off to the in-process `claude-agent-sdk` adapter,
+so there's no second container in the loop.
 
 ---
 
 ## SRS state machine
 
-`prep/domain/srs.py` owns the rules. Pure functions, no I/O:
+`prep/domain/srs.py` owns the rules — pure functions over the FSRS-6
+state model (stability, difficulty, phase). No I/O.
+
+State per card:
+- **stability (float, days)**: how long until recall probability falls
+  to ~90%. Grows with successful reviews, shrinks on lapses.
+- **difficulty (float, 1–10)**: how hard the card is, learned over
+  time from your verdict history.
+- **phase**: Learning (new / recently lapsed) vs Review (graduated).
 
 ```
-LADDER_MINUTES = (10, 1d, 3d, 7d, 14d, 30d)
-
-advance_step(current, Verdict.RIGHT) → min(current + 1, 5)
-advance_step(current, Verdict.WRONG) → 0
-
-next_due_at(now, step) → now + LADDER_MINUTES[step]
+schedule_review(card_state, verdict, now) →
+    CardState(stability', difficulty', phase', next_due)
 ```
+
+A historical ladder-based migration shim survives in
+`seed_state_from_ladder_step()` for pre-FSRS cards in old decks —
+maps step→stability so they don't all become "new" on upgrade.
 
 Insert path (`prep.db.add_question`): create the question row + a
-matching `cards` row at `step=0, next_due=now` so the card lands due
+matching `cards` row in the Learning phase so the card lands due
 immediately.
 
 Review path (`prep.db.record_review`, used by both the sync grade
@@ -250,13 +268,19 @@ in `prep.study.service.submit_sync_answer` and the Go worker's
 GradeAnswer activity):
 1. Verify the question belongs to the user (defense in depth — the
    route should already have checked).
-2. Read the current step.
-3. `new_step = advance_step(current, verdict)`.
-4. `next_due = now + interval_for_step(new_step)`.
-5. `INSERT INTO reviews` (audit log) + `UPDATE cards SET step,
-   next_due, last_review`.
-6. Return `CardState(step, next_due, interval_minutes)` so the
-   route can render "next review in N days" without a re-query.
+2. Read the current FSRS state.
+3. Call `schedule_review(state, verdict, now)`.
+4. `INSERT INTO reviews` (audit log) + `UPDATE cards SET stability,
+   difficulty, phase, next_due, last_review`.
+5. Return `CardState(...)` so the route can render "next review in
+   N days" without a re-query.
+
+**Caveat — Go worker still uses the legacy ladder.** As of 2026-06-02,
+`worker-go/activities/grading.go` writes `cards.step` + `next_due`
+from a hardcoded `srsLadderMinutes` array. The Python path migrated
+to FSRS; the Go path didn't. Hybrid behavior in practice: sync
+self-grade uses FSRS; AI-graded free-text answers use the ladder.
+Migrating the Go path is tracked separately.
 
 The audit-log split between `reviews` (immutable history) and `cards`
 (mutable current state) means we can compute "rights / attempts"
