@@ -246,7 +246,11 @@ def test_decks_new_trivia_redirects_to_deck_page_when_no_agent(
     import prep.agent
     from prep import temporal_client as _tc
 
+    # Force both the legacy global flag AND any env-leaked subscription
+    # token out so is_available_for(uid) is unambiguously False —
+    # exercises the manual-only branch of the trivia route.
     prep.agent.is_available = False
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
 
     called = False
 

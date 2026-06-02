@@ -51,6 +51,50 @@ def get_agent(user_id: str | None = None) -> AgentPort:
     return agent_for_user(user_id)
 
 
+def is_available_for(user_id: str | None) -> bool:
+    """Per-user availability — the multi-user safe replacement for the
+    module-level `is_available` flag. Returns True when this user's
+    BYOK row (or the deploy-wide subscription path, when allowed)
+    would yield a usable adapter. Use this in routes/templates that
+    have a resolved user; the legacy `is_available` only knew about
+    the deploy-wide file/env and misses every BYOK row on prepcards.app.
+
+    Test overrides via `set_agent()` are honored — when the global
+    override is set, that adapter's existence implies availability."""
+    if _agent_override is not None:
+        # Test override is in place; the override IS the configured
+        # agent. Treat as available unless the override deliberately
+        # exposes a falsy `available` attribute (escape hatch for
+        # tests that want to simulate the "no AI" surface).
+        return getattr(_agent_override, "available", True)
+
+    # Deploy-wide flag wins when True. Covers (a) single-user tailscale
+    # installs where CLAUDE_CODE_OAUTH_TOKEN is set on the container and
+    # the selector's subscription path is the right answer, and
+    # (b) legacy tests that just toggle `prep.agent.is_available = True`
+    # without setting up BYOK or env. Returning True here short-circuits
+    # the BYOK lookup, which is correct: the deploy-wide token covers
+    # everyone on a single-tenant install.
+    # Read via globals() to honor a test-shadowed value before falling
+    # back to the backing module's live attribute.
+    shadowed = globals().get("is_available")
+    if shadowed is not None:
+        if shadowed:
+            return True
+    else:
+        from prep.agent import status as _status
+
+        if _status.is_available:
+            return True
+
+    # Deploy-wide off (e.g. clerk-mode multi-user, no shared token):
+    # ask the selector whether THIS user has a BYOK row that would
+    # resolve to a usable adapter.
+    from prep.agent.selector import agent_available_for_user
+
+    return agent_available_for_user(user_id)
+
+
 def set_agent(impl: AgentPort | None) -> None:
     """Replace the agent globally — tests only.
 
@@ -81,6 +125,7 @@ __all__ = [
     "get_agent",
     "init_availability",
     "is_available",
+    "is_available_for",
     "probe",
     "set_agent",
     "set_available",

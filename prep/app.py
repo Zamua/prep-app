@@ -444,11 +444,14 @@ if _default_user_at_boot:
     )
 
 if _agent_mod.is_available:
-    _log.info("agent: AI features ENABLED (PREP_AGENT_URL or PREP_AGENT_BIN reachable).")
+    _log.info(
+        "agent: deploy-wide CLAUDE_CODE_OAUTH_TOKEN is set (single-user / fallback path active)."
+    )
 else:
     _log.info(
-        "agent: AI features DISABLED — no PREP_AGENT_URL set, and PREP_AGENT_BIN "
-        "(default ~/.local/bin/claude) doesn't exist. Manual flashcard mode only."
+        "agent: no deploy-wide token. AI features are per-user — each user "
+        "configures their own BYOK key at /settings/agent (or, on tailscale "
+        "single-user installs, runs `claude setup-token` and pastes it)."
     )
 
 

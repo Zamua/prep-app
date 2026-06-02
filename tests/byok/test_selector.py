@@ -143,6 +143,29 @@ def test_subscription_byok_wins_over_anthropic_api_by_default(
     assert flipped.__class__.__name__ == "AnthropicApiAdapter"
 
 
+def test_agent_available_for_user_true_on_byok(monkeypatch, initialized_db, _byok_master):
+    """The per-user availability helper drives the `agent_available`
+    template flag. The bug: without this, a clerk-mode user who saved
+    their subscription token via BYOK still saw "no AI configured"
+    because the legacy module-level probe is file-presence-only and
+    misses BYOK rows. Verify the helper actually returns True in that
+    setup."""
+    uid = "byok-only@example.com"
+    UserRepo().upsert(external_id=uid, email=uid)
+    BYOKRepo().store(
+        user_id=uid,
+        provider=Provider.CLAUDE_SUBSCRIPTION,
+        secret="sk-ant-oat01-byokscoped",
+    )
+    assert selector.agent_available_for_user(uid) is True
+
+
+def test_agent_available_for_user_false_when_nothing_configured(monkeypatch, initialized_db):
+    """No env token, no BYOK row → False. Drives the manual-flashcard
+    fallback UI."""
+    assert selector.agent_available_for_user("nobody@example.com") is False
+
+
 def test_factory_override_short_circuits_selection(initialized_db):
     """Tests can inject any adapter via set_user_agent_factory and
     the selector hands it back regardless of DB/env state."""

@@ -19,13 +19,15 @@ from prep.agent.port import AgentBudgetExhausted, AgentResult
 @pytest.fixture
 def fake_agent(monkeypatch: pytest.MonkeyPatch) -> FakeAgent:
     """Swap the process-singleton AgentPort with a FakeAgent for the
-    duration of a test. set_agent() puts the original back via the
-    monkeypatch.undo() that pytest runs at teardown."""
-    original = _agent_mod.get_agent()
+    duration of a test. Teardown restores the default selector path
+    (set_agent(None)) so other tests' `is_available_for(uid)` checks
+    don't see a stale captured adapter — which would otherwise leak
+    True availability across tests, breaking siblings like the trivia
+    redirect-on-no-agent test."""
     fake = FakeAgent()
     _agent_mod.set_agent(fake)
     yield fake
-    _agent_mod.set_agent(original)
+    _agent_mod.set_agent(None)
 
 
 @pytest.fixture

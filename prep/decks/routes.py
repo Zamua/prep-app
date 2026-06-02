@@ -332,7 +332,7 @@ async def deck_new_srs_create(
         )
 
     if action == "plan":
-        if not _agent_mod.is_available:
+        if not _agent_mod.is_available_for(uid):
             return rerender(
                 "Plan & generate needs an AI agent. Configure one on the "
                 "agent settings page (/settings/agent), or pick "
@@ -430,7 +430,7 @@ async def deck_new_trivia_create(
     # there (the existing /trivia/decks/<id>/manual-add path). When an
     # agent IS configured, kick off the batch-generation workflow and
     # redirect to the polling page.
-    if not _agent_mod.is_available:
+    if not _agent_mod.is_available_for(uid):
         return responses.redirect(request, f"/deck/{clean}")
 
     # Kick off the workflow that does the actual AI call + per-card

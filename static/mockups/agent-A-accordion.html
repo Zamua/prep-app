@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock A · accordion · agent settings</title>
+<link rel="stylesheet" href="/prep-staging/static/css/index.css">
+<style>
+  /* Mockup-only tightening; ships to prod only if user picks this option. */
+  body { background: var(--bg); color: var(--ink); font-family: var(--serif); padding: 1.25rem var(--safe-side) 4rem; max-width: var(--measure-tight); margin: 0 auto; }
+  .mock-banner { background: var(--quill); color: var(--paper); padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.78rem; margin-bottom: 1rem; font-style: italic; }
+  .prelude { margin-bottom: 1rem; }
+  .prelude .eyebrow { font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); margin: 0 0 0.25rem; }
+  .prelude .display { font-size: 1.6rem; font-style: italic; margin: 0 0 0.5rem; line-height: 1.15; }
+  .prelude .lede { color: var(--ink-soft); font-size: 0.92rem; margin: 0 0 0.85rem; line-height: 1.4; }
+  /* Mini direction switcher */
+  .ds { display: flex; gap: 0.4rem; margin-bottom: 1rem; }
+  .ds button { flex: 1; padding: 0.55rem 0.6rem; border-radius: 999px; border: 1px solid var(--rule); background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.85rem; cursor: pointer; }
+  .ds button.is-active { background: var(--paper); border-color: var(--quill); color: var(--ink); }
+  /* Accordion rows */
+  .prov { border-top: 1px solid var(--hairline); }
+  .prov:last-of-type { border-bottom: 1px solid var(--hairline); }
+  .prov-head { display: flex; align-items: center; gap: 0.55rem; padding: 0.85rem 0; cursor: pointer; }
+  .prov-head .prov-name { font-style: italic; font-size: 1.02rem; flex: 1; }
+  .prov-head .badge { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.15rem 0.45rem; border-radius: 4px; }
+  .badge.active { background: var(--right-bg); color: var(--right); }
+  .badge.connected { background: var(--ink-soft-bg); color: var(--ink-soft); }
+  .badge.unset { background: transparent; color: var(--ink-mute); font-style: italic; text-transform: none; letter-spacing: 0; }
+  .chev { transition: transform .12s; }
+  details[open] .chev { transform: rotate(90deg); }
+  .prov-body { padding: 0.25rem 0 1rem; }
+  .key { font-family: var(--mono); font-size: 0.82rem; color: var(--ink-soft); }
+  .row-hint { font-size: 0.8rem; color: var(--ink-mute); font-style: italic; margin: 0.35rem 0 0.65rem; }
+  textarea { width: 100%; box-sizing: border-box; padding: 0.55rem 0.65rem; border-radius: 8px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); font: inherit; font-family: var(--mono); font-size: 0.85rem; min-height: 4.5em; }
+  .btn-row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  .btn { padding: 0.55rem 0.95rem; border-radius: 999px; border: 1px solid var(--rule); background: transparent; color: var(--ink); font: inherit; font-size: 0.88rem; cursor: pointer; }
+  .btn.primary { background: var(--paper); border-color: var(--quill); }
+  .btn.quiet { color: var(--ink-soft); }
+  summary { list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+</style>
+</head>
+<body>
+
+  <div class="mock-banner">Mockup A · accordion · ~1100px page height (vs ~2700px current)</div>
+
+  <section class="prelude">
+    <p class="eyebrow">AI</p>
+    <h1 class="display">Prep <em>↔</em> AI.</h1>
+    <p class="lede">Embed an agent inside prep, or let an outside agent use prep.</p>
+    <div class="ds">
+      <button class="is-active">→ Embed an agent</button>
+      <button>← External MCP</button>
+    </div>
+  </section>
+
+  <details class="prov" open>
+    <summary class="prov-head">
+      <span class="prov-name">Claude subscription</span>
+      <span class="badge active">Active</span>
+      <span class="chev">›</span>
+    </summary>
+    <div class="prov-body">
+      <p class="key">Connected · sk-ant-oat01-…wxyz · added 2026-05-30</p>
+      <p class="row-hint">Bills your Max-plan credit pool.</p>
+      <textarea placeholder="Replace token (sk-ant-oat01-…)"></textarea>
+      <div class="btn-row"><button class="btn primary">Replace</button><button class="btn quiet">Remove key</button></div>
+    </div>
+  </details>
+
+  <details class="prov">
+    <summary class="prov-head">
+      <span class="prov-name">Anthropic</span>
+      <span class="badge connected">Connected</span>
+      <span class="chev">›</span>
+    </summary>
+    <div class="prov-body">
+      <p class="key">sk-ant-api03-…mnop · last used 2026-05-28</p>
+      <div class="btn-row"><button class="btn">Use Anthropic for AI calls</button></div>
+    </div>
+  </details>
+
+  <details class="prov">
+    <summary class="prov-head">
+      <span class="prov-name">OpenAI</span>
+      <span class="badge unset">not configured</span>
+      <span class="chev">›</span>
+    </summary>
+  </details>
+
+  <details class="prov">
+    <summary class="prov-head">
+      <span class="prov-name">OpenRouter</span>
+      <span class="badge unset">not configured</span>
+      <span class="chev">›</span>
+    </summary>
+  </details>
+
+</body>
+</html>

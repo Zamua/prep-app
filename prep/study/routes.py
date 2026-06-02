@@ -317,7 +317,7 @@ async def session_submit(
     if qtype in ("code", "short") and not idk:
         deck_name = deck_repo.find_name(uid, s.deck_id) or ""
 
-        if not _agent_mod.is_available:
+        if not _agent_mod.is_available_for(uid):
             return templates.TemplateResponse(
                 "self_grade.html",
                 {
@@ -506,7 +506,7 @@ async def study_submit(
     from prep import agent as _agent_mod
 
     if qtype in ("code", "short") and not idk:
-        if not _agent_mod.is_available:
+        if not _agent_mod.is_available_for(uid):
             return templates.TemplateResponse(
                 "self_grade.html",
                 {

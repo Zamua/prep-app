@@ -147,6 +147,24 @@ def _subscription_path_allowed() -> bool:
     return (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower() != "clerk"
 
 
+def agent_available_for_user(user_id: str | None) -> bool:
+    """Per-user availability — drives the `agent_available` template
+    flag. True when `agent_for_user(uid)` would return a usable
+    adapter (BYOK row decrypts, or deploy-wide subscription path is
+    legal + a token is set). False when the only thing the selector
+    can hand back is `_NoopAgent`.
+
+    Why per-user, not global: on a multi-user clerk deploy, "is the
+    agent available" is meaningless deploy-wide — every user owns
+    their own credentials. The pre-BYOK code path used a module-level
+    cached probe (file-presence of /data/claude-oauth-token), which
+    works fine for tailscale-mode single-user installs but misses
+    every BYOK row on prepcards.app. This helper bridges that gap;
+    routes/context-processors call it with the request user.
+    """
+    return not isinstance(agent_for_user(user_id), _NoopAgent)
+
+
 def agent_for_user(user_id: str | None) -> AgentPort:
     """Return the AgentPort that should be used for this user's call.
 
