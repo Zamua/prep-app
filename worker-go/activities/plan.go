@@ -140,8 +140,11 @@ func renderPriorPlan(items []shared.PlanItem) string {
 //   - the raw array literal (preferred, what the prompt asks for)
 //   - a wrapper object {"plan": [...]} (claude sometimes hedges)
 //   - a fenced ```json block (despite our "no fences" instruction)
+//   - any of the above PRECEDED by a chatty preamble ("Here is the new
+//     63-card plan: ```json [...] ```") — the failure mode that hit
+//     a real user on 2026-06-02
 func parsePlanJSON(raw []byte) ([]shared.PlanItem, error) {
-	body := unfence(strings.TrimSpace(string(raw)))
+	body := extractJSON(strings.TrimSpace(string(raw)))
 
 	// Try array first.
 	var arr []shared.PlanItem
@@ -168,18 +171,51 @@ func parsePlanJSON(raw []byte) ([]shared.PlanItem, error) {
 	return nil, fmt.Errorf("could not parse plan JSON: %s", truncate(body, 400))
 }
 
-func unfence(s string) string {
-	// Strip leading/trailing ``` or ```json fences if present.
-	if strings.HasPrefix(s, "```") {
-		// Find first newline, drop everything up to and including it.
-		if i := strings.Index(s, "\n"); i >= 0 {
-			s = s[i+1:]
+// extractJSON pulls the JSON payload out of whatever the model returned.
+// Three patterns observed in the wild:
+//
+//  1. Raw JSON ("[ {...} ]" or "{ ... }") — return as-is.
+//  2. Fenced block, optionally with chatty preamble:
+//     "Here is the plan: ```json [ ... ] ```" — extract between the
+//     first ``` and the next ```.
+//  3. No fence but chatty preamble: "Here is the plan: [ ... ]" —
+//     fall back to grabbing from the first '[' or '{' to the matching
+//     closing bracket. Naive last-occurrence match; assumes the model
+//     didn't put extra trailing prose after the JSON.
+//
+// The old `unfence` only handled (2) when the WHOLE input started
+// with ```; the preamble case fell through and json.Unmarshal failed.
+func extractJSON(s string) string {
+	s = strings.TrimSpace(s)
+	// Case 2: fenced block somewhere in the string.
+	if start := strings.Index(s, "```"); start >= 0 {
+		after := s[start+3:]
+		// Drop optional language tag + newline ("json\n", "```\n")
+		if nl := strings.Index(after, "\n"); nl >= 0 {
+			after = after[nl+1:]
 		}
-		if j := strings.LastIndex(s, "```"); j >= 0 {
-			s = s[:j]
+		if end := strings.Index(after, "```"); end >= 0 {
+			return strings.TrimSpace(after[:end])
+		}
+		// Opening fence but no closing — take everything after the open.
+		return strings.TrimSpace(after)
+	}
+	// Case 3: no fence but possibly a preamble. Trim to the first
+	// JSON opener and matching last closer. The unmarshal call upstream
+	// will fail loudly if there's still garbage; we just give it the
+	// best slice to work with.
+	openers := []struct {
+		open, close byte
+	}{{'[', ']'}, {'{', '}'}}
+	for _, o := range openers {
+		if i := strings.IndexByte(s, o.open); i >= 0 {
+			if j := strings.LastIndexByte(s, o.close); j > i {
+				return s[i : j+1]
+			}
 		}
 	}
-	return strings.TrimSpace(s)
+	// Case 1: raw JSON or unrecognized — return as-is.
+	return s
 }
 
 // GenerateCardFromBrief expands one PlanItem into a full Card via claude.
