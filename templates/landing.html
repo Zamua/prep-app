@@ -12,6 +12,10 @@
   {% endif %}
 {% endblock %}
 {% block main %}
+{# Sign-in lives in the masthead's "Sign in" chip — always reachable
+   via the sticky top bar. Inline hero/footer CTAs were redundant with
+   the persistent chip + ate vertical space on mobile; removed
+   2026-06-02. #}
 <section class="prelude landing-hero">
   <p class="eyebrow">prep</p>
   <h1 class="display">A standing library<br><em>of questions</em>.</h1>
@@ -20,11 +24,6 @@
     a topic in, a deck out, then a forgetting curve that re-surfaces
     each card right before you'd lose it.
   </p>
-  {% if sign_in_url %}
-    <p class="landing-cta-row">
-      <a class="btn btn-primary" href="{{ sign_in_url }}">Sign in to start</a>
-    </p>
-  {% endif %}
 </section>
 
 <section class="landing-grid">
@@ -72,15 +71,6 @@
     </p>
   </article>
 </section>
-
-{% if sign_in_url %}
-<section class="landing-foot">
-  <p class="landing-cta-row">
-    <a class="btn btn-primary" href="{{ sign_in_url }}">Sign in</a>
-    <a class="btn btn-quiet" href="{{ sign_in_url }}">Create an account</a>
-  </p>
-</section>
-{% endif %}
 
 {# Post-signup reload — when a freshly-signed-in user lands here, base.html
    loads ClerkJS, which mints the apex __session cookie from the

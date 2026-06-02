@@ -13,13 +13,6 @@
   margin-block-end: 3rem;
 }
 
-.landing-cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-block-start: 1.75rem;
-}
-
 /* Two-up grid. The .landing-tile carries its own card chrome so it
  * doesn't depend on other components' selectors. */
 .landing-grid {
@@ -54,23 +47,6 @@
   font-size: 0.98rem;
 }
 .landing-tile em { color: var(--quill); font-style: italic; }
-
-/* Footer band — repeats the CTAs after the value props so a long-
- * scrolling reader doesn't have to scroll back up to find the button. */
-.landing-foot {
-  margin-block-start: 1.5rem;
-  padding-block-start: 2rem;
-  border-block-start: 1px solid var(--rule);
-  text-align: center;
-}
-.landing-foot .landing-cta-row {
-  justify-content: center;
-}
-.landing-foot-text {
-  color: var(--ink-mute);
-  font-style: italic;
-  margin: 0;
-}
 
 .masthead-cta {
   /* Compact pill that sits in the masthead slot where the user-chip
