@@ -2,30 +2,40 @@
  * brand word, baseline-aligned with the user-indicator chip on the
  * right. Hairline rule below separates it from page content.
  *
- * Sticky: locks to the top of the viewport once the user scrolls past
- * it so the sign-in chip (or avatar chip when authed) is always
- * accessible. Slim translucent paper background so content scrolling
- * underneath reads OK. `overflow: visible` is critical — the avatar
- * <details> popover is a child and would get clipped otherwise.
+ * Two-layer:
+ *
+ * .masthead-wrap — full-width sticky shelf. Translucent paper bg
+ *   spans the whole viewport so the bar reads as a single shelf
+ *   docked to the top edge, not a card floating inside the column.
+ *   Honors the iOS safe-area-top so the wordmark isn't under the
+ *   notch in standalone PWA mode.
+ *
+ * .masthead — inner row, max-width-constrained to mirror .paper so
+ *   the wordmark + avatar visually share the content column below.
  */
 
-.masthead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-block: 0.85rem 0.9rem;
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: 2rem;
+.masthead-wrap {
   position: sticky;
   top: 0;
   z-index: 50;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: saturate(140%) blur(8px);
   -webkit-backdrop-filter: saturate(140%) blur(8px);
+  border-bottom: 1px solid var(--hairline);
+  padding-top: var(--safe-top, 0px);
+  padding-inline: var(--safe-side, 1.25rem);
+  margin-bottom: 2rem;
   overflow: visible;
-  /* iPhone safe area — the masthead now sits flush against the top
-   * edge in standalone PWA mode, so push it down by the notch height. */
-  padding-top: max(0.85rem, var(--safe-top, 0px));
+}
+
+.masthead {
+  max-width: 46rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-block: 0.85rem 0.9rem;
+  overflow: visible;
 }
 
 .masthead-brand {

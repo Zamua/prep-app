@@ -7,8 +7,11 @@
 .paper {
   max-width: 46rem;
   margin: 0 auto;
+  /* No top safe-area / vertical padding here — the masthead-wrap is a
+   * sibling that already handles safe-area-top and provides the
+   * margin-bottom to space itself from this column. */
   padding:
-    calc(var(--safe-top) + 1.25rem)
+    0
     var(--safe-side)
     calc(var(--safe-bottom) + 4rem);
 }

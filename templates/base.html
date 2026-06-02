@@ -112,8 +112,14 @@
 </head>
 <body class="page-{% block page_class %}default{% endblock %}"
       {% if user and user.editor_input_mode %}data-editor-mode="{{ user.editor_input_mode }}"{% endif %}>
-  <div class="paper">
-    <header class="masthead">
+  {# Masthead lives OUTSIDE .paper so its background + sticky shelf can
+     span the full viewport width and meet the top edge of the screen.
+     `.masthead-wrap` is the full-width sticky chrome (translucent
+     paper bg, hairline below, iOS safe-area-top); `.masthead` inside
+     is max-width-aligned to mirror the .paper column below so the
+     wordmark + avatar visually share the column. #}
+  <header class="masthead-wrap">
+    <div class="masthead">
       <a href="{{ request.scope.get('root_path','') }}/" class="masthead-brand">
         <span class="brand-mark">P</span>
         <span class="brand-word">Prep&nbsp;·&nbsp;<em>a commonplace book</em></span>
@@ -181,7 +187,9 @@
         </details>
       {% endif %}
       {% block header_extra %}{% endblock %}
-    </header>
+    </div>
+  </header>
+  <div class="paper">
     <main class="folio">
       {% block main %}{% endblock %}
     </main>
