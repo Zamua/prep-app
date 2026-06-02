@@ -455,53 +455,81 @@ For the staging-vs-prod two-stack split, use `make deploy-stag` /
 
 ---
 
-## Deploy model (single checkout, two stacks)
+## Deploy model (single checkout, THREE deploys)
 
-One checkout (`prep-app-staging/`, on `main`), two compose stacks
-running on the same docker daemon:
+One checkout (`prep-app-staging/`, on `main`), three deploys built
+from it. Two stacks share the local docker daemon (stag + prod-tailnet);
+the third is the public-internet deploy on the Hetzner VPS.
 
-- **stag** — image `prep:staging`, project `stag`, host port 8082,
-  single `prep-data` volume. Tailscale serves at `/prep-staging/`.
-  Built from current working tree on every `make deploy-stag`.
-- **prod** — image `prep:<tag>`, project `prod`, host port 8081,
-  single `prod-data` volume. Tailscale serves at `/prep/`. Built from
-  `git worktree add --detach <tag>` against whatever tag is in
-  `.prod-version`. The working tree never moves during a prod build.
+- **stag** (Mac mini, tailnet) — image `prep:staging`, project `stag`,
+  host port 8082, single `prep-data` volume. Tailscale serves at
+  `/prep-staging/`. Tailscale auth. Built from current working tree
+  on every `make deploy-stag`. No pin file — always the latest commit.
+- **prod-tailnet** (Mac mini, tailnet) — image `prep:<tag>`, project
+  `prod`, host port 8081, single `prod-data` volume. Tailscale serves
+  at `/prep/`. Tailscale auth. **Single-user** (the operator's own
+  /prep instance). Built from `git worktree add --detach <tag>` against
+  the tag in `.prod-version`.
+- **prepcards.app** (Hetzner VPS, public internet) — image `prep:vps`,
+  compose project `prep`. nginx at the VPS terminates TLS and reverse-
+  proxies to the container on :8082. **Clerk auth, multi-user.** Lives
+  at `/home/apps/projects/prep` on the VPS (`ssh vps`). Built from
+  the tag in `.vps-version` via `make deploy-vps` (SSHes to the VPS,
+  `git fetch --tags && git checkout <tag> && docker compose build && up -d`).
 
 (Pre-SDK-migration there was a second per-env `*-agent-data` volume
 for the sidecar's OAuth token. With the token now in `prep-data` at
 `/data/claude-oauth-token`, those volumes are retired —
 `prep-agent-data` was removed on 2026-05-30.)
 
-**Source of truth for "what is prod"** = `.prod-version` (single
-line, e.g., `v0.13.3`). Tracked in git so `git log .prod-version` is
-the prod-deploy history.
+**Two pin files — DON'T conflate them:**
+- `.prod-version` → Mac mini /prep (tailnet, single-user)
+- `.vps-version` → prepcards.app (public, multi-user)
 
-**Per-stack config** lives in `deploy/staging.env` and
-`deploy/prod.env` (tracked). A local `.env` (gitignored) layers on
-top for per-machine overrides. `PREP_DEFAULT_USER` is deliberately
-unset in both deploy env files — both stacks enforce real Tailscale
-auth.
+**Per-deploy config** lives in `deploy/staging.env` + `deploy/prod.env`
+(tracked, used by Mac mini stacks) and `/home/apps/projects/prep/.env`
+(on the VPS, NOT in git — holds Clerk keys + PREP_AUTH_MODE=clerk +
+secrets). A local `.env` (gitignored) layers on top of the Mac mini
+stacks for per-machine overrides. `PREP_DEFAULT_USER` is deliberately
+unset in all three deploys — every request must authenticate.
 
-**Promote flow**:
+**Promote flow** — tag once, promote per-target:
 ```bash
 # tag whatever's on main
 git tag -a v0.X.Y -m "..."
 git push origin --tags
 
-# promote: writes .prod-version, commits, pushes, builds at the tag,
-# brings up prod stack
+# promote to Mac mini /prep (tailnet, single-user) — writes .prod-version,
+# commits, pushes, builds at the tag, brings up local prod stack.
 make promote v=v0.X.Y
+
+# promote to prepcards.app (public, multi-user) — writes .vps-version,
+# commits, pushes, SSH'd build + up on the VPS.
+make promote-vps v=v0.X.Y
 ```
 
-`make deploy-prod` (without promote) just redeploys whatever
-`.prod-version` already says — idempotent. Use it after editing
-`deploy/prod.env` or to recreate prod containers from the same tag.
+`make deploy-prod` / `make deploy-vps` (without `v=`) redeploy whatever
+the respective pin already says — idempotent. Use after editing the
+deploy env file or to recreate containers from the same tag.
 
-**Important — wait for go-ahead before prod.** Default to
-`make deploy-stag` during a session; wait for the user to say
-"deploy prod" or equivalent before running `make promote` or
-`make deploy-prod`.
+**"Promote to prepcards.app" = `make promote-vps`, not `make promote`.**
+The two are NOT interchangeable. Past incident (2026-06-02): a
+security-relevant change was promoted via `make promote` and Claude
+believed the public deploy was updated; only the tailnet /prep instance
+got it, and prepcards.app stayed on the old version for 15 more minutes
+until the user pointed out the form they were trying to remove was
+still visible to multi-user signups. When in doubt about which deploy
+the user means, check both pin files (`cat .prod-version .vps-version`)
+and the running images (`docker ps` locally, `ssh vps "sudo docker ps"`
+on the VPS).
+
+**Important — wait for go-ahead before any prod deploy.** Default to
+`make deploy-stag` during a session; wait for the user to say "deploy
+prod" / "promote" / equivalent before running `make promote`,
+`make deploy-prod`, `make promote-vps`, or `make deploy-vps`. For
+security-relevant changes, prefer rolling out to prepcards.app FIRST
+(highest stakes — multi-user), confirm visually, then promote to the
+tailnet /prep too.
 
 Image tags are versioned (`prep:staging`, `prep:v0.13.3`) so all
 historical prod images coexist in the daemon's cache; running
