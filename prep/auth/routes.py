@@ -44,11 +44,27 @@ def sign_in(request: Request):
 
 @router.get("/sign-out")
 def sign_out(request: Request):
-    """Redirect to provider sign-out. Cookies / session revocation
-    happen provider-side (Clerk handles it on their /sign-out)."""
-    urls = get_provider().urls()
+    """Sign the user out.
+
+    Clerk: ClerkJS owns session revocation (it has to clear cookies
+    across the apex + Clerk's frontend host, and broadcast to other
+    tabs). The hosted `/sign-out` URL on the account portal isn't a
+    real page on Clerk's current account-portal config — navigating
+    there returns 403/404 — so we render a small interstitial that
+    calls `Clerk.signOut()` from JS and then redirects home.
+
+    Other providers (Tailscale: no concept of sign-out; FakeProvider:
+    explicit URL): keep the legacy redirect-to-provider behavior.
+    """
+    provider = get_provider()
+    urls = provider.urls()
     if not urls.sign_out:
         raise HTTPException(404, "this deploy has no in-app sign-out flow")
+    if provider.name == "clerk":
+        return templates.TemplateResponse(
+            "sign_out_interstitial.html",
+            {"request": request, "user": None, "redirect_url": "/"},
+        )
     return RedirectResponse(urls.sign_out, status_code=303)
 
 

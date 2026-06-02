@@ -76,6 +76,28 @@ def test_sign_in_redirects_when_provider_has_url(client: TestClient, initialized
         set_provider(None)
 
 
+def test_sign_out_renders_interstitial_on_clerk(client: TestClient, initialized_db: str):
+    """Clerk sign-out needs ClerkJS to revoke the session — Clerk's
+    hosted /sign-out URL isn't a real navigable page on their
+    current account-portal config. So we render an interstitial
+    that invokes Clerk.signOut() from JS and redirects home."""
+    from prep.auth.providers import set_provider
+    from prep.auth.providers.fake import FakeProvider
+
+    class _PretendClerk(FakeProvider):
+        name = "clerk"
+
+    try:
+        set_provider(_PretendClerk())
+        r = client.get("/sign-out", follow_redirects=False)
+        assert r.status_code == 200
+        # Interstitial renders the page chrome + ClerkJS call.
+        assert "Signing out" in r.text
+        assert "Clerk.signOut" in r.text
+    finally:
+        set_provider(None)
+
+
 # ---- /settings/account --------------------------------------------
 
 

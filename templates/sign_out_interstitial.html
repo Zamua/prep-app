@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Signing out · prep{% endblock %}
+{% block page_class %}sign-out{% endblock %}
+{% block main %}
+
+{# Interstitial: Clerk's session revocation has to be initiated from
+   ClerkJS so it can clear cross-domain cookies + tell every active
+   tab. The hosted "/sign-out" URL at accounts.<domain> isn't a real
+   page on Clerk's recent account portal — navigating there returns
+   403/404 — so we render this tiny page that loads Clerk (base.html
+   bootstrap does it) and calls Clerk.signOut() ourselves, then
+   redirects to the home. #}
+
+<section class="prelude" aria-live="polite">
+  <p class="eyebrow">Signing out</p>
+  <h1 class="display">One moment.</h1>
+  <p class="lede">
+    Clearing your session and redirecting. If this page hasn't
+    moved in a few seconds, <a href="{{ redirect_url }}">click here</a>
+    to go back to prep.
+  </p>
+</section>
+
+<script>
+  (async function () {
+    const home = {{ redirect_url|tojson }};
+    let waited = 0;
+    while (!window.Clerk && waited < 5000) {
+      await new Promise(r => setTimeout(r, 50));
+      waited += 50;
+    }
+    try {
+      if (window.Clerk) {
+        // Wait for load if not yet done.
+        if (typeof window.Clerk.load === "function" && !window.Clerk.loaded) {
+          try { await window.Clerk.load(); } catch (_) { /* fall through */ }
+        }
+        if (typeof window.Clerk.signOut === "function") {
+          await window.Clerk.signOut();
+        }
+      }
+    } catch (e) {
+      console.warn("Clerk.signOut failed:", e);
+    } finally {
+      window.location.replace(home);
+    }
+  })();
+</script>
+
+{% endblock %}
