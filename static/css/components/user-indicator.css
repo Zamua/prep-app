@@ -91,3 +91,15 @@
   -webkit-tap-highlight-color: transparent;
 }
 .user-links a:hover { color: var(--quill); }
+
+.user-link-divider {
+  height: 1px;
+  background: var(--hairline);
+  margin: 0.25rem 0;
+  list-style: none;
+}
+
+.user-link-signout {
+  color: var(--ink-soft);
+}
+.user-link-signout:hover { color: var(--accent, var(--quill)); }

@@ -40,6 +40,28 @@
   text-decoration: underline;
 }
 
+/* Install-app entry in the footer. Persists past the auto-prompt
+ * dismissal so the user always has a way back to install. JS in
+ * pwa-install.js unhides it when the platform is installable;
+ * matches the existing link styling so it visually belongs. */
+.colophon-install {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--ink-mute);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.colophon-install:hover {
+  color: var(--ink-soft);
+  text-decoration: underline;
+}
+.colophon-install .icon { width: 0.9em; height: 0.9em; }
+
 /* Focused screens (study, result, grading, generation) hide the colophon
  * to keep attention on the card. The literary mood lives on index/deck. */
 .page-study .colophon,

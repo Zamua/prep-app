@@ -150,9 +150,13 @@
               <li><a href="{{ root }}/notify/log">Notification log{% if notif_unseen_count %} <span class="notif-unseen-badge">{{ notif_unseen_count }}</span>{% endif %} {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               {# Clerk-mode only: the account-delete flow needs an upstream
                  user to delete. Tailscale-mode has no notion of "delete
-                 the user" — identity comes from the proxy. #}
+                 the user" — identity comes from the proxy. Same gate
+                 applies to sign-out: tailscale identity is proxy-injected
+                 per request, so there's no session to revoke client-side. #}
               {% if auth_provider == 'clerk' %}
                 <li><a href="{{ root }}/settings/account">Account {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+                <li class="user-link-divider" aria-hidden="true"></li>
+                <li><a href="{{ root }}/sign-out" class="user-link-signout" data-turbo="false">Sign out {{ icon('sign-out', class_='icon icon-inline') }}</a></li>
               {% endif %}
             </ul>
           </div>
@@ -181,6 +185,16 @@
         <a href="{{ root }}/llms.txt">llms.txt</a>
         <span aria-hidden="true">·</span>
         <a href="https://github.com/Zamua/prep-app" target="_blank" rel="noopener">Source</a>
+        {# PWA install entry — persists past dismiss/session-hide so the
+           user can always re-open the install drawer. JS in
+           modules/pwa-install.js hides this in standalone mode and on
+           unsupported browsers; visible otherwise. Same click handler
+           as the bottom pill — opens the platform-aware modal. #}
+        <span aria-hidden="true" class="colophon-install-sep" hidden>·</span>
+        <button type="button" class="colophon-install pwa-install-trigger" hidden>
+          {{ icon('download-simple', class_='icon icon-inline') }}
+          <span>Install app</span>
+        </button>
       </nav>
     </footer>
   </div>

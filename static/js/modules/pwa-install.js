@@ -80,15 +80,29 @@ export function init(opts = {}) {
   const root = document.getElementById("pwa-install-root");
   if (!root) return;
 
-  // Hard out: already installed, or already permanently dismissed.
+  // Hard out: already installed → no install UI anywhere, including
+  // the footer mirror. The footer button is hidden by default in
+  // markup; we only un-hide it if installable AND not standalone.
   if (isStandalone()) return;
-  if (getStorage(STORAGE_KEY_DISMISSED)) return;
-  if (getStorage(STORAGE_KEY_SESSION_HIDDEN)) return;
+
+  // Footer-mirror trigger (lives outside the install-root partial,
+  // in base.html's <footer>). Survives dismissal — the footer entry
+  // is the user's "second chance" to install after they dismissed
+  // the auto-prompt.
+  const footerTrigger = document.querySelector(".colophon-install");
+  const footerSep = document.querySelector(".colophon-install-sep");
 
   // Pieces of the partial.
   const pill = root.querySelector(".pwa-install-pill");
   const dialog = root.querySelector("dialog.pwa-install-dialog");
   if (!pill || !dialog) return;
+
+  // Auto-prompt path is gated by the dismiss / session-hide storage;
+  // the FOOTER path is not (always show when installable). When the
+  // auto-prompt is suppressed, we still want the footer button to
+  // appear so the user can find their way back to the install flow.
+  const autoPromptSuppressed =
+    getStorage(STORAGE_KEY_DISMISSED) || getStorage(STORAGE_KEY_SESSION_HIDDEN);
 
   const closeBtn = dialog.querySelector(".pwa-install-close");
   const dontShowAgain = dialog.querySelector(".pwa-install-dont-show");
@@ -118,21 +132,25 @@ export function init(opts = {}) {
     event.preventDefault();
     deferredPrompt = event;
     kind = kind || "android"; // covers desktop Chrome too
-    showPill();
+    if (!autoPromptSuppressed) showPill();
+    showFooter();
   });
 
   // appinstalled fires when the install completes (Chromium browsers).
   // Hide the nudge immediately + remember persistently so a later
-  // re-uninstall doesn't bring it back uninvited.
+  // re-uninstall doesn't bring it back uninvited. The footer button
+  // hides too — installed-app users shouldn't see "Install app".
   window.addEventListener("appinstalled", () => {
     setStoragePersistent(STORAGE_KEY_DISMISSED);
     hideAll();
+    hideFooter();
   });
 
   // iOS Safari has no install event to wait for — show the pill
   // immediately on iOS-eligible pages.
   if (kind === "ios" || kind === "ios-non-safari") {
-    showPill();
+    if (!autoPromptSuppressed) showPill();
+    showFooter();
   }
 
   // ---- UI handlers --------------------------------------------------
@@ -147,7 +165,18 @@ export function init(opts = {}) {
     if (dialog.open) dialog.close();
   }
 
-  pill.addEventListener("click", () => {
+  function showFooter() {
+    if (!footerTrigger) return;
+    footerTrigger.hidden = false;
+    if (footerSep) footerSep.hidden = false;
+  }
+
+  function hideFooter() {
+    if (footerTrigger) footerTrigger.hidden = true;
+    if (footerSep) footerSep.hidden = true;
+  }
+
+  function openDialog() {
     // Render only the platform-relevant block; hide others.
     iosBlock.hidden = kind !== "ios";
     iosNonSafariBlock.hidden = kind !== "ios-non-safari";
@@ -159,7 +188,10 @@ export function init(opts = {}) {
 
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
-  });
+  }
+
+  pill.addEventListener("click", openDialog);
+  if (footerTrigger) footerTrigger.addEventListener("click", openDialog);
 
   if (closeBtn) {
     closeBtn.addEventListener("click", () => {

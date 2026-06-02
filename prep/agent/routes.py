@@ -372,7 +372,7 @@ async def settings_byok_connect(
             byok_error=(
                 "BYOK isn't available on this deploy — the operator hasn't "
                 "configured PREP_KEY_ENCRYPTION_SECRET. Ask whoever runs this "
-                "instance to enable it, or use the subscription path above."
+                "instance to enable it."
             ),
             status_code=503,
         )
