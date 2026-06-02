@@ -57,74 +57,89 @@
     <p class="notify-status" data-kind="ok">{{ byok_flash }}</p>
   {% endif %}
 
+  {# Accordion of BYOK providers. The active provider opens by default;
+     others stay collapsed so the page reads as a tight list of "here's
+     what you have" rather than four full-height panels stacked. Key
+     entry is `<input type="password">` with a peek toggle — secret
+     by default, single-line, browser/password-manager friendly.
+     The data-active attribute lets the show-key JS scope per-row. #}
   {% for s in byok_sections %}
   {% set p = s.info %}
   {% set m = s.metadata %}
-  <section class="agent-panel">
-    <p class="section-eyebrow">
-      <span>{{ p.label }}{% if s.is_active %} <span class="byok-active-badge">Active</span>{% endif %}</span>
-      <span class="rule"></span>
-    </p>
+  <details class="byok-row"
+           data-provider="{{ s.provider }}"
+           {% if s.is_active or (not m and loop.first and not byok_sections|selectattr('metadata')|list|length) %}open{% endif %}>
+    <summary class="byok-row-summary">
+      <span class="byok-row-name">
+        {{ p.label }}
+        {% if s.is_active %}<span class="byok-active-badge">Active</span>{% endif %}
+      </span>
+      <span class="byok-row-status" data-state="{{ 'on' if m else 'off' }}">
+        {% if m %}
+          <code>{{ m.key_prefix }}</code>
+        {% else %}
+          <span class="byok-unset">not configured</span>
+        {% endif %}
+      </span>
+      <span class="byok-row-chev" aria-hidden="true">›</span>
+    </summary>
 
-    {% if m %}
-      <p class="agent-status" data-state="on">
-        {{ icon('check-circle', class_='icon icon-inline') }}
-        <strong>Connected</strong> · <code>{{ m.key_prefix }}</code>
-        <span class="form-hint">
+    <div class="byok-row-body">
+      {% if m %}
+        <p class="byok-row-meta">
           added {{ m.created_at[:10] }}{% if m.last_used_at %} · last used {{ m.last_used_at[:10] }}{% else %} · not yet used{% endif %}
-        </span>
-      </p>
-      {% if not s.is_active %}
-        <form method="post"
-              action="{{ _root }}/settings/agent/byok/{{ s.provider }}/use"
-              class="byok-use-form" style="margin-block-start: 0.85rem;">
-          <button type="submit" class="btn btn-quiet">Use {{ p.label }} for AI calls</button>
-        </form>
+        </p>
+        {% if not s.is_active %}
+          <form method="post"
+                action="{{ _root }}/settings/agent/byok/{{ s.provider }}/use"
+                class="byok-use-form">
+            <button type="submit" class="btn btn-quiet">Use {{ p.label }} for AI calls</button>
+          </form>
+        {% endif %}
       {% endif %}
-    {% else %}
-      <p class="agent-status" data-state="off">
-        {{ icon('warning-circle', class_='icon icon-inline') }}
-        <strong>Not configured</strong>
-      </p>
-    {% endif %}
 
-    <form method="post"
-          action="{{ _root }}/settings/agent/byok/{{ s.provider }}/connect"
-          class="agent-connect-form" autocomplete="off">
-      <label class="freetext">
-        <span class="freetext-label">{% if m %}Replace {{ p.label }} key{% else %}{{ p.label }} API key{% endif %}</span>
-        <textarea name="api_key" rows="2" required spellcheck="false"
-                  autocomplete="off" autocapitalize="off" autocorrect="off"
-                  placeholder="{{ p.key_prefixes[0] }}…"></textarea>
-        <span class="freetext-hint">
-          {% if s.provider == 'claude-subscription' %}
-            Run <code>claude setup-token</code> on a machine where you're
-            signed into Claude, paste the <code>sk-ant-oat01-…</code>
-            output here. Token is valid for a year and bills against your
-            <strong>own</strong> Max subscription pool.
-            <a href="{{ p.console_url }}" target="_blank" rel="noopener">Docs.</a>
-          {% else %}
-            Get a key at
-            <a href="{{ p.console_url }}" target="_blank" rel="noopener">{{ p.console_url|replace('https://', '') }}</a>.
-          {% endif %}
-          Encrypted at rest, only used for your own AI calls.
-        </span>
-      </label>
-      <div class="study-actions">
-        <button type="submit" class="btn btn-primary">
-          {% if m %}Replace{% else %}Save key{% endif %}
-        </button>
-      </div>
-    </form>
-
-    {% if m %}
       <form method="post"
-            action="{{ _root }}/settings/agent/byok/{{ s.provider }}/disconnect"
-            class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
-        <button type="submit" class="btn btn-quiet">Remove key</button>
+            action="{{ _root }}/settings/agent/byok/{{ s.provider }}/connect"
+            class="agent-connect-form" autocomplete="off">
+        <label class="form-field byok-key-field">
+          <span class="form-label">{% if m %}Replace {{ p.label }} key{% else %}{{ p.label }} API key{% endif %}</span>
+          <div class="byok-key-input">
+            <input type="password" name="api_key" required spellcheck="false"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   placeholder="{{ p.key_prefixes[0] }}…">
+            <button type="button" class="byok-key-toggle" aria-label="Show key" data-state="hidden">
+              {{ icon('eye', class_='icon icon-inline byok-key-eye-show') }}
+              {{ icon('eye-slash', class_='icon icon-inline byok-key-eye-hide') }}
+            </button>
+          </div>
+          <span class="form-hint">
+            {% if s.provider == 'claude-subscription' %}
+              Run <code>claude setup-token</code> on a machine where you're
+              signed into Claude, paste the <code>sk-ant-oat01-…</code>
+              output here. Token is valid for a year and bills against your
+              <strong>own</strong> Max subscription pool.
+              <a href="{{ p.console_url }}" target="_blank" rel="noopener">Docs.</a>
+            {% else %}
+              Get a key at
+              <a href="{{ p.console_url }}" target="_blank" rel="noopener">{{ p.console_url|replace('https://', '') }}</a>.
+            {% endif %}
+            Encrypted at rest, only used for your own AI calls.
+          </span>
+        </label>
+        <div class="study-actions byok-row-actions">
+          <button type="submit" class="btn btn-primary">
+            {% if m %}Replace{% else %}Save key{% endif %}
+          </button>
+          {% if m %}
+            <button type="submit" formaction="{{ _root }}/settings/agent/byok/{{ s.provider }}/disconnect"
+                    formnovalidate class="btn btn-quiet">
+              Remove key
+            </button>
+          {% endif %}
+        </div>
       </form>
-    {% endif %}
-  </section>
+    </div>
+  </details>
   {% endfor %}
 
   {# Subscription path (deploy-shared OAuth token, secondary).
@@ -180,11 +195,17 @@
       </ol>
 
       <form method="post" action="{{ _root }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
-        <label class="freetext">
-          <span class="freetext-label">Token</span>
-          <textarea name="token" rows="3" required spellcheck="false"
-                    autocapitalize="off" autocorrect="off"
-                    placeholder="sk-ant-oat01-…"></textarea>
+        <label class="form-field byok-key-field">
+          <span class="form-label">Token</span>
+          <div class="byok-key-input">
+            <input type="password" name="token" required spellcheck="false"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   placeholder="sk-ant-oat01-…">
+            <button type="button" class="byok-key-toggle" aria-label="Show token" data-state="hidden">
+              {{ icon('eye', class_='icon icon-inline byok-key-eye-show') }}
+              {{ icon('eye-slash', class_='icon icon-inline byok-key-eye-hide') }}
+            </button>
+          </div>
         </label>
         <div class="study-actions">
           <button type="submit" class="btn btn-primary">Connect</button>

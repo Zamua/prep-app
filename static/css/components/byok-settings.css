@@ -1,0 +1,183 @@
+/* /settings/agent — BYOK accordion + key-entry chrome.
+ *
+ * Each provider is a <details class="byok-row">. Closed state shows
+ * label + status (active badge / masked prefix / "not configured")
+ * in a single tight row; open state reveals the connect form. The
+ * active provider opens by default; others stay collapsed so the
+ * page reads as a 4-row list instead of four stacked full-height
+ * panels (the pre-2026-06-02 layout was ~2700px tall on mobile).
+ *
+ * Key entry uses <input type="password"> with a peek-toggle button.
+ * Single-line, browser/password-manager friendly, secret-by-default;
+ * the eye icon flips on focus or click to verify a paste.
+ */
+
+/* ---- The accordion row -------------------------------------------- */
+
+.byok-row {
+  border-top: 1px solid var(--hairline);
+  padding: 0;
+}
+.byok-row:last-of-type {
+  border-bottom: 1px solid var(--hairline);
+  margin-block-end: 1.5rem;
+}
+
+.byok-row-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 0.25rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.byok-row-summary::-webkit-details-marker { display: none; }
+.byok-row-summary::marker { content: ""; }
+
+.byok-row-name {
+  font-style: italic;
+  font-size: 1.02rem;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.byok-row-status {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  text-align: end;
+}
+.byok-row-status[data-state="off"] {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-mute);
+}
+.byok-row-status code {
+  font-family: inherit;
+  font-size: inherit;
+}
+.byok-unset {
+  font-style: italic;
+}
+
+.byok-row-chev {
+  color: var(--ink-mute);
+  font-size: 1rem;
+  transition: transform 120ms ease;
+  display: inline-block;
+}
+.byok-row[open] > .byok-row-summary .byok-row-chev {
+  transform: rotate(90deg);
+}
+
+/* Open body — slight indent so the form aligns visually with the
+ * label/status row above. */
+.byok-row-body {
+  padding: 0.35rem 0.25rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.byok-row-meta {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+
+/* "Active" badge — kept inline with the name. */
+.byok-active-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--quill);
+  border-radius: 999px;
+}
+
+.byok-row-actions {
+  margin-block-start: 0.55rem;
+}
+
+/* ---- Key entry: password input + show toggle ---------------------- */
+
+.byok-key-field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.byok-key-input {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.byok-key-input input[type="password"],
+.byok-key-input input[type="text"] {
+  flex: 1;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  padding: 0.65rem 2.6rem 0.65rem 0.85rem;  /* right-padding for the toggle */
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  /* When showing the secret, keep it on one line — long Anthropic
+   * OAuth tokens are ~150 chars. Horizontal scroll is preferable to
+   * wrap because the user is verifying a prefix, not reading prose. */
+  white-space: nowrap;
+  overflow-x: auto;
+}
+.byok-key-input input[type="password"]:focus-visible,
+.byok-key-input input[type="text"]:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
+
+.byok-key-toggle {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 2.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-mute);
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.byok-key-toggle:hover {
+  color: var(--ink);
+}
+.byok-key-toggle .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* Default state shows the "eye" (means: "tap to reveal"); when
+ * revealed we swap to the "eye-slash" (tap to re-hide). JS flips
+ * the input's type AND the button's data-state. */
+.byok-key-toggle .byok-key-eye-hide,
+.byok-key-toggle[data-state="shown"] .byok-key-eye-show {
+  display: none;
+}
+.byok-key-toggle[data-state="shown"] .byok-key-eye-hide {
+  display: inline-block;
+}
