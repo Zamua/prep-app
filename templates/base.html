@@ -141,12 +141,19 @@
           <div class="user-panel">
             <p class="user-name">{{ user.display_name or user.tailscale_login.split('@')[0] }}</p>
             <p class="user-login">{{ user.tailscale_login }}</p>
-            {# Two groups of entries: Settings (the .../settings/* + /notify
-               pages — places you go to *configure* something) and Activity
-               (the notification log — a record of what happened). Sign out
-               sits below the groups under its own divider. The group
-               eyebrows make the asymmetry explicit so the log doesn't read
-               as one-more-settings page. #}
+            {# Two groups of entries: Activity (the notification log — a
+               record of what happened, with the unseen-count badge) and
+               Settings (the .../settings/* + /notify pages — places you
+               go to *configure* something). Activity first because the
+               unseen badge is the most likely reason to open the popover;
+               surfacing it ahead of the settings list keeps that the
+               first thing you see. Sign out sits below both groups under
+               its own divider. #}
+            <p class="user-group-eyebrow">Activity</p>
+            <ul class="user-links">
+              <li><a href="{{ root }}/notify/log">Notification log{% if notif_unseen_count %} <span class="notif-unseen-badge">{{ notif_unseen_count }}</span>{% endif %} {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+            </ul>
+
             <p class="user-group-eyebrow">Settings</p>
             <ul class="user-links">
               <li><a href="{{ root }}/settings/agent">AI agent {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
@@ -160,11 +167,6 @@
               {% if auth_provider == 'clerk' %}
                 <li><a href="{{ root }}/settings/account">Account {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               {% endif %}
-            </ul>
-
-            <p class="user-group-eyebrow">Activity</p>
-            <ul class="user-links">
-              <li><a href="{{ root }}/notify/log">Notification log{% if notif_unseen_count %} <span class="notif-unseen-badge">{{ notif_unseen_count }}</span>{% endif %} {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
             </ul>
 
             {# Sign-out: clerk-only, behind the same identity-revocation gate
