@@ -554,6 +554,46 @@ class ReviewRepo:
             interval_minutes=interval_minutes,
         )
 
+    def find_idempotent_record(self, idempotency_key: str) -> dict | None:
+        """Look up a previously-recorded grading by its idempotency key.
+        Returns the cached SRSState dict, or None if not seen yet.
+
+        Called by `record_grading_with_idempotency` so the Go worker
+        can safely retry an activity without writing the review row
+        twice."""
+        with cursor() as c:
+            row = c.execute(
+                """SELECT step, next_due, interval_minutes
+                     FROM grading_idempotency
+                    WHERE idempotency_key = ?""",
+                (idempotency_key,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "step": int(row["step"]),
+            "next_due": row["next_due"],
+            "interval_minutes": int(row["interval_minutes"]),
+        }
+
+    def record_idempotency(self, idempotency_key: str, question_id: int, state: CardState) -> None:
+        """Persist the (key → state) mapping so retries return the same
+        SRSState without re-grading."""
+        with cursor() as c:
+            c.execute(
+                """INSERT INTO grading_idempotency
+                       (idempotency_key, question_id, step, next_due, interval_minutes, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    idempotency_key,
+                    question_id,
+                    state.step,
+                    state.next_due,
+                    state.interval_minutes,
+                    now(),
+                ),
+            )
+
     def get_last_user_answer(self, qid: int) -> str | None:
         """Most recent user_answer recorded for `qid` across the
         reviews log. Used by the session-view route when rendering the
@@ -660,3 +700,49 @@ def _row_to_recent(row: dict) -> RecentSession:
         current_type=row.get("current_type"),
         snoozed_until=row.get("snoozed_until"),
     )
+
+
+# ---- worker-callback helper --------------------------------------------
+
+
+def record_grading_with_idempotency(
+    *,
+    user_id: str,
+    question_id: int,
+    result: str,
+    user_answer: str,
+    grader_notes: str,
+    idempotency_key: str,
+) -> dict:
+    """End-to-end SRS state write with idempotency. Called by the Go
+    worker via `/api/internal/record-review` after the LLM grader
+    returns a verdict.
+
+    Pre-FSRS, the Go worker did the whole thing directly: read step,
+    advance via the ladder, write reviews + cards. After the FSRS swap
+    the ladder math became wrong, so we route the write through Python
+    where the canonical scheduler lives. The Go side keeps the
+    fast LLM call and the workflow plumbing.
+
+    Idempotency: if `idempotency_key` has been recorded before, return
+    the cached state — no second insert into reviews, no double-advance
+    of the SRS state. Same `grading_idempotency` table the Go worker
+    used before this rewrite, so existing pin rows stay valid.
+    """
+    repo = ReviewRepo()
+    existing = repo.find_idempotent_record(idempotency_key)
+    if existing is not None:
+        return existing
+    new_state = repo.record(
+        user_id=user_id,
+        qid=question_id,
+        result=result,
+        user_answer=user_answer,
+        notes=grader_notes,
+    )
+    repo.record_idempotency(idempotency_key, question_id, new_state)
+    return {
+        "step": new_state.step,
+        "next_due": new_state.next_due,
+        "interval_minutes": new_state.interval_minutes,
+    }

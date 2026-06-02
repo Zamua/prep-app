@@ -139,3 +139,118 @@ def test_run_ignores_session_id_resume_id(
         headers={"X-Internal-Token": internal_token},
     )
     assert r.status_code == 200
+
+
+# ---- /api/internal/record-review ---------------------------------------
+
+
+def _seed_question(uid: str = "testuser@example.com"):
+    """Create a deck + question + card row so the record-review endpoint
+    has something to update. Returns the question id."""
+    from prep.decks.entities import NewQuestion
+    from prep.decks.repo import DeckRepo, QuestionRepo
+
+    deck_id = DeckRepo().create(uid, "rev-test")
+    qid = QuestionRepo().add(
+        uid,
+        deck_id,
+        NewQuestion(
+            type="short",
+            topic="topic",
+            prompt="What is 2+2?",
+            answer="4",
+            rubric="",
+        ),
+    )
+    return qid
+
+
+def test_record_review_writes_and_round_trips_idempotently(
+    client: TestClient, initialized_db: str, internal_token: str
+):
+    """Happy path: post a grading, get back {step, next_due, interval_minutes}.
+    Posting the same idempotency_key again returns the same payload
+    without writing a second reviews row."""
+    from prep.infrastructure.db import cursor
+
+    uid = initialized_db
+    qid = _seed_question(uid)
+
+    r = client.post(
+        "/api/internal/record-review",
+        json={
+            "user_id": uid,
+            "question_id": qid,
+            "result": "right",
+            "user_answer": "4",
+            "grader_notes": "",
+            "idempotency_key": "wf-test-1",
+        },
+        headers={"X-Internal-Token": internal_token},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["step"] >= 1
+    assert body["next_due"]
+    assert body["interval_minutes"] >= 1
+
+    # Idempotent retry: same key → same payload, no second review row.
+    r2 = client.post(
+        "/api/internal/record-review",
+        json={
+            "user_id": uid,
+            "question_id": qid,
+            "result": "right",
+            "user_answer": "4",
+            "grader_notes": "",
+            "idempotency_key": "wf-test-1",
+        },
+        headers={"X-Internal-Token": internal_token},
+    )
+    assert r2.status_code == 200
+    assert r2.json() == body
+    with cursor() as c:
+        n = c.execute("SELECT COUNT(*) AS n FROM reviews WHERE question_id = ?", (qid,)).fetchone()
+    assert n["n"] == 1
+
+
+def test_record_review_rejects_cross_user_question(
+    client: TestClient, initialized_db: str, internal_token: str
+):
+    """A worker that tries to record a review against another user's
+    question gets 400 (non-retryable). Defense in depth — the workflow
+    layer already shouldn't dispatch this, but the endpoint owns the
+    ownership check now."""
+    uid = initialized_db
+    qid = _seed_question(uid)
+
+    r = client.post(
+        "/api/internal/record-review",
+        json={
+            "user_id": "wronguser@example.com",
+            "question_id": qid,
+            "result": "right",
+            "user_answer": "",
+            "grader_notes": "",
+            "idempotency_key": "wf-cross-user",
+        },
+        headers={"X-Internal-Token": internal_token},
+    )
+    assert r.status_code == 400
+
+
+def test_record_review_requires_internal_token(
+    client: TestClient, initialized_db: str, internal_token: str
+):
+    r = client.post(
+        "/api/internal/record-review",
+        json={
+            "user_id": initialized_db,
+            "question_id": 1,
+            "result": "right",
+            "user_answer": "",
+            "grader_notes": "",
+            "idempotency_key": "k",
+        },
+    )
+    assert r.status_code == 401

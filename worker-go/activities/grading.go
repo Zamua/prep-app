@@ -11,11 +11,14 @@
 package activities
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -25,17 +28,6 @@ import (
 	"prep-worker/agent"
 	"prep-worker/shared"
 )
-
-// SRS interval ladder in minutes. Mirrors db.py:INTERVAL_LADDER_MINUTES.
-// Wrong → step 0; right → step += 1, capped at len-1.
-var srsLadderMinutes = []int{
-	10,          // 10 min
-	24 * 60,     // 1d
-	3 * 24 * 60, // 3d
-	7 * 24 * 60,
-	14 * 24 * 60,
-	30 * 24 * 60,
-}
 
 // ---- Activity: GradeFreeText -------------------------------------------
 
@@ -132,9 +124,16 @@ Output ONLY the JSON object.`,
 
 // ---- Activity: RecordReview -------------------------------------------
 
-// RecordReview writes a row to the reviews table and advances the cards
-// table's SRS step. Idempotent via grading_idempotency: if the
-// idempotency key already exists, return the cached state.
+// RecordReview posts to prep's /api/internal/record-review endpoint to
+// write the review row and advance FSRS state for the card. Python owns
+// the scheduler (prep/domain/srs.py); doing the math worker-side would
+// require porting FSRS twice + keeping the weights in sync, so we
+// delegate via the same internal-HTTP pattern as /api/agent/run.
+//
+// Idempotent on `IdempotencyKey` (usually the workflow id) — the
+// Python helper short-circuits a duplicate write and returns the
+// cached SRSState. Same `grading_idempotency` table as before; the
+// ownership of the writes flipped over, not the schema.
 func (a *Activities) RecordReview(ctx context.Context, in shared.RecordReviewInput) (shared.SRSState, error) {
 	if in.Result != "right" && in.Result != "wrong" {
 		return shared.SRSState{}, temporal.NewNonRetryableApplicationError(
@@ -142,103 +141,57 @@ func (a *Activities) RecordReview(ctx context.Context, in shared.RecordReviewInp
 			fmt.Errorf("result must be right or wrong, got %q", in.Result))
 	}
 
-	db, err := openDB(a.Cfg.DBPath)
+	baseURL := strings.TrimSpace(os.Getenv("PREP_AGENT_URL"))
+	if baseURL == "" {
+		return shared.SRSState{}, fmt.Errorf("PREP_AGENT_URL not set — worker can't reach /api/internal/record-review")
+	}
+	token := strings.TrimSpace(os.Getenv("PREP_INTERNAL_TOKEN"))
+	if token == "" {
+		return shared.SRSState{}, fmt.Errorf("PREP_INTERNAL_TOKEN not set — internal endpoint would refuse the call")
+	}
+
+	body, err := json.Marshal(in)
 	if err != nil {
-		return shared.SRSState{}, err
-	}
-	defer db.Close()
-
-	// Ensure the grading idempotency table exists. Do it here lazily rather
-	// than coupling worker boot to schema setup. CREATE IF NOT EXISTS is cheap.
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS grading_idempotency (
-			idempotency_key TEXT PRIMARY KEY,
-			question_id     INTEGER NOT NULL,
-			step            INTEGER NOT NULL,
-			next_due        TEXT NOT NULL,
-			interval_minutes INTEGER NOT NULL,
-			created_at      TEXT NOT NULL
-		);
-	`); err != nil {
-		return shared.SRSState{}, fmt.Errorf("create grading_idempotency: %w", err)
+		return shared.SRSState{}, fmt.Errorf("marshal record-review request: %w", err)
 	}
 
-	tx, err := db.Begin()
+	// /api/internal/record-review lives next to /api/agent/run, so the
+	// base path is the same (PREP_AGENT_URL points at /api/agent — we
+	// strip the trailing /run/agent and rebuild). The deploy env var is
+	// historically named for the agent endpoint, hence the rewrite.
+	url := strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/api/agent") + "/api/internal/record-review"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return shared.SRSState{}, err
+		return shared.SRSState{}, fmt.Errorf("build record-review request: %w", err)
 	}
-	defer tx.Rollback()
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("X-Internal-Token", token)
 
-	// Idempotency check.
-	var existing shared.SRSState
-	row := tx.QueryRow(`SELECT step, next_due, interval_minutes FROM grading_idempotency WHERE idempotency_key = ?`,
-		in.IdempotencyKey)
-	if err := row.Scan(&existing.Step, &existing.NextDue, &existing.IntervalMinutes); err == nil {
-		// Already recorded — return the cached state, skip the writes.
-		return existing, tx.Commit()
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return shared.SRSState{}, fmt.Errorf("idempotency check: %w", err)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return shared.SRSState{}, fmt.Errorf("record-review http: %w", err)
 	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
-	// Verify ownership — defense in depth so a misrouted workflow can't
-	// mutate another user's SRS state.
-	var owner string
-	if err := tx.QueryRow(`SELECT user_id FROM questions WHERE id = ?`, in.QuestionID).Scan(&owner); err != nil {
-		return shared.SRSState{}, fmt.Errorf("read question owner: %w", err)
-	}
-	if owner != in.UserID {
-		return shared.SRSState{}, temporal.NewNonRetryableApplicationError(
-			"question does not belong to user", "BadOwner",
-			fmt.Errorf("question %d owned by %s, not %s", in.QuestionID, owner, in.UserID))
-	}
-
-	// Read current step.
-	var step int
-	if err := tx.QueryRow(`SELECT step FROM cards WHERE question_id = ?`, in.QuestionID).Scan(&step); err != nil {
-		return shared.SRSState{}, fmt.Errorf("read card step: %w", err)
-	}
-
-	// Advance.
-	var newStep int
-	if in.Result == "wrong" {
-		newStep = 0
-	} else {
-		newStep = step + 1
-		if newStep > len(srsLadderMinutes)-1 {
-			newStep = len(srsLadderMinutes) - 1
+	if resp.StatusCode == http.StatusBadRequest {
+		// Bad owner / unknown result / missing card → non-retryable.
+		var errBody struct {
+			Error string `json:"error"`
 		}
+		_ = json.Unmarshal(raw, &errBody)
+		return shared.SRSState{}, temporal.NewNonRetryableApplicationError(
+			"record-review rejected", "BadInput", fmt.Errorf("%s", errBody.Error))
 	}
-	intervalMin := srsLadderMinutes[newStep]
-	now := time.Now().UTC()
-	nowISO := now.Format(time.RFC3339Nano)
-	nextDue := now.Add(time.Duration(intervalMin) * time.Minute).Format(time.RFC3339Nano)
-
-	if _, err := tx.Exec(`
-		INSERT INTO reviews (question_id, ts, result, user_answer, grader_notes)
-		VALUES (?, ?, ?, ?, ?)`,
-		in.QuestionID, nowISO, in.Result, in.UserAnswer, in.GraderNotes); err != nil {
-		return shared.SRSState{}, fmt.Errorf("insert review: %w", err)
+	if resp.StatusCode/100 != 2 {
+		return shared.SRSState{}, fmt.Errorf("record-review http %d: %s", resp.StatusCode, truncate(string(raw), 400))
 	}
-	if _, err := tx.Exec(`
-		UPDATE cards SET step = ?, next_due = ?, last_review = ? WHERE question_id = ?`,
-		newStep, nextDue, nowISO, in.QuestionID); err != nil {
-		return shared.SRSState{}, fmt.Errorf("update card: %w", err)
+	var out shared.SRSState
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return shared.SRSState{}, fmt.Errorf("parse record-review response: %w (raw: %s)", err, truncate(string(raw), 400))
 	}
-	if _, err := tx.Exec(`
-		INSERT INTO grading_idempotency (idempotency_key, question_id, step, next_due, interval_minutes, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		in.IdempotencyKey, in.QuestionID, newStep, nextDue, intervalMin, nowISO); err != nil {
-		return shared.SRSState{}, fmt.Errorf("insert grading_idempotency: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return shared.SRSState{}, err
-	}
-	return shared.SRSState{
-		Step:            newStep,
-		NextDue:         nextDue,
-		IntervalMinutes: intervalMin,
-	}, nil
+	return out, nil
 }
 
 // ---- helpers -----------------------------------------------------------

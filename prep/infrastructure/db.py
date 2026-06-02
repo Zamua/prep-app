@@ -124,6 +124,22 @@ def init() -> None:
                 grader_notes TEXT
             );
 
+            -- Pin the SRSState the Go worker returned for a given grading
+            -- workflow run, so retrying the activity doesn't re-record the
+            -- review or re-advance the FSRS state. Key is the workflow id
+            -- the worker passes in. Used by record_grading_with_idempotency.
+            -- (Pre-FSRS this was created lazily inside the Go activity; the
+            -- Python-side ownership flipped over with the FSRS migration so
+            -- the worker no longer touches sqlite directly.)
+            CREATE TABLE IF NOT EXISTS grading_idempotency (
+                idempotency_key  TEXT PRIMARY KEY,
+                question_id      INTEGER NOT NULL,
+                step             INTEGER NOT NULL,
+                next_due         TEXT NOT NULL,
+                interval_minutes INTEGER NOT NULL,
+                created_at       TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_questions_deck ON questions(deck_id);
             CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(next_due);
             CREATE INDEX IF NOT EXISTS idx_reviews_q ON reviews(question_id);

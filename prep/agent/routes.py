@@ -95,6 +95,57 @@ async def api_agent_run(
     return {"stdout": result.text}
 
 
+# ---- machine-to-machine /api/internal/record-review ----------------------
+
+
+class _RecordReviewRequest(BaseModel):
+    """Wire format for worker → prep SRS state writes.
+
+    The Go worker handled SRS bookkeeping locally via a hardcoded
+    ladder before this endpoint existed; consolidating here means
+    FSRS (the live Python scheduler) drives every code/short grade,
+    not just the sync self-grade path. See worker-go/activities/grading.go's
+    RecordReview activity for the caller."""
+
+    user_id: str
+    question_id: int
+    result: str
+    user_answer: str = ""
+    grader_notes: str = ""
+    # workflow_id usually — lets the worker safely retry an activity
+    # without writing the review row twice.
+    idempotency_key: str
+
+
+@router.post("/api/internal/record-review")
+def api_record_review(
+    body: _RecordReviewRequest,
+    _gate: None = Depends(_require_internal_token),
+):
+    """Worker callback: record a review and advance FSRS state for the
+    given (user, question). Idempotent on `idempotency_key`.
+
+    Returns `{step, next_due, interval_minutes}` matching the Go
+    worker's `shared.SRSState` so the GradeAnswerWorkflow output
+    shape stays the same."""
+    from prep.study.repo import record_grading_with_idempotency
+
+    try:
+        return record_grading_with_idempotency(
+            user_id=body.user_id,
+            question_id=body.question_id,
+            result=body.result,
+            user_answer=body.user_answer,
+            grader_notes=body.grader_notes,
+            idempotency_key=body.idempotency_key,
+        )
+    except ValueError as e:
+        # ValueError from ReviewRepo covers bad owner, unknown result,
+        # missing card row. Non-retryable on the worker side.
+        logger.warning("record-review rejected: %s", e)
+        return JSONResponse({"error": str(e), "kind": "bad_input"}, status_code=400)
+
+
 # ---- user-facing /settings/agent --------------------------------------
 
 # Anthropic-issued `claude setup-token` values look like
