@@ -72,6 +72,66 @@
   color: var(--ink);
 }
 
+/* Per-deck retention override (SRS): same collapsible-with-pencil
+ * pattern as the trivia topic-prompt edit. Closed-state shows the
+ * current target; opens to reveal the radio set with "Use default"
+ * + four presets. Reuses .retention-presets from settings_srs. */
+.deck-retention { margin: 0 0 1.4rem; }
+.deck-retention-edit { display: block; }
+.deck-retention-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--paper-overlay);
+  -webkit-tap-highlight-color: transparent;
+}
+.deck-retention-summary::-webkit-details-marker { display: none; }
+.deck-retention-summary::marker { content: ""; }
+.deck-retention-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.deck-retention-preview {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.deck-retention-preview em {
+  font-style: normal;
+  color: var(--quill);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-inline-start: 0.3rem;
+}
+.deck-retention-pencil { color: var(--ink-mute); width: 0.95rem; height: 0.95rem; }
+.deck-retention-edit:hover .deck-retention-pencil { color: var(--ink); }
+.deck-retention-edit[open] .deck-retention-summary {
+  border-color: var(--rule);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.deck-retention-form {
+  padding: 0.85rem;
+  border: 1px solid var(--rule);
+  border-top: none;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
 /* Trivia topic-prompt edit: collapsible <details> showing the
  * current topic preview + a pencil; opens to reveal the edit
  * textarea. Per-element pattern, same as rename + notif. */

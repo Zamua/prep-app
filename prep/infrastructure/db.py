@@ -626,3 +626,14 @@ def init() -> None:
                      WHERE COALESCE(d.deck_type, 'srs') = 'trivia'
                 )"""
         )
+
+        # 21. Per-deck FSRS desired-retention override. NULL means "use
+        #     the user's default" (which itself falls back to the
+        #     algorithm default 0.90). Lets a user push a single hard
+        #     deck to 95% while the rest of their decks stay at 90 —
+        #     mirrors Anki's deck-options model. Resolution order at
+        #     review time: deck.desired_retention → users.desired_retention
+        #     → DEFAULT_DESIRED_RETENTION (see prep/study/repo.py:record).
+        dcols2 = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
+        if "desired_retention" not in dcols2:
+            c.execute("ALTER TABLE decks ADD COLUMN desired_retention REAL")

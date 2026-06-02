@@ -198,3 +198,119 @@ def test_record_review_uses_user_retention(initialized_db: str):
     assert high_interval <= low_interval, (
         f"high-retention ({high_interval}m) should be ≤ " f"low-retention ({low_interval}m)"
     )
+
+
+# ---- per-deck retention override ----------------------------------------
+
+
+def test_deck_retention_override_beats_user_default(initialized_db: str):
+    """A deck-level override takes precedence over the user-level
+    default. Set user to 0.80 (loose) but the deck to 0.95 (strict)
+    — the deck's review should use 0.95, producing a tighter interval
+    than the same setup without the override."""
+    from prep.auth.repo import UserRepo
+    from prep.decks.entities import NewQuestion, QuestionType
+    from prep.decks.repo import DeckRepo, QuestionRepo
+    from prep.study.repo import ReviewRepo
+
+    UserRepo().set_desired_retention(initialized_db, 0.80)
+    deck_repo = DeckRepo()
+    deck_a = deck_repo.get_or_create(initialized_db, "loose-deck")
+    deck_b = deck_repo.get_or_create(initialized_db, "strict-deck")
+    deck_repo.set_desired_retention(initialized_db, deck_b, 0.95)
+
+    qid_a = QuestionRepo().add(
+        initialized_db, deck_a, NewQuestion(type=QuestionType.SHORT, prompt="Qa", answer="Aa")
+    )
+    qid_b = QuestionRepo().add(
+        initialized_db, deck_b, NewQuestion(type=QuestionType.SHORT, prompt="Qb", answer="Ab")
+    )
+    state_a = ReviewRepo().record(initialized_db, qid_a, "right", user_answer="Aa")
+    state_b = ReviewRepo().record(initialized_db, qid_b, "right", user_answer="Ab")
+
+    assert state_b.interval_minutes <= state_a.interval_minutes, (
+        f"strict deck override (95%) should schedule tighter than "
+        f"the user's default (80%) — got deck={state_b.interval_minutes}m, "
+        f"user-default={state_a.interval_minutes}m"
+    )
+
+
+def test_deck_retention_clear_falls_back_to_user(initialized_db: str):
+    """Clearing a deck override (set to None) restores the user-level
+    default's effect."""
+    from prep.auth.repo import UserRepo
+    from prep.decks.entities import NewQuestion, QuestionType
+    from prep.decks.repo import DeckRepo, QuestionRepo
+    from prep.study.repo import ReviewRepo
+
+    UserRepo().set_desired_retention(initialized_db, 0.80)
+    deck_repo = DeckRepo()
+    deck_id = deck_repo.get_or_create(initialized_db, "cleared")
+
+    # Deck override at 0.95 first.
+    deck_repo.set_desired_retention(initialized_db, deck_id, 0.95)
+    qid1 = QuestionRepo().add(
+        initialized_db, deck_id, NewQuestion(type=QuestionType.SHORT, prompt="Q1", answer="A1")
+    )
+    state_override = ReviewRepo().record(initialized_db, qid1, "right", user_answer="A1")
+
+    # Clear override.
+    deck_repo.set_desired_retention(initialized_db, deck_id, None)
+    qid2 = QuestionRepo().add(
+        initialized_db, deck_id, NewQuestion(type=QuestionType.SHORT, prompt="Q2", answer="A2")
+    )
+    state_user = ReviewRepo().record(initialized_db, qid2, "right", user_answer="A2")
+
+    # User default (0.80) is looser than 0.95 → longer interval after clear.
+    assert state_user.interval_minutes >= state_override.interval_minutes
+
+
+def test_deck_retention_route_saves_and_clears(client: TestClient, initialized_db: str):
+    """POST /deck/<name>/retention with a float value stores the
+    override; POST with 'default' clears it."""
+    from prep.decks.repo import DeckRepo
+
+    deck_repo = DeckRepo()
+    deck_repo.get_or_create(initialized_db, "ret-route-test")
+
+    # Save override.
+    r = client.post(
+        "/deck/ret-route-test/retention",
+        data={"retention": "0.85"},
+        follow_redirects=False,
+    )
+    assert r.status_code in (200, 303)
+    deck_id = deck_repo.find_id(initialized_db, "ret-route-test")
+    assert deck_repo.get_desired_retention(initialized_db, deck_id) == 0.85
+
+    # Clear via the "default" sentinel.
+    r2 = client.post(
+        "/deck/ret-route-test/retention",
+        data={"retention": "default"},
+        follow_redirects=False,
+    )
+    assert r2.status_code in (200, 303)
+    assert deck_repo.get_desired_retention(initialized_db, deck_id) is None
+
+
+def test_deck_retention_route_rejects_trivia_deck(client: TestClient, initialized_db: str):
+    """Retention is FSRS-only; trivia decks should 400."""
+    from prep.decks.repo import DeckRepo
+
+    DeckRepo().create_trivia(
+        initialized_db, "trivia-no-retention", topic="topic", interval_minutes=60
+    )
+    r = client.post(
+        "/deck/trivia-no-retention/retention",
+        data={"retention": "0.85"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_deck_retention_route_out_of_range(client: TestClient, initialized_db: str):
+    from prep.decks.repo import DeckRepo
+
+    DeckRepo().get_or_create(initialized_db, "ret-oor")
+    r = client.post("/deck/ret-oor/retention", data={"retention": "0.50"})
+    assert r.status_code == 400

@@ -145,6 +145,58 @@
 </section>
 {% endif %}
 
+{# Per-deck FSRS retention override (SRS only).
+   Closed by default — most users never touch this, but advanced
+   users want a per-deck knob. The "Use default" option clears the
+   override so the deck falls back to whatever /settings/srs has.
+   Resolution at review time: deck → user → algorithm default 0.90. #}
+{% if deck_type == 'srs' and retention_presets %}
+{%- set _user_default = user_retention if user_retention is not none else 0.90 -%}
+<section class="deck-retention">
+  <details class="deck-retention-edit">
+    <summary class="deck-retention-summary">
+      <span class="deck-retention-eyebrow">retention target</span>
+      <span class="deck-retention-preview">
+        {% if deck_retention is not none -%}
+          {{ '%.0f%%' % (deck_retention * 100) }} <em>(deck override)</em>
+        {%- else -%}
+          using default ({{ '%.0f%%' % (_user_default * 100) }})
+        {%- endif %}
+      </span>
+      {{ icon('pencil-simple-line', class_='icon icon-inline deck-retention-pencil') }}
+    </summary>
+    <form action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/retention"
+          method="post" class="deck-retention-form"
+          autocomplete="off" data-submit-pending>
+      <div class="retention-presets">
+        <label class="retention-preset {% if deck_retention is none %}is-active{% endif %}">
+          <input type="radio" name="retention" value="default"
+                 {% if deck_retention is none %}checked{% endif %}>
+          <span class="retention-preset-label">Use default ({{ '%.0f%%' % (_user_default * 100) }})</span>
+          <span class="retention-preset-blurb">Inherits from <a href="{{ request.scope.get('root_path','') }}/settings/srs">/settings/srs</a>. Update the default there to affect every deck that hasn't overridden it.</span>
+        </label>
+        {% for value, label, blurb in retention_presets %}
+          {% set picked = deck_retention is not none and (deck_retention - value)|abs < 0.001 %}
+          <label class="retention-preset {% if picked %}is-active{% endif %}">
+            <input type="radio" name="retention" value="{{ value }}"
+                   {% if picked %}checked{% endif %}>
+            <span class="retention-preset-label">{{ label }}</span>
+            <span class="retention-preset-blurb">{{ blurb }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <p class="form-hint">
+        Higher targets schedule more frequent reviews. Existing cards
+        re-schedule on their next answer, not retroactively.
+      </p>
+      <div class="study-actions">
+        <button type="submit" class="btn btn-primary" data-pending-label="Saving…">Save</button>
+      </div>
+    </form>
+  </details>
+</section>
+{% endif %}
+
 {% if questions %}
   <section class="card-index">
     <p class="section-eyebrow"><span>The collection</span><span class="rule"></span></p>

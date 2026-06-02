@@ -495,6 +495,22 @@ def deck_view(
 
         trivia_stats = TriviaQueueRepo().deck_stats(deck_id)
 
+    # SRS-only: surface this deck's retention override (if any) and the
+    # user-level default so the deck page can render the override picker
+    # with the right preselected option. NULL deck_retention means "use
+    # the default"; the template just needs both values + the preset
+    # list to render the radio set.
+    deck_retention: float | None = None
+    user_retention: float | None = None
+    retention_presets = None
+    if deck_type is not None and deck_type.value == "srs":
+        deck_retention = deck_repo.get_desired_retention(uid, deck_id)
+        from prep.auth.repo import UserRepo
+        from prep.auth.routes import _RETENTION_PRESETS
+
+        user_retention = UserRepo().get_desired_retention(uid)
+        retention_presets = _RETENTION_PRESETS
+
     return templates.TemplateResponse(
         "deck.html",
         {
@@ -516,6 +532,9 @@ def deck_view(
                 for c in cards
                 if not c.suspended and c.next_due is not None and c.next_due <= now_ts
             ),
+            "deck_retention": deck_retention,
+            "user_retention": user_retention,
+            "retention_presets": retention_presets,
         },
     )
 
@@ -752,6 +771,50 @@ def deck_toggle_pin(
             "partials/pin_form.html",
             {"deck_name": name, "pinned": is_pinned},
         )
+    return responses.redirect(request, f"/deck/{name}")
+
+
+@router.post("/deck/{name}/retention")
+def deck_set_retention(
+    request: Request,
+    name: str,
+    retention: str = Form(...),
+    user: dict = Depends(current_user),
+    repo: DeckRepo = Depends(_deck_repo),
+):
+    """Per-deck FSRS retention override (SRS decks only).
+
+    `retention` is either a float in [MIN, MAX] (override the user
+    default for this deck) or the literal string "default" (clear
+    the override → fall back to the user's setting at /settings/srs).
+
+    Resolution at review time happens in prep/study/repo.py:record —
+    deck override wins; user-level fallback; FSRS algorithm default."""
+    from prep.domain.srs import MAX_DESIRED_RETENTION, MIN_DESIRED_RETENTION
+
+    uid = user["tailscale_login"]
+    deck_id = repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    if (deck_type := repo.get_type(uid, deck_id)) is None or deck_type.value != "srs":
+        raise HTTPException(400, "retention applies only to SRS decks")
+
+    raw = retention.strip().lower()
+    if raw in ("default", "none", ""):
+        new_val: float | None = None
+    else:
+        try:
+            new_val = float(raw)
+        except ValueError as e:
+            raise HTTPException(400, f"retention must be a number or 'default', got {raw!r}") from e
+        if not (MIN_DESIRED_RETENTION <= new_val <= MAX_DESIRED_RETENTION):
+            raise HTTPException(
+                400,
+                f"retention must be between {MIN_DESIRED_RETENTION:.0%} and "
+                f"{MAX_DESIRED_RETENTION:.0%}",
+            )
+    if not repo.set_desired_retention(uid, deck_id, new_val):
+        raise HTTPException(404, "deck not found")
     return responses.redirect(request, f"/deck/{name}")
 
 

@@ -423,6 +423,37 @@ class DeckRepo:
             )
             return cur.rowcount > 0
 
+    # ---- per-deck FSRS retention override -----------------------------
+
+    def get_desired_retention(self, user_id: str, deck_id: int) -> float | None:
+        """Read the deck's retention override, if any. NULL means
+        "use the user-level default" — callers should not substitute
+        a fallback at the read layer; resolution happens in
+        ReviewRepo.record so the deck/user/algorithm order stays in
+        one place.
+        """
+        with cursor() as c:
+            row = c.execute(
+                "SELECT desired_retention FROM decks WHERE id = ? AND user_id = ?",
+                (deck_id, user_id),
+            ).fetchone()
+        if not row:
+            return None
+        val = row["desired_retention"]
+        return float(val) if val is not None else None
+
+    def set_desired_retention(self, user_id: str, deck_id: int, retention: float | None) -> bool:
+        """Set (or clear with None) the deck's retention override.
+        Caller clamps to [MIN, MAX] per prep.domain.srs constants.
+        Returns True if a row was updated (i.e. the deck exists and
+        belongs to the user)."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE decks SET desired_retention = ? WHERE id = ? AND user_id = ?",
+                (retention, deck_id, user_id),
+            )
+            return cur.rowcount > 0
+
 
 class QuestionRepo:
     """Read/write access to the `questions` table."""

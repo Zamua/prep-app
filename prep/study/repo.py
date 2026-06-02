@@ -517,15 +517,31 @@ class ReviewRepo:
                 fsrs_state=row["fsrs_state"] or 1,
                 last_review=last_review,
             )
-            # User's chosen FSRS desired-retention overrides the
-            # algorithm default (0.90). Cheap one-column lookup; we're
-            # already inside the same transaction.
+            # Resolve effective FSRS desired-retention:
+            #   1. deck-level override (decks.desired_retention)
+            #   2. user-level default (users.desired_retention)
+            #   3. algorithm default (0.90, applied inside schedule_review)
+            # Single combined query — both columns are NULL by default
+            # so this stays cheap even on installs that haven't picked
+            # any custom retention.
             ret_row = c.execute(
-                "SELECT desired_retention FROM users WHERE tailscale_login = ?",
-                (user_id,),
+                """SELECT d.desired_retention AS deck_ret,
+                          u.desired_retention AS user_ret
+                     FROM questions q
+                     JOIN decks d ON d.id = q.deck_id
+                     JOIN users u ON u.tailscale_login = q.user_id
+                    WHERE q.id = ?""",
+                (qid,),
             ).fetchone()
-            user_retention = ret_row["desired_retention"] if ret_row else None
-            scheduled = schedule_review(state, verdict, now=ts, desired_retention=user_retention)
+            if ret_row is not None:
+                effective_retention = ret_row["deck_ret"]
+                if effective_retention is None:
+                    effective_retention = ret_row["user_ret"]
+            else:
+                effective_retention = None
+            scheduled = schedule_review(
+                state, verdict, now=ts, desired_retention=effective_retention
+            )
             interval_minutes = max(1, scheduled.interval_seconds // 60)
             next_due_iso = scheduled.next_due.isoformat()
             c.execute(

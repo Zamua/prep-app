@@ -58,6 +58,15 @@
   max-width: var(--measure-tight);
   margin: 0 0 2.5rem;
 }
+/* Secondary lede — used under the primary lede on settings pages
+ * to clarify scope (e.g. "this is the default; per-deck overrides
+ * live elsewhere"). Smaller, dimmer, less spacing so it reads as
+ * an aside, not a co-equal pitch. */
+.settings-lede-secondary {
+  font-size: 0.93rem;
+  color: var(--ink-mute);
+  margin: -1.6rem 0 2rem;
+}
 
 .section-eyebrow {
   display: flex;
