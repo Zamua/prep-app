@@ -72,18 +72,38 @@
   font-size: 0.82rem;
   color: var(--ink-mute);
 }
+/* Group eyebrow ("SETTINGS" / "ACTIVITY") above each cluster of
+ * links in the popover. Smaller caps than the section-eyebrow used
+ * on settings pages — popover is denser, the eyebrow needs to read
+ * as a list label without dominating. */
+.user-group-eyebrow {
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-style: italic;
+  color: var(--ink-mute);
+  margin: 0.85rem 0 0.2rem;
+}
+/* First eyebrow (right under the dashed identity rule) gets a touch
+ * less top margin so the popover stays compact. */
+.user-name + .user-login + .user-group-eyebrow,
+.user-login + .user-group-eyebrow {
+  margin-top: 0.7rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--hairline);
+}
+
 .user-links {
   list-style: none;
-  margin: 0.55rem 0 0;
-  padding: 0.55rem 0 0;
-  border-top: 1px dashed var(--hairline);
+  margin: 0;
+  padding: 0;
   display: grid;
-  gap: 0.35rem;
+  gap: 0.15rem;
 }
 .user-links li { margin: 0; }
 .user-links a {
   display: block;
-  padding: 0.45rem 0;
+  padding: 0.4rem 0 0.4rem 0.25rem;
   font-style: italic;
   font-size: 0.92rem;
   color: var(--ink-soft);
@@ -92,14 +112,12 @@
 }
 .user-links a:hover { color: var(--quill); }
 
-.user-link-divider {
-  height: 1px;
-  background: var(--hairline);
-  margin: 0.25rem 0;
-  list-style: none;
+/* Sign-out lives in its own .user-links block under a solid hairline
+ * so it visually separates from the Activity group above it. */
+.user-links-signout {
+  margin-top: 0.7rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--hairline);
 }
-
-.user-link-signout {
-  color: var(--ink-soft);
-}
-.user-link-signout:hover { color: var(--accent, var(--quill)); }
+.user-link-signout { color: var(--ink-mute); }
+.user-link-signout:hover { color: var(--quill); }

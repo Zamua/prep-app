@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock 2 · grouped · profile popover</title>
+<link rel="stylesheet" href="/prep-staging/static/css/index.css">
+<style>
+  body { background: var(--bg); color: var(--ink); font-family: var(--serif); margin: 0; padding: 0; min-height: 100vh; }
+  .mock-banner { background: var(--quill); color: var(--paper); padding: 0.4rem 0.75rem; font-size: 0.78rem; font-style: italic; }
+  .frame { max-width: 430px; margin: 0 auto; padding: 1.25rem 1.5rem 4rem; }
+  .masthead { display: flex; align-items: baseline; justify-content: space-between; padding-block: 0.85rem 0.9rem; border-bottom: 1px solid var(--hairline); margin-bottom: 2rem; }
+  .brand { font-family: var(--serif); display: inline-flex; gap: 0.55rem; align-items: baseline; }
+  .brand-mark { font-weight: 600; font-size: 1.6rem; line-height: 1; width: 1.6rem; height: 1.6rem; text-align: center; border: 1px solid var(--ink); border-radius: 4px; padding: 0 0.2em; color: var(--paper); background: var(--ink); font-style: italic; }
+  .brand-word { font-size: 0.92rem; letter-spacing: 0.04em; color: var(--ink-soft); }
+  .brand-word em { color: var(--ink-mute); font-style: italic; }
+
+  .popover-anchor { position: relative; }
+  .chip { width: 2.1rem; height: 2.1rem; border-radius: 50%; background: var(--quill); color: var(--paper); font-family: var(--serif); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
+
+  .popover { position: absolute; top: 2.6rem; right: 0; width: 18rem; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 0.95rem 1rem; z-index: 100; }
+  .popover .name { font-size: 0.95rem; color: var(--ink); font-style: italic; margin: 0; }
+  .popover .login { font-size: 0.78rem; color: var(--ink-mute); margin: 0.05rem 0 0.85rem; padding-bottom: 0.7rem; border-bottom: 1px dashed var(--hairline); font-family: var(--mono); }
+
+  .group-eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-style: italic;
+    margin: 0.6rem 0 0.25rem;
+  }
+  .group-eyebrow:first-of-type { margin-top: 0; }
+
+  .links { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.1rem; }
+  .links li { margin: 0; }
+  .links a { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; padding-inline-start: 0.4rem; font-style: italic; font-size: 0.92rem; color: var(--ink-soft); text-decoration: none; }
+  .links a:hover { color: var(--ink); }
+  .links .arrow { color: var(--ink-mute); font-style: normal; }
+  .badge { background: var(--quill); color: var(--paper); border-radius: 999px; padding: 0.08rem 0.45rem; font-size: 0.7rem; font-style: normal; font-weight: 500; margin-inline-start: 0.4rem; }
+
+  .signout-row { margin-top: 0.6rem; padding-top: 0.55rem; border-top: 1px solid var(--hairline); }
+  .signout { color: var(--ink-mute) !important; }
+  .signout:hover { color: var(--quill) !important; }
+  .below { color: var(--ink-mute); font-style: italic; font-size: 0.9rem; margin: 2rem 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="mock-banner">Mock 2 · labeled groups · most explicit</div>
+<div class="frame">
+  <header class="masthead">
+    <a class="brand" href="#">
+      <span class="brand-mark">P</span>
+      <span class="brand-word">Prep <em>· a commonplace book</em></span>
+    </a>
+    <div class="popover-anchor">
+      <span class="chip">Z</span>
+      <div class="popover" role="menu">
+        <p class="name">Zamua Nasrawt</p>
+        <p class="login">zamua2012@gmail.com</p>
+
+        <p class="group-eyebrow">Settings</p>
+        <ul class="links">
+          <li><a href="#">AI agent <span class="arrow">→</span></a></li>
+          <li><a href="#">Scheduling <span class="arrow">→</span></a></li>
+          <li><a href="#">Editor <span class="arrow">→</span></a></li>
+          <li><a href="#">Notifications <span class="arrow">→</span></a></li>
+          <li><a href="#">API tokens <span class="arrow">→</span></a></li>
+          <li><a href="#">Account <span class="arrow">→</span></a></li>
+        </ul>
+
+        <p class="group-eyebrow">Activity</p>
+        <ul class="links">
+          <li><a href="#">Notification log <span class="badge">153</span> <span class="arrow">→</span></a></li>
+        </ul>
+
+        <ul class="links signout-row">
+          <li><a href="#" class="signout">Sign out <span class="arrow">→</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </header>
+  <p class="below">— page content scrolls below —</p>
+</div>
+</body>
+</html>
