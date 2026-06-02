@@ -82,9 +82,13 @@ def is_available_for(user_id: str | None) -> bool:
         if shadowed:
             return True
     else:
-        from prep.agent import status as _status
+        # `from prep.agent import status as _status` would resolve to the
+        # function (it shadows the submodule in this package's namespace);
+        # use importlib to get the actual module and read its live flag.
+        import importlib
 
-        if _status.is_available:
+        _status_mod = importlib.import_module("prep.agent.status")
+        if _status_mod.is_available:
             return True
 
     # Deploy-wide off (e.g. clerk-mode multi-user, no shared token):
