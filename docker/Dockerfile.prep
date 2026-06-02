@@ -160,6 +160,7 @@ COPY --from=builder-bun /src/static/cm-bundle.js ./static/cm-bundle.js
 COPY static/css/ ./static/css/
 COPY static/icons/ ./static/icons/
 COPY static/js/ ./static/js/
+COPY static/mockups/ ./static/mockups/
 COPY static/pwa/ ./static/pwa/
 COPY static/sw.js ./static/sw.js
 

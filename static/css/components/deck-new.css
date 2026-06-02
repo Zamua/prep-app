@@ -49,6 +49,43 @@
   outline-offset: 1px;
   border-color: var(--quill);
 }
+
+/* File input — Safari/Chrome render this as a native widget by default
+ * (white "Choose File" button + filename text) which clashes with the
+ * paper aesthetic. Style the chooser button via ::file-selector-button
+ * to match the rest of the design system, and constrain the row so the
+ * filename text doesn't push the layout sideways. */
+.form-field input[type="file"] {
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  padding: 0.45rem 0.55rem;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.form-field input[type="file"]::file-selector-button {
+  font: inherit;
+  font-size: 0.9rem;
+  margin-inline-end: 0.7rem;
+  padding: 0.35rem 0.85rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.form-field input[type="file"]::file-selector-button:hover {
+  border-color: var(--quill);
+  background: var(--warm);
+}
+.form-field input[type="file"]:focus-visible {
+  outline: 2px solid var(--quill);
+  outline-offset: 1px;
+  border-color: var(--quill);
+}
 .form-field textarea {
   min-height: 12rem;
 }
