@@ -52,7 +52,24 @@ class ProviderInfo:
     default_model: str
 
 
+# PROVIDERS insertion order = display order on /settings/agent.
+# Claude subscription leads: it's the most ergonomic option for users
+# who already have a Max plan (no per-token billing, one CLI command
+# to generate the token).
 PROVIDERS: dict[Provider, ProviderInfo] = {
+    Provider.CLAUDE_SUBSCRIPTION: ProviderInfo(
+        provider=Provider.CLAUDE_SUBSCRIPTION,
+        label="Claude subscription",
+        short_label="claude-sub",
+        # Output of `claude setup-token` — Anthropic OAuth token,
+        # one-year validity, draws from the user's Max-plan credit
+        # pool rather than API-account credits.
+        key_prefixes=("sk-ant-oat01-",),
+        # No web console — the token is generated CLI-side. Link to
+        # the relevant docs page so users know what to run.
+        console_url="https://docs.claude.com/en/docs/agent-sdk/auth#claude-app-tokens",
+        default_model="claude-sonnet-4-6",
+    ),
     Provider.ANTHROPIC_API: ProviderInfo(
         provider=Provider.ANTHROPIC_API,
         label="Anthropic",
@@ -83,19 +100,6 @@ PROVIDERS: dict[Provider, ProviderInfo] = {
         # default. The user can swap to gpt-5, gemini-2.5-pro, etc.
         # later via the model selector (#302).
         default_model="anthropic/claude-sonnet-4.5",
-    ),
-    Provider.CLAUDE_SUBSCRIPTION: ProviderInfo(
-        provider=Provider.CLAUDE_SUBSCRIPTION,
-        label="Claude subscription",
-        short_label="claude-sub",
-        # Output of `claude setup-token` — Anthropic OAuth token,
-        # one-year validity, draws from the user's Max-plan credit
-        # pool rather than API-account credits.
-        key_prefixes=("sk-ant-oat01-",),
-        # No web console — the token is generated CLI-side. Link to
-        # the relevant docs page so users know what to run.
-        console_url="https://docs.claude.com/en/docs/agent-sdk/auth#claude-app-tokens",
-        default_model="claude-sonnet-4-6",
     ),
 }
 

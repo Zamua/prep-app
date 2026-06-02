@@ -142,82 +142,86 @@
   </details>
   {% endfor %}
 
-  {# Subscription path (deploy-shared OAuth token, secondary).
-     HIDDEN on clerk-mode deploys — see prep/agent/selector.py
-     `_subscription_path_allowed()`.  On a multi-user public deploy,
-     a single deploy-wide token would fund every user's AI from the
-     operator's credit pool (the 2026-06-02 incident).  Per-user
-     subscription tokens are tracked as task #326. #}
+  {# Deploy-wide (operator) Claude subscription token. Restyled to
+     match the BYOK accordion rows above so the page reads as a tight
+     list — but lives BELOW the per-user providers because it's an
+     operator-level concern, and rendered with explicit "local-install
+     only" framing so a stray user on a multi-user instance doesn't
+     mistake it for a personal-key field. Visibility:
+       - Hidden entirely on clerk-mode (multi-user public deploys
+         can't have a deploy-wide token; see selector.py
+         `_subscription_path_allowed()` + the 2026-06-02 incident).
+       - Visible on tailscale (single-user local installs), where one
+         operator runs prep on their own box. #}
   {% if auth_provider != 'clerk' %}
-  <details class="agent-panel" {% if not any_byok_connected and status.logged_in %}open{% endif %}>
-    <summary class="section-eyebrow" style="cursor: pointer; list-style: none;">
-      <span>Or: connect a Claude subscription token</span><span class="rule"></span>
+  <p class="section-eyebrow byok-section-divider"><span>Local install only</span><span class="rule"></span></p>
+
+  <details class="byok-row byok-row-deploywide"
+           {% if not any_byok_connected and status.logged_in %}open{% endif %}>
+    <summary class="byok-row-summary">
+      <span class="byok-row-name">Process-wide Claude subscription</span>
+      <span class="byok-row-status" data-state="{{ 'on' if status.logged_in else 'off' }}">
+        {% if status.logged_in %}in-process SDK
+        {% else %}<span class="byok-unset">not connected</span>{% endif %}
+      </span>
+      <span class="byok-row-chev" aria-hidden="true">›</span>
     </summary>
 
-    <p class="form-hint" style="margin-block-start: 0.85rem;">
-      The subscription path uses a single OAuth token shared across all
-      users on this deploy. Suitable when one operator wants to fund
-      everyone's AI usage from their own Max subscription.
-    </p>
+    <div class="byok-row-body">
+      <p class="byok-row-warn">
+        <strong>Heads up:</strong> this configures a single OAuth token at the
+        <em>process</em> level — every user signed in to this prep install
+        will be able to run AI calls against the connected Max subscription.
+        Use it on personal / single-user installs only. For multi-user
+        instances, set each user up with their own Claude subscription
+        token in the row above.
+      </p>
 
-    <p class="agent-status" data-state="{{ 'on' if status.logged_in else 'off' }}" style="margin-block-start: 0.85rem;">
-      {% if status.logged_in %}
-        {{ icon('check-circle', class_='icon icon-inline') }}
-        <strong>Connected</strong> · in-process SDK
-      {% else %}
-        {{ icon('warning-circle', class_='icon icon-inline') }}
-        <strong>Not connected</strong>{% if status.reason and status.kind != 'unconfigured' %} · {{ status.reason }}{% endif %}
-      {% endif %}
-    </p>
+      {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+      {% if flash %}<p class="notify-status" data-kind="ok">{{ flash }}</p>{% endif %}
 
-    {% if error %}
-      <p class="form-error">{{ error }}</p>
-    {% endif %}
-    {% if flash %}
-      <p class="notify-status" data-kind="ok">{{ flash }}</p>
-    {% endif %}
+      {% if not status.logged_in %}
+        <ol class="agent-steps">
+          <li>
+            On any machine where you have Claude Code installed and signed
+            in, run:
+            <pre class="reproduction agent-cmd"><code id="agent-cmd-copy">claude setup-token</code></pre>
+            <button type="button" class="btn btn-quiet btn-tiny" id="copy-agent-cmd">Copy command</button>
+          </li>
+          <li>
+            Authenticate in the browser when it opens, then copy the token
+            it prints to the terminal. Starts with <code>sk-ant-oat01-</code>; valid for a year.
+          </li>
+          <li>
+            Paste the token here and click <strong>Connect</strong>.
+          </li>
+        </ol>
 
-    {% if not status.logged_in %}
-      <ol class="agent-steps">
-        <li>
-          On any machine where you have Claude Code installed and signed
-          in, run:
-          <pre class="reproduction agent-cmd"><code id="agent-cmd-copy">claude setup-token</code></pre>
-          <button type="button" class="btn btn-quiet btn-tiny" id="copy-agent-cmd">Copy command</button>
-        </li>
-        <li>
-          Authenticate in the browser when it opens, then copy the token
-          it prints to the terminal. Starts with <code>sk-ant-oat01-</code>; valid for a year.
-        </li>
-        <li>
-          Paste the token here and click <strong>Connect</strong>.
-        </li>
-      </ol>
-
-      <form method="post" action="{{ _root }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
-        <label class="form-field byok-key-field">
-          <span class="form-label">Token</span>
-          <div class="byok-key-input">
-            <input type="password" name="token" required spellcheck="false"
-                   autocomplete="off" autocapitalize="off" autocorrect="off"
-                   placeholder="sk-ant-oat01-…">
-            <button type="button" class="byok-key-toggle" aria-label="Show token" data-state="hidden">
-              {{ icon('eye', class_='icon icon-inline byok-key-eye-show') }}
-              {{ icon('eye-slash', class_='icon icon-inline byok-key-eye-hide') }}
-            </button>
+        <form method="post" action="{{ _root }}/settings/agent/connect" class="agent-connect-form" autocomplete="off">
+          <label class="form-field byok-key-field">
+            <span class="form-label">Process-wide token</span>
+            <div class="byok-key-input">
+              <input type="password" name="token" required spellcheck="false"
+                     autocomplete="off" autocapitalize="off" autocorrect="off"
+                     placeholder="sk-ant-oat01-…">
+              <button type="button" class="byok-key-toggle" aria-label="Show token" data-state="hidden">
+                {{ icon('eye', class_='icon icon-inline byok-key-eye-show') }}
+                {{ icon('eye-slash', class_='icon icon-inline byok-key-eye-hide') }}
+              </button>
+            </div>
+          </label>
+          <div class="study-actions byok-row-actions">
+            <button type="submit" class="btn btn-primary">Connect for all users</button>
           </div>
-        </label>
-        <div class="study-actions">
-          <button type="submit" class="btn btn-primary">Connect</button>
-        </div>
-      </form>
-    {% else %}
-      <form method="post" action="{{ _root }}/settings/agent/disconnect" class="agent-disconnect-form" style="margin-block-start: 1.25rem;">
-        <button type="submit" class="btn btn-quiet">Disconnect</button>
-      </form>
-    {% endif %}
+        </form>
+      {% else %}
+        <form method="post" action="{{ _root }}/settings/agent/disconnect" class="agent-disconnect-form">
+          <button type="submit" class="btn btn-quiet">Disconnect process-wide token</button>
+        </form>
+      {% endif %}
+    </div>
   </details>
-  {% endif %}{# end clerk-gated subscription panel #}
+  {% endif %}{# end clerk-gated deploy-wide row #}
 </div>
 
 {# ---- Let-an-agent-use-prep direction: MCP setup ---- #}
