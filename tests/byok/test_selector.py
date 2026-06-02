@@ -86,6 +86,63 @@ def test_byok_lookup_failure_does_not_break_other_users(monkeypatch, initialized
     assert isinstance(agent, ClaudeAgentSdkAdapter)
 
 
+def test_subscription_path_blocked_on_clerk_mode(monkeypatch, initialized_db):
+    """Cut 1: a stray CLAUDE_CODE_OAUTH_TOKEN on a multi-user clerk
+    deploy must NOT silently fund every user's AI from the operator's
+    Max credit pool (the 2026-06-02 incident on prepcards.app).
+    Gating happens in _subscription_path_allowed(); when off, the
+    selector falls all the way through to noop."""
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-leftover-from-local-dev")
+    monkeypatch.setenv("PREP_AUTH_MODE", "clerk")
+
+    agent = selector.agent_for_user("random-clerk-user@example.com")
+    assert agent.__class__.__name__ == "_NoopAgent"
+
+
+def test_subscription_byok_builds_sdk_adapter_with_bound_token(
+    monkeypatch, initialized_db, _byok_master
+):
+    """Cut 2: a per-user oat01 token stored as CLAUDE_SUBSCRIPTION must
+    materialize as ClaudeAgentSdkAdapter with the user's token bound,
+    so the SDK sees it via options.env instead of process env. This
+    is what makes the multi-user case concurrency-safe."""
+    uid = "sub-byok@example.com"
+    UserRepo().upsert(external_id=uid, email=uid)
+    user_token = "sk-ant-oat01-pretend-this-came-from-claude-setup-token"
+    BYOKRepo().store(user_id=uid, provider=Provider.CLAUDE_SUBSCRIPTION, secret=user_token)
+
+    agent = selector.agent_for_user(uid)
+    assert isinstance(agent, ClaudeAgentSdkAdapter)
+    # Token is bound to the adapter instance, not lifted into os.environ.
+    assert agent._token == user_token
+    import os as _os
+
+    assert _os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") is None
+
+
+def test_subscription_byok_wins_over_anthropic_api_by_default(
+    monkeypatch, initialized_db, _byok_master
+):
+    """Cut 2 precedence: when a user has both a sk-ant-oat01 (flat-rate
+    subscription pool) and a sk-ant-api03 (per-token metered API key)
+    configured, default to subscription so they don't get surprised
+    by metered API charges. Explicit active_byok_provider still wins."""
+    uid = "sub-vs-api@example.com"
+    UserRepo().upsert(external_id=uid, email=uid)
+    repo = BYOKRepo()
+    repo.store(user_id=uid, provider=Provider.ANTHROPIC_API, secret="sk-ant-api03-metered")
+    repo.store(user_id=uid, provider=Provider.CLAUDE_SUBSCRIPTION, secret="sk-ant-oat01-flatrate")
+
+    agent = selector.agent_for_user(uid)
+    assert isinstance(agent, ClaudeAgentSdkAdapter)
+    assert agent._token == "sk-ant-oat01-flatrate"
+
+    # Explicit choice flips it back to the API key.
+    UserRepo().set_active_byok_provider(uid, Provider.ANTHROPIC_API.value)
+    flipped = selector.agent_for_user(uid)
+    assert flipped.__class__.__name__ == "AnthropicApiAdapter"
+
+
 def test_factory_override_short_circuits_selection(initialized_db):
     """Tests can inject any adapter via set_user_agent_factory and
     the selector hands it back regardless of DB/env state."""

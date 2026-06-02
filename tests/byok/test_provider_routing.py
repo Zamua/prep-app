@@ -32,6 +32,7 @@ def _byok_master(monkeypatch):
     "secret, expected",
     [
         ("sk-ant-api03-abcdef", Provider.ANTHROPIC_API),
+        ("sk-ant-oat01-abcdef", Provider.CLAUDE_SUBSCRIPTION),
         ("sk-or-v1-abcdef1234", Provider.OPENROUTER_API),
         ("sk-proj-abcdef1234", Provider.OPENAI_API),
         ("sk-abcdef1234", Provider.OPENAI_API),

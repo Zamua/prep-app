@@ -83,12 +83,15 @@ def set_user_agent_factory(fn: Callable[[str | None], AgentPort] | None) -> None
 
 
 # Provider precedence — when a user has BYOK keys for multiple
-# providers, the first in this list wins. Order chosen so the
-# narrowest / most-specific provider beats the generic chat-completions
-# providers (OpenRouter routes through Anthropic anyway, so direct
-# Anthropic when available; then OpenRouter as the multi-vendor router;
-# then OpenAI as the fallback).
+# providers and hasn't set an explicit active choice, the first in
+# this list wins. CLAUDE_SUBSCRIPTION first: it draws from the
+# user's flat-rate Max-plan credit pool (no per-token surprise
+# charges), so when a user configures both subscription + API key
+# we'd rather burn the subscription quota by default. ANTHROPIC_API
+# second (same model surface, just metered). Then OpenRouter as the
+# multi-vendor router, then OpenAI as a fallback.
 _BYOK_PROVIDER_ORDER = (
+    Provider.CLAUDE_SUBSCRIPTION,
     Provider.ANTHROPIC_API,
     Provider.OPENROUTER_API,
     Provider.OPENAI_API,
@@ -112,7 +115,36 @@ def _build_byok_adapter(provider: Provider, secret: str) -> AgentPort:
         from prep.agent.openai_api import OpenAIAdapter
 
         return OpenAIAdapter(secret)
+    if provider is Provider.CLAUDE_SUBSCRIPTION:
+        # Same SDK adapter as the deploy-wide path, but with the
+        # user's token bound at construction so it's injected via
+        # ClaudeAgentOptions.env (per-subprocess) instead of read
+        # from process env. Concurrency-safe across users.
+        from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
+
+        return ClaudeAgentSdkAdapter(token=secret)
     raise ValueError(f"unsupported BYOK provider: {provider}")
+
+
+def _subscription_path_allowed() -> bool:
+    """Is the deploy-wide subscription OAuth token a legal fallback?
+
+    YES on single-user local installs (Tailscale / fake providers) —
+    one person operates the deploy AND consumes the AI; the token
+    funds their own use.
+
+    NO on multi-user public deploys (Clerk mode) — every signup would
+    silently consume the operator's Anthropic credit pool without
+    knowing it. After the 2026-06-02 incident on prepcards.app we
+    hard-gate the subscription path off for `PREP_AUTH_MODE=clerk`,
+    even if `CLAUDE_CODE_OAUTH_TOKEN` is somehow set.
+
+    See also: prep/agent/routes.py — the /settings/agent/connect POST
+    refuses to save a token under the same condition; settings_agent.html
+    doesn't render the connect form. Defense in depth: even if those
+    surfaces were bypassed, this guard makes the path inert.
+    """
+    return (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower() != "clerk"
 
 
 def agent_for_user(user_id: str | None) -> AgentPort:
@@ -120,8 +152,10 @@ def agent_for_user(user_id: str | None) -> AgentPort:
 
     Selection order (first hit wins):
       1. Per-user BYOK key (Anthropic → OpenRouter → OpenAI in order)
-      2. Deploy-wide subscription OAuth token
-         (`CLAUDE_CODE_OAUTH_TOKEN` env or token file)
+      2. Deploy-wide subscription OAuth token (single-user local
+         installs only — `_subscription_path_allowed()` returns False
+         on `PREP_AUTH_MODE=clerk` to keep the operator's credit pool
+         from funding random signups on a public deploy)
       3. `_NoopAgent` whose `.run()` raises AgentUnavailable
 
     `user_id` may be None for system-initiated calls (none today;
@@ -171,8 +205,12 @@ def agent_for_user(user_id: str | None) -> AgentPort:
             # user.
             logger.exception("agent: BYOK lookup failed for user %s; falling through", user_id)
 
-    # 2. Subscription OAuth token — same path as before BYOK landed.
-    if (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip():
+    # 2. Deploy-wide subscription OAuth token — single-user local installs
+    #    only. `_subscription_path_allowed()` returns False on clerk-mode
+    #    deploys so a stray CLAUDE_CODE_OAUTH_TOKEN can't silently fund
+    #    every signup from the operator's credit pool (the 2026-06-02
+    #    incident on prepcards.app).
+    if _subscription_path_allowed() and (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip():
         from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
 
         return ClaudeAgentSdkAdapter()

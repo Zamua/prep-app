@@ -57,9 +57,19 @@ logger = logging.getLogger(__name__)
 class ClaudeAgentSdkAdapter(AgentPort):
     """`AgentPort` implementation using `claude_agent_sdk.query`.
 
-    Stateless — safe to share one instance across the process. The
-    SDK manages its own auth state (env var) per call.
+    Two construction modes:
+      - `ClaudeAgentSdkAdapter()` — no bound token; relies on
+        `CLAUDE_CODE_OAUTH_TOKEN` in the process env. This is the
+        deploy-wide path used by single-user local installs.
+      - `ClaudeAgentSdkAdapter(token=...)` — explicit per-user token,
+        injected into the SDK subprocess via `ClaudeAgentOptions.env`
+        without mutating os.environ. Concurrency-safe across users
+        sharing the process; this is what the per-user subscription
+        BYOK provider uses on multi-user deploys.
     """
+
+    def __init__(self, token: str | None = None):
+        self._token: str | None = (token or "").strip() or None
 
     async def run(
         self,
@@ -86,10 +96,10 @@ class ClaudeAgentSdkAdapter(AgentPort):
                 "claude-agent-sdk not installed; run `uv sync` to pull it"
             ) from e
 
-        # Auth precheck. The SDK will raise its own auth error if this
-        # is missing, but surface a sharper error so the settings page
-        # can prompt the user to paste a `claude setup-token`.
-        if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        # Resolve effective token: bound (per-user BYOK) wins over
+        # process env (deploy-wide single-user path).
+        effective_token = self._token or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
+        if not effective_token:
             raise AgentUnavailable(
                 "CLAUDE_CODE_OAUTH_TOKEN not set — run `claude setup-token` and paste"
             )
@@ -97,9 +107,13 @@ class ClaudeAgentSdkAdapter(AgentPort):
         chosen_model = model or DEFAULT_MODEL
         chosen_reasoning = reasoning or DEFAULT_REASONING
         # SDK calls it `effort`, not `reasoning` (low | medium | high).
-        # Construct via kwargs so older SDK versions without the field
-        # surface a clean error instead of silently dropping it.
-        options = ClaudeAgentOptions(model=chosen_model, effort=chosen_reasoning)
+        # When a per-user token is bound, pass it via the subprocess
+        # env dict — that scope is per-call (one SDK subprocess per
+        # query) so concurrent users with different tokens never
+        # race. The session-resume code (sdk/internal/session_resume.py)
+        # consults `options.env` before falling back to os.environ.
+        sdk_env = {"CLAUDE_CODE_OAUTH_TOKEN": effective_token} if self._token else {}
+        options = ClaudeAgentOptions(model=chosen_model, effort=chosen_reasoning, env=sdk_env)
 
         text_parts: list[str] = []
         result_msg = None

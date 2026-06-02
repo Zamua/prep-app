@@ -97,8 +97,16 @@
                   autocomplete="off" autocapitalize="off" autocorrect="off"
                   placeholder="{{ p.key_prefixes[0] }}…"></textarea>
         <span class="freetext-hint">
-          Get a key at
-          <a href="{{ p.console_url }}" target="_blank" rel="noopener">{{ p.console_url|replace('https://', '') }}</a>.
+          {% if s.provider == 'claude-subscription' %}
+            Run <code>claude setup-token</code> on a machine where you're
+            signed into Claude, paste the <code>sk-ant-oat01-…</code>
+            output here. Token is valid for a year and bills against your
+            <strong>own</strong> Max subscription pool.
+            <a href="{{ p.console_url }}" target="_blank" rel="noopener">Docs.</a>
+          {% else %}
+            Get a key at
+            <a href="{{ p.console_url }}" target="_blank" rel="noopener">{{ p.console_url|replace('https://', '') }}</a>.
+          {% endif %}
           Encrypted at rest, only used for your own AI calls.
         </span>
       </label>
@@ -119,7 +127,13 @@
   </section>
   {% endfor %}
 
-  {# Subscription path (deploy-shared OAuth token, secondary) #}
+  {# Subscription path (deploy-shared OAuth token, secondary).
+     HIDDEN on clerk-mode deploys — see prep/agent/selector.py
+     `_subscription_path_allowed()`.  On a multi-user public deploy,
+     a single deploy-wide token would fund every user's AI from the
+     operator's credit pool (the 2026-06-02 incident).  Per-user
+     subscription tokens are tracked as task #326. #}
+  {% if auth_provider != 'clerk' %}
   <details class="agent-panel" {% if not any_byok_connected and status.logged_in %}open{% endif %}>
     <summary class="section-eyebrow" style="cursor: pointer; list-style: none;">
       <span>Or: connect a Claude subscription token</span><span class="rule"></span>
@@ -182,6 +196,7 @@
       </form>
     {% endif %}
   </details>
+  {% endif %}{# end clerk-gated subscription panel #}
 </div>
 
 {# ---- Let-an-agent-use-prep direction: MCP setup ---- #}

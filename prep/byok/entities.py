@@ -23,6 +23,12 @@ class Provider(str, Enum):
     ANTHROPIC_API = "anthropic-api"
     OPENAI_API = "openai-api"
     OPENROUTER_API = "openrouter-api"
+    # Claude subscription OAuth token from `claude setup-token`. NOT
+    # an Anthropic API key — different prefix, different endpoint,
+    # different billing pool (Max subscription credits instead of
+    # API account credits). Stored per-user and injected into the
+    # SDK subprocess at call time; see prep/agent/sdk_adapter.py.
+    CLAUDE_SUBSCRIPTION = "claude-subscription"
 
 
 @dataclass(frozen=True)
@@ -78,6 +84,19 @@ PROVIDERS: dict[Provider, ProviderInfo] = {
         # later via the model selector (#302).
         default_model="anthropic/claude-sonnet-4.5",
     ),
+    Provider.CLAUDE_SUBSCRIPTION: ProviderInfo(
+        provider=Provider.CLAUDE_SUBSCRIPTION,
+        label="Claude subscription",
+        short_label="claude-sub",
+        # Output of `claude setup-token` — Anthropic OAuth token,
+        # one-year validity, draws from the user's Max-plan credit
+        # pool rather than API-account credits.
+        key_prefixes=("sk-ant-oat01-",),
+        # No web console — the token is generated CLI-side. Link to
+        # the relevant docs page so users know what to run.
+        console_url="https://docs.claude.com/en/docs/agent-sdk/auth#claude-app-tokens",
+        default_model="claude-sonnet-4-6",
+    ),
 }
 
 
@@ -85,15 +104,22 @@ def provider_for_key(secret: str) -> Provider | None:
     """Return the provider whose key-prefix matches `secret`, or None.
 
     Disambiguates the OpenAI broad `sk-` prefix from Anthropic's
-    `sk-ant-` and OpenRouter's `sk-or-` — checks the more-specific
-    prefixes first so an Anthropic key never gets routed as OpenAI."""
+    `sk-ant-` and OpenRouter's `sk-or-`, and the Anthropic API key
+    prefix from the Claude subscription OAuth prefix (both start with
+    `sk-ant-`). Most-specific prefix wins."""
     secret = (secret or "").strip()
     if not secret:
         return None
-    # Specific-before-generic: Anthropic and OpenRouter both technically
-    # start with "sk-" too. Iterate in a defined order and the OpenAI
-    # broad match falls through.
-    for p in (Provider.ANTHROPIC_API, Provider.OPENROUTER_API, Provider.OPENAI_API):
+    # Specific-before-generic. CLAUDE_SUBSCRIPTION's `sk-ant-oat01-`
+    # is more specific than ANTHROPIC_API's `sk-ant-api03-`, but both
+    # share the `sk-ant-` parent — list the subscription provider
+    # first so oat01 tokens never get routed as API keys.
+    for p in (
+        Provider.CLAUDE_SUBSCRIPTION,
+        Provider.ANTHROPIC_API,
+        Provider.OPENROUTER_API,
+        Provider.OPENAI_API,
+    ):
         for prefix in PROVIDERS[p].key_prefixes:
             if secret.startswith(prefix):
                 # Belt-and-suspenders: don't classify a `sk-ant-` key

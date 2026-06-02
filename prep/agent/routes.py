@@ -229,7 +229,30 @@ def settings_agent_view(request: Request, user: dict = Depends(current_user)):
 async def settings_agent_connect(request: Request, user: dict = Depends(current_user)):
     """Persist a `claude setup-token` value to prep-data + activate it
     in-process. Post-SDK migration: no HTTP round-trip to a separate
-    container — token storage is fully prep-side."""
+    container — token storage is fully prep-side.
+
+    HARD-GATED to non-clerk deploys. A clerk-mode deploy is multi-user;
+    a single deploy-wide token would fund every signup's AI usage from
+    the operator's Anthropic credit pool (the 2026-06-02 incident on
+    prepcards.app). Per-user subscription tokens are tracked separately
+    as task #326."""
+    if (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower() == "clerk":
+        # Use byok_error (not error) — `error` only renders inside the
+        # subscription <details> panel, which is hidden on clerk mode.
+        # byok_error is rendered above the BYOK provider sections so the
+        # user actually sees the refusal.
+        return _render_settings(
+            request,
+            user,
+            byok_error=(
+                "Deploy-wide subscription tokens are disabled on multi-user "
+                "deploys. Add a personal API key on this page instead "
+                "(Anthropic, OpenAI, OpenRouter, or your own Claude "
+                "subscription token via the new BYOK section)."
+            ),
+            status_code=403,
+        )
+
     from prep.agent import token_store
 
     form = await request.form()
