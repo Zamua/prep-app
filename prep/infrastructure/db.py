@@ -610,3 +610,19 @@ def init() -> None:
         ucols2 = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
         if "desired_retention" not in ucols2:
             c.execute("ALTER TABLE users ADD COLUMN desired_retention REAL")
+
+        # 20. Trivia decks never needed a `cards` row — their queue lives
+        #     in `trivia_queue` — but QuestionRepo.add() used to create
+        #     one unconditionally. The result: orphaned rows that the
+        #     index page's due-count query happily summed, inflating the
+        #     "X due" badge on trivia decks (audit 2026-06-02).
+        #     One-shot cleanup; idempotent because new trivia inserts
+        #     post-fix don't create cards rows.
+        c.execute(
+            """DELETE FROM cards
+                WHERE question_id IN (
+                    SELECT q.id FROM questions q
+                      JOIN decks d ON d.id = q.deck_id
+                     WHERE COALESCE(d.deck_type, 'srs') = 'trivia'
+                )"""
+        )

@@ -6,16 +6,12 @@
 //	             idempotency via deck_id+normalized prompt).
 //	DONE / FAILED — terminal.
 //
-// The earlier flow walked the user through a plan-review step (claude
-// sketches an outline; user replans/accepts/rejects) before expanding
-// each item with a per-card claude call. That added latency and a
-// gating UX that wasn't pulling its weight — the user wants to type
-// a topic and get a deck back. The plan/expand activities + the
-// trivia feedback/accept/reject signals are still registered but
-// unused by this workflow; left in place rather than deleted so the
-// signal endpoints don't break for any in-flight workflow runs from
-// the previous shape. They're dead code from this workflow's POV
-// and can be removed in a follow-up.
+// The SRS plan-first flow (claude sketches an outline; user
+// replans/accepts/rejects before per-card expansion) deliberately
+// doesn't apply here — trivia users want to type a topic and get a
+// deck back. A previous comment in this file claimed leftover
+// trivia plan/feedback signals "still registered but unused";
+// grepping shows they don't exist anywhere in the codebase.
 //
 // Progress query exposes Status + Total + GeneratedCount + Inserted
 // so the polling page renders a real progress bar.

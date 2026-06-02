@@ -35,13 +35,10 @@ _TICK_SECONDS = 300  # 5 minutes
 _WHEN_READY_DEBOUNCE_SECONDS = 4 * 60 * 60  # don't re-fire within 4h
 
 
-def _in_quiet_hours(local_hour: int, quiet_start: int, quiet_end: int) -> bool:
-    if quiet_start == quiet_end:
-        return False
-    if quiet_start < quiet_end:
-        return quiet_start <= local_hour < quiet_end
-    # Wraps midnight (e.g., 22..8): quiet from start..24 OR 0..end
-    return local_hour >= quiet_start or local_hour < quiet_end
+# Quiet-hours logic moved to prep.notify.quiet_hours so the trivia
+# scheduler can share it; kept the local import shape minimal so the
+# rest of this module reads unchanged.
+from prep.notify.quiet_hours import in_quiet_hours as _in_quiet_hours  # noqa: E402,F401
 
 
 def _digest_body(deck_breakdown: list[tuple[str, int]], total: int) -> str:

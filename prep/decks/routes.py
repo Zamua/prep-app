@@ -506,8 +506,11 @@ def deck_view(
             "trivia": deck_meta,  # template still uses `trivia` for the trivia path
             "deck_meta": deck_meta,
             "trivia_stats": trivia_stats,
-            # next_due is None for trivia-deck questions (no `cards`
-            # row); the truthiness check handles that path implicitly.
+            # Trivia decks no longer create `cards` rows (fix #335);
+            # next_due is None for trivia questions, and the truthiness
+            # check skips them. The deck route also gates trivia from
+            # ever reaching this counting path, but the guard is cheap
+            # and makes the semantics local.
             "due_count": sum(
                 1
                 for c in cards

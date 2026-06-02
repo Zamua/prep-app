@@ -56,6 +56,17 @@
   gap: 0.25rem;
   -webkit-tap-highlight-color: transparent;
 }
+/* The `display: inline-flex` above has higher specificity than the
+ * UA's `[hidden] { display: none }`, so without this explicit
+ * override the button keeps showing even when the JS leaves the
+ * `hidden` attribute on (PWA / standalone mode). Symptom: a visible
+ * "Install app" button in the PWA that no-ops on tap, because the
+ * JS already bailed out via isStandalone() and never bound click
+ * handlers. Same gotcha for the surrounding "·" separator. */
+.colophon-install[hidden],
+.colophon-install-sep[hidden] {
+  display: none;
+}
 .colophon-install:hover {
   color: var(--ink-soft);
   text-decoration: underline;

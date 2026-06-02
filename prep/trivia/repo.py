@@ -285,6 +285,25 @@ class TriviaQueueRepo:
         gap. A brand-new deck (no review yet) becomes 3 fresh; a deck
         with no fresh left becomes 3 review. Never returns more than
         `target_size`; may return zero if the deck is empty.
+
+        ## Two callers, one source of truth
+
+        Called from two places that look like they overlap:
+
+        - **trivia/scheduler.py**, at notification-fire time. Picks
+          the queue so the push payload can carry the full session in
+          the URL (`?cards=<ids>`) and the body can show the first
+          card's prompt. Persists via `sessions.replace_active()` so
+          a tap minutes-or-hours later doesn't re-pick (which would
+          mismatch the notification body).
+        - **trivia/routes.py**, when the user lands on the bare
+          session URL without a `cards` query param (manual nav, or
+          stale notification log entry). If there's an active session
+          it's resumed; only when there's no active session does the
+          route call this and pick fresh.
+
+        So scheduler-time pick is the canonical path; route-time pick
+        is the no-state fallback. Same function, different trigger.
         """
         review_slots = target_size - fresh_target
         with cursor() as c:

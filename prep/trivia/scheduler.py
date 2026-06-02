@@ -99,9 +99,12 @@ def tick(now_utc: datetime) -> None:
     trivia = TriviaQueueRepo()
 
     # Per-user prefs lookup; cached for this tick so we don't re-read
-    # for every deck owned by the same user. Quiet hours apply to
-    # trivia notifications now too (decoupled from SRS when-ready).
+    # for every deck owned by the same user. Quiet-hours logic itself
+    # lives in prep.notify.quiet_hours and is shared with the SRS
+    # scheduler — having two copies was an easy way to drift on a
+    # default change.
     from prep.auth.repo import UserRepo
+    from prep.notify.quiet_hours import should_silence as _should_silence_for_prefs
 
     users = UserRepo()
     prefs_cache: dict[str, dict] = {}
@@ -114,25 +117,7 @@ def tick(now_utc: datetime) -> None:
             except Exception:
                 prefs = {}
             prefs_cache[user_id] = prefs
-        if not prefs.get("quiet_hours_enabled"):
-            return False
-        try:
-            from zoneinfo import ZoneInfo
-
-            tz = ZoneInfo(prefs.get("tz") or "America/New_York")
-        except Exception:
-            from zoneinfo import ZoneInfo
-
-            tz = ZoneInfo("America/New_York")
-        local_hour = now_utc.astimezone(tz).hour
-        start = int(prefs.get("quiet_start_hour", 22))
-        end = int(prefs.get("quiet_end_hour", 8))
-        if start == end:
-            return False
-        if start < end:
-            return start <= local_hour < end
-        # Wraps midnight (22..8).
-        return local_hour >= start or local_hour < end
+        return _should_silence_for_prefs(prefs, now_utc)
 
     for deck in decks.list_trivia_decks():
         try:

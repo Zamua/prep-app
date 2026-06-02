@@ -185,13 +185,20 @@ class DeckRepo:
     def list_summaries(self, user_id: str) -> list[DeckSummary]:
         """All decks owned by user, with total + due counts. Used by
         the index page. Pinned decks float to the top, ordered by
-        most-recently-pinned first; the rest fall through to alpha."""
+        most-recently-pinned first; the rest fall through to alpha.
+
+        `due` is SRS-only — trivia decks have their own per-deck
+        notification cadence, not a per-card due date, so the LEFT
+        JOIN on `cards` is gated to srs decks. Without this gate,
+        orphaned `cards` rows that pre-fix-#335 trivia decks accumulated
+        would inflate the trivia "due" badge on the index page."""
         with cursor() as c:
             rows = c.execute(
                 """
                 SELECT d.id, d.name, d.deck_type, d.pinned_at,
                        COUNT(q.id) AS total,
                        SUM(CASE WHEN cards.next_due <= ? AND COALESCE(q.suspended,0)=0
+                                  AND COALESCE(d.deck_type,'srs') = 'srs'
                                 THEN 1 ELSE 0 END) AS due
                   FROM decks d
                   LEFT JOIN questions q ON q.deck_id = d.id AND q.user_id = d.user_id
@@ -421,7 +428,12 @@ class QuestionRepo:
     """Read/write access to the `questions` table."""
 
     def add(self, user_id: str, deck_id: int, new: NewQuestion) -> int:
-        """Insert a new question + its initial card row, return id."""
+        """Insert a new question. For SRS decks, also seed the FSRS
+        cards row so the next study session can pick it up. Trivia
+        decks track their queue in `trivia_queue` instead, so no
+        cards row is created (an orphan there would inflate the
+        index page's due-count via list_summaries).
+        """
         # `answer` for `multi` may come as a list — store canonically as JSON.
         answer = new.answer
         if isinstance(answer, list):
@@ -454,10 +466,15 @@ class QuestionRepo:
                 ),
             )
             qid = cur.lastrowid
-            c.execute(
-                "INSERT INTO cards (question_id, step, next_due) VALUES (?, 0, ?)",
-                (qid, ts),
-            )
+            deck_type_row = c.execute(
+                "SELECT COALESCE(deck_type, 'srs') AS deck_type FROM decks WHERE id = ?",
+                (deck_id,),
+            ).fetchone()
+            if deck_type_row and deck_type_row["deck_type"] == "srs":
+                c.execute(
+                    "INSERT INTO cards (question_id, step, next_due) VALUES (?, 0, ?)",
+                    (qid, ts),
+                )
             return qid
 
     def update(self, user_id: str, qid: int, new: NewQuestion) -> None:
