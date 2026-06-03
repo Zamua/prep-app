@@ -11,6 +11,25 @@ The columns in order:
 `choices` is newline-joined within the cell (CSV quoting handles
 embedded newlines correctly). Empty cells round-trip as Python None.
 
+## Optional deck-level preamble
+
+Trivia decks carry per-deck config that can't fit in per-card rows
+(notification cadence, the topic prompt, session size). For those, the
+exporter prepends `# key: value` lines BEFORE the CSV header:
+
+    # deck_type: trivia
+    # notification_interval_minutes: 30
+    # topic_prompt: world capitals
+    # trivia_session_size: 3
+    type,topic,prompt,answer,...
+
+The importer strips and parses these on read, then dispatches to the
+right deck-creation path. SRS exports omit the preamble entirely so
+the file is back-compat with pre-preamble readers (and with Anki's
+plain-CSV import, which has no notion of comment lines). Any unknown
+preamble keys are ignored so the format can grow without breaking
+older readers.
+
 This module is the single source of truth for the wire format — the
 public API's `/api/v1/decks/<name>/export.csv` and the settings-page
 "Export deck" button both call into here.
@@ -62,17 +81,88 @@ def _question_to_row(q: Question) -> dict[str, str]:
     }
 
 
+def _build_preamble(user_id: str, deck_id: int) -> str:
+    """Build the optional `# key: value` preamble emitted before the
+    CSV header. Only non-empty for trivia decks today — SRS exports
+    have no deck-level state worth preserving in the file (the FSRS
+    state on individual cards isn't exported either; reimporting
+    always starts at step 0)."""
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        row = c.execute(
+            """SELECT COALESCE(deck_type, 'srs') AS deck_type,
+                      notification_interval_minutes, trivia_session_size,
+                      context_prompt
+                 FROM decks WHERE id = ? AND user_id = ?""",
+            (deck_id, user_id),
+        ).fetchone()
+    if row is None or row["deck_type"] != "trivia":
+        return ""
+    lines = ["# deck_type: trivia"]
+    if row["notification_interval_minutes"] is not None:
+        lines.append(
+            f"# notification_interval_minutes: {int(row['notification_interval_minutes'])}"
+        )
+    if row["trivia_session_size"] is not None:
+        lines.append(f"# trivia_session_size: {int(row['trivia_session_size'])}")
+    if row["context_prompt"]:
+        # Single-line: collapse any embedded newlines so the preamble
+        # stays one-key-per-line. The topic prompt is usually a short
+        # phrase but the column allows long text; trim to keep things
+        # sane on round-trip (the trivia worker uses the prompt at
+        # most a few hundred chars anyway).
+        topic = row["context_prompt"].replace("\n", " ").replace("\r", " ").strip()
+        lines.append(f"# topic_prompt: {topic}")
+    return "\n".join(lines) + "\n"
+
+
 def deck_to_csv(user_id: str, deck_id: int) -> str:
     """Render every question in `deck_id` as a CSV string. Caller is
     responsible for ownership (deck_id is already user-scoped) and
-    for the response Content-Type header."""
+    for the response Content-Type header.
+
+    For trivia decks, prepends a `# key: value` preamble carrying
+    deck-level config so the importer can recreate the deck shape on
+    the other side. SRS decks get no preamble (the file is plain CSV)."""
+    preamble = _build_preamble(user_id, deck_id)
     questions = _questions_for_export(user_id, deck_id)
     buf = io.StringIO()
+    if preamble:
+        buf.write(preamble)
     writer = csv.DictWriter(buf, fieldnames=list(CSV_COLUMNS), extrasaction="ignore")
     writer.writeheader()
     for q in questions:
         writer.writerow(_question_to_row(q))
     return buf.getvalue()
+
+
+def _split_preamble(csv_text: str) -> tuple[dict[str, str], str]:
+    """Pull leading `# key: value` lines off the top of `csv_text`.
+    Returns `(preamble_dict, csv_remainder)`.
+
+    Stops at the first non-`#` non-blank line. Blank lines inside the
+    preamble are skipped silently. Unknown keys are kept in the dict
+    but ignored by the importer — keeps the format forward-compat as
+    new keys land. Values are stripped; keys are lowercased.
+    """
+    preamble: dict[str, str] = {}
+    lines = csv_text.splitlines(keepends=False)
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if not stripped:
+            i += 1
+            continue
+        if stripped.startswith("#"):
+            kv = stripped[1:].strip()
+            if ":" in kv:
+                k, _, v = kv.partition(":")
+                preamble[k.strip().lower()] = v.strip()
+            i += 1
+            continue
+        break
+    return preamble, "\n".join(lines[i:])
 
 
 def _questions_for_export(user_id: str, deck_id: int) -> list[Question]:
@@ -132,6 +222,9 @@ def csv_to_deck(
 ) -> ImportOutcome:
     """Create-or-find a deck, parse the CSV, insert questions.
 
+    - Optional `# key: value` preamble lines before the header carry
+      deck-level metadata (trivia decks use this; SRS exports omit
+      it). Unknown keys are ignored.
     - Header is required (column names map to the `_question_to_row`
       shape). Extra columns are ignored. Missing columns default to
       empty.
@@ -141,11 +234,60 @@ def csv_to_deck(
     - Dedup is per (deck, prompt). Already-present prompts increment
       `skipped_duplicates` without raising. Same shape as the trivia
       batch generator's dedup so the two paths are interchangeable.
+
+    Trivia-specific:
+    - If the preamble says `deck_type: trivia`, the importer creates
+      the deck as type=trivia (with `notification_interval_minutes`,
+      `trivia_session_size`, `context_prompt` from the preamble) and
+      appends each new question to `trivia_queue`.
+    - If a deck with this name already exists with a DIFFERENT type
+      than the preamble declares, the import fails with a clear
+      `errors` entry rather than silently mixing shapes.
     """
-    deck_id = deck_repo.get_or_create(user_id, deck_name)
-    if context_prompt:
+    preamble, csv_text = _split_preamble(csv_text)
+    declared_type = (preamble.get("deck_type") or "srs").lower()
+
+    # Resolve / create the deck, gated by deck_type.
+    existing_id = deck_repo.find_id(user_id, deck_name)
+    if existing_id is not None:
+        existing_type = deck_repo.get_type(user_id, existing_id)
+        existing_type_str = existing_type.value if existing_type else "srs"
+        if existing_type_str != declared_type:
+            return ImportOutcome(
+                deck_id=existing_id,
+                deck_name=deck_name,
+                inserted=0,
+                skipped_duplicates=0,
+                errors=[
+                    f"deck '{deck_name}' already exists as "
+                    f"{existing_type_str!r}; CSV declares {declared_type!r}. "
+                    "Pick a different name or import into a fresh deck."
+                ],
+            )
+        deck_id = existing_id
+    else:
+        if declared_type == "trivia":
+            try:
+                interval = int(preamble.get("notification_interval_minutes", "30"))
+            except (TypeError, ValueError):
+                interval = 30
+            topic = preamble.get("topic_prompt") or context_prompt or ""
+            deck_id = deck_repo.create_trivia(
+                user_id, deck_name, topic=topic, interval_minutes=interval
+            )
+            # Optional session size override.
+            try:
+                if "trivia_session_size" in preamble:
+                    size = int(preamble["trivia_session_size"])
+                    deck_repo.set_trivia_session_size(user_id, deck_id, size)
+            except (TypeError, ValueError):
+                pass
+        else:
+            deck_id = deck_repo.get_or_create(user_id, deck_name)
+
+    if context_prompt and declared_type != "trivia":
         # Only set if the deck is new-ish (no prompt yet) — don't
-        # clobber a real one.
+        # clobber a real one. Trivia handled above via preamble.
         existing_prompt = deck_repo.get_context_prompt(user_id, deck_name)
         if not existing_prompt:
             deck_repo.update_context_prompt(user_id, deck_name, context_prompt)
@@ -217,9 +359,18 @@ def csv_to_deck(
             continue
 
         try:
-            question_repo.add(user_id, deck_id, new)
+            qid = question_repo.add(user_id, deck_id, new)
             existing.add(prompt)
             inserted += 1
+            # Trivia: append to the per-deck queue so the question
+            # becomes pickable. QuestionRepo.add() for trivia decks
+            # skips the FSRS cards row (fix #335) — without an explicit
+            # trivia_queue insert here the imported card would be dead
+            # weight in the questions table.
+            if declared_type == "trivia":
+                from prep.trivia.repo import TriviaQueueRepo
+
+                TriviaQueueRepo().append_card(qid, deck_id)
         except Exception as e:  # noqa: BLE001
             errors.append(f"row {i}: write failed — {e}")
 

@@ -358,6 +358,168 @@ def test_csv_double_export_is_byte_identical(initialized_db: str):
     )
 
 
+def _seed_trivia_deck(initialized_db: str, name: str = "trivia-src") -> tuple[int, list[int]]:
+    """Seed a trivia deck with three short cards + their queue rows.
+    Mirrors what the trivia batch generator would produce in real use.
+    Returns (deck_id, queue-ordered-qids)."""
+    from prep.trivia.repo import TriviaQueueRepo
+
+    deck_repo = DeckRepo()
+    qr = QuestionRepo()
+    deck_id = deck_repo.create_trivia(
+        initialized_db, name, topic="world capitals", interval_minutes=45
+    )
+    deck_repo.set_trivia_session_size(initialized_db, deck_id, 5)
+    tq = TriviaQueueRepo()
+    qids = []
+    for prompt, ans in [
+        ("What is the capital of France?", "Paris"),
+        ("What is the capital of Japan?", "Tokyo"),
+        ("What is the capital of Brazil?", "Brasília"),
+    ]:
+        qid = qr.add(
+            initialized_db,
+            deck_id,
+            NewQuestion(
+                type=QuestionType.SHORT,
+                topic="capitals",
+                prompt=prompt,
+                answer=ans,
+                explanation=f"{ans} is the political and administrative capital.",
+            ),
+        )
+        tq.append_card(qid, deck_id)
+        qids.append(qid)
+    return deck_id, qids
+
+
+def test_csv_trivia_round_trip_preserves_deck_shape_and_queue(initialized_db: str):
+    """Trivia decks round-trip with their full shape: deck_type,
+    notification_interval_minutes, trivia_session_size, the topic
+    prompt, and the trivia_queue order. The CSV preamble carries the
+    deck-level state; the importer reconstructs both the deck and
+    the queue."""
+    from prep.decks.entities import DeckType
+
+    src_deck_id, src_qids = _seed_trivia_deck(initialized_db, "trivia-src")
+    body = deck_to_csv(initialized_db, src_deck_id)
+
+    # The preamble announces it as trivia + carries the per-deck config.
+    assert "# deck_type: trivia" in body
+    assert "# notification_interval_minutes: 45" in body
+    assert "# trivia_session_size: 5" in body
+    assert "# topic_prompt: world capitals" in body
+    # Preamble sits before the CSV header.
+    assert body.index("# deck_type") < body.index("type,topic,prompt")
+
+    out = csv_to_deck(
+        initialized_db,
+        "trivia-dst",
+        body,
+        deck_repo=DeckRepo(),
+        question_repo=QuestionRepo(),
+    )
+    assert out.inserted == 3, f"errors={out.errors}"
+    assert out.errors == []
+
+    # Destination deck has the expected type + per-deck config.
+    deck_repo = DeckRepo()
+    dst_type = deck_repo.get_type(initialized_db, out.deck_id)
+    assert dst_type == DeckType.TRIVIA
+    meta = deck_repo.get_meta(initialized_db, out.deck_id)
+    assert meta.interval_minutes == 45
+    assert meta.session_size == 5
+    assert meta.context_prompt == "world capitals"
+
+    # Per-card content survived (using the same _questions_for_export
+    # helper to bypass the DeckCard projection's missing-explanation
+    # shim).
+    from prep.decks.io import _questions_for_export
+
+    src = _questions_for_export(initialized_db, src_deck_id)
+    dst = _questions_for_export(initialized_db, out.deck_id)
+    assert len(src) == len(dst) == 3
+    src_by_prompt = {q.prompt: q for q in src}
+    dst_by_prompt = {q.prompt: q for q in dst}
+    assert set(src_by_prompt) == set(dst_by_prompt)
+    for prompt, s in src_by_prompt.items():
+        d = dst_by_prompt[prompt]
+        assert s.answer == d.answer
+        assert s.topic == d.topic
+        assert s.explanation == d.explanation
+
+    # trivia_queue rebuilt: every imported question has a queue row,
+    # and the queue order matches the CSV row order (which is the
+    # original export's questions ORDER BY id ASC).
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        rows = c.execute(
+            """SELECT q.prompt FROM trivia_queue tq
+                 JOIN questions q ON q.id = tq.question_id
+                WHERE q.deck_id = ?
+                ORDER BY tq.queue_position ASC""",
+            (out.deck_id,),
+        ).fetchall()
+    queue_prompts = [r["prompt"] for r in rows]
+    src_prompts_in_export_order = [q.prompt for q in src]
+    assert queue_prompts == src_prompts_in_export_order
+
+
+def test_csv_trivia_double_export_is_byte_identical(initialized_db: str):
+    """Trivia version of the SRS double-export test: the preamble +
+    body should reserialize byte-for-byte after a round-trip."""
+    src_deck_id, _ = _seed_trivia_deck(initialized_db, "trivia-double-src")
+    first = deck_to_csv(initialized_db, src_deck_id)
+
+    out = csv_to_deck(
+        initialized_db,
+        "trivia-double-dst",
+        first,
+        deck_repo=DeckRepo(),
+        question_repo=QuestionRepo(),
+    )
+    assert out.errors == []
+    second = deck_to_csv(initialized_db, out.deck_id)
+    assert first == second, (
+        "second trivia export differs from first — preamble or CSV body drifted.\n"
+        f"--- first ---\n{first}\n--- second ---\n{second}"
+    )
+
+
+def test_csv_trivia_import_rejects_type_mismatch(initialized_db: str):
+    """A trivia-preamble CSV imported into an existing SRS deck name
+    should fail with a clear error, not silently mix shapes."""
+    # Create an SRS deck named 'collide'.
+    DeckRepo().get_or_create(initialized_db, "collide")
+    body = "# deck_type: trivia\n# notification_interval_minutes: 30\ntype,topic,prompt,answer\nshort,x,Q,A\n"
+    out = csv_to_deck(
+        initialized_db,
+        "collide",
+        body,
+        deck_repo=DeckRepo(),
+        question_repo=QuestionRepo(),
+    )
+    assert out.inserted == 0
+    assert any("already exists" in e for e in out.errors), out.errors
+
+
+def test_csv_srs_import_rejects_into_existing_trivia_deck(initialized_db: str):
+    """The reverse: a plain SRS CSV imported into an existing trivia
+    deck name should also fail with a clear error."""
+    DeckRepo().create_trivia(initialized_db, "trivia-target", topic="x", interval_minutes=30)
+    body = "type,topic,prompt,answer\nshort,x,Q,A\n"
+    out = csv_to_deck(
+        initialized_db,
+        "trivia-target",
+        body,
+        deck_repo=DeckRepo(),
+        question_repo=QuestionRepo(),
+    )
+    assert out.inserted == 0
+    assert any("already exists" in e for e in out.errors), out.errors
+
+
 def test_csv_import_empty_csv_returns_zero_inserts(initialized_db: str):
     out = csv_to_deck(
         initialized_db,
