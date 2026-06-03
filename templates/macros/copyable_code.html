@@ -1,28 +1,30 @@
-{# Inline block: <code> with a Copy button beside it. Matches the
-   .new-token-value pattern in settings_api.html (the existing
-   `Copy` chrome shipped with BYOK tokens) so all "string the user
-   needs to paste somewhere" surfaces look the same.
+{# Tap-the-code-to-copy chip. The whole block is the copy target —
+   no separate button — so the user has a single big tap zone
+   instead of a tiny icon. Inline flexbox so it hugs the value
+   instead of stretching across the row.
 
    Usage:
      {% import "macros/copyable_code.html" as cc with context %}
      {{ cc.block(deck_name, label='deck name') }}
 
    The `label` is fed into the button's aria-label so screen
-   readers get "Copy deck name" / "Copy account ID" — give it a
-   short descriptor of the thing being copied.
+   readers get "Copy deck name to clipboard" / "Copy account ID
+   to clipboard" — give it a short descriptor of the thing being
+   copied.
 
    The button is wired by static/js/modules/copy-button.js via
    the data-copy-text attribute. No per-page JS needed.
 #}
 {% macro block(value, label='value') %}
-<div class="copyable-code">
-  <code>{{ value }}</code>
-  <button type="button"
-          class="btn btn-quiet btn-tiny copy-btn"
-          data-copy-text="{{ value }}"
-          aria-label="Copy {{ label }}" title="Copy">
-    <span class="copy-btn-default">{{ icon('copy', class_='icon icon-inline') }}</span>
-    <span class="copy-btn-done">{{ icon('check', class_='icon icon-inline') }}</span>
-  </button>
-</div>
+<button type="button"
+        class="copyable-code"
+        data-copy-text="{{ value }}"
+        aria-label="Copy {{ label }} to clipboard"
+        title="Tap to copy">
+  <span class="copyable-code-icon copyable-code-default">{{ icon('copy', class_='icon icon-inline') }}</span>
+  <span class="copyable-code-icon copyable-code-done">{{ icon('check', class_='icon icon-inline') }}</span>
+  <span class="copyable-code-value">{{ value }}</span>
+  <span class="copyable-code-hint copyable-code-default">tap to copy</span>
+  <span class="copyable-code-hint copyable-code-done">copied</span>
+</button>
 {% endmacro %}

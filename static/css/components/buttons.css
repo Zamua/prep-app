@@ -188,41 +188,62 @@
   margin-left: 0.4rem;
 }
 
-/* Copyable-code block — <code> + a Copy button beside it, used by
- * the macros/copyable_code.html macro for any "paste this exact
- * string somewhere" surface (delete confirmations, account ID).
- * Mirrors the .new-token-value chrome from BYOK so all such
- * affordances look the same. */
+/* Copyable-code chip — the entire chip is a button. One tap copies
+ * the value. Sits inline at max-content width so it never stretches
+ * across the dialog. Driven by static/js/modules/copy-button.js
+ * via the [data-copy-text] hook; on success the `.is-copied` class
+ * toggles the default icon + hint for their "done" counterparts. */
 .copyable-code {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 0.7rem;
+  gap: 0.4rem;
+  padding: 0.32em 0.6em;
+  margin: 0.5rem 0 0.7rem;
   background: var(--tint);
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  margin-block: 0.5rem 0.7rem;
-}
-.copyable-code code {
-  flex: 1;
+  border: 1px dashed var(--hairline);
+  border-radius: 6px;
   font-family: var(--mono, monospace);
   font-size: 0.92rem;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.copyable-code:hover {
+  background: color-mix(in srgb, var(--tint) 70%, var(--paper));
+  border-color: var(--rule);
+}
+.copyable-code-icon {
+  display: inline-flex;
+  color: var(--ink-soft);
+}
+.copyable-code-icon .icon-inline {
+  width: 0.95em;
+  height: 0.95em;
+}
+.copyable-code-value {
+  font-family: var(--mono, monospace);
+  letter-spacing: 0;
   word-break: break-all;
-  user-select: all;
 }
-
-/* The Copy button itself — icon-only, swaps copy → check for ~1.5s
- * after a successful copy via copy-button.js's is-copied toggle. */
-.copy-btn .copy-btn-done {
+.copyable-code-hint {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.78em;
+  color: var(--ink-mute);
+  margin-left: 0.15em;
+}
+/* Default/done state swap — `.copyable-code-default` shows when the
+ * chip is idle, `.copyable-code-done` shows for ~1.5s after a tap. */
+.copyable-code-done {
   display: none;
 }
-.copy-btn.is-copied .copy-btn-default {
+.copyable-code.is-copied .copyable-code-default {
   display: none;
 }
-.copy-btn.is-copied .copy-btn-done {
+.copyable-code.is-copied .copyable-code-done {
   display: inline-flex;
 }
-.copy-btn .icon-inline {
-  width: 1em;
-  height: 1em;
+.copyable-code.is-copied .copyable-code-icon {
+  color: var(--accent, var(--ink));
 }
