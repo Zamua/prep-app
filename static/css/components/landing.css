@@ -1,40 +1,141 @@
 /* Landing page — rendered at `/` when no user is signed in.
  *
- * Layout: hero (eyebrow + display + lede + CTA) → demo card (the
- * "what a card looks like" visual hero) → 2x2 benefits grid. The
- * goal is that a brand-new visitor can answer "what is this thing"
- * within 5 seconds without reading a paragraph.
+ * Shape:
+ *   hero  (display headline + lede + primary CTA)
+ *   walkthrough  (three numbered steps with concrete sample artifacts)
+ *   benefits  (2x2 grid)
+ *   cta-band  (dark closing band with second CTA)
+ *
+ * Goal: a brand-new visitor can answer "what is this thing"
+ * within 5 seconds, then see real examples of what cards look like
+ * if they want to scroll. The walkthrough's sample artifacts do the
+ * "show, don't tell" work.
  */
 
 .page-landing .folio {
   padding-block: 2rem 4rem;
 }
 
+/* --- hero --- */
 .landing-hero {
-  margin-block-end: 2rem;
+  margin-block-end: 2.5rem;
+}
+.landing-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 0;
 }
 .landing-cta {
-  display: inline-block;
+  /* let the primary CTA breathe a bit more than a normal btn-primary */
+  padding-block: 0.85rem;
+  padding-inline: 1.6rem;
+  font-size: 1.05rem;
+}
+.landing-cta-aside {
+  color: var(--ink-mute);
+  font-style: italic;
+  font-size: 0.92rem;
+}
+
+/* --- walkthrough --- */
+.landing-walkthrough {
+  margin-block-end: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.2rem;
+}
+.landing-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.landing-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+.landing-step-num {
+  flex: 0 0 2.2rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+.landing-step-h {
+  font-family: var(--serif);
+  font-weight: 450;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  margin: 0;
+}
+.landing-step-lede {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.97rem;
+  line-height: 1.55;
+}
+.landing-step-artifact {
   margin-block-start: 0.5rem;
 }
 
-/* Sample-card visual hero. Echoes the real .study-card chrome so
- * what a visitor sees here is what they'll be looking at as a user;
- * keeps its own selectors to stay decoupled from the study surface. */
-.landing-demo {
-  margin-block-end: 2.5rem;
+/* topic-input artifact (step 1) */
+.landing-topic-input {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0.85rem 1rem 1rem;
+}
+.landing-topic-eyebrow {
+  display: block;
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  margin-bottom: 0.35rem;
+}
+.landing-topic-text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* sample-card stack (step 2) — three demo cards in a column */
+.landing-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
 }
 .landing-demo-card {
   background: var(--paper);
   border: 1px solid var(--rule);
   border-radius: 14px;
-  padding: 1.4rem 1.3rem 1.6rem;
-  box-shadow: 0 4px 16px rgba(50, 30, 10, 0.05);
+  padding: 1.1rem 1.1rem 1.25rem;
+  box-shadow: 0 4px 14px rgba(50, 30, 10, 0.05);
+}
+.landing-demo-type {
+  display: inline-block;
+  font-family: var(--mono, monospace);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent, var(--ink));
+  margin-bottom: 0.55rem;
 }
 .landing-demo-prompt {
-  font-size: 1.08rem;
-  line-height: 1.5;
-  margin: 0 0 1.1rem;
+  font-size: 1.02rem;
+  line-height: 1.45;
+  margin: 0 0 0.9rem;
   color: var(--ink);
 }
 .landing-demo-choices {
@@ -43,25 +144,93 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 .landing-demo-choice {
-  padding: 0.7rem 0.95rem;
+  padding: 0.6rem 0.85rem;
   border: 1px solid var(--hairline);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   color: var(--ink);
 }
 .landing-demo-choice.is-correct {
   background: color-mix(in srgb, var(--right, #5d8c46) 12%, var(--bg));
   border-color: var(--right, #5d8c46);
 }
+.landing-demo-answer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  background: color-mix(in srgb, var(--right, #5d8c46) 10%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--right, #5d8c46) 50%, var(--rule));
+  border-radius: 8px;
+}
+.landing-demo-answer-label {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.landing-demo-answer-value {
+  font-family: var(--mono, monospace);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.landing-demo-code {
+  margin: 0;
+  padding: 0.85rem 0.95rem;
+  background: var(--tint);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  font-family: var(--mono, monospace);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  color: var(--ink);
+}
+.landing-demo-code code {
+  font-family: inherit;
+  background: transparent;
+  padding: 0;
+}
 
-/* 2x2 benefits grid. On narrow viewports it folds to a single column.
- * Each tile is an eyebrow + paragraph — same shape as the previous
- * landing-tile, just smaller because the demo card is doing the heavy
- * "what is this" lift now. */
+/* due-strip artifact (step 3) — looks like the real index "due now" list */
+.landing-due-strip {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.landing-due-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.95rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--rule) 50%, transparent);
+}
+.landing-due-row:last-child { border-bottom: none; }
+.landing-due-name {
+  font-family: var(--serif);
+  color: var(--ink);
+}
+.landing-due-count {
+  font-family: var(--mono, monospace);
+  font-size: 0.82rem;
+  color: var(--accent, var(--ink));
+}
+.landing-due-row-quiet .landing-due-count {
+  color: var(--ink-mute);
+  font-style: italic;
+  font-family: var(--serif);
+}
+
+/* --- benefits --- */
 .landing-benefits-grid {
   list-style: none;
   padding: 0;
@@ -91,9 +260,48 @@
   color: var(--ink-soft);
 }
 
+/* --- closing CTA band --- */
+.landing-cta-band {
+  margin-block-start: 3rem;
+  padding: 2rem 1.5rem 2.2rem;
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 16px;
+  text-align: center;
+}
+.landing-cta-band-h {
+  font-family: var(--serif);
+  font-weight: 450;
+  font-size: 1.6rem;
+  margin: 0 0 0.4rem;
+  color: var(--bg);
+}
+.landing-cta-band-lede {
+  margin: 0 0 1.2rem;
+  color: color-mix(in srgb, var(--bg) 70%, var(--ink-mute));
+  font-size: 0.95rem;
+}
+.landing-cta-band-btn {
+  background: var(--bg);
+  color: var(--ink);
+  border: none;
+  padding-block: 0.8rem;
+  padding-inline: 1.6rem;
+  font-size: 1.05rem;
+}
+.landing-cta-band-btn:hover {
+  background: color-mix(in srgb, var(--bg) 85%, var(--accent));
+}
+
 @media (max-width: 480px) {
   .landing-benefits-grid {
     grid-template-columns: 1fr;
+  }
+  .landing-step-h {
+    font-size: 1.25rem;
+  }
+  .landing-cta-band {
+    padding: 1.6rem 1.2rem 1.8rem;
   }
 }
 

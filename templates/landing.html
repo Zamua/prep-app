@@ -17,31 +17,118 @@
   <p class="eyebrow">prep</p>
   <h1 class="display"><em>Remember</em> anything.</h1>
   <p class="lede">
-    A flashcard app that does the scheduling for you. Type what you
-    want to learn — get a deck back. Study a handful of cards a day;
-    the hard ones come back when you'd forget them.
+    A flashcard app that does the scheduling for you. Describe what
+    you want to learn — get a deck back. Study a handful of cards a
+    day; the hard ones return when you'd forget them.
   </p>
   {% if sign_in_url %}
-    <a class="btn btn-primary landing-cta" href="{{ sign_in_url }}">Start a deck</a>
+    <p class="landing-cta-row">
+      <a class="btn btn-primary landing-cta" href="{{ sign_in_url }}">Start a deck — it's free</a>
+      <span class="landing-cta-aside">No card. Sign in with Google.</span>
+    </p>
   {% endif %}
 </section>
 
-{# Sample card rendered as the hero visual — shows what a flashcard
-   actually is, instead of asking the visitor to read a paragraph
-   about "spaced repetition". The styling intentionally echoes the
-   real study-card chrome from /session/<id> so what they see here
-   is what they'll be looking at as a user. #}
-<section class="landing-demo">
-  <p class="section-eyebrow"><span>What a card looks like</span><span class="rule"></span></p>
-  <article class="landing-demo-card">
-    <p class="landing-demo-prompt">
-      What does <strong>ACID</strong> stand for in database transactions?
+{# Walkthrough: three steps with their own sample artifact so the
+   visitor sees the flow end-to-end — type a topic → get back cards
+   → study the ones that are due. Concrete examples > abstract copy. #}
+<section class="landing-walkthrough">
+  <p class="section-eyebrow"><span>How it works</span><span class="rule"></span></p>
+
+  <article class="landing-step">
+    <header class="landing-step-head">
+      <span class="landing-step-num">1</span>
+      <h2 class="landing-step-h">Describe what you want to learn.</h2>
+    </header>
+    <p class="landing-step-lede">
+      A topic, a textbook chapter, a paper, a syllabus, a body of
+      code. Anything you'd want to keep in your head.
     </p>
-    <ul class="landing-demo-choices" role="list">
-      <li class="landing-demo-choice">Atomic, Consistent, Idempotent, Durable</li>
-      <li class="landing-demo-choice is-correct">Atomic, Consistent, Isolated, Durable</li>
-      <li class="landing-demo-choice">Asynchronous, Consistent, Isolated, Distributed</li>
-    </ul>
+    <div class="landing-step-artifact landing-topic-input" aria-hidden="true">
+      <span class="landing-topic-eyebrow">topic</span>
+      <p class="landing-topic-text">
+        Postgres MVCC — read committed vs repeatable read, how vacuum
+        and visibility maps interact, what xmin/xmax mean on a tuple.
+      </p>
+    </div>
+  </article>
+
+  <article class="landing-step">
+    <header class="landing-step-head">
+      <span class="landing-step-num">2</span>
+      <h2 class="landing-step-h">Get a deck of cards.</h2>
+    </header>
+    <p class="landing-step-lede">
+      An AI agent plans short questions and answers. Review, edit,
+      accept what lands — every card is yours to keep, edit, or
+      delete later. Or write the cards yourself, if you'd rather.
+    </p>
+    <div class="landing-step-artifact landing-card-stack">
+      <article class="landing-demo-card landing-card-stack-item">
+        <span class="landing-demo-type">multiple choice</span>
+        <p class="landing-demo-prompt">
+          What does <strong>ACID</strong> stand for in database transactions?
+        </p>
+        <ul class="landing-demo-choices" role="list">
+          <li class="landing-demo-choice">Atomic, Consistent, Idempotent, Durable</li>
+          <li class="landing-demo-choice is-correct">Atomic, Consistent, Isolated, Durable</li>
+          <li class="landing-demo-choice">Asynchronous, Consistent, Isolated, Distributed</li>
+        </ul>
+      </article>
+
+      <article class="landing-demo-card landing-card-stack-item">
+        <span class="landing-demo-type">short answer</span>
+        <p class="landing-demo-prompt">
+          What's the time complexity of inserting into a balanced BST?
+        </p>
+        <div class="landing-demo-answer">
+          <span class="landing-demo-answer-label">Answer</span>
+          <code class="landing-demo-answer-value">O(log n)</code>
+        </div>
+      </article>
+
+      <article class="landing-demo-card landing-card-stack-item">
+        <span class="landing-demo-type">code</span>
+        <p class="landing-demo-prompt">
+          Reverse a singly linked list in place.
+        </p>
+        <pre class="landing-demo-code"><code>def reverse(head):
+    prev = None
+    while head:
+        nxt = head.next
+        head.next = prev
+        prev = head
+        head = nxt
+    return prev</code></pre>
+      </article>
+    </div>
+  </article>
+
+  <article class="landing-step">
+    <header class="landing-step-head">
+      <span class="landing-step-num">3</span>
+      <h2 class="landing-step-h">Study what's due.</h2>
+    </header>
+    <p class="landing-step-lede">
+      Each card schedules itself with FSRS — the hard ones return
+      right before you'd forget, the easy ones get out of your way.
+      Push notifies when a stack comes due. Study for 90 seconds on
+      the train, then close it.
+    </p>
+    <div class="landing-step-artifact landing-due-strip" aria-hidden="true">
+      <div class="landing-due-row">
+        <span class="landing-due-name">Postgres MVCC</span>
+        <span class="landing-due-count"><strong>4</strong> due now</span>
+      </div>
+      <div class="landing-due-row">
+        <span class="landing-due-name">Distributed systems</span>
+        <span class="landing-due-count"><strong>2</strong> due now</span>
+      </div>
+      <div class="landing-due-row landing-due-row-quiet">
+        <span class="landing-due-name">World capitals</span>
+        <span class="landing-due-count">all caught up</span>
+      </div>
+    </div>
   </article>
 </section>
 
@@ -50,22 +137,30 @@
   <ul class="landing-benefits-grid" role="list">
     <li class="landing-benefit">
       <p class="landing-benefit-eyebrow">AI-built</p>
-      <p>Type a topic — paste a chapter, a paper, a syllabus. An AI agent plans the deck for you to review and accept. Or write the cards yourself.</p>
+      <p>Describe a topic — paste a chapter, paper, or syllabus. An agent plans the deck for you. Edit anything; nothing is locked.</p>
     </li>
     <li class="landing-benefit">
       <p class="landing-benefit-eyebrow">FSRS</p>
-      <p>Each card schedules itself based on how well you recall it. The hard ones return right before you'd forget; the easy ones get out of your way.</p>
+      <p>Cards schedule themselves based on your recall. The hard ones return; the easy ones get out of your way.</p>
     </li>
     <li class="landing-benefit">
       <p class="landing-benefit-eyebrow">PWA</p>
-      <p>Installs on your phone like a native app. Push notifies when a stack comes due. Study for 90 seconds on the train, then close it.</p>
+      <p>Installs on your phone like a native app. Push notifies when a stack comes due. Works offline-tolerant.</p>
     </li>
     <li class="landing-benefit">
       <p class="landing-benefit-eyebrow">BYOK</p>
-      <p>Generation, grading, and edits run against an API key you supply. Your model, your bill — no shared pool to throttle against.</p>
+      <p>Generation and grading run against an API key you supply. Your model, your bill — no shared pool to throttle against.</p>
     </li>
   </ul>
 </section>
+
+{% if sign_in_url %}
+<section class="landing-cta-band">
+  <h2 class="landing-cta-band-h">Start a deck.</h2>
+  <p class="landing-cta-band-lede">Free for now. Sign in with Google — no card.</p>
+  <a class="btn btn-primary landing-cta-band-btn" href="{{ sign_in_url }}">Get started</a>
+</section>
+{% endif %}
 
 {# Post-signup reload — when a freshly-signed-in user lands here, base.html
    loads ClerkJS, which mints the apex __session cookie from the
