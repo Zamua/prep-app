@@ -2,6 +2,16 @@
  * sits behind every page before any component-specific rules apply.
  */
 
+/* Opt every same-origin navigation into the View Transitions API.
+ * Templates can tag elements with `view-transition-name: <ident>`
+ * (e.g. deck cards do this so a Pin/Unpin POST → 303 → re-render of
+ * the index animates the card sliding between its old and new
+ * positions instead of jumping). Browsers without support (Firefox
+ * as of 2026, older Safari) fall back to the instant page swap. */
+@view-transition {
+  navigation: auto;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
 }

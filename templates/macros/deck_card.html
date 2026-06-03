@@ -7,7 +7,14 @@
 
 {% macro card(d, index) %}
 {% set roman = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'][index - 1] %}
-<li class="deck-card{% if d.pinned %} deck-card-pinned{% endif %}" style="--i: {{ index }}">
+{# view-transition-name pairs the same card's old + new positions across
+   a same-origin navigation. Combined with `@view-transition { navigation: auto }`
+   in base.css, this is what makes the card glide between the unpinned
+   and pinned sections on Pin/Unpin instead of the page jumping. The
+   deck id is stable across renders, so the browser knows which old
+   element corresponds to which new one. #}
+<li class="deck-card{% if d.pinned %} deck-card-pinned{% endif %}"
+    style="--i: {{ index }}; view-transition-name: deck-{{ d.id }};">
   <a href="{{ request.scope.get('root_path','') }}/deck/{{ d.name }}" class="deck-link">
     <span class="deck-numeral" aria-hidden="true">{{ roman }}</span>
     <span class="deck-body">
