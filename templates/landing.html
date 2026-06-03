@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}prep · a commonplace book{% endblock %}
+{% block title %}prep · flashcards that remember for you{% endblock %}
 {% block page_class %}landing{% endblock %}
 {% block header_extra %}
   {# Sign-in chip in the masthead — mirrors the user-indicator slot on
@@ -12,64 +12,59 @@
   {% endif %}
 {% endblock %}
 {% block main %}
-{# Sign-in lives in the masthead's "Sign in" chip — always reachable
-   via the sticky top bar. Inline hero/footer CTAs were redundant with
-   the persistent chip + ate vertical space on mobile; removed
-   2026-06-02. #}
+
 <section class="prelude landing-hero">
   <p class="eyebrow">prep</p>
-  <h1 class="display">A standing library<br><em>of questions</em>.</h1>
+  <h1 class="display"><em>Remember</em> anything.</h1>
   <p class="lede">
-    Spaced-repetition flashcards for the things you want to keep —
-    a topic in, a deck out, then a forgetting curve that re-surfaces
-    each card right before you'd lose it.
+    A flashcard app that does the scheduling for you. Type what you
+    want to learn — get a deck back. Study a handful of cards a day;
+    the hard ones come back when you'd forget them.
   </p>
+  {% if sign_in_url %}
+    <a class="btn btn-primary landing-cta" href="{{ sign_in_url }}">Start a deck</a>
+  {% endif %}
 </section>
 
-<section class="landing-grid">
-  <article class="landing-tile">
-    <p class="section-eyebrow"><span>How it works</span><span class="rule"></span></p>
-    <h2>Describe it, study it.</h2>
-    <p>
-      Type a topic — <em>capitals of every country</em>, <em>the Krebs cycle</em>,
-      <em>Postgres MVCC</em> — and an AI agent plans a deck for you to
-      review and accept. Or write the cards yourself. Either way,
-      what comes out is yours.
+{# Sample card rendered as the hero visual — shows what a flashcard
+   actually is, instead of asking the visitor to read a paragraph
+   about "spaced repetition". The styling intentionally echoes the
+   real study-card chrome from /session/<id> so what they see here
+   is what they'll be looking at as a user. #}
+<section class="landing-demo">
+  <p class="section-eyebrow"><span>What a card looks like</span><span class="rule"></span></p>
+  <article class="landing-demo-card">
+    <p class="landing-demo-prompt">
+      What does <strong>ACID</strong> stand for in database transactions?
     </p>
+    <ul class="landing-demo-choices" role="list">
+      <li class="landing-demo-choice">Atomic, Consistent, Idempotent, Durable</li>
+      <li class="landing-demo-choice is-correct">Atomic, Consistent, Isolated, Durable</li>
+      <li class="landing-demo-choice">Asynchronous, Consistent, Isolated, Distributed</li>
+    </ul>
   </article>
+</section>
 
-  <article class="landing-tile">
-    <p class="section-eyebrow"><span>The schedule</span><span class="rule"></span></p>
-    <h2>Tuned to <em>you</em>.</h2>
-    <p>
-      Each card schedules itself based on how well you remember it —
-      FSRS picks the next review at the moment your recall is starting
-      to fade. The ones you know slip into the background; the ones
-      you don't quietly come back around.
-    </p>
-  </article>
-
-  <article class="landing-tile">
-    <p class="section-eyebrow"><span>Bring your own key</span><span class="rule"></span></p>
-    <h2>Your model, your bill.</h2>
-    <p>
-      Generation, grading, and transforms run against an API key
-      you supply. No usage caps imposed by us, no shared pool to
-      throttle against, and your prompts and answers never leave
-      the path between you and the model you chose.
-    </p>
-  </article>
-
-  <article class="landing-tile">
-    <p class="section-eyebrow"><span>On every device</span><span class="rule"></span></p>
-    <h2>Installs as an app.</h2>
-    <p>
-      Open it in a browser, add to home screen, and prep behaves
-      like a native app — offline-tolerant, push-notified when a
-      stack of cards comes due, sized for one-thumb study on the
-      train.
-    </p>
-  </article>
+<section class="landing-benefits">
+  <p class="section-eyebrow"><span>What you get</span><span class="rule"></span></p>
+  <ul class="landing-benefits-grid" role="list">
+    <li class="landing-benefit">
+      <p class="landing-benefit-eyebrow">AI-built</p>
+      <p>Type a topic — paste a chapter, a paper, a syllabus. An AI agent plans the deck for you to review and accept. Or write the cards yourself.</p>
+    </li>
+    <li class="landing-benefit">
+      <p class="landing-benefit-eyebrow">FSRS</p>
+      <p>Each card schedules itself based on how well you recall it. The hard ones return right before you'd forget; the easy ones get out of your way.</p>
+    </li>
+    <li class="landing-benefit">
+      <p class="landing-benefit-eyebrow">PWA</p>
+      <p>Installs on your phone like a native app. Push notifies when a stack comes due. Study for 90 seconds on the train, then close it.</p>
+    </li>
+    <li class="landing-benefit">
+      <p class="landing-benefit-eyebrow">BYOK</p>
+      <p>Generation, grading, and edits run against an API key you supply. Your model, your bill — no shared pool to throttle against.</p>
+    </li>
+  </ul>
 </section>
 
 {# Post-signup reload — when a freshly-signed-in user lands here, base.html

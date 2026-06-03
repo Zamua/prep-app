@@ -44,7 +44,10 @@ def test_index_renders_landing_when_no_identity(env: None, monkeypatch):
     r = c.get("/")
     assert r.status_code == 200
     # Marketing copy lives in the landing template, not the dashboard.
-    assert "standing library" in r.text.lower()
+    # The headline and the demo-card prompt are landing-only — either
+    # being present is enough to prove the landing template rendered.
+    body = r.text.lower()
+    assert "remember anything" in body or "what does <strong>acid</strong>" in body
 
 
 def test_protected_route_401s_when_no_identity(env: None, monkeypatch):

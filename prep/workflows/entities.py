@@ -118,6 +118,11 @@ class ActiveWorkflow(BaseModel):
     workflow_type: WorkflowType
     deck_id: int | None = None
     deck_name: str | None = None
+    # Populated by the badge-list query via LEFT JOIN to decks; lets
+    # display_label render the user-typed label (with spaces) instead
+    # of the opaque URL slug. NULL on legacy decks (or when this
+    # entity is loaded by a query that doesn't JOIN).
+    deck_display_name: str | None = None
     status: str = Field(min_length=0, max_length=64)
     started_at: str
     terminal_at: str | None = None
@@ -164,9 +169,12 @@ class ActiveWorkflow(BaseModel):
 
     @property
     def display_label(self) -> str:
-        """The primary label shown in the popover row — deck name when
-        we have one, otherwise the workflow type. Reorganize is the
-        notable cross-deck case where deck_name is None."""
+        """The primary label shown in the popover row — the deck's
+        user-typed display name when present, falling back to the URL
+        slug for legacy decks. Reorganize is the notable cross-deck
+        case where deck_name is None entirely."""
+        if self.deck_display_name:
+            return self.deck_display_name
         if self.deck_name:
             return self.deck_name
         if self.workflow_type is WorkflowType.TRANSFORM:

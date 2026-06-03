@@ -42,12 +42,18 @@ RECONCILER_PRUNE_WINDOW_SECONDS = 24 * 60 * 60
 
 
 def _row_to_entity(row) -> ActiveWorkflow:
+    # JOIN-supplied column (popover query); other queries don't ask
+    # for it. sqlite Row keys() works on the underlying row class but
+    # not on a dict; tolerate both.
+    keys = row.keys() if hasattr(row, "keys") else []
+    display = row["deck_display_name"] if "deck_display_name" in keys else None
     return ActiveWorkflow(
         workflow_id=row["workflow_id"],
         user_login=row["user_login"],
         workflow_type=WorkflowType(row["workflow_type"]),
         deck_id=row["deck_id"],
         deck_name=row["deck_name"],
+        deck_display_name=display,
         status=row["status"] or "",
         started_at=row["started_at"],
         terminal_at=row["terminal_at"],
@@ -156,12 +162,19 @@ class ActiveWorkflowsRepo:
         """
         cutoff_dt = datetime.now(timezone.utc) - timedelta(seconds=recent_terminal_window_seconds)
         cutoff_iso = cutoff_dt.isoformat()
+        # LEFT JOIN decks so we can populate deck_display_name on the
+        # entity — the popover row label uses display_name when set
+        # and falls back to the URL slug for legacy decks. JOIN is on
+        # (user, name) which is the unique constraint, so it's cheap.
         with cursor() as c:
             rows = c.execute(
-                """SELECT * FROM active_workflows
-                   WHERE user_login = ?
-                     AND (terminal_at IS NULL OR terminal_at >= ?)
-                   ORDER BY started_at DESC""",
+                """SELECT w.*, d.display_name AS deck_display_name
+                     FROM active_workflows w
+                     LEFT JOIN decks d
+                       ON d.user_id = w.user_login AND d.name = w.deck_name
+                    WHERE w.user_login = ?
+                      AND (w.terminal_at IS NULL OR w.terminal_at >= ?)
+                    ORDER BY w.started_at DESC""",
                 (user_login, cutoff_iso),
             ).fetchall()
         items = [_row_to_entity(r) for r in rows]

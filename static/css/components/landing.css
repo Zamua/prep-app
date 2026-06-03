@@ -1,8 +1,9 @@
 /* Landing page — rendered at `/` when no user is signed in.
- * Reuses the existing prelude/eyebrow/display/lede chrome but adds a
- * 2-column value-prop grid that collapses to a single column on
- * narrow viewports. Stays minimal so the page reads like the rest of
- * prep (paper + ink + Fraunces) rather than a generic marketing page.
+ *
+ * Layout: hero (eyebrow + display + lede + CTA) → demo card (the
+ * "what a card looks like" visual hero) → 2x2 benefits grid. The
+ * goal is that a brand-new visitor can answer "what is this thing"
+ * within 5 seconds without reading a paragraph.
  */
 
 .page-landing .folio {
@@ -10,43 +11,91 @@
 }
 
 .landing-hero {
-  margin-block-end: 3rem;
+  margin-block-end: 2rem;
+}
+.landing-cta {
+  display: inline-block;
+  margin-block-start: 0.5rem;
 }
 
-/* Two-up grid. The .landing-tile carries its own card chrome so it
- * doesn't depend on other components' selectors. */
-.landing-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
-  margin-block-end: 3rem;
+/* Sample-card visual hero. Echoes the real .study-card chrome so
+ * what a visitor sees here is what they'll be looking at as a user;
+ * keeps its own selectors to stay decoupled from the study surface. */
+.landing-demo {
+  margin-block-end: 2.5rem;
 }
-
-.landing-tile {
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  padding: 1.75rem 1.5rem;
+.landing-demo-card {
   background: var(--paper);
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 1.4rem 1.3rem 1.6rem;
+  box-shadow: 0 4px 16px rgba(50, 30, 10, 0.05);
 }
-.landing-tile h2 {
-  font-family: var(--serif);
-  font-variation-settings: "opsz" 36, "SOFT" 50;
-  font-weight: 420;
-  font-size: 1.45rem;
-  line-height: 1.2;
-  margin: 0;
+.landing-demo-prompt {
+  font-size: 1.08rem;
+  line-height: 1.5;
+  margin: 0 0 1.1rem;
   color: var(--ink);
 }
-.landing-tile p {
-  color: var(--ink-soft);
-  line-height: 1.55;
+.landing-demo-choices {
+  list-style: none;
+  padding: 0;
   margin: 0;
-  font-size: 0.98rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
 }
-.landing-tile em { color: var(--quill); font-style: italic; }
+.landing-demo-choice {
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.landing-demo-choice.is-correct {
+  background: color-mix(in srgb, var(--right, #5d8c46) 12%, var(--bg));
+  border-color: var(--right, #5d8c46);
+}
+
+/* 2x2 benefits grid. On narrow viewports it folds to a single column.
+ * Each tile is an eyebrow + paragraph — same shape as the previous
+ * landing-tile, just smaller because the demo card is doing the heavy
+ * "what is this" lift now. */
+.landing-benefits-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.85rem;
+}
+.landing-benefit {
+  padding: 1rem 1rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tint) 30%, var(--paper));
+}
+.landing-benefit-eyebrow {
+  margin: 0 0 0.35rem;
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent, var(--ink));
+}
+.landing-benefit p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 480px) {
+  .landing-benefits-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 .masthead-cta {
   /* Compact pill that sits in the masthead slot where the user-chip
