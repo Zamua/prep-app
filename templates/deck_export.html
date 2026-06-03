@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Export {{ deck_name }} · prep{% endblock %}
+{% block title %}Export {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}deck-export{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}
-{{ nav.back("/deck/" ~ deck_name, deck_name) }}
+{{ nav.back("/deck/" ~ deck_name, deck_display(deck_name)) }}
 
 <section class="prelude">
-  <p class="eyebrow">Export <code>{{ deck_name }}</code></p>
+  <p class="eyebrow">Export <em>{{ deck_display(deck_name) }}</em></p>
   <h1 class="display">Send your <em>cards</em> somewhere.</h1>
   <p class="lede">
     Three formats with different trade-offs. Use <code>.prepdeck</code>

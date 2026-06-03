@@ -27,7 +27,7 @@
      {% endif %}
 >
   <section class="prelude">
-    <p class="eyebrow">{{ deck_name }} · plan</p>
+    <p class="eyebrow">{{ deck_display(deck_name) }} · plan</p>
     <h1 class="display" id="display-headline">
       {% if _status == 'planning' %}<em>Planning</em><span class="ellipsis"></span>
       {% elif _status == 'replanning' %}<em>Refining</em><span class="ellipsis"></span>

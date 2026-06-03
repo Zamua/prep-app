@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}edit card № {{ q.id }} · {{ deck_name }} · prep{% endblock %}
+{% block title %}edit card № {{ q.id }} · {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}deck-new{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% import "macros/question_form.html" as qf with context %}

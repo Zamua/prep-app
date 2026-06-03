@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}all clear · {{ deck_name }} · prep{% endblock %}
+{% block title %}all clear · {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}study study-empty{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}
-{{ nav.back("/deck/" ~ deck_name, deck_name) }}
+{{ nav.back("/deck/" ~ deck_name, deck_display(deck_name)) }}
 
 <article class="study-card">
   <section class="empty-state">

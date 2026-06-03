@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}planning {{ deck_name }} · prep{% endblock %}
+{% block title %}planning {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}plan{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}
 
-{{ nav.back("/deck/" ~ deck_name, deck_name) }}
+{{ nav.back("/deck/" ~ deck_name, deck_display(deck_name)) }}
 
 {# Progress region in its own partial — htmx polls
    GET /plan/{wid}/fragment every 2s while the workflow is alive and

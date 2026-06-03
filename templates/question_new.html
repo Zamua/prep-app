@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}new card · {{ deck_name }} · prep{% endblock %}
+{% block title %}new card · {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}deck-new{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% import "macros/question_form.html" as qf with context %}
 {% block main %}
-{{ nav.back("/deck/" ~ deck_name, deck_name) }}
+{{ nav.back("/deck/" ~ deck_name, deck_display(deck_name)) }}
 
 <article class="deck-new-card">
   <p class="section-eyebrow"><span>Add a card</span><span class="rule"></span></p>

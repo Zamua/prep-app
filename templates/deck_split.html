@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}split {{ deck_name }} · prep{% endblock %}
+{% block title %}split {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}deck-split{% endblock %}
 {% block main %}
 <section class="deck-header">
   <p class="eyebrow">
-    <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_name }}</a>
+    <a href="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ deck_display(deck_name) }}</a>
   </p>
-  <h1 class="display deck-title">Split <em>{{ deck_name }}</em></h1>
+  <h1 class="display deck-title">Split <em>{{ deck_display(deck_name) }}</em></h1>
   <p class="lede">
     Pick the cards to move into a new deck. Selected cards are reassigned (no copy); originals are not preserved here.
     {% if deck_type == 'trivia' %}

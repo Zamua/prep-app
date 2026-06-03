@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ deck_name }} · study · prep{% endblock %}
+{% block title %}{{ deck_display(deck_name) }} · study · prep{% endblock %}
 {% block page_class %}study{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}

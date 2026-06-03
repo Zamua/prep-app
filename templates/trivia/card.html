@@ -9,7 +9,7 @@
      "Next" advances to the head-popped queue. Progress indicator
      ("1 of 3") rendered when in session mode. #}
 {% extends "base.html" %}
-{% block title %}{{ deck_name or 'trivia' }} · prep{% endblock %}
+{% block title %}{{ deck_display(deck_name) or 'trivia' }} · prep{% endblock %}
 {% block page_class %}trivia-card{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}

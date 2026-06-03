@@ -136,6 +136,48 @@ def _notif_unseen_context(request: Request) -> dict:
         return {"notif_unseen_count": 0}
 
 
+def _deck_display_for_slug(uid: str | None, slug: str | None) -> str:
+    """Resolve a deck's user-facing label from its URL slug, falling
+    back to the slug for legacy decks (no display_name set) or when
+    the lookup fails. Single indexed SELECT — cheap to call per
+    render at this scale."""
+    if not slug:
+        return ""
+    if not uid:
+        return slug
+    try:
+        from prep.infrastructure.db import cursor
+
+        with cursor() as c:
+            row = c.execute(
+                "SELECT display_name FROM decks WHERE user_id = ? AND name = ?",
+                (uid, slug),
+            ).fetchone()
+        if row and row["display_name"]:
+            return row["display_name"]
+    except Exception:
+        pass
+    return slug
+
+
+def _deck_display_context(request: Request) -> dict:
+    """Bind a deck-display helper into the template scope.
+
+    Templates that render a deck name as text — page titles, hero
+    headings, breadcrumbs — call `{{ deck_display(deck_name) }}`
+    instead of `{{ deck_name }}` so the user sees what they typed
+    instead of the opaque slug. The closure carries the active
+    user_id so each call is a single-arg lookup.
+    """
+    user = getattr(request.state, "user", None)
+    uid = user.get("tailscale_login") if isinstance(user, dict) else None
+
+    def deck_display(slug: str | None) -> str:
+        return _deck_display_for_slug(uid, slug)
+
+    return {"deck_display": deck_display}
+
+
 templates = Jinja2Templates(
     directory=str(_REPO_ROOT / "templates"),
     context_processors=[
@@ -145,5 +187,6 @@ templates = Jinja2Templates(
         _auth_provider_context,
         _clerk_bootstrap_context,
         _notif_unseen_context,
+        _deck_display_context,
     ],
 )

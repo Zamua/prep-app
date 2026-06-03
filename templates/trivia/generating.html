@@ -10,12 +10,12 @@
    gone (browser noise on a 1.5s poll loop already gets the user
    most of the way there). #}
 {% extends "base.html" %}
-{% block title %}generating · {{ deck_name }} · prep{% endblock %}
+{% block title %}generating · {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}trivia-generating transform{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}
 
-{{ nav.back("/deck/" ~ deck_name, deck_name) }}
+{{ nav.back("/deck/" ~ deck_name, deck_display(deck_name)) }}
 
 {% include "partials/trivia_generating_progress.html" %}
 

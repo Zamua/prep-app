@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ verdict.result }} · {{ deck_name }} · prep{% endblock %}
+{% block title %}{{ verdict.result }} · {{ deck_display(deck_name) }} · prep{% endblock %}
 {% block page_class %}result result-{{ verdict.result }}{% endblock %}
 {% import "macros/nav.html" as nav with context %}
 {% block main %}

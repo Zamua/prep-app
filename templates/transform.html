@@ -5,7 +5,7 @@
 {% block main %}
 
 {% if deck_name %}
-  {{ nav.back("/deck/" ~ deck_name, deck_name) }}
+  {{ nav.back("/deck/" ~ deck_name, deck_display(deck_name)) }}
 {% else %}
   {{ nav.back("/", "back") }}
 {% endif %}
