@@ -14,7 +14,19 @@ export function attachDeclarative(root = document) {
     if (btn.dataset.wired) continue;
     btn.dataset.wired = "1";
     btn.addEventListener("click", (e) => handleClick(e, btn));
+    // Keep the iOS keyboard up when the user taps copy while typing
+    // in a sibling confirmation field. Without this, pointerdown
+    // steals focus from the input, the keyboard dismisses, the
+    // layout reflows, and the user has to re-tap the input.
+    // Matches the "button-near-input two-tap" iOS pattern in
+    // ~/.claude/CLAUDE.md.
+    btn.addEventListener("mousedown", preventFocusSteal);
+    btn.addEventListener("pointerdown", preventFocusSteal);
   }
+}
+
+function preventFocusSteal(e) {
+  e.preventDefault();
 }
 
 async function handleClick(event, btn) {
