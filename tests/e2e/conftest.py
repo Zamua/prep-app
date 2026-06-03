@@ -80,18 +80,20 @@ def http(base_url: str) -> Iterator[httpx.Client]:
 
 @pytest.fixture(scope="session")
 def test_deck(http: httpx.Client) -> Iterator[dict]:
-    """Create the e2e-test-deck via the SRS deck-creation route, seed
+    """Create the e2e test deck via the SRS deck-creation route, seed
     `E2E_QUESTIONS` via the manual question-add route, yield a dict of
     deck metadata to the tests, and delete the deck on teardown.
 
-    Idempotent on entry: if a prior run left the deck behind (e.g.
-    interrupted teardown), we delete it first.
-    """
-    # Pre-clean: if a prior failed run left the deck, drop it first
-    # so create succeeds. Delete is idempotent.
-    _delete_test_deck(http)
+    The URL slug is auto-generated (opaque short ID); the display
+    label is `E2E_DECK_NAME`. We learn the slug from the create
+    response's Location header and use it for every follow-up call.
 
-    # Create — SRS path with no AI agent involvement, fastest path.
+    Idempotent on entry: any prior decks with the E2E display label
+    are deleted before creating a fresh one.
+    """
+    # Pre-clean: drop any leftover e2e decks the previous run left.
+    _delete_test_decks_by_display(http)
+
     r = http.post(
         "/decks/new/srs",
         data={
@@ -100,13 +102,16 @@ def test_deck(http: httpx.Client) -> Iterator[dict]:
             "action": "empty",  # no claude generation
         },
     )
-    assert r.status_code in (200, 303), f"deck create returned {r.status_code}: {r.text[:300]}"
+    assert r.status_code == 303, f"deck create returned {r.status_code}: {r.text[:300]}"
+    # /deck/<slug> — strip the redirect to learn the slug.
+    location = r.headers.get("location", "")
+    slug = location.rstrip("/").split("/deck/", 1)[-1].split("/")[0].split("?")[0]
+    assert slug, f"could not parse slug from redirect {location!r}"
 
-    # Seed questions via the manual add route.
     qids: list[int] = []
     for q in E2E_QUESTIONS:
         r = http.post(
-            f"/deck/{E2E_DECK_NAME}/question/new",
+            f"/deck/{slug}/question/new",
             data={
                 "prompt": q["prompt"],
                 "answer": q["answer"],
@@ -118,9 +123,7 @@ def test_deck(http: httpx.Client) -> Iterator[dict]:
             303,
         ), f"seed question {q['prompt']!r}: {r.status_code} {r.text[:200]}"
 
-    # Pull the question ids back. The deck page exposes them via
-    # data-qid attributes on each .qcard.
-    r = http.get(f"/deck/{E2E_DECK_NAME}")
+    r = http.get(f"/deck/{slug}")
     assert r.status_code == 200, f"deck page: {r.status_code}"
     import re
 
@@ -132,25 +135,42 @@ def test_deck(http: httpx.Client) -> Iterator[dict]:
         E2E_QUESTIONS
     ), f"expected {len(E2E_QUESTIONS)} qids on deck page, got {qids}"
 
-    info = {"name": E2E_DECK_NAME, "qids": qids[: len(E2E_QUESTIONS)]}
+    info = {"name": slug, "display_name": E2E_DECK_NAME, "qids": qids[: len(E2E_QUESTIONS)]}
     try:
         yield info
     finally:
-        _delete_test_deck(http)
+        _delete_one_deck(http, slug)
 
 
-def _delete_test_deck(http: httpx.Client) -> None:
-    """Best-effort delete. The app requires the deck name in the
-    `confirm` field as a typo guard; we always pass it. 303 = success,
-    404 = already gone (also fine), other = the test reports it."""
-    r = http.post(
-        f"/deck/{E2E_DECK_NAME}/delete",
-        data={"confirm": E2E_DECK_NAME},
-    )
+def _delete_one_deck(http: httpx.Client, slug: str) -> None:
+    """Delete a single deck by slug. Best-effort — non-200/303/404
+    responses are reported but don't raise so teardown failures
+    don't mask earlier real failures."""
+    r = http.post(f"/deck/{slug}/delete", data={"confirm": slug})
     if r.status_code not in (200, 303, 404):
-        # Surface non-fatally — we don't want a teardown failure to mask
-        # a real test failure earlier in the session.
-        print(f"[e2e teardown] deck delete returned {r.status_code}: {r.text[:200]}")
+        print(f"[e2e teardown] delete {slug!r} returned {r.status_code}: {r.text[:200]}")
+
+
+def _delete_test_decks_by_display(http: httpx.Client) -> None:
+    """Scrape the index page for any deck-card whose label matches
+    the e2e display name or whose slug equals it (legacy decks from
+    before the slug-vs-display split), and delete each. Necessary
+    because the slug is random and we can't guess it from a prior
+    leftover run."""
+    import re
+
+    r = http.get("/")
+    if r.status_code != 200:
+        return
+    pattern = re.compile(
+        r'<a\s+href="[^"]*?/deck/([^"/]+)"[^>]*class="deck-link"[\s\S]*?'
+        r'<span\s+class="deck-name">\s*([^<\n]+)',
+    )
+    for m in pattern.finditer(r.text):
+        slug = m.group(1)
+        display = m.group(2).strip()
+        if display == E2E_DECK_NAME or slug == E2E_DECK_NAME:
+            _delete_one_deck(http, slug)
 
 
 # ---- Playwright (browser) fixtures ------------------------------------

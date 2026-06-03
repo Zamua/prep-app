@@ -135,13 +135,27 @@ def e2e_trivia_deck(http: httpx.Client) -> Iterator[dict]:
     the redirect so the test can drive it. Teardown cancels via the
     delete route — the deck-delete cascades through cards and review
     state."""
-    deck_name = "e2e-trivia-deck"
-    # Pre-clean — idempotent.
-    http.post(f"/deck/{deck_name}/delete", data={"confirm": deck_name})
+    display_name = "e2e-trivia-deck"
+    # Pre-clean: scrape index for any prior leftover with this display
+    # name (slug is opaque-random so we can't guess it). Reuses the SRS
+    # fixture's helper.
+    from tests.e2e.conftest import E2E_DECK_NAME as _SRS_LABEL  # noqa: F401
+    from tests.e2e.conftest import _delete_one_deck
+
+    r = http.get("/")
+    if r.status_code == 200:
+        pattern = re.compile(
+            r'<a\s+href="[^"]*?/deck/([^"/]+)"[^>]*class="deck-link"[\s\S]*?'
+            r'<span\s+class="deck-name">\s*([^<\n]+)',
+        )
+        for m in pattern.finditer(r.text):
+            if m.group(2).strip() == display_name:
+                _delete_one_deck(http, m.group(1))
+
     r = http.post(
         "/decks/new/trivia",
         data={
-            "name": deck_name,
+            "name": display_name,
             "topic": "world capitals: short single-token answers, no trivia about people",
             "notification_interval_minutes": "30",
         },
@@ -152,11 +166,16 @@ def e2e_trivia_deck(http: httpx.Client) -> Iterator[dict]:
     wid_match = re.search(r"/trivia/gen/([^/?#]+)", loc)
     assert wid_match, f"no /trivia/gen/<wid> in redirect: {loc!r}"
     wid = wid_match.group(1)
-    info = {"name": deck_name, "wid": wid}
+    # wid shape is `trivia-<slug>-<random>`; the slug is what we need
+    # for /deck/<slug> lookups.
+    slug_match = re.match(r"^trivia-([a-z0-9]+)-[a-z0-9]+$", wid)
+    assert slug_match, f"unexpected trivia wid shape: {wid!r}"
+    slug = slug_match.group(1)
+    info = {"name": slug, "display_name": display_name, "wid": wid}
     try:
         yield info
     finally:
-        http.post(f"/deck/{deck_name}/delete", data={"confirm": deck_name})
+        _delete_one_deck(http, slug)
 
 
 # ---- transform flow ----------------------------------------------------

@@ -188,7 +188,9 @@ def test_pin_toggle_floats_deck_to_top(http: httpx.Client, test_deck: dict):
     # And our test deck's name appears within or after it. Cheap proxy:
     # the section header position should be earlier than the deck name.
     pinned_at = idx.find(">Pinned<")
-    deck_at = idx.find(test_deck["name"])
+    # The index renders the display label; the slug is opaque and
+    # would not appear in body text.
+    deck_at = idx.find(test_deck["display_name"])
     assert pinned_at < deck_at, "test deck appears before the Pinned section header"
     # Cleanup: unpin so the next test (and the next run) doesn't see
     # this state. The deck is deleted in teardown anyway, but we keep
