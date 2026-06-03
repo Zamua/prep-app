@@ -71,7 +71,12 @@
 
   <label class="form-field">
     <span class="form-label">.prepdeck file</span>
-    <input type="file" name="file" accept=".prepdeck,application/zip" required>
+    {# accept attr left off on purpose: iOS Files greys out .prepdeck
+       because the extension isn't in its UTI registry, and even
+       application/zip filtering hides any file whose extension iOS
+       doesn't recognize. The server validates the file (zip + meta)
+       so client-side restriction earns nothing but UX pain. #}
+    <input type="file" name="file" required>
     <span class="form-hint">
       Export from any prep instance via deck overflow menu → <em>Export .prepdeck</em>.
       Archives include the format version so newer exports refuse to

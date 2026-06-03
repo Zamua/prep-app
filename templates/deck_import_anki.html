@@ -61,7 +61,11 @@
 
   <label class="form-field">
     <span class="form-label">.apkg file</span>
-    <input type="file" name="file" accept=".apkg,application/zip" required>
+    {# accept omitted — iOS Files greys out .apkg because the extension
+       isn't in its UTI registry. Server validates the file (zip +
+       sqlite shape) so client-side restriction earns nothing but
+       UX pain on mobile. #}
+    <input type="file" name="file" required>
     <span class="form-hint">
       Export from Anki Desktop via File → Export → "Anki Deck Package".
       Media and per-note-type templates aren't imported in this version.
