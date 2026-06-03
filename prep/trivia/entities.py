@@ -76,6 +76,7 @@ class ActiveTriviaSession(BaseModel):
     """
 
     deck_name: str
+    deck_display_name: str | None = None
     deck_id: int
     last_active: str
     queue: list[int]
@@ -85,6 +86,10 @@ class ActiveTriviaSession(BaseModel):
     # this populated; list_active filters them out. Same field on both
     # entities so the template can share one row partial.
     snoozed_until: str | None = None
+
+    @property
+    def deck_display(self) -> str:
+        return self.deck_display_name or self.deck_name
 
     @property
     def remaining(self) -> int:

@@ -1,5 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ deck_name }} · prep{% endblock %}
+{# `deck_name` is the URL slug; `deck_display` is what the user typed
+   (falls back to the slug for legacy decks). All rendered text uses
+   deck_display; all URLs / form actions / data attrs use deck_name. #}
+{%- set deck_display = (deck_meta.display_name if deck_meta and deck_meta.display_name else deck_name) -%}
+{% block title %}{{ deck_display }} · prep{% endblock %}
 {% block page_class %}deck{% endblock %}
 {% import "macros/mastery.html" as mastery with context %}
 {% import "macros/copyable_code.html" as cc with context %}
@@ -35,7 +39,7 @@
   <div class="deck-hero">
     <p class="deck-type-eyebrow">{{ deck_type }}</p>
     <div class="deck-title-row deck-title-row-hero">
-      <h1 class="display deck-title">{{ deck_name }}</h1>
+      <h1 class="display deck-title">{{ deck_display }}</h1>
       <details class="deck-rename">
         <summary class="deck-rename-trigger" title="Rename deck">
           {{ icon('pencil-simple-line', class_='icon icon-inline') }}
@@ -44,12 +48,13 @@
         <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/rename"
               class="deck-rename-form">
           <label class="form-label">Rename deck</label>
-          <input type="text" name="new_name" value="{{ deck_name }}" required
-                 pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
-                 autocapitalize="none" autocorrect="off"
-                 class="deck-rename-input">
+          <input type="text" name="new_name" value="{{ deck_display }}" required
+                 maxlength="60" class="deck-rename-input">
           <button type="submit" class="btn btn-quiet">Save</button>
-          <p class="form-hint">2–30 chars, lowercase letters/digits/hyphens.</p>
+          <p class="form-hint">
+            Up to 60 chars. The display label changes; the URL stays
+            <code>{{ deck_name }}</code> so existing links keep working.
+          </p>
         </form>
       </details>
     </div>
@@ -395,7 +400,7 @@
    prevents accidental clicks in a way "Are you sure?" doesn't. #}
 <dialog id="delete-deck-dialog" class="delete-dialog" aria-label="Delete deck confirmation" data-dialog>
   <form method="post" action="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/delete" class="delete-form">
-    <h2 class="delete-headline">Delete <em>{{ deck_name }}</em>?</h2>
+    <h2 class="delete-headline">Delete <em>{{ deck_display }}</em>?</h2>
     <p class="delete-warn">
       This permanently removes <strong>{{ questions|length }}</strong>
       card{{ '' if questions|length == 1 else 's' }} plus all reviews
@@ -404,7 +409,7 @@
     <p class="delete-warn">
       This <strong>cannot be undone</strong>. Type the deck name below to confirm:
     </p>
-    {{ cc.block(deck_name, label='deck name') }}
+    {{ cc.block(deck_display, label='deck name') }}
     <label class="form-field">
       <span class="visually-hidden">Type the deck name to confirm</span>
       <input type="text" name="confirm" id="delete-confirm-input" autocomplete="off"
@@ -448,6 +453,6 @@
   initCardPreview();
   initImproveDialog({rootPath: "{{ request.scope.get('root_path','') }}"});
   initQcardSuspend();
-  initDeleteDeckDlg({expectedName: "{{ deck_name }}"});
+  initDeleteDeckDlg({expectedName: {{ deck_display | tojson }}});
 </script>
 {% endblock %}

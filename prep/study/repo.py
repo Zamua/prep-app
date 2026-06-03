@@ -162,7 +162,7 @@ class SessionRepo:
             )
             rows = c.execute(
                 """
-                SELECT s.*, d.name AS deck_name,
+                SELECT s.*, d.name AS deck_name, d.display_name AS deck_display_name,
                        q.prompt AS current_prompt, q.type AS current_type
                   FROM study_sessions s
                   JOIN decks d ON d.id = s.deck_id
@@ -196,7 +196,7 @@ class SessionRepo:
         with cursor() as c:
             rows = c.execute(
                 """
-                SELECT s.*, d.name AS deck_name,
+                SELECT s.*, d.name AS deck_name, d.display_name AS deck_display_name,
                        q.prompt AS current_prompt, q.type AS current_type
                   FROM study_sessions s
                   JOIN decks d ON d.id = s.deck_id
@@ -800,6 +800,7 @@ def _row_to_recent(row: dict) -> RecentSession:
         id=row["id"],
         deck_id=row["deck_id"],
         deck_name=row["deck_name"],
+        deck_display_name=row.get("deck_display_name"),
         last_active=row["last_active"],
         status=SessionStatus(row.get("status") or "active"),
         state=SessionState(row.get("state") or "awaiting-answer"),

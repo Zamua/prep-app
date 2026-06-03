@@ -49,10 +49,13 @@ def create_deck(
     user_id: str,
     name: str,
     context_prompt: str | None = None,
+    display_name: str | None = None,
 ) -> int:
-    """Create a new deck. Raises sqlite IntegrityError on duplicate name
-    for the same user (UNIQUE constraint at the DB level)."""
-    return repo.create(user_id, name, context_prompt)
+    """Create a new deck. `name` is the kebab-case URL slug; the
+    caller is responsible for picking a unique one. `display_name` is
+    the user-typed label (optional; UI falls back to name when None).
+    Raises sqlite IntegrityError on duplicate (user, name)."""
+    return repo.create(user_id, name, context_prompt, display_name=display_name)
 
 
 def delete_deck(repo: DeckRepo, user_id: str, name: str) -> int:

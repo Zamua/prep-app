@@ -26,10 +26,11 @@
    the duration-sheet element below the lists) via data-sheet-open;
    the form keeps the .session-discard-form class so the existing
    JS handler picks up its submit. #}
-{% macro session_menu(deck_name, snooze_action, discard_action, mute_deck_id=None) %}
+{% macro session_menu(deck_name, deck_display, snooze_action, discard_action, mute_deck_id=None) %}
 {%- set root = request.scope.get('root_path','') -%}
+{%- set _label = deck_display or deck_name -%}
 <details class="session-menu row-overflow-menu">
-  <summary class="row-overflow-trigger" title="Session actions" aria-label="Session actions for {{ deck_name }}"><span aria-hidden="true">⋯</span></summary>
+  <summary class="row-overflow-trigger" title="Session actions" aria-label="Session actions for {{ _label }}"><span aria-hidden="true">⋯</span></summary>
   <div class="session-menu-popover" data-details-body role="menu">
     <a class="session-menu-row" role="menuitem"
        href="{{ root }}/deck/{{ deck_name }}">
@@ -40,7 +41,7 @@
             data-sheet-open="duration-sheet"
             data-sheet-action="{{ root }}{{ snooze_action }}"
             data-sheet-title="snooze"
-            data-sheet-deck="{{ deck_name }}"
+            data-sheet-deck="{{ _label }}"
             data-sheet-subtitle="hides from your continue list until the picked time. nothing else changes.">
       {{ icon('clock', class_='icon icon-inline') }}
       Snooze
@@ -50,7 +51,7 @@
             data-sheet-open="duration-sheet"
             data-sheet-action="{{ root }}/trivia/decks/{{ mute_deck_id }}/mute"
             data-sheet-title="mute"
-            data-sheet-deck="{{ deck_name }}"
+            data-sheet-deck="{{ _label }}"
             data-sheet-subtitle="silences push notifications for this deck. auto-unmutes when the timer runs out.">
       {{ icon('bell-slash', class_='icon icon-inline') }}
       Mute notifications
@@ -61,7 +62,7 @@
           action="{{ root }}{{ discard_action }}"
           class="session-discard-form session-discard-form-inline">
       <button type="submit" class="session-menu-row danger" role="menuitem"
-              data-deck="{{ deck_name }}" aria-label="Discard this session">
+              data-deck="{{ _label }}" aria-label="Discard this session">
         {{ icon('trash', class_='icon icon-inline') }}
         Discard session
       </button>
@@ -78,12 +79,13 @@
       <li class="session-card">
         {{ session_menu(
              s.deck_name,
+             s.deck_display,
              snooze_action="/trivia/session/" ~ s.deck_name ~ "/snooze",
              discard_action="/trivia/session/" ~ s.deck_name ~ "/abandon",
              mute_deck_id=s.deck_id,
            ) }}
         <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ s.deck_name }}?cards={{ s.queue_param }}{% if s.done_param %}&amp;done={{ s.done_param }}{% endif %}" class="session-link">
-          <span class="session-deck">{{ s.deck_name }}</span>
+          <span class="session-deck">{{ s.deck_display or s.deck_name }}</span>
           <span class="session-meta">
             <span class="session-state">{{ s.remaining }} of {{ s.total }} cards left</span>
           </span>
@@ -102,11 +104,12 @@
       <li class="session-card" data-session-id="{{ s.id }}">
         {{ session_menu(
              s.deck_name,
+             s.deck_display_name or s.deck_name,
              snooze_action="/session/" ~ s.id ~ "/snooze",
              discard_action="/session/" ~ s.id ~ "/abandon",
            ) }}
         <a href="{{ request.scope.get('root_path','') }}/session/{{ s.id }}" class="session-link">
-          <span class="session-deck">{{ s.deck_name }}</span>
+          <span class="session-deck">{{ s.deck_display_name or s.deck_name }}</span>
           <span class="session-meta">
             {% if s.state == 'grading' %}<span class="session-state">grading…</span>
             {% elif s.state == 'showing-result' %}<span class="session-state">just answered</span>
@@ -142,15 +145,16 @@
         {%- else -%}
           {%- set action_url = root ~ '/trivia/session/' ~ s.deck_name ~ '/snooze' -%}
         {%- endif -%}
+        {%- set _label = s.deck_display or s.deck_name -%}
         <button type="button" class="snoozed-row-button"
                 data-sheet-open="duration-sheet"
                 data-sheet-action="{{ action_url }}"
                 data-sheet-title="adjust snooze for"
-                data-sheet-deck="{{ s.deck_name }}"
+                data-sheet-deck="{{ _label }}"
                 data-sheet-subtitle="wake now, or pick a new duration. picking a new one overwrites the current snooze."
                 data-sheet-show-wake="1">
           <span class="snoozed-row-text">
-            <span class="snoozed-row-deck">{{ s.deck_name }}</span>
+            <span class="snoozed-row-deck">{{ _label }}</span>
             {%- set _wakes = s.snoozed_until|wakes_in -%}
             <span class="snoozed-row-wakes">
               {%- if _wakes == 'forever' -%}snoozed indefinitely

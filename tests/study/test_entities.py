@@ -90,6 +90,7 @@ def test_recent_session_round_trips_dict():
         "id": "abc123",
         "deck_id": 1,
         "deck_name": "go-systems",
+        "deck_display_name": None,
         "last_active": "2026-04-29T12:00:00Z",
         "status": "active",
         "state": "awaiting-answer",

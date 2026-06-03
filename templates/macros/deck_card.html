@@ -20,7 +20,7 @@
     <span class="deck-body">
       <span class="deck-type-eyebrow deck-type-eyebrow-{{ d.deck_type }}">{{ d.deck_type }}</span>
       <span class="deck-name">
-        {{ d.name }}
+        {{ d.display_name or d.name }}
         {% if d.pinned %}
           <span class="deck-pin-mark" aria-label="pinned" title="Pinned to top">{{ icon('push-pin', class_='icon icon-inline') }}</span>
         {% endif %}
@@ -53,7 +53,7 @@
      Sibling of the .deck-link <a>, positioned absolute in the top-right
      so its click target doesn't overlap the link. #}
   <details class="row-overflow-menu">
-    <summary class="row-overflow-trigger" title="More actions" aria-label="More actions for {{ d.name }}"><span aria-hidden="true">⋯</span></summary>
+    <summary class="row-overflow-trigger" title="More actions" aria-label="More actions for {{ d.display_name or d.name }}"><span aria-hidden="true">⋯</span></summary>
     <div class="deck-overflow-body" data-details-body>
       {% set deck_name = d.name %}
       {% set deck_type = d.deck_type %}

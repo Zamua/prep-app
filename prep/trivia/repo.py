@@ -502,7 +502,8 @@ class TriviaSessionsRepo:
             )
             rows = c.execute(
                 """
-                SELECT s.deck_id, s.last_active, s.queue, s.done, d.name AS deck_name
+                SELECT s.deck_id, s.last_active, s.queue, s.done,
+                       d.name AS deck_name, d.display_name AS deck_display_name
                   FROM trivia_sessions s
                   JOIN decks d ON d.id = s.deck_id
                  WHERE s.user_id = ? AND s.status = 'active'
@@ -514,6 +515,7 @@ class TriviaSessionsRepo:
         return [
             ActiveTriviaSession(
                 deck_name=r["deck_name"],
+                deck_display_name=r["deck_display_name"],
                 deck_id=r["deck_id"],
                 last_active=r["last_active"],
                 queue=parse_card_ids(r["queue"]),
@@ -546,7 +548,7 @@ class TriviaSessionsRepo:
             rows = c.execute(
                 """
                 SELECT s.deck_id, s.last_active, s.queue, s.done, s.snoozed_until,
-                       d.name AS deck_name
+                       d.name AS deck_name, d.display_name AS deck_display_name
                   FROM trivia_sessions s
                   JOIN decks d ON d.id = s.deck_id
                  WHERE s.user_id = ? AND s.status = 'active'
@@ -558,6 +560,7 @@ class TriviaSessionsRepo:
         return [
             ActiveTriviaSession(
                 deck_name=r["deck_name"],
+                deck_display_name=r["deck_display_name"],
                 deck_id=r["deck_id"],
                 last_active=r["last_active"],
                 queue=parse_card_ids(r["queue"]),

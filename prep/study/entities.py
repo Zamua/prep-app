@@ -72,6 +72,7 @@ class RecentSession(BaseModel):
     id: str
     deck_id: int
     deck_name: str
+    deck_display_name: str | None = None
     last_active: str
     status: SessionStatus
     state: SessionState
@@ -83,6 +84,10 @@ class RecentSession(BaseModel):
     # in the future. Surfaced in the index "Snoozed" sub-section to
     # show "wakes in X" and drive the adjust-sheet wake-from-here flow.
     snoozed_until: str | None = None
+
+    @property
+    def deck_display(self) -> str:
+        return self.deck_display_name or self.deck_name
 
 
 class Review(BaseModel):

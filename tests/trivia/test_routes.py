@@ -227,10 +227,15 @@ def test_decks_new_trivia_creates_deck_and_starts_workflow(
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"].endswith("/trivia/gen/trivia-geo-deadbeef01")
-    # Deck row landed sync with deck_type='trivia' and the right interval.
+    # Slug is an opaque random ID now; the redirect target ends with
+    # /trivia/gen/trivia-<slug>-deadbeef01. Check the prefix instead.
+    assert "/trivia/gen/trivia-" in r.headers["location"]
+    assert r.headers["location"].endswith("-deadbeef01")
+    # Deck row landed sync with deck_type='trivia', display_name="geo"
+    # (what the user typed), and the right interval. Find by
+    # display_name since the slug is random.
     rows = DeckRepo().list_trivia_decks()
-    geo = next(d for d in rows if d.name == "geo")
+    geo = next(d for d in rows if d.display_name == "geo")
     assert geo.notification_interval_minutes == 15
     # Queue starts empty (workflow does the inserts; we faked it).
     assert TriviaQueueRepo().pick_next_for_deck(geo.id) is None
@@ -270,10 +275,13 @@ def test_decks_new_trivia_redirects_to_deck_page_when_no_agent(
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"].endswith("/deck/manual-only")
+    # Slug is opaque now; redirect goes to /deck/<slug>. Just verify
+    # the redirect lands somewhere on the deck page namespace.
+    assert "/deck/" in r.headers["location"]
     assert called is False
-    # Deck row still landed.
-    assert any(d.name == "manual-only" for d in DeckRepo().list_trivia_decks())
+    # Deck row landed with display_name="manual-only" (what the user
+    # typed). Find by display_name since the slug is random.
+    assert any(d.display_name == "manual-only" for d in DeckRepo().list_trivia_decks())
 
 
 # ---- /trivia/session/<deck_name> --------------------------------------

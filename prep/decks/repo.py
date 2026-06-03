@@ -89,7 +89,7 @@ class DeckRepo:
         with cursor() as c:
             row = c.execute(
                 "SELECT notifications_enabled, notification_interval_minutes, "
-                "trivia_session_size, context_prompt, pinned_at "
+                "trivia_session_size, context_prompt, pinned_at, display_name "
                 "FROM decks WHERE id=? AND user_id=?",
                 (deck_id, user_id),
             ).fetchone()
@@ -102,6 +102,7 @@ class DeckRepo:
             session_size=int(row["trivia_session_size"] or 3),
             context_prompt=row["context_prompt"] or "",
             pinned=row["pinned_at"] is not None,
+            display_name=row["display_name"],
         )
 
     def get_trivia_source_meta(self, user_id: str, deck_id: int) -> TriviaSourceMeta | None:
@@ -121,17 +122,36 @@ class DeckRepo:
             context_prompt=row["context_prompt"],
         )
 
-    def create(self, user_id: str, name: str, context_prompt: str | None = None) -> int:
-        """Insert a new deck row. Caller is responsible for validating
-        the name (alphanumeric + hyphens, length cap, etc.). Raises
-        sqlite3.IntegrityError if the (user_id, name) pair already
-        exists."""
+    def create(
+        self,
+        user_id: str,
+        name: str,
+        context_prompt: str | None = None,
+        display_name: str | None = None,
+    ) -> int:
+        """Insert a new deck row. Caller validates `name` (kebab-case
+        slug used in URLs) and `display_name` (user-typed, may contain
+        spaces / capitals / punctuation). When display_name is None,
+        the UI falls back to `name`. Raises sqlite3.IntegrityError on
+        (user_id, name) collision."""
         with cursor() as c:
             cur = c.execute(
-                "INSERT INTO decks (user_id, name, created_at, context_prompt) VALUES (?, ?, ?, ?)",
-                (user_id, name, now(), context_prompt),
+                "INSERT INTO decks (user_id, name, display_name, created_at, context_prompt)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (user_id, name, display_name, now(), context_prompt),
             )
             return cur.lastrowid
+
+    def update_display_name(self, user_id: str, name: str, display_name: str) -> bool:
+        """Update only the human-display label; the URL slug `name`
+        stays put so existing bookmarks keep working. Returns True
+        when a row was updated."""
+        with cursor() as c:
+            cur = c.execute(
+                "UPDATE decks SET display_name = ? WHERE user_id = ? AND name = ?",
+                (display_name, user_id, name),
+            )
+            return cur.rowcount > 0
 
     def get_context_prompt(self, user_id: str, name: str) -> str | None:
         """Returns the user-supplied context prompt for a deck, or
@@ -195,7 +215,7 @@ class DeckRepo:
         with cursor() as c:
             rows = c.execute(
                 """
-                SELECT d.id, d.name, d.deck_type, d.pinned_at,
+                SELECT d.id, d.name, d.display_name, d.deck_type, d.pinned_at,
                        COUNT(q.id) AS total,
                        SUM(CASE WHEN cards.next_due <= ? AND COALESCE(q.suspended,0)=0
                                   AND COALESCE(d.deck_type,'srs') = 'srs'
@@ -205,7 +225,8 @@ class DeckRepo:
                   LEFT JOIN cards ON cards.question_id = q.id
                  WHERE d.user_id = ?
                  GROUP BY d.id
-                 ORDER BY (d.pinned_at IS NULL), d.pinned_at DESC, d.name
+                 ORDER BY (d.pinned_at IS NULL), d.pinned_at DESC,
+                          COALESCE(d.display_name, d.name)
                 """,
                 (now(), user_id),
             ).fetchall()
@@ -213,6 +234,7 @@ class DeckRepo:
             DeckSummary(
                 id=r["id"],
                 name=r["name"],
+                display_name=r["display_name"],
                 total=r["total"] or 0,
                 due=r["due"] or 0,
                 deck_type=DeckType(r["deck_type"] or "srs"),
@@ -253,19 +275,21 @@ class DeckRepo:
         *,
         topic: str,
         interval_minutes: int,
+        display_name: str | None = None,
     ) -> int:
         """Create a deck with deck_type='trivia'. `topic` is stored in
         the existing context_prompt column (claude reads it during
-        generation). `interval_minutes` is per-deck.
+        generation). `interval_minutes` is per-deck. `display_name`
+        is the user-typed label; UI falls back to `name` when None.
         """
         with cursor() as c:
             cur = c.execute(
                 """
-                INSERT INTO decks (user_id, name, created_at, context_prompt,
+                INSERT INTO decks (user_id, name, display_name, created_at, context_prompt,
                                    deck_type, notification_interval_minutes)
-                VALUES (?, ?, ?, ?, 'trivia', ?)
+                VALUES (?, ?, ?, ?, ?, 'trivia', ?)
                 """,
-                (user_id, name, now(), topic, interval_minutes),
+                (user_id, name, display_name, now(), topic, interval_minutes),
             )
             return cur.lastrowid
 
@@ -279,7 +303,7 @@ class DeckRepo:
         with cursor() as c:
             rows = c.execute(
                 """
-                SELECT id, user_id, name, created_at, context_prompt,
+                SELECT id, user_id, name, display_name, created_at, context_prompt,
                        deck_type, notification_interval_minutes, last_notified_at,
                        notifications_enabled, notification_ignored_streak,
                        trivia_session_size, notifications_muted_until
@@ -299,6 +323,7 @@ class DeckRepo:
             id=rd["id"],
             user_id=rd["user_id"],
             name=rd["name"],
+            display_name=rd.get("display_name"),
             created_at=rd["created_at"],
             context_prompt=rd.get("context_prompt"),
             deck_type=DeckType(rd.get("deck_type") or "srs"),

@@ -31,11 +31,13 @@
 <form method="post" action="{{ request.scope.get('root_path','') }}/decks/new/trivia" class="deck-new-form" autocomplete="off" data-submit-pending>
   <label class="form-field">
     <span class="form-label">Deck name</span>
-    <input type="text" name="name" value="{{ name_value }}" required
-           pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
-           placeholder="e.g. capitals, oncall-on-prem"
-           autocapitalize="none" autocorrect="off">
-    <span class="form-hint">2–30 chars, lowercase letters/digits/hyphens, used in the URL.</span>
+    <input type="text" name="name" value="{{ name_value }}" required maxlength="60"
+           placeholder="e.g. World Capitals">
+    <span class="form-hint">
+      Up to 60 chars; spaces and punctuation are fine. We'll derive a
+      kebab-case URL slug from it (so "World Capitals" lives at
+      <code>/deck/world-capitals</code>).
+    </span>
   </label>
 
   <label class="form-field">

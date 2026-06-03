@@ -60,6 +60,7 @@ _RESERVED_DECK_NAMES = frozenset(
     }
 )
 _MAX_CONTEXT_PROMPT_CHARS = 8000
+_MAX_DISPLAY_NAME_CHARS = 60
 
 
 def _validate_deck_name(name: str) -> str:
@@ -73,6 +74,47 @@ def _validate_deck_name(name: str) -> str:
     if n in _RESERVED_DECK_NAMES:
         raise HTTPException(400, f'"{n}" is reserved — pick another name.')
     return n
+
+
+def _validate_display_name(name: str) -> str:
+    """User-typed deck name. Allows spaces / capitals / punctuation;
+    rejects empty, newlines, over-length. The URL slug is generated
+    separately as an opaque short ID."""
+    n = (name or "").strip()
+    if not n:
+        raise HTTPException(400, "Deck name is required.")
+    if "\n" in n or "\r" in n:
+        raise HTTPException(400, "Deck name can't contain newlines.")
+    if len(n) > _MAX_DISPLAY_NAME_CHARS:
+        raise HTTPException(
+            400, f"Deck name is too long ({len(n)} chars; max {_MAX_DISPLAY_NAME_CHARS})."
+        )
+    return n
+
+
+# Nanoid-style alphabet, lowercase only so URLs stay easy to read
+# aloud / dictate. 8 chars × 32 alphabet ≈ 40 bits of entropy — plenty
+# for per-user uniqueness; collisions get retried in _unique_slug.
+_SLUG_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
+_SLUG_LENGTH = 8
+
+
+def _unique_slug(deck_repo, user_id: str) -> str:
+    """Generate a fresh URL slug for a new deck. The slug is opaque
+    (8 chars from a 32-symbol alphabet) so renames don't break links
+    and decks can carry display names with spaces / punctuation
+    without polluting the URL. Retries on per-user collision (very
+    rare at this scale)."""
+    import secrets
+
+    for _ in range(100):
+        candidate = "".join(secrets.choice(_SLUG_ALPHABET) for _ in range(_SLUG_LENGTH))
+        if deck_repo.find_id(user_id, candidate) is None:
+            return candidate
+    # 100 collisions in a row means something is very wrong (likely
+    # a test mock returning find_id != None unconditionally). Fail
+    # loudly instead of looping forever.
+    raise HTTPException(500, "could not find a free deck slug after 100 attempts")
 
 
 # ---- question-form parsing ---------------------------------------------
@@ -318,12 +360,11 @@ async def deck_new_srs_create(
         )
 
     try:
-        clean = _validate_deck_name(name)
+        display = _validate_display_name(name)
     except HTTPException as e:
         return rerender(e.detail)
 
-    if deck_repo.find_id(uid, clean) is not None:
-        return rerender(f'You already have a deck named "{clean}".')
+    slug = _unique_slug(deck_repo, uid)
 
     if len(context_prompt) > _MAX_CONTEXT_PROMPT_CHARS:
         return rerender(
@@ -341,7 +382,9 @@ async def deck_new_srs_create(
         if not context_prompt:
             return rerender("Plan & generate needs a description for the AI to plan against.")
 
-    deck_id = service.create_deck(deck_repo, uid, clean, context_prompt or None)
+    deck_id = service.create_deck(
+        deck_repo, uid, slug, context_prompt or None, display_name=display
+    )
 
     if action == "plan":
         try:
@@ -349,14 +392,14 @@ async def deck_new_srs_create(
                 temporal_client,
                 user_id=uid,
                 deck_id=deck_id,
-                deck_name=clean,
+                deck_name=slug,
                 prompt=context_prompt,
             )
         except Exception as e:
             raise HTTPException(500, f"deck created but failed to start plan workflow: {e}")
         return responses.redirect(request, f"/plan/{res.workflow_id}")
 
-    return responses.redirect(request, f"/deck/{clean}")
+    return responses.redirect(request, f"/deck/{slug}")
 
 
 @router.post("/decks/new/trivia", response_class=HTMLResponse)
@@ -401,12 +444,11 @@ async def deck_new_trivia_create(
         )
 
     try:
-        clean = _validate_deck_name(name)
+        display = _validate_display_name(name)
     except HTTPException as e:
         return rerender(e.detail)
 
-    if deck_repo.find_id(uid, clean) is not None:
-        return rerender(f'You already have a deck named "{clean}".')
+    slug = _unique_slug(deck_repo, uid)
 
     if len(topic) > _MAX_CONTEXT_PROMPT_CHARS:
         return rerender(f"Topic is too long ({len(topic)} chars; max {_MAX_CONTEXT_PROMPT_CHARS}).")
@@ -423,7 +465,9 @@ async def deck_new_trivia_create(
     if interval < 1 or interval > 720:
         return rerender("Notification interval must be 1–720 minutes.")
 
-    deck_id = deck_repo.create_trivia(uid, clean, topic=topic, interval_minutes=interval)
+    deck_id = deck_repo.create_trivia(
+        uid, slug, topic=topic, interval_minutes=interval, display_name=display
+    )
 
     # AI is optional. When no agent is configured, create the deck and
     # send the user to the deck page — they can add cards manually
@@ -431,7 +475,7 @@ async def deck_new_trivia_create(
     # agent IS configured, kick off the batch-generation workflow and
     # redirect to the polling page.
     if not _agent_mod.is_available_for(uid):
-        return responses.redirect(request, f"/deck/{clean}")
+        return responses.redirect(request, f"/deck/{slug}")
 
     # Kick off the workflow that does the actual AI call + per-card
     # inserts. Returns immediately — UI redirects to a polling page.
@@ -439,7 +483,7 @@ async def deck_new_trivia_create(
         res = await temporal_client.start_trivia_generate(
             user_id=uid,
             deck_id=deck_id,
-            deck_name=clean,
+            deck_name=slug,
             topic=topic,
         )
     except Exception as e:
@@ -458,7 +502,7 @@ async def deck_new_trivia_create(
         workflow_id=res.workflow_id,
         workflow_type=_WT.TRIVIA_GEN,
         deck_id=deck_id,
-        deck_name=clean,
+        deck_name=slug,
         url_path=f"/trivia/gen/{res.workflow_id}",
         initial_status="computing",
     )
@@ -548,14 +592,20 @@ def deck_delete(
     repo: DeckRepo = Depends(_deck_repo),
 ):
     """Delete a deck and (via FK CASCADE) all its questions/cards/
-    reviews/sessions. Requires the user to type the deck name into a
-    `confirm` field on the dialog form — guards against accidental
-    clicks. Returns a redirect back to the index."""
+    reviews/sessions. Requires the user to type the deck label into
+    `confirm` — either the display name (preferred, what the dialog
+    shows) or the URL slug (legacy decks without a display label).
+    Either string suffices so renamed decks don't lock the owner
+    out of deletion if they typed the slug."""
     uid = user["tailscale_login"]
-    if confirm.strip() != name:
-        raise HTTPException(400, "deck name didn't match — delete not performed")
-    if repo.find_id(uid, name) is None:
+    deck_id = repo.find_id(uid, name)
+    if deck_id is None:
         raise HTTPException(404, "deck not found")
+    typed = confirm.strip()
+    meta = repo.get_meta(uid, deck_id)
+    expected = meta.display_name or name
+    if typed not in (expected, name):
+        raise HTTPException(400, "deck name didn't match — delete not performed")
     service.delete_deck(repo, uid, name)
     return responses.redirect(request, "/")
 
@@ -604,18 +654,15 @@ def deck_rename(
     user: dict = Depends(current_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
 ):
-    """Rename a deck. Validates the new name with the same regex used
-    on creation and rejects collisions with another existing deck of
-    the same user. Redirects to the deck under its new URL."""
+    """Update the deck's display label. The URL slug `name` stays put
+    so existing bookmarks / shared links / open MCP sessions keep
+    working — only the human-facing label changes."""
     uid = user["tailscale_login"]
     if deck_repo.find_id(uid, name) is None:
         raise HTTPException(404, "deck not found")
-    cleaned = _validate_deck_name(new_name)
-    if cleaned == name:
-        return responses.redirect(request, f"/deck/{name}")
-    if not deck_repo.rename(uid, name, cleaned):
-        raise HTTPException(400, f'a deck named "{cleaned}" already exists')
-    return responses.redirect(request, f"/deck/{cleaned}")
+    display = _validate_display_name(new_name)
+    deck_repo.update_display_name(uid, name, display)
+    return responses.redirect(request, f"/deck/{name}")
 
 
 @router.get("/deck/{name}/edit-with-claude", response_class=HTMLResponse)

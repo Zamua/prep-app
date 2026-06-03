@@ -637,3 +637,14 @@ def init() -> None:
         dcols2 = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
         if "desired_retention" not in dcols2:
             c.execute("ALTER TABLE decks ADD COLUMN desired_retention REAL")
+
+        # 22. Separate the user-facing display name from the URL slug.
+        #     The `name` column still holds the kebab-case slug used in
+        #     URLs / dedup-via-UNIQUE. `display_name` is what the user
+        #     typed (with spaces, capitals, punctuation). NULL on
+        #     existing rows means "fall back to name" so legacy decks
+        #     keep rendering exactly as they did until the user
+        #     renames one.
+        dcols3 = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
+        if "display_name" not in dcols3:
+            c.execute("ALTER TABLE decks ADD COLUMN display_name TEXT")

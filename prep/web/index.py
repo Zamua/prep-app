@@ -126,6 +126,7 @@ def index(
     active_trivia_views = [
         {
             "deck_name": s.deck_name,
+            "deck_display": s.deck_display,
             "deck_id": s.deck_id,
             "remaining": s.remaining,
             "total": s.total,
@@ -143,10 +144,21 @@ def index(
     snoozed_srs = session_repo.list_snoozed(uid)
     snoozed_trivia = trivia_sessions.list_snoozed(uid)
     snoozed_views = [
-        {"kind": "srs", "id": s.id, "deck_name": s.deck_name, "snoozed_until": s.snoozed_until}
+        {
+            "kind": "srs",
+            "id": s.id,
+            "deck_name": s.deck_name,
+            "deck_display": s.deck_display,
+            "snoozed_until": s.snoozed_until,
+        }
         for s in snoozed_srs
     ] + [
-        {"kind": "trivia", "deck_name": s.deck_name, "snoozed_until": s.snoozed_until}
+        {
+            "kind": "trivia",
+            "deck_name": s.deck_name,
+            "deck_display": s.deck_display,
+            "snoozed_until": s.snoozed_until,
+        }
         for s in snoozed_trivia
     ]
     # Soonest wakes first — same order on both sides of the merge.

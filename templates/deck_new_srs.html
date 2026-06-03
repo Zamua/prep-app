@@ -23,11 +23,13 @@
 <form method="post" action="{{ request.scope.get('root_path','') }}/decks/new/srs" class="deck-new-form" autocomplete="off">
   <label class="form-field">
     <span class="form-label">Deck name</span>
-    <input type="text" name="name" value="{{ name_value }}" required
-           pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
-           placeholder="e.g. acme, distributed-systems"
-           autocapitalize="none" autocorrect="off">
-    <span class="form-hint">2–30 chars, lowercase letters/digits/hyphens, used in the URL.</span>
+    <input type="text" name="name" value="{{ name_value }}" required maxlength="60"
+           placeholder="e.g. Distributed Systems">
+    <span class="form-hint">
+      Up to 60 chars; spaces and punctuation are fine. We'll derive a
+      kebab-case URL slug from it (so "Distributed Systems" lives at
+      <code>/deck/distributed-systems</code>).
+    </span>
   </label>
 
   <label class="form-field">

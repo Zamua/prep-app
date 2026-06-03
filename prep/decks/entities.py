@@ -76,6 +76,10 @@ class Deck(BaseModel):
     id: int
     user_id: str
     name: str = Field(min_length=1, max_length=200)
+    # User-typed name preserved with spaces / capitals / punctuation.
+    # NULL on legacy rows that pre-date the column; UI falls back to
+    # `name` (the URL slug) in that case via the `display` property.
+    display_name: str | None = None
     created_at: str
     context_prompt: str | None = None
     # Trivia-specific. NULL on srs decks. The `deck_type` column has a
@@ -103,6 +107,12 @@ class Deck(BaseModel):
     # toggle persists. Only meaningful when deck_type=='trivia'.
     notifications_muted_until: str | None = None
 
+    @property
+    def display(self) -> str:
+        """User-facing label. Falls back to the URL slug for legacy
+        rows that pre-date the display_name column."""
+        return self.display_name or self.name
+
 
 class DeckSummary(BaseModel):
     """The shape returned by `list_decks` for the index page — adds
@@ -113,10 +123,17 @@ class DeckSummary(BaseModel):
 
     id: int
     name: str
+    display_name: str | None = None
     total: int
     due: int
     deck_type: DeckType = DeckType.SRS
     pinned: bool = False
+
+    @property
+    def display(self) -> str:
+        """What to render in UI for this deck. Falls back to the URL
+        slug for legacy rows that pre-date the display_name column."""
+        return self.display_name or self.name
 
 
 class Question(BaseModel):
@@ -210,6 +227,16 @@ class DeckMeta(BaseModel):
     session_size: int = 3
     context_prompt: str = ""
     pinned: bool = False
+    # User-typed label. NULL on legacy rows; templates fall back to
+    # the URL slug via the `display` property.
+    display_name: str | None = None
+
+    def display_for(self, slug: str) -> str:
+        """Best-effort user-facing label given the deck's URL slug
+        as the fallback. Used by templates that receive both
+        `deck_meta` and `deck_name` (slug) and want to render the
+        display where it exists, or the slug where it doesn't."""
+        return self.display_name or slug
 
 
 class TriviaSourceMeta(BaseModel):

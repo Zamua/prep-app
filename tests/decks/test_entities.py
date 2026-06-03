@@ -68,7 +68,7 @@ def test_deck_summary_round_trips_dict():
     default which surfaces as a serialized field)."""
     raw = {"id": 1, "name": "go-systems", "total": 12, "due": 5}
     s = DeckSummary.model_validate(raw)
-    expected = {**raw, "deck_type": "srs", "pinned": False}
+    expected = {**raw, "display_name": None, "deck_type": "srs", "pinned": False}
     # model_dump returns the enum object, not its value; mode='json'
     # gives us the wire-shape we'd JSON-encode for the UI.
     assert s.model_dump(mode="json") == expected
