@@ -3,9 +3,6 @@
 Spaced-repetition flashcards. Describe a topic, get a deck. AI generates and
 grades; FSRS schedules.
 
-> Pre-1.0, single-author. Stable for personal use; data shape and APIs may
-> shift between minor versions.
-
 ## Try the hosted version
 
 [**prepcards.app**](https://prepcards.app). Free, multi-user, Clerk sign-in.
