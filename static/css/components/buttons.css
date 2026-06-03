@@ -188,44 +188,41 @@
   margin-left: 0.4rem;
 }
 
-/* Copy-to-clipboard chip — sits next to a <code> the user is expected
- * to type or paste (typed-name delete confirmations). Icon-only, sized
- * to match adjacent text. The is-copied class is added by
- * copy-button.js for ~1.5s after a successful copy; CSS swaps the
- * default copy icon for a check. */
-.copy-btn {
-  display: inline-flex;
+/* Copyable-code block — <code> + a Copy button beside it, used by
+ * the macros/copyable_code.html macro for any "paste this exact
+ * string somewhere" surface (delete confirmations, account ID).
+ * Mirrors the .new-token-value chrome from BYOK so all such
+ * affordances look the same. */
+.copyable-code {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  vertical-align: middle;
-  padding: 0.2em;
-  margin-left: 0.35em;
-  border: 1px solid var(--hairline);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--ink-soft);
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--tint);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin-block: 0.5rem 0.7rem;
 }
-.copy-btn .icon-inline {
-  width: 0.95em;
-  height: 0.95em;
+.copyable-code code {
+  flex: 1;
+  font-family: var(--mono, monospace);
+  font-size: 0.92rem;
+  word-break: break-all;
+  user-select: all;
 }
-.copy-btn:hover {
-  background: var(--paper);
-  color: var(--ink);
-  border-color: var(--rule);
-}
+
+/* The Copy button itself — icon-only, swaps copy → check for ~1.5s
+ * after a successful copy via copy-button.js's is-copied toggle. */
 .copy-btn .copy-btn-done {
   display: none;
-}
-.copy-btn.is-copied {
-  color: var(--accent, var(--ink));
-  border-color: var(--rule);
 }
 .copy-btn.is-copied .copy-btn-default {
   display: none;
 }
 .copy-btn.is-copied .copy-btn-done {
   display: inline-flex;
+}
+.copy-btn .icon-inline {
+  width: 1em;
+  height: 1em;
 }

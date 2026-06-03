@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Account · prep{% endblock %}
 {% block page_class %}settings{% endblock %}
+{% import "macros/copyable_code.html" as cc with context %}
 {% block main %}
 
 <section class="prelude">
@@ -40,19 +41,13 @@
         style="margin-top: 1rem;">
     <label class="form-field">
       <span class="form-label">Type your account ID to confirm</span>
+      {{ cc.block(user.tailscale_login, label='account ID') }}
       <input type="text" name="confirm" required
              placeholder="{{ user.tailscale_login }}"
              autocapitalize="none" autocorrect="off" spellcheck="false"
              style="font-family: var(--mono, monospace);">
       <span class="form-hint">
-        It's the value above: <code>{{ user.tailscale_login }}</code><button type="button"
-          class="copy-btn"
-          data-copy-text="{{ user.tailscale_login }}"
-          aria-label="Copy account ID to clipboard" title="Copy">
-          <span class="copy-btn-default">{{ icon('copy', class_='icon icon-inline') }}</span>
-          <span class="copy-btn-done">{{ icon('check', class_='icon icon-inline') }}</span>
-        </button>.
-        Typing it exactly is the safety check that prevents an accidental click here.
+        Typing the value exactly is the safety check that prevents an accidental click here.
       </span>
     </label>
     <div class="study-actions">
