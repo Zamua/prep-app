@@ -147,6 +147,31 @@
 .deck-overflow-action-danger { color: var(--danger, #a14040); }
 .deck-overflow-action-danger:hover { background: rgba(161, 64, 64, 0.08); }
 
+/* Stacked variant: primary label + small sub-line below.  Used by
+ * Export-CSV / Export-Anki where the format trade-offs matter and a
+ * one-word label hides them.  align-items shifts from center to
+ * baseline because the icon should align with the first line, not
+ * the column's midpoint. */
+.deck-overflow-action-stacked {
+  align-items: flex-start;
+}
+.deck-overflow-action-stacked .icon {
+  /* nudge down so the icon's optical center lines up with the
+   * primary label's x-height rather than its top edge */
+  margin-top: 0.18em;
+}
+.deck-overflow-action-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  gap: 0.05em;
+}
+.deck-overflow-action-sub {
+  font-size: 0.78em;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+
 /* Notif partial inside the overflow menu.
    The notif_edit partial renders a `<details class="notif-edit">` whose
    summary is a tinted pill ("every Nm" / "paused") and whose popover

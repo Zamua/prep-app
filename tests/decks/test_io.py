@@ -178,6 +178,186 @@ def test_csv_export_and_reimport_yields_identical_cards(initialized_db: str):
         )
 
 
+def _seed_comprehensive_deck(initialized_db: str, name: str = "round-trip-everything") -> int:
+    """Seed a deck with one card of each type, every optional field
+    populated where it's structurally meaningful for that type.
+
+    Coverage target:
+      - SHORT:  topic, rubric, explanation, answer_regex
+      - MCQ:    topic, rubric, explanation, choices (3 entries)
+      - MULTI:  topic, rubric, explanation, choices (4), answer as
+                JSON-encoded list of two correct choices
+      - CODE:   topic, rubric, explanation, skeleton, language
+
+    Anything CSV-exportable that's NOT covered here would slip through
+    the round-trip test below, so the goal is breadth over depth.
+    """
+    import json
+
+    deck_repo = DeckRepo()
+    qr = QuestionRepo()
+    deck_id = deck_repo.create(initialized_db, name)
+
+    qr.add(
+        initialized_db,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.SHORT,
+            topic="biology",
+            prompt="What organelle generates ATP?",
+            answer="mitochondria",
+            answer_regex="mitochondri[ao]n?",
+            rubric="must name the organelle; spelling tolerant",
+            explanation="The mitochondrion is the site of oxidative phosphorylation.",
+        ),
+    )
+    qr.add(
+        initialized_db,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.MCQ,
+            topic="geography",
+            prompt="Which is the capital of Australia?",
+            answer="Canberra",
+            choices=["Sydney", "Melbourne", "Canberra", "Perth"],
+            rubric="single correct city; Sydney is the largest, not the capital",
+            explanation="Common confusion — Canberra was chosen as a compromise between Sydney and Melbourne.",
+        ),
+    )
+    qr.add(
+        initialized_db,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.MULTI,
+            topic="systems",
+            prompt="Which of these are ACID properties?",
+            answer=json.dumps(["atomicity", "isolation"]),
+            choices=["atomicity", "scaling", "isolation", "latency"],
+            rubric="exactly the two ACID properties listed; partial credit not accepted",
+            explanation="ACID = atomicity, consistency, isolation, durability — only A and I appear in the choices.",
+        ),
+    )
+    qr.add(
+        initialized_db,
+        deck_id,
+        NewQuestion(
+            type=QuestionType.CODE,
+            topic="python",
+            prompt="Implement a thread-safe counter.",
+            answer=(
+                "import threading\n"
+                "class Counter:\n"
+                "    def __init__(self):\n"
+                "        self._n = 0\n"
+                "        self._lock = threading.Lock()\n"
+                "    def increment(self):\n"
+                "        with self._lock:\n"
+                "            self._n += 1\n"
+                "    def value(self):\n"
+                "        with self._lock:\n"
+                "            return self._n"
+            ),
+            skeleton=(
+                "class Counter:\n"
+                "    def __init__(self):\n"
+                "        ...\n"
+                "    def increment(self):\n"
+                "        ...\n"
+                "    def value(self):\n"
+                "        ..."
+            ),
+            language="python",
+            rubric="counter must be safe under N*K increments from concurrent threads",
+            explanation="A lock around both increment and value prevents lost updates and torn reads.",
+        ),
+    )
+    return deck_id
+
+
+def test_csv_round_trip_preserves_all_fields_all_types(initialized_db: str):
+    """End-to-end fidelity check: a deck with one card of EVERY type and
+    EVERY optional field populated round-trips through CSV without any
+    user-visible drift.
+
+    The earlier `test_csv_export_and_reimport_yields_identical_cards`
+    used a uniform short-deck and checked a 4-field subset — that pins
+    the basics. This test extends to mcq + multi + code AND asserts
+    every column in CSV_COLUMNS round-trips. If CSV gains a new
+    column, this test will catch a missed field at the import or
+    export end.
+    """
+    src_deck_id = _seed_comprehensive_deck(initialized_db, "round-trip-src")
+    body = deck_to_csv(initialized_db, src_deck_id)
+
+    out = csv_to_deck(
+        initialized_db,
+        "round-trip-dst",
+        body,
+        deck_repo=DeckRepo(),
+        question_repo=QuestionRepo(),
+    )
+    assert (
+        out.inserted == 4
+    ), f"expected 4 cards reimported, got {out.inserted}; errors={out.errors}"
+    assert out.errors == []
+
+    # Fetch full Question entities directly so we can diff every column
+    # the CSV touches. `list_in_deck` returns a DeckCard projection that
+    # drops `explanation`; pull the raw Question shape via the same
+    # internal helper the export uses to stay consistent.
+    from prep.decks.io import _questions_for_export
+
+    src = _questions_for_export(initialized_db, src_deck_id)
+    dst = _questions_for_export(initialized_db, out.deck_id)
+    assert len(src) == len(dst) == 4
+
+    # Compare by prompt so we don't depend on insertion-order survival
+    # through the import path (the importer respects CSV row order but
+    # the assertion shouldn't bake that in).
+    src_by_prompt = {q.prompt: q for q in src}
+    dst_by_prompt = {q.prompt: q for q in dst}
+    assert set(src_by_prompt) == set(dst_by_prompt)
+
+    for prompt, s in src_by_prompt.items():
+        d = dst_by_prompt[prompt]
+        assert s.type == d.type, f"{prompt}: type drift {s.type} → {d.type}"
+        assert s.topic == d.topic, f"{prompt}: topic drift {s.topic!r} → {d.topic!r}"
+        assert s.answer == d.answer, f"{prompt}: answer drift"
+        assert s.choices == d.choices, f"{prompt}: choices drift {s.choices!r} → {d.choices!r}"
+        assert s.rubric == d.rubric, f"{prompt}: rubric drift"
+        assert s.skeleton == d.skeleton, f"{prompt}: skeleton drift"
+        assert s.language == d.language, f"{prompt}: language drift {s.language!r} → {d.language!r}"
+        assert (
+            s.answer_regex == d.answer_regex
+        ), f"{prompt}: answer_regex drift {s.answer_regex!r} → {d.answer_regex!r}"
+        assert s.explanation == d.explanation, f"{prompt}: explanation drift"
+
+
+def test_csv_double_export_is_byte_identical(initialized_db: str):
+    """Export → import → export should yield the same CSV bytes as the
+    first export (sorted by id ASC, which is the deterministic order
+    `_questions_for_export` uses). Catches subtle re-serialization
+    drift like whitespace normalization or list-order changes in
+    `choices` that a field-by-field diff might miss."""
+    src_deck_id = _seed_comprehensive_deck(initialized_db, "double-export-src")
+    first = deck_to_csv(initialized_db, src_deck_id)
+
+    out = csv_to_deck(
+        initialized_db,
+        "double-export-dst",
+        first,
+        deck_repo=DeckRepo(),
+        question_repo=QuestionRepo(),
+    )
+    assert out.inserted == 4
+    second = deck_to_csv(initialized_db, out.deck_id)
+    assert first == second, (
+        "second export differs from first — something is mutating in the "
+        "import-then-re-export path. Diff:\n"
+        f"--- first ---\n{first}\n--- second ---\n{second}"
+    )
+
+
 def test_csv_import_empty_csv_returns_zero_inserts(initialized_db: str):
     out = csv_to_deck(
         initialized_db,

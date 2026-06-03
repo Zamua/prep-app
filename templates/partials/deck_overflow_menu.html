@@ -61,11 +61,23 @@
   </a>
 {% endif %}
 
-<a href="{{ _root }}/deck/{{ deck_name }}/export.csv" class="deck-overflow-action">
-  {{ icon('download-simple', class_='icon icon-inline') }}<span>Export CSV</span>
+<a href="{{ _root }}/deck/{{ deck_name }}/export.csv"
+   class="deck-overflow-action deck-overflow-action-stacked"
+   title="CSV export preserves every prep field — choices, rubric, skeleton, language, answer_regex, explanation.">
+  {{ icon('download-simple', class_='icon icon-inline') }}
+  <span class="deck-overflow-action-label">
+    <span>Export CSV</span>
+    <span class="deck-overflow-action-sub">full fidelity — all prep fields preserved</span>
+  </span>
 </a>
-<a href="{{ _root }}/deck/{{ deck_name }}/export.apkg" class="deck-overflow-action">
-  {{ icon('package', class_='icon icon-inline') }}<span>Export Anki deck</span>
+<a href="{{ _root }}/deck/{{ deck_name }}/export.apkg"
+   class="deck-overflow-action deck-overflow-action-stacked"
+   title="Anki .apkg flattens to a basic Anki note (front + back). Prep-only fields (choices structure, rubric, skeleton, language, answer_regex) get appended to the back as labeled text and aren't structurally recoverable on reimport.">
+  {{ icon('package', class_='icon icon-inline') }}
+  <span class="deck-overflow-action-label">
+    <span>Export Anki <code>.apkg</code></span>
+    <span class="deck-overflow-action-sub">Anki-compatible; flattened to front + back</span>
+  </span>
 </a>
 
 {% if has_cards %}
