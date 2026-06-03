@@ -771,7 +771,7 @@ def deck_toggle_pin(
             "partials/pin_form.html",
             {"deck_name": name, "pinned": is_pinned},
         )
-    return responses.redirect(request, f"/deck/{name}")
+    return responses.redirect_back(request, f"/deck/{name}")
 
 
 @router.post("/deck/{name}/retention")
@@ -838,7 +838,7 @@ def deck_toggle_notifications(
         raise HTTPException(404, "deck not found")
     if not service.set_notifications_enabled(repo, uid, deck_id, enabled == "on"):
         raise HTTPException(404, "deck not found")
-    return responses.redirect(request, f"/deck/{name}")
+    return responses.redirect_back(request, f"/deck/{name}")
 
 
 # ---- Question-level routes ----------------------------------------------

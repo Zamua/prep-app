@@ -813,7 +813,7 @@ def _redirect_or_notif_edit(
     the same UI surface (the notif-edit popover)."""
     if request.headers.get("hx-request") == "true":
         return _notif_edit_response(request, decks, uid, deck_id)
-    return responses.redirect(request, f"/deck/{deck_name}")
+    return responses.redirect_back(request, f"/deck/{deck_name}")
 
 
 @router.post("/trivia/decks/{deck_id}/notifications")
