@@ -189,16 +189,16 @@
 }
 
 /* Copy-to-clipboard chip — sits next to a <code> the user is expected
- * to type or paste (typed-name delete confirmations). Same height as
- * adjacent text, monospace, faint border. The is-copied class is
- * toggled by copy-button.js while the post-tap "Copied" label is up. */
+ * to type or paste (typed-name delete confirmations). Icon-only, sized
+ * to match adjacent text. The is-copied class is added by
+ * copy-button.js for ~1.5s after a successful copy; CSS swaps the
+ * default copy icon for a check. */
 .copy-btn {
   display: inline-flex;
   align-items: center;
-  font-family: var(--mono);
-  font-size: 0.78em;
-  line-height: 1;
-  padding: 0.18em 0.5em;
+  justify-content: center;
+  vertical-align: middle;
+  padding: 0.2em;
   margin-left: 0.35em;
   border: 1px solid var(--hairline);
   border-radius: 4px;
@@ -207,14 +207,25 @@
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
+.copy-btn .icon-inline {
+  width: 0.95em;
+  height: 0.95em;
+}
 .copy-btn:hover {
   background: var(--paper);
   color: var(--ink);
   border-color: var(--rule);
 }
+.copy-btn .copy-btn-done {
+  display: none;
+}
 .copy-btn.is-copied {
-  background: var(--paper);
-  color: var(--ink);
+  color: var(--accent, var(--ink));
   border-color: var(--rule);
-  font-style: italic;
+}
+.copy-btn.is-copied .copy-btn-default {
+  display: none;
+}
+.copy-btn.is-copied .copy-btn-done {
+  display: inline-flex;
 }

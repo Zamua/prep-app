@@ -404,7 +404,10 @@
       This <strong>cannot be undone</strong>. Type
       <code>{{ deck_name }}</code><button type="button" class="copy-btn"
         data-copy-text="{{ deck_name }}"
-        aria-label="Copy deck name to clipboard">copy</button> below to confirm.
+        aria-label="Copy deck name to clipboard" title="Copy">
+        <span class="copy-btn-default">{{ icon('copy', class_='icon icon-inline') }}</span>
+        <span class="copy-btn-done">{{ icon('check', class_='icon icon-inline') }}</span>
+      </button> below to confirm.
     </p>
     <label class="form-field">
       <span class="visually-hidden">Type the deck name to confirm</span>

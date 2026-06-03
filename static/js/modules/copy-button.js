@@ -1,7 +1,8 @@
 // Tiny clipboard helper. Any element marked `data-copy-text="…"`
 // becomes a click target that copies that text to the clipboard.
-// On success the button briefly shows its `data-copy-done-label`
-// (default "Copied"), restoring the original label after ~1.5s.
+// On success the `.is-copied` class is added for ~1.5s; the
+// template renders both the default + done icons inside the button
+// and CSS toggles which one is visible based on the class.
 //
 // Used by typed-name delete confirmations so users can paste the
 // expected string rather than typing it character-by-character.
@@ -29,20 +30,8 @@ async function handleClick(event, btn) {
     fallbackCopy(text);
   }
 
-  const doneLabel = btn.dataset.copyDoneLabel || "Copied";
-  const original = btn.innerHTML;
-  // Lock width so the label swap doesn't reflow neighbors (mobile
-  // UX rail — no layout shift on interaction).
-  const width = btn.getBoundingClientRect().width;
-  btn.style.minWidth = `${width}px`;
-  btn.textContent = doneLabel;
   btn.classList.add("is-copied");
-
-  setTimeout(() => {
-    btn.innerHTML = original;
-    btn.classList.remove("is-copied");
-    btn.style.minWidth = "";
-  }, DONE_MS);
+  setTimeout(() => btn.classList.remove("is-copied"), DONE_MS);
 }
 
 function fallbackCopy(text) {
