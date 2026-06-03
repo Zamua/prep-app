@@ -1,0 +1,65 @@
+{# Deck lists fragment — the two <section>s (pinned + the rest) that
+   live on the index. Pulled out of index.html so the pin-toggle
+   route can re-render JUST this slice via htmx (hx-target="#deck-lists"),
+   keeping the user's scroll position instead of doing a full
+   POST → 303 → reload.
+
+   The list still has view-transition-name on each card; htmx's
+   `transition:true` swap modifier wraps the DOM mutation in
+   document.startViewTransition() so the same slide-between-sections
+   animation plays.
+
+   Inputs (all passed by both the index route and the pin route):
+     pinned_decks            — list[dict], deck summaries with pinned=True
+     decks                   — list[dict], the rest
+     is_new_user             — bool, gates the empty-state hero
+     recent_sessions         — list, used by the section-eyebrow text
+     active_trivia_sessions  — list, ditto
+     agent_available         — bool, gates the "Edit with AI" pill
+#}
+{% import "macros/deck_card.html" as deck_card_macro with context %}
+<div id="deck-lists">
+  {% if pinned_decks %}
+  <section class="decks-section decks-section-pinned">
+    <p class="section-eyebrow"><span>Pinned</span><span class="rule"></span></p>
+    <ol class="deck-list" role="list">
+      {% for d in pinned_decks %}
+        {{ deck_card_macro.card(d, loop.index) }}
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+
+  {% if is_new_user %}
+    <section class="empty-state index-empty-state">
+      <p class="empty-headline">Start with <em>one deck</em>.</p>
+      <p class="empty-sub">
+        Pick a topic you want to remember — anything from world capitals to a paper you just read. Prep does the rest.
+      </p>
+      <a href="{{ request.scope.get('root_path','') }}/decks/new" class="btn btn-primary index-empty-cta">
+        Create your first deck
+      </a>
+    </section>
+  {% else %}
+  <section class="decks-section">
+    <p class="section-eyebrow"><span>{% if pinned_decks %}Other decks{% elif recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
+    <div class="deck-actions">
+      <a href="{{ request.scope.get('root_path','') }}/decks/new" class="deck-action-pill">
+        <span class="deck-action-icon" aria-hidden="true">+</span>
+        <span>new deck</span>
+      </a>
+      {% if agent_available and (decks or pinned_decks) %}
+        <a href="{{ request.scope.get('root_path','') }}/reorganize" class="deck-action-pill">
+          {{ icon('sparkle', class_='icon icon-inline') }}
+          <span>edit with AI</span>
+        </a>
+      {% endif %}
+    </div>
+    <ol class="deck-list" role="list">
+      {% for d in decks %}
+        {{ deck_card_macro.card(d, loop.index) }}
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+</div>

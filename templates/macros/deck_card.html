@@ -59,6 +59,7 @@
       {% set deck_type = d.deck_type %}
       {% set deck_meta = d %}
       {% set has_cards = (d.total or 0) > 0 %}
+      {% set list_context = True %}
       {% include "partials/deck_overflow_menu.html" %}
     </div>
   </details>

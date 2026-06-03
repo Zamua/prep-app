@@ -250,57 +250,8 @@
 </script>
 {% endif %}
 
-{# Pinned decks sit in their own labeled section above the rest, so
-   the user's curated set reads as a separate group rather than just a
-   re-ordered list. Section is omitted entirely when nothing is pinned. #}
-{% if pinned_decks %}
-<section class="decks-section decks-section-pinned">
-  <p class="section-eyebrow"><span>Pinned</span><span class="rule"></span></p>
-  <ol class="deck-list" role="list">
-    {% for d in pinned_decks %}
-      {{ deck_card_macro.card(d, loop.index) }}
-    {% endfor %}
-  </ol>
-</section>
-{% endif %}
-
-{% if is_new_user %}
-  {# Brand-new user — replace the section header + small empty row
-     with a single centered hero CTA. No "edit with AI" pill (nothing
-     to edit yet); no list shell (no items to list). #}
-  <section class="empty-state index-empty-state">
-    <p class="empty-headline">Start with <em>one deck</em>.</p>
-    <p class="empty-sub">
-      Pick a topic you want to remember — anything from world capitals to a paper you just read. Prep does the rest.
-    </p>
-    <a href="{{ request.scope.get('root_path','') }}/decks/new" class="btn btn-primary index-empty-cta">
-      Create your first deck
-    </a>
-  </section>
-{% else %}
-<section class="decks-section">
-  <p class="section-eyebrow"><span>{% if pinned_decks %}Other decks{% elif recent_sessions or active_trivia_sessions %}Or pick a deck{% else %}Your decks{% endif %}</span><span class="rule"></span></p>
-  {# Deck-level actions sit under the section header as small pills,
-     not as full-width tiles in the list. New deck is always available;
-     "edit with AI" only when an agent is configured + there's at
-     least one deck to edit. #}
-  <div class="deck-actions">
-    <a href="{{ request.scope.get('root_path','') }}/decks/new" class="deck-action-pill">
-      <span class="deck-action-icon" aria-hidden="true">+</span>
-      <span>new deck</span>
-    </a>
-    {% if agent_available and (decks or pinned_decks) %}
-      <a href="{{ request.scope.get('root_path','') }}/reorganize" class="deck-action-pill">
-        {{ icon('sparkle', class_='icon icon-inline') }}
-        <span>edit with AI</span>
-      </a>
-    {% endif %}
-  </div>
-<ol class="deck-list" role="list">
-  {% for d in decks %}
-    {{ deck_card_macro.card(d, loop.index) }}
-  {% endfor %}
-</ol>
-</section>
-{% endif %}
+{# Deck-list sections — pulled into a partial so the pin-toggle route
+   can re-render just this slice via htmx without a full page nav
+   (preserves scroll position; same view-transition animation). #}
+{% include "partials/deck_lists.html" %}
 {% endblock %}

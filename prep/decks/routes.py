@@ -766,6 +766,16 @@ def deck_toggle_pin(
     is_pinned = pinned == "on"
     repo.set_pinned(uid, deck_id, is_pinned)
     if request.headers.get("hx-request") == "true":
+        # The list-page menu form sets X-Pin-Context: list — that's
+        # the cue to return the full deck-lists fragment so htmx can
+        # swap #deck-lists in place (preserves scroll, animates via
+        # view transitions). Older callers (the deck-hero pin pill on
+        # /deck/<name>) get just the pill fragment as before.
+        if request.headers.get("x-pin-context") == "list":
+            from prep.web.index import build_deck_lists_context
+
+            ctx = build_deck_lists_context(request, uid)
+            return templates.TemplateResponse(request, "partials/deck_lists.html", ctx)
         return templates.TemplateResponse(
             request,
             "partials/pin_form.html",

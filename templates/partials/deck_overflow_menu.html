@@ -22,10 +22,17 @@
 {%- set _root = request.scope.get('root_path','') -%}
 {%- set pinned = deck_meta.pinned -%}
 {%- set delete_inline = delete_inline if delete_inline is defined else False -%}
+{%- set list_context = list_context if list_context is defined else False -%}
 
 {# Pin/Unpin. Form-shaped because it POSTs, but styled as a plain row
    so it visually matches the anchor + button entries below. #}
-<form method="post" action="{{ _root }}/deck/{{ deck_name }}/pin" class="deck-pin-menu-form">
+<form method="post" action="{{ _root }}/deck/{{ deck_name }}/pin" class="deck-pin-menu-form"
+      {% if list_context %}
+      hx-post="{{ _root }}/deck/{{ deck_name }}/pin"
+      hx-target="#deck-lists"
+      hx-swap="outerHTML transition:true"
+      hx-headers='{"X-Pin-Context": "list"}'
+      {% endif %}>
   <input type="hidden" name="pinned" value="{{ 'off' if pinned else 'on' }}">
   <button type="submit" class="deck-overflow-action">
     {{ icon('push-pin' if pinned else 'push-pin-simple', class_='icon icon-inline') }}

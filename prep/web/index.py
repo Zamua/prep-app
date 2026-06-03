@@ -28,6 +28,42 @@ from prep.web.templates import templates
 router = APIRouter()
 
 
+def build_deck_lists_context(request: Request, uid: str) -> dict:
+    """Build the subset of index-template context needed by
+    partials/deck_lists.html. Reused by the pin route's htmx
+    response so the in-place swap reflects fresh state without
+    re-doing the full index render. Same data shape as the index
+    handler builds — kept in lockstep here.
+    """
+    deck_repo = DeckRepo()
+    session_repo = SessionRepo()
+    trivia_repo = TriviaQueueRepo()
+    summaries = deck_repo.list_summaries(uid)
+    pinned: list[dict] = []
+    others: list[dict] = []
+    for d in summaries:
+        item = d.model_dump()
+        if d.deck_type == d.deck_type.TRIVIA:
+            item["trivia_stats"] = trivia_repo.deck_stats(d.id)
+        (pinned if d.pinned else others).append(item)
+    recents = session_repo.list_recent(uid, limit=5)
+    trivia_sessions = TriviaSessionsRepo()
+    active_trivia = trivia_sessions.list_active(uid)
+    snoozed_srs = session_repo.list_snoozed(uid)
+    snoozed_trivia = trivia_sessions.list_snoozed(uid)
+    is_new_user = not (
+        pinned or others or recents or active_trivia or snoozed_srs or snoozed_trivia
+    )
+    return {
+        "request": request,
+        "pinned_decks": pinned,
+        "decks": others,
+        "is_new_user": is_new_user,
+        "recent_sessions": [r.model_dump() for r in recents],
+        "active_trivia_sessions": active_trivia,
+    }
+
+
 @router.get("/healthz", include_in_schema=False)
 def healthz() -> PlainTextResponse:
     """Liveness probe. 200 = the uvicorn process is up and the route
