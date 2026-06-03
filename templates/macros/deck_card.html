@@ -40,10 +40,11 @@
       {% endif %}
     </span>
   </a>
-  {# Per-row overflow menu — same partial the deck-hero band uses, with
-     notifications + delete suppressed. Sibling of the .deck-link <a>,
-     positioned absolute in the top-right so its click target doesn't
-     overlap the link. The shared partial handles the rest. #}
+  {# Per-row overflow menu — same partial the deck-hero band uses. The
+     Delete row navigates to /deck/<name>#delete which auto-opens the
+     dialog on the deck page (delete_inline=false is the default).
+     Sibling of the .deck-link <a>, positioned absolute in the top-right
+     so its click target doesn't overlap the link. #}
   <details class="row-overflow-menu">
     <summary class="row-overflow-trigger" title="More actions" aria-label="More actions for {{ d.name }}"><span aria-hidden="true">⋯</span></summary>
     <div class="deck-overflow-body" data-details-body>
@@ -51,8 +52,6 @@
       {% set deck_type = d.deck_type %}
       {% set deck_meta = d %}
       {% set has_cards = (d.total or 0) > 0 %}
-      {% set show_notifications = false %}
-      {% set show_delete = false %}
       {% include "partials/deck_overflow_menu.html" %}
     </div>
   </details>

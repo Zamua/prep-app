@@ -15,12 +15,23 @@ export function init({expectedName} = {}) {
   const input = document.getElementById("delete-confirm-input");
   if (!openBtn || !dlg) return;
 
-  openBtn.addEventListener("click", () => {
+  function open() {
     if (input) input.value = "";
     if (submitBtn) submitBtn.disabled = true;
     dlg.showModal();
     if (input) input.focus();
-  });
+  }
+
+  openBtn.addEventListener("click", open);
+
+  // Auto-open if the user landed on this page from the index card's
+  // "Delete deck" overflow link, which navigates to /deck/<name>#delete.
+  // Strip the hash on open so a back-button doesn't re-trigger the
+  // dialog when the user navigates away and returns.
+  if (window.location.hash === "#delete") {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    open();
+  }
 
   if (cancelBtn) {
     cancelBtn.addEventListener("click", (e) => {

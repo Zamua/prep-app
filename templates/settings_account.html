@@ -45,7 +45,10 @@
              autocapitalize="none" autocorrect="off" spellcheck="false"
              style="font-family: var(--mono, monospace);">
       <span class="form-hint">
-        It's the value above: <code>{{ user.tailscale_login }}</code>.
+        It's the value above: <code>{{ user.tailscale_login }}</code><button type="button"
+          class="copy-btn"
+          data-copy-text="{{ user.tailscale_login }}"
+          aria-label="Copy account ID to clipboard">copy</button>.
         Typing it exactly is the safety check that prevents an accidental click here.
       </span>
     </label>

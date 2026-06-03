@@ -26,6 +26,7 @@
       <summary title="More actions" aria-label="More actions"><span aria-hidden="true">⋯</span></summary>
       <div class="deck-overflow-body">
         {% set has_cards = (questions|length) > 0 %}
+        {% set delete_inline = True %}
         {% include "partials/deck_overflow_menu.html" %}
       </div>
     </details>
@@ -401,7 +402,9 @@
     </p>
     <p class="delete-warn">
       This <strong>cannot be undone</strong>. Type
-      <code>{{ deck_name }}</code> below to confirm.
+      <code>{{ deck_name }}</code><button type="button" class="copy-btn"
+        data-copy-text="{{ deck_name }}"
+        aria-label="Copy deck name to clipboard">copy</button> below to confirm.
     </p>
     <label class="form-field">
       <span class="visually-hidden">Type the deck name to confirm</span>

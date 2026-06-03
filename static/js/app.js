@@ -15,6 +15,7 @@ import {attachDeclarative as attachSheets} from "@/modules/sheet.js";
 import {init as initPwaInstall} from "@/modules/pwa-install.js";
 import {init as initRowOverflow} from "@/modules/row-overflow.js";
 import {attachDeclarative as attachByokToggles} from "@/modules/byok-key-toggle.js";
+import {attachDeclarative as attachCopyButtons} from "@/modules/copy-button.js";
 
 initDetailsToggle();
 attachDialogs();
@@ -23,6 +24,7 @@ attachSheets();
 initPwaInstall();
 initRowOverflow();
 attachByokToggles();
+attachCopyButtons();
 
 // Workflow polling pages (transform, plan, grading, trivia gen) now
 // drive their polling via htmx's `hx-trigger="every Ns"` on a fragment

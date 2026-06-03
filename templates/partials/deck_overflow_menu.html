@@ -1,12 +1,13 @@
 {# Shared deck-overflow menu — the ⋯ popover.
 
-   Used in two contexts:
-   1. Inside the deck-hero band on /deck/<name> — full menu including
-      the notifications editor (interval popover for trivia, on/off
-      toggle for srs) and Delete entry.
-   2. On the index page deck card — same menu without notifications
-      (too heavy for an inline list-item render) and without Delete
-      (destructive action stays gated behind drilling into the deck).
+   Used in two contexts, both showing the same items:
+   1. Inside the deck-hero band on /deck/<name> — Delete row opens the
+      inline <dialog> via `delete-deck-dialog.js`.
+   2. On the index page deck card — Delete row navigates to
+      /deck/<name>#delete; the deck page sees the hash on load and
+      auto-opens the dialog. This keeps the typed-name confirmation
+      living in one place while the entry point stays consistent
+      between the two surfaces.
 
    Inputs:
      deck_name        — string, the deck's URL slug
@@ -14,13 +15,13 @@
      deck_meta        — DeckMeta-shaped (pinned, optional notifications_enabled)
      has_cards        — bool, gates the "Split deck" entry
      agent_available  — bool, gates the "Edit with AI" entry
-     show_notifications — bool, defaults True. Index sets False.
-     show_delete      — bool, defaults True. Index sets False.
+     delete_inline    — bool, defaults False. Deck-hero sets True so
+                        the Delete row opens the dialog directly
+                        instead of navigating to #delete.
 #}
 {%- set _root = request.scope.get('root_path','') -%}
 {%- set pinned = deck_meta.pinned -%}
-{%- set show_notifications = show_notifications if show_notifications is defined else True -%}
-{%- set show_delete = show_delete if show_delete is defined else True -%}
+{%- set delete_inline = delete_inline if delete_inline is defined else False -%}
 
 {# Pin/Unpin. Form-shaped because it POSTs, but styled as a plain row
    so it visually matches the anchor + button entries below. #}
@@ -32,23 +33,21 @@
   </button>
 </form>
 
-{% if show_notifications %}
-  {# Notifications. Trivia needs the interval editor (notif_edit.html);
-     SRS just needs a one-tap on/off toggle. Same row position in both. #}
-  {% if deck_type == 'trivia' %}
-    {% include "partials/notif_edit.html" %}
-  {% else %}
-    <form method="post" action="{{ _root }}/deck/{{ deck_name }}/notifications" class="notif-pill-form">
-      <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
-      <button type="submit" class="deck-overflow-action">
-        {% if deck_meta.notifications_enabled %}
-          {{ icon('bell', class_='icon icon-inline') }}<span>Pause notifications</span>
-        {% else %}
-          {{ icon('bell-slash', class_='icon icon-inline') }}<span>Resume notifications</span>
-        {% endif %}
-      </button>
-    </form>
-  {% endif %}
+{# Notifications. Trivia needs the interval editor (notif_edit.html);
+   SRS just needs a one-tap on/off toggle. Same row position in both. #}
+{% if deck_type == 'trivia' %}
+  {% include "partials/notif_edit.html" %}
+{% else %}
+  <form method="post" action="{{ _root }}/deck/{{ deck_name }}/notifications" class="notif-pill-form">
+    <input type="hidden" name="enabled" value="{{ 'off' if deck_meta.notifications_enabled else 'on' }}">
+    <button type="submit" class="deck-overflow-action">
+      {% if deck_meta.notifications_enabled %}
+        {{ icon('bell', class_='icon icon-inline') }}<span>Pause notifications</span>
+      {% else %}
+        {{ icon('bell-slash', class_='icon icon-inline') }}<span>Resume notifications</span>
+      {% endif %}
+    </button>
+  </form>
 {% endif %}
 
 <a href="{{ _root }}/deck/{{ deck_name }}/question/new" class="deck-overflow-action">
@@ -71,8 +70,12 @@
   </a>
 {% endif %}
 
-{% if show_delete %}
+{% if delete_inline %}
   <button type="button" id="open-delete-dialog" class="deck-overflow-action deck-overflow-action-danger">
     {{ icon('trash', class_='icon icon-inline') }}<span>Delete deck</span>
   </button>
+{% else %}
+  <a href="{{ _root }}/deck/{{ deck_name }}#delete" class="deck-overflow-action deck-overflow-action-danger">
+    {{ icon('trash', class_='icon icon-inline') }}<span>Delete deck</span>
+  </a>
 {% endif %}
