@@ -37,6 +37,16 @@
     </a>
   </li>
   <li>
+    <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/import-prepdeck">
+      {{ icon('package', class_='deck-type-card-icon') }}
+      <span class="deck-type-card-body">
+        <span class="deck-type-card-title">Restore .prepdeck</span>
+        <span class="deck-type-card-sub">Drop a prep backup — cards, FSRS state, and study history all come back.</span>
+      </span>
+      <span class="deck-arrow">{{ icon('arrow-right') }}</span>
+    </a>
+  </li>
+  <li>
     <a class="deck-type-card" href="{{ request.scope.get('root_path','') }}/decks/import-csv">
       {{ icon('upload-simple', class_='deck-type-card-icon') }}
       <span class="deck-type-card-body">

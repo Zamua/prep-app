@@ -112,6 +112,54 @@ class TriviaQueueRepo:
             is_fresh=bool(row["is_fresh"]),
         )
 
+    # ---- archive (.prepdeck) restore path ------------------------------
+    #
+    # See prep/study/repo.py for the matching SRS-side helpers. The
+    # archive codec stays I/O-free here by delegating to these methods.
+
+    def list_queue_for_deck(self, deck_id: int) -> list[dict]:
+        """Per-card queue state for one deck, joined to the prompt for
+        the cross-reference key used in .prepdeck trivia_queue.csv.
+        Ordered by queue_position ASC so reimport replays the same
+        rotation order."""
+        with cursor() as c:
+            rows = c.execute(
+                """SELECT q.prompt, tq.queue_position, tq.last_answered_at,
+                          tq.last_answered_correctly
+                     FROM trivia_queue tq JOIN questions q ON q.id = tq.question_id
+                    WHERE q.deck_id = ?
+                    ORDER BY tq.queue_position ASC""",
+                (deck_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def import_entry(
+        self,
+        question_id: int,
+        queue_position: int,
+        *,
+        last_answered_at: str | None = None,
+        last_answered_correctly: int | None = None,
+    ) -> None:
+        """Insert one trivia_queue row verbatim from an external
+        source. Used by the archive importer to restore queue order +
+        per-card progress without bumping anything through the normal
+        append/answer paths.
+        """
+        with cursor() as c:
+            c.execute(
+                """INSERT INTO trivia_queue
+                       (question_id, queue_position, last_answered_at,
+                        last_answered_correctly)
+                       VALUES (?, ?, ?, ?)""",
+                (
+                    question_id,
+                    queue_position,
+                    last_answered_at,
+                    last_answered_correctly,
+                ),
+            )
+
     def mark_answered(self, question_id: int, correct: bool) -> None:
         """Record an answer + rotate the card to the back of its
         deck's queue. Bumping `queue_position` happens in the same

@@ -1666,6 +1666,35 @@ def deck_export_csv(
     )
 
 
+@router.get("/deck/{name}/export.prepdeck", include_in_schema=False)
+def deck_export_prepdeck(
+    name: str,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Download every question + FSRS state + reviews log + trivia
+    queue state in `name` as a `.prepdeck` archive (zip).
+
+    Full-fidelity backup format — what gets exported here is exactly
+    what `.prepdeck` import can restore (modulo regenerated question
+    ids). Wire shape lives in `prep.decks.archive`."""
+    from prep.decks.archive import deck_to_prepdeck
+
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    body = deck_to_prepdeck(uid, deck_id)
+    return Response(
+        content=body,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}.prepdeck"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.get("/deck/{name}/export.apkg", include_in_schema=False)
 def deck_export_apkg(
     name: str,
@@ -1755,6 +1784,67 @@ async def decks_import_csv_submit(
     )
     return templates.TemplateResponse(
         "deck_import_csv.html",
+        {"request": request, "user": user, "outcome": outcome, "error": None},
+    )
+
+
+@router.get("/decks/import-prepdeck", response_class=HTMLResponse)
+def decks_import_prepdeck_form(request: Request, user: dict = Depends(current_user)):
+    """Render the .prepdeck upload page. POSTs to the same path."""
+    return templates.TemplateResponse(
+        "deck_import_prepdeck.html",
+        {"request": request, "user": user, "outcome": None, "error": None},
+    )
+
+
+@router.post("/decks/import-prepdeck", response_class=HTMLResponse)
+async def decks_import_prepdeck_submit(
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+    q_repo: QuestionRepo = Depends(_question_repo),
+):
+    """Multipart-form upload: a `.prepdeck` zip + a deck name. Restores
+    a deck with full FSRS state, review log, and (for trivia decks)
+    queue state. Refuses if the target deck name already exists — the
+    semantics are 'restore deck,' not 'append cards.'"""
+    from prep.decks.archive import prepdeck_to_deck
+
+    uid = user["tailscale_login"]
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return templates.TemplateResponse(
+            "deck_import_prepdeck.html",
+            {
+                "request": request,
+                "user": user,
+                "outcome": None,
+                "error": "Pick a .prepdeck file to upload.",
+            },
+            status_code=400,
+        )
+
+    try:
+        clean = _validate_deck_name(name)
+    except HTTPException as e:
+        return templates.TemplateResponse(
+            "deck_import_prepdeck.html",
+            {"request": request, "user": user, "outcome": None, "error": e.detail},
+            status_code=400,
+        )
+
+    raw = await upload.read()
+    outcome = prepdeck_to_deck(
+        uid,
+        clean,
+        raw,
+        deck_repo=deck_repo,
+        question_repo=q_repo,
+    )
+    return templates.TemplateResponse(
+        "deck_import_prepdeck.html",
         {"request": request, "user": user, "outcome": outcome, "error": None},
     )
 

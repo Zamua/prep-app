@@ -570,6 +570,99 @@ class ReviewRepo:
             interval_minutes=interval_minutes,
         )
 
+    # ---- archive (.prepdeck) restore path ------------------------------
+    #
+    # These three methods exist so prep.decks.archive doesn't have to
+    # reach into sqlite directly: it asks the review/card repo for the
+    # state of one deck (export) or pushes state back row-by-row (import).
+    # The normal record() / record_grading_with_idempotency() paths run
+    # the FSRS scheduler; the archive path skips it because the source
+    # archive already carries the computed state.
+
+    def list_card_state_for_deck(self, user_id: str, deck_id: int) -> list[dict]:
+        """All `cards` rows for the deck, joined back to their prompt for
+        the cross-reference key used in `.prepdeck` cards.csv. Returns
+        plain dicts keyed by the column names so the archive codec
+        doesn't need a per-shape entity for a one-off projection.
+        """
+        with cursor() as c:
+            rows = c.execute(
+                """SELECT q.prompt, c.step, c.next_due, c.last_review,
+                          c.stability, c.difficulty, c.fsrs_state
+                     FROM cards c JOIN questions q ON q.id = c.question_id
+                    WHERE q.deck_id = ? AND q.user_id = ?""",
+                (deck_id, user_id),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def restore_card_state(
+        self,
+        question_id: int,
+        *,
+        step: int | None = None,
+        next_due: str | None = None,
+        last_review: str | None = None,
+        stability: float | None = None,
+        difficulty: float | None = None,
+        fsrs_state: int | None = None,
+    ) -> None:
+        """Overwrite the `cards` row's FSRS state with values from an
+        external source (the archive importer). Only non-None fields
+        are updated; the row's other fields are left intact.
+        """
+        fields: dict[str, object] = {}
+        for k, v in (
+            ("step", step),
+            ("next_due", next_due),
+            ("last_review", last_review),
+            ("stability", stability),
+            ("difficulty", difficulty),
+            ("fsrs_state", fsrs_state),
+        ):
+            if v is not None:
+                fields[k] = v
+        if not fields:
+            return
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        with cursor() as c:
+            c.execute(
+                f"UPDATE cards SET {sets} WHERE question_id = ?",
+                (*fields.values(), question_id),
+            )
+
+    def list_reviews_for_deck(self, user_id: str, deck_id: int) -> list[dict]:
+        """All review rows for the deck, oldest-first, joined to the
+        prompt for cross-reference. Used by `.prepdeck` export."""
+        with cursor() as c:
+            rows = c.execute(
+                """SELECT q.prompt, r.ts, r.result, r.user_answer, r.grader_notes
+                     FROM reviews r JOIN questions q ON q.id = r.question_id
+                    WHERE q.deck_id = ? AND q.user_id = ?
+                    ORDER BY r.ts ASC, r.id ASC""",
+                (deck_id, user_id),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def import_review(
+        self,
+        question_id: int,
+        ts: str,
+        result: str,
+        user_answer: str = "",
+        grader_notes: str = "",
+    ) -> None:
+        """Insert one review row verbatim from an external source.
+        DOES NOT run the scheduler — the archive importer calls
+        `restore_card_state` separately to seed the FSRS state."""
+        if result not in ("right", "wrong"):
+            raise ValueError(f"unknown result: {result!r}")
+        with cursor() as c:
+            c.execute(
+                """INSERT INTO reviews (question_id, ts, result, user_answer, grader_notes)
+                       VALUES (?, ?, ?, ?, ?)""",
+                (question_id, ts, result, user_answer, grader_notes),
+            )
+
     def find_idempotent_record(self, idempotency_key: str) -> dict | None:
         """Look up a previously-recorded grading by its idempotency key.
         Returns the cached SRSState dict, or None if not seen yet.

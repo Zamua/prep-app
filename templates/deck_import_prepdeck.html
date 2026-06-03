@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Restore .prepdeck · prep{% endblock %}
+{% block page_class %}deck-new{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/decks/new", "back") }}
+
+<section class="prelude">
+  <p class="eyebrow">Restore from .prepdeck</p>
+  <h1 class="display">Bring <em>your deck</em> back.</h1>
+  <p class="lede">
+    A <code>.prepdeck</code> archive carries every prep field plus
+    your full study history: FSRS state per card, the reviews log,
+    and (for trivia decks) the queue order and per-card answered state.
+    Imported into a fresh deck name so the restore can't merge into
+    an existing deck's progress by accident.
+  </p>
+</section>
+
+{% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+{% if outcome %}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Restored into <code>{{ outcome.deck_name }}</code></span><span class="rule"></span></p>
+  <ul class="agent-steps">
+    <li><strong>{{ outcome.inserted }}</strong> card{{ '' if outcome.inserted == 1 else 's' }} added.</li>
+    {% if outcome.reviews_inserted %}
+      <li><strong>{{ outcome.reviews_inserted }}</strong> review{{ '' if outcome.reviews_inserted == 1 else 's' }} from your history replayed.</li>
+    {% endif %}
+    {% if outcome.queue_rows_inserted %}
+      <li><strong>{{ outcome.queue_rows_inserted }}</strong> trivia queue row{{ '' if outcome.queue_rows_inserted == 1 else 's' }} restored.</li>
+    {% endif %}
+    {% if outcome.skipped_duplicates %}
+      <li><strong>{{ outcome.skipped_duplicates }}</strong> duplicate{{ '' if outcome.skipped_duplicates == 1 else 's' }} skipped.</li>
+    {% endif %}
+    {% if outcome.errors %}
+      <li><strong>{{ outcome.errors|length }}</strong> issue{{ '' if outcome.errors|length == 1 else 's' }} surfaced:</li>
+    {% endif %}
+  </ul>
+  {% if outcome.errors %}
+    <pre class="reproduction" style="margin-top: 0.6rem; max-height: 12rem; overflow: auto;">{% for err in outcome.errors %}{{ err }}
+{% endfor %}</pre>
+  {% endif %}
+  {% if outcome.inserted > 0 %}
+    <div class="study-actions" style="margin-top: 0.8rem;">
+      <a href="{{ request.scope.get('root_path','') }}/deck/{{ outcome.deck_name }}" class="btn btn-primary">Open deck</a>
+      <a href="{{ request.scope.get('root_path','') }}/decks/import-prepdeck" class="btn btn-quiet">Restore another</a>
+    </div>
+  {% else %}
+    <div class="study-actions" style="margin-top: 0.8rem;">
+      <a href="{{ request.scope.get('root_path','') }}/decks/import-prepdeck" class="btn btn-primary">Try again</a>
+    </div>
+  {% endif %}
+</section>
+{% else %}
+<form method="post" action="{{ request.scope.get('root_path','') }}/decks/import-prepdeck"
+      enctype="multipart/form-data" class="deck-new-form" autocomplete="off"
+      data-submit-pending>
+  <label class="form-field">
+    <span class="form-label">New deck name</span>
+    <input type="text" name="name" required
+           pattern="[a-z0-9][a-z0-9-]{1,29}" maxlength="30"
+           placeholder="e.g. capitals-restore"
+           autocapitalize="none" autocorrect="off">
+    <span class="form-hint">
+      2–30 chars, lowercase letters/digits/hyphens. Must NOT match an
+      existing deck — the restore creates a new one so it can't merge
+      awkwardly into an in-progress deck's state.
+    </span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">.prepdeck file</span>
+    <input type="file" name="file" accept=".prepdeck,application/zip" required>
+    <span class="form-hint">
+      Export from any prep instance via deck overflow menu → <em>Export .prepdeck</em>.
+      Archives include the format version so newer exports refuse to
+      import into older prep builds (the message will tell you which
+      version it was).
+    </span>
+  </label>
+
+  <div class="study-actions deck-new-actions">
+    <button type="submit" class="btn btn-primary" data-pending-label="Restoring…">
+      Restore deck
+    </button>
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/decks/new">Cancel</a>
+  </div>
+</form>
+{% endif %}
+
+{% endblock %}
