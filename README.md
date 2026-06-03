@@ -1,35 +1,29 @@
 # prep
 
-A self-hosted spaced-repetition flashcard tool for learning anything.
+Spaced-repetition flashcards. Describe a topic, get a deck. AI generates and
+grades; FSRS schedules.
 
-You describe what you want to learn — a topic, a chapter, a paper, a
-syllabus — and prep turns it into a deck of flashcards using your local
-Claude subscription. You study them on a schedule. Wrong answers come
-back in 10 minutes; right ones step out: 1d → 3d → 7d → 14d → 30d. The
-more you remember, the longer they sleep.
+> Pre-1.0, single-author. Stable for personal use; data shape and APIs may
+> shift between minor versions.
 
-It runs on a single docker host you own. Your data stays local. No
-SaaS, no shared servers. AI features are opt-in: connect Claude once,
-then everything generates / grades / improves through your own
-subscription. Or use prep without AI at all and write the cards by hand.
+## Try the hosted version
 
-> **Status:** pre-1.0, single-author. Stable for personal use; APIs
-> and data shape may shift between minor versions.
+[**prepcards.app**](https://prepcards.app). Free, multi-user, Clerk sign-in.
+Bring your own AI key (Claude subscription, Anthropic API, OpenAI, or
+OpenRouter) on the AI settings page.
 
----
+## Or self-host
 
-## Use it
+Same code, different auth model. The `PREP_AUTH_MODE` env var switches
+between them.
 
-A 5-minute walkthrough for self-hosting on any docker-capable box
-(your laptop, a mini PC, a Pi, a VPS).
+| | Hosted (prepcards.app) | Self-host |
+|---|---|---|
+| Auth | Clerk | Tailscale, or single-user |
+| AI key | Per-user, BYOK | Per-user BYOK, *or* one process-wide token |
+| Domain | prepcards.app | Your own |
 
-### 1. Install docker
-
-- macOS: `brew install colima && colima start` (CLI), or install
-  Docker Desktop.
-- Linux: your distro's `docker` + `docker compose` packages.
-
-### 2. Get prep
+### Quickstart
 
 ```bash
 git clone https://github.com/Zamua/prep-app.git prep
@@ -37,233 +31,70 @@ cd prep
 docker compose up -d
 ```
 
-The first `up` builds the images (~5 min); subsequent ones are <5s.
-Visit <http://127.0.0.1:8082/>. You're logged in as `guest` —
-that's the single-user default for a fresh deploy. To go multi-user,
-keep `guest` for now and skip to step 3 (Tailscale).
+Open <http://127.0.0.1:8082>. Default user is `guest`.
 
-For other tweaks (port, URL prefix, custom default user), copy
-`.env.example` → `.env` and edit; everything in there is optional.
-
-### 3. Reach it from anywhere — and add real auth
-
-prep ships with one auth model: **Tailscale Serve**. Install
-[Tailscale](https://tailscale.com), sign in on the docker host and on
-your phone / laptop, then on the docker host:
+To go multi-user via your tailnet:
 
 ```bash
 tailscale serve --bg --https=443 --set-path=/prep http://127.0.0.1:8082
 ```
 
-Now `https://<your-tailnet>.ts.net/prep/` works from any device on
-your tailnet — valid TLS, no DNS, no port-forwarding. Tailscale Serve
-injects per-user identity headers, so each tailnet member who visits
-gets their own decks.
+Then drop `PREP_DEFAULT_USER` from `.env` so the real Tailscale identity
+flows through.
 
-If multiple people on your tailnet are using the same prep instance,
-also remove the `PREP_DEFAULT_USER` line from `.env` (or leave it
-unset — same effect) so the bypass doesn't override the real headers.
+### AI (optional)
 
-There's no other auth path: no passwords, no OAuth, no magic links.
-prep is built for single-tailnet groups; if you need broader auth,
-this isn't the project for you.
+Prep works as a manual SRS without AI. To enable generation and grading,
+open the user menu, choose **AI agent**, and add credentials for one of:
 
-### 4. Connect Claude (optional)
+- **Claude subscription**: run `claude setup-token`, paste the output. Bills
+  your Max plan.
+- **Anthropic API**, **OpenAI**, or **OpenRouter**: paste the API key.
 
-Without Claude, prep works as a manual flashcard SRS — you write the
-cards, you self-grade after answering. That's a perfectly valid setup.
+Self-hosted single-user installs can also set one process-wide subscription
+token, at the bottom of the same page.
 
-If you have a Claude subscription and want the AI features (deck
-generation, AI grading of code/short answers, deck-wide transforms,
-per-card refinement):
+### Day-to-day
 
-1. On any machine where you're signed into Claude Code, run
-   `claude setup-token`.
-2. In prep: open the user menu → **AI agent**.
-3. Paste the token. Click **Connect**.
+```bash
+docker compose up -d        # start
+docker compose down         # stop (data preserved)
+docker compose logs -f      # tail
+git pull && docker compose build && docker compose up -d   # update
+```
 
-The token is valid for a year and lives in a docker volume on the
-host. AI surfaces unhide on the next page load.
+Backup:
 
-### 5. Day-to-day
-
-- **`docker compose up -d`** — start
-- **`docker compose down`** — stop (data preserved in volumes)
-- **`docker compose logs -f`** — tail
-- **Update**: `git pull && docker compose build && docker compose up -d`
-- **Backup data**:
-  ```
-  docker run --rm -v prep-data:/src -v "$PWD":/dst alpine \
-    tar -czf /dst/prep-backup-$(date +%F).tgz -C /src .
-  ```
-
-### Running staging + prod side-by-side (advanced)
-
-If you want to iterate on `main` without touching what's deployed —
-the way the project author runs it — there's a separate **`make
-deploy-stag`** / **`make deploy-prod`** flow that runs two stacks on
-the same docker host. Skip this section if you just want one
-deploy; only worth the extra moving pieces if you'd otherwise have to
-make changes to the live URL while testing them. See [Hack on it →
-Two-stack deploy](#two-stack-deploy-staging--prod-from-one-checkout)
-below.
-
----
+```bash
+docker run --rm -v prep-data:/src -v "$PWD":/dst alpine \
+  tar -czf /dst/prep-$(date +%F).tgz -C /src .
+```
 
 ## Hack on it
 
-For contributors who want a fast iteration loop on the source. If
-you want the conceptual map first — bounded contexts, the FastAPI +
-Temporal-worker + agent-container split, the SRS state machine,
-the deploy shape — read [`docs/architecture.md`](docs/architecture.md)
-before diving into the code.
+```bash
+brew bundle && make setup       # mise, python, go, bun, temporal-cli, deps
+make dev                        # goreman: temporal + uvicorn + worker
+```
 
-### Setup (one-time, macOS)
+Open <http://127.0.0.1:8081>. Python and jinja auto-reload; hard-refresh
+for static. Tests: `make test`.
+
+Architecture: [`docs/architecture.md`](docs/architecture.md). DDD layout,
+FSRS scheduler, BYOK adapter precedence, single-container deploy shape.
+
+### Two-stack deploy
+
+Run staging plus prod side-by-side on one docker host:
 
 ```bash
-git clone https://github.com/Zamua/prep-app.git prep
-cd prep
-brew bundle              # installs mise (only)
-make setup               # mise pulls python+go+bun+goreman+temporal-cli; uv sync; go build
+make deploy-stag                       # prep:staging on :8082
+git tag -a v0.X.Y && git push --tags
+make promote v=v0.X.Y                  # pins .prod-version, builds, :8081
 ```
 
-Linux: skip `brew bundle`, install mise via the
-[one-line curl installer](https://mise.jdx.dev/), then `make setup`.
-
-### Run
-
-```bash
-make dev                 # goreman starts temporal + uvicorn + worker
-```
-
-Open <http://127.0.0.1:8081/>. The Makefile exports
-`PREP_DEFAULT_USER=dev@example.com` for `make dev` so you're
-auto-logged in. `Ctrl-C` cleans up all three processes.
-
-This is loopback-only, with `--reload` on uvicorn. Edit a Python file
-and the server restarts in <1s. Templates auto-reload. Static files
-need a browser hard-refresh.
-
-### Common operations
-
-| You change | What you do |
-|---|---|
-| `app.py`, `db.py`, any Python | save — uvicorn `--reload` picks it up |
-| `templates/*.html` | save, refresh browser (jinja auto-reloads per request) |
-| `static/style.css` or icons | save, hard-refresh browser |
-| `static/cm/` (CodeMirror source) | `cd static/cm && bun run build` |
-| `worker-go/**/*.go` | `Ctrl-C` make dev, `make build`, `make dev` again (~5s) |
-| Add a python dep | `mise exec -- uv add <pkg>` |
-| Add a go dep | `cd worker-go && mise exec -- go get <mod>` |
-| Schema change | edit `db.init()` (idempotent), restart `make dev` |
-
-Tests live under `tests/`, organized per bounded context (decks,
-study, domain, etc.). `make test` runs the suite (pytest); the
-pre-commit hook runs `pytest -x` against changes touching python.
-
-### Validate the docker artifact
-
-When you want to test the actual deploy shape:
-
-```bash
-docker compose build      # multi-stage: go + bun + python:slim
-docker compose up -d      # one container; FastAPI + Temporal + Go worker
-docker compose logs -f    # tail
-```
-
-Reads `.env` if present. The default host port is 8082 so it doesn't
-collide with `make dev`'s 8081. If 8082 is *also* in use (e.g.,
-because `make deploy-stag` is already running on this host),
-override with `PREP_HOST_PORT=8083 docker compose up -d`.
-
-### Two-stack deploy (staging + prod from one checkout)
-
-The author runs prep with two stacks side-by-side on a single Mac
-mini: `staging` tracks `main`, `prod` is pinned to a git tag. Both
-stacks share the docker daemon's image cache and the working tree —
-no second checkout, no `git checkout` dance.
-
-The whole flow:
-
-```bash
-# iterate on main, deploy to staging
-vim ...
-make deploy-stag                    # builds prep:staging, project=stag, port 8082
-
-# happy with what's on main; tag it
-git tag -a v0.14.0 -m "what's new"
-git push origin --tags
-
-# promote that tag to prod (writes the tag to .prod-version,
-# commits, pushes, builds, deploys)
-make promote v=v0.14.0              # builds prep:v0.14.0, project=prod, port 8081
-
-# back to iterating on main — staging gets new bytes, prod stays
-# pinned at v0.14.0 until the next promote.
-```
-
-Internals worth knowing:
-
-- **`.prod-version`** is the source of truth for what's running in
-  prod. `make deploy-prod` reads it; `make promote` updates it via a
-  commit. To redeploy whatever prod is currently on (e.g., after a
-  config change), just `make deploy-prod` — idempotent.
-- **`deploy/staging.env` + `deploy/prod.env`** carry the per-stack
-  shape (port, ROOT_PATH, namespace). Tracked in git. A local `.env`
-  layers on top for personal overrides.
-- **`make deploy-prod`** uses `git worktree add --detach <tag>` into
-  `/tmp/prep-build`, builds from there, then removes the worktree.
-  Your main working tree never moves — you can be mid-edit on main
-  and `make deploy-prod` is invisible to you.
-- Image tags are versioned (`prep:staging`, `prep:v0.14.0`) so
-  multiple versions coexist in the daemon's image cache without
-  fighting over a single `:dev` tag.
-- `make logs-stag` / `make logs-prod` / `make down-stag` /
-  `make down-prod` for per-stack ops.
-
-### Repo layout
-
-DDD-style — one package per bounded context, pure domain logic
-isolated under `prep/domain/`, infrastructure under
-`prep/infrastructure/`. See [`docs/architecture.md`](docs/architecture.md)
-for the deeper map (layering rules, end-to-end flow walkthroughs,
-schema overview, deploy shape). Highlights:
-
-```
-prep/
-├── app.py                  FastAPI() bootstrap + router mounts (~130 loc)
-├── domain/                 pure: SRS state machine, deterministic grader
-├── infrastructure/db.py    sqlite connection + schema + migrations
-├── decks/                  bounded context: deck + question lifecycle
-├── study/                  bounded context: sessions + reviews + grading
-├── notify/                 bounded context: web push + scheduler
-├── agent/                  bounded context: AI integration
-├── auth/                   bounded context: identity + per-user prefs
-└── web/                    cross-cutting HTTP layer (errors, pwa, index)
-templates/                  Jinja2 templates (at repo root)
-static/                     style.css, icons/, pwa/, cm-bundle.js (at repo root)
-tests/<context>/            per-context test pyramid (entities, repo, service, routes)
-worker-go/                  Go Temporal worker (in-container)
-docker/                     Dockerfile.prep + Procfile.docker
-docker-compose.yml          canonical deploy: single prep container
-```
-
-AI integration runs in-process via the `claude-agent-sdk` Python
-package — there's no separate "agent" sidecar. Auth: paste the
-output of `claude setup-token` into `/settings/agent`. The token is
-written to `/data/claude-oauth-token` inside the prep container.
-
-Each `prep/<context>/` typically holds `entities.py` (pydantic
-types), `repo.py` (read/write surface), `service.py` (use cases),
-and `routes.py` (HTTP handlers).
-
-### Contributing back
-
-Fork, branch, PR. Issues welcome with a way to reproduce on a fresh
-`make dev`. What's intentionally out of scope: cloud SaaS / public
-multi-tenant auth (prep is designed for personal-tailnet hosting),
-ANTHROPIC_API_KEY support (we use the Claude subscription path on
-purpose), mobile native apps (the PWA covers that).
+`.prod-version` tracks what's in prod. `make deploy-prod` redeploys the
+pinned tag.
 
 ## License
 
