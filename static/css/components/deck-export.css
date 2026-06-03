@@ -1,0 +1,81 @@
+/* /deck/<name>/export — dedicated export page with three format cards.
+ *
+ * One column on mobile, comfortable single-screen scroll. Cards share
+ * the paper-bordered chrome the rest of the app uses; the eyebrow +
+ * h2 + sub-line follow the same pattern as the prelude on settings
+ * pages so the export page feels like part of the family.
+ */
+
+.export-options {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.export-card {
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.export-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.export-card-head h2 {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  font-weight: 450;
+  margin: 0;
+  color: var(--ink);
+}
+.export-card-head h2 code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  color: var(--ink);
+  background: var(--bg);
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+}
+
+.export-card-sub {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.export-card-body {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.export-card-body code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+
+/* The export button itself is a primary button; we just want it to
+ * stretch full-width inside the card. The is-loading state is
+ * handled by deck-export.js via the button's disabled + textContent
+ * swap (matches the submit-pending pattern). */
+.export-card .study-actions {
+  margin: 0;
+}
+.export-card .export-btn {
+  width: 100%;
+}
+.export-btn.is-loading {
+  opacity: 0.65;
+  cursor: progress;
+}

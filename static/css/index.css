@@ -59,6 +59,7 @@
 @import "./components/deck-new.css" layer(components);
 @import "./components/error.css" layer(components);
 @import "./components/notify-settings.css" layer(components);
+@import "./components/deck-export.css" layer(components);
 @import "./components/byok-settings.css" layer(components);
 @import "./components/trivia-card.css" layer(components);
 @import "./components/session-summary.css" layer(components);

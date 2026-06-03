@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Export {{ deck_name }} · prep{% endblock %}
+{% block page_class %}deck-export{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/deck/" ~ deck_name, deck_name) }}
+
+<section class="prelude">
+  <p class="eyebrow">Export <code>{{ deck_name }}</code></p>
+  <h1 class="display">Send your <em>cards</em> somewhere.</h1>
+  <p class="lede">
+    Three formats with different trade-offs. Use <code>.prepdeck</code>
+    to back up <em>everything</em> — including your study history — so
+    you can restore the deck later. Use CSV or Anki if you want to
+    share cards with someone else or move them into another app.
+  </p>
+</section>
+
+{# Three format cards. Each card has the format name, a one-line
+   description, a paragraph of detail, and an Export button that
+   the deck-export.js module hooks. The hook prefers the Web Share
+   API on iOS so the share sheet pops cleanly instead of Safari's
+   full-screen "Open in..." preview hijacking the PWA. #}
+<ul class="export-options">
+  <li>
+    <article class="export-card">
+      <header class="export-card-head">
+        <p class="section-eyebrow"><span>Format · backup</span><span class="rule"></span></p>
+        <h2><code>.prepdeck</code></h2>
+        <p class="export-card-sub">Full fidelity backup. Cards, FSRS state, review history.</p>
+      </header>
+      <p class="export-card-body">
+        Includes every prep field plus your study progress: per-card
+        FSRS state, every review you've made, and (for trivia decks)
+        the queue order with per-card answered state. Import back
+        into any prep instance via <em>New deck → Restore .prepdeck</em>.
+      </p>
+      <div class="study-actions">
+        <button type="button" class="btn btn-primary export-btn"
+                data-export-url="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/export.prepdeck"
+                data-export-filename="{{ deck_name }}.prepdeck"
+                data-export-mime="application/zip">
+          Export <code>.prepdeck</code>
+        </button>
+      </div>
+    </article>
+  </li>
+
+  <li>
+    <article class="export-card">
+      <header class="export-card-head">
+        <p class="section-eyebrow"><span>Format · cards only</span><span class="rule"></span></p>
+        <h2>CSV</h2>
+        <p class="export-card-sub">All card fields, no study history. Anki-friendly.</p>
+      </header>
+      <p class="export-card-body">
+        Every prep card field (prompt, answer, choices, rubric,
+        skeleton, language, answer_regex, explanation) lands in a
+        single CSV. Opens cleanly in Excel / Numbers / Google Sheets.
+        Re-importable into prep, into Anki, or anywhere that reads
+        plain CSV. Does <strong>not</strong> carry study history.
+      </p>
+      <div class="study-actions">
+        <button type="button" class="btn btn-primary export-btn"
+                data-export-url="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/export.csv"
+                data-export-filename="{{ deck_name }}.csv"
+                data-export-mime="text/csv">
+          Export CSV
+        </button>
+      </div>
+    </article>
+  </li>
+
+  <li>
+    <article class="export-card">
+      <header class="export-card-head">
+        <p class="section-eyebrow"><span>Format · Anki-compatible</span><span class="rule"></span></p>
+        <h2>Anki <code>.apkg</code></h2>
+        <p class="export-card-sub">Flattened to basic Anki notes. Lossy. No history.</p>
+      </header>
+      <p class="export-card-body">
+        Imports directly into Anki Desktop / AnkiMobile / AnkiWeb. Prep
+        flattens each card to a Basic note (Front + Back); MCQ choices
+        become bulleted text on the front, skeleton / rubric /
+        explanation get appended to the back as labeled sections. The
+        original structured fields don't survive a re-import back into
+        prep — use <code>.prepdeck</code> if you want lossless round-trip.
+      </p>
+      <div class="study-actions">
+        <button type="button" class="btn btn-primary export-btn"
+                data-export-url="{{ request.scope.get('root_path','') }}/deck/{{ deck_name }}/export.apkg"
+                data-export-filename="{{ deck_name }}.apkg"
+                data-export-mime="application/octet-stream">
+          Export Anki <code>.apkg</code>
+        </button>
+      </div>
+    </article>
+  </li>
+</ul>
+
+{# Hook the buttons. Module is lazy-loaded only on this page since the
+   import isn't useful anywhere else. #}
+<script type="module">
+  import { attachDeclarative } from "@/modules/deck-export.js";
+  attachDeclarative();
+</script>
+
+{% endblock %}

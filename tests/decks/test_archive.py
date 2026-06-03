@@ -433,6 +433,24 @@ def test_prepdeck_refuses_into_existing_deck(initialized_db: str):
 # ---- HTTP route smoke tests --------------------------------------------
 
 
+def test_export_hub_renders_three_format_buttons(client, initialized_db: str):
+    """GET /deck/<name>/export → 200 with cards for all three formats."""
+    _seed_srs_deck_with_history(initialized_db, "hub-deck")
+    r = client.get("/deck/hub-deck/export")
+    assert r.status_code == 200
+    # Each format has an Export button with its data-export-url.
+    assert "/deck/hub-deck/export.prepdeck" in r.text
+    assert "/deck/hub-deck/export.csv" in r.text
+    assert "/deck/hub-deck/export.apkg" in r.text
+    # Each card's Export button is hooked by the deck-export.js module.
+    assert r.text.count('class="btn btn-primary export-btn"') == 3
+
+
+def test_export_hub_404s_for_missing_deck(client, initialized_db: str):
+    r = client.get("/deck/no-such-deck/export")
+    assert r.status_code == 404
+
+
 def test_export_prepdeck_route_returns_zip(client, initialized_db: str):
     """GET /deck/<name>/export.prepdeck → 200, application/zip with the
     right content-disposition, body is a valid zip carrying the

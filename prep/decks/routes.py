@@ -1666,6 +1666,37 @@ def deck_export_csv(
     )
 
 
+@router.get("/deck/{name}/export", response_class=HTMLResponse)
+def deck_export_hub(
+    name: str,
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Dedicated export landing page. Hosts the three format options
+    (prepdeck, CSV, Anki) with full explanations + one download button
+    per format. The deck overflow menu links here instead of carrying
+    three flat actions that don't fit the popover.
+
+    The page's JS triggers the Web Share API (with file) for iOS PWAs,
+    falling back to a regular download elsewhere — see
+    static/js/modules/deck-export.js."""
+    uid = user["tailscale_login"]
+    deck_id = deck_repo.find_id(uid, name)
+    if deck_id is None:
+        raise HTTPException(404, "deck not found")
+    deck_type = deck_repo.get_type(uid, deck_id)
+    return templates.TemplateResponse(
+        "deck_export.html",
+        {
+            "request": request,
+            "user": user,
+            "deck_name": name,
+            "deck_type": deck_type.value if deck_type else "srs",
+        },
+    )
+
+
 @router.get("/deck/{name}/export.prepdeck", include_in_schema=False)
 def deck_export_prepdeck(
     name: str,

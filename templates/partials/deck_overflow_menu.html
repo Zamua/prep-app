@@ -61,32 +61,8 @@
   </a>
 {% endif %}
 
-<a href="{{ _root }}/deck/{{ deck_name }}/export.prepdeck"
-   class="deck-overflow-action deck-overflow-action-stacked"
-   title="Full-fidelity prep backup: every card field, FSRS state per card, the reviews log, and (for trivia) the queue order and per-card answered state. Imports back into prep losslessly via 'Restore .prepdeck' on /decks/new.">
-  {{ icon('package', class_='icon icon-inline') }}
-  <span class="deck-overflow-action-label">
-    <span>Export <code>.prepdeck</code></span>
-    <span class="deck-overflow-action-sub">full backup — cards, FSRS state, review history</span>
-  </span>
-</a>
-<a href="{{ _root }}/deck/{{ deck_name }}/export.csv"
-   class="deck-overflow-action deck-overflow-action-stacked"
-   title="CSV export preserves every prep card field (choices, rubric, skeleton, language, answer_regex, explanation). Does NOT preserve study history or FSRS state — use .prepdeck for that.">
-  {{ icon('download-simple', class_='icon icon-inline') }}
-  <span class="deck-overflow-action-label">
-    <span>Export CSV</span>
-    <span class="deck-overflow-action-sub">cards only — Anki-friendly, no history</span>
-  </span>
-</a>
-<a href="{{ _root }}/deck/{{ deck_name }}/export.apkg"
-   class="deck-overflow-action deck-overflow-action-stacked"
-   title="Anki .apkg flattens to a basic Anki note (front + back). Prep-only fields (choices structure, rubric, skeleton, language, answer_regex) get appended to the back as labeled text and aren't structurally recoverable on reimport. No study history either.">
-  {{ icon('download-simple', class_='icon icon-inline') }}
-  <span class="deck-overflow-action-label">
-    <span>Export Anki <code>.apkg</code></span>
-    <span class="deck-overflow-action-sub">Anki-compatible; flattened, no history</span>
-  </span>
+<a href="{{ _root }}/deck/{{ deck_name }}/export" class="deck-overflow-action">
+  {{ icon('download-simple', class_='icon icon-inline') }}<span>Export…</span>
 </a>
 
 {% if has_cards %}
