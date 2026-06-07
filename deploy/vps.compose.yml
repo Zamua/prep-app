@@ -19,6 +19,7 @@ services:
       - "traefik.http.routers.prepcards-https.rule=Host(`prepcards.app`) || Host(`www.prepcards.app`)"
       - "traefik.http.routers.prepcards-https.entryPoints=https"
       - "traefik.http.routers.prepcards-https.tls=true"
+      - "traefik.http.routers.prepcards-https.tls.certresolver=letsencrypt"
       - "traefik.http.routers.prepcards-https.service=prepcards"
       - "traefik.http.routers.prepcards-https.middlewares=prepcards-hsts"
 
