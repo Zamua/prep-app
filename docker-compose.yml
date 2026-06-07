@@ -25,7 +25,12 @@ services:
     image: prep:${IMAGE_TAG:-dev}
     restart: unless-stopped
     ports:
-      - "${PREP_HOST_PORT:-8082}:8082"
+      # 127.0.0.1 default so prep isn't reachable directly on the host port.
+      # Edge proxy (nginx → traefik on the VPS, tailscale serve on the mac mini)
+      # connects via localhost; the public surface is the edge, not the
+      # prep container directly. Override PREP_HOST_BIND only on a
+      # single-tenant dev box if you genuinely want direct access.
+      - "${PREP_HOST_BIND:-127.0.0.1}:${PREP_HOST_PORT:-8082}:8082"
     volumes:
       - prep-data:/data
     healthcheck:
