@@ -335,7 +335,7 @@ deploy-vps:
 	@# resolves to the right binary. The Dockerfile defaults to arm64
 	@# (Mac mini is M-series); without this override the VPS amd64 host
 	@# downloads an arm64 temporal CLI binary → Exec format error.
-	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) up -d --wait --remove-orphans'
+	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) up -d --wait --remove-orphans'
 	@# Smoke check: hit the prepcards.app health surface from the VPS so
 	@# we verify nginx → container path, not just container health.
 	@$(SSH_VPS) "curl -sS -o /dev/null -w 'prepcards.app / → %{http_code}\\n' --max-time 10 https://prepcards.app/ || true"
@@ -362,4 +362,4 @@ promote-vps:
 	$(MAKE) deploy-vps
 
 logs-vps:
-	$(SSH_VPS) "sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml --project-directory $(VPS_PROJECT) logs -f --tail=200"
+	$(SSH_VPS) "sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) logs -f --tail=200"
