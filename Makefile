@@ -343,8 +343,12 @@ deploy-vps:
 	@# -w 90 to wait long enough for the new container's /healthz to
 	@# flip green before stopping the old.
 	@# docker rollout doesn't accept --project-directory; cd into the
-	@# project dir so relative -f paths resolve.
-	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && cd $(VPS_PROJECT) && sudo docker rollout -f docker-compose.yml -f deploy/vps.compose.yml -w 90 prep'
+	@# project dir so relative -f paths resolve. -p prep so the new
+	@# container ends up in the same compose project as the existing
+	@# prep-prep-1 (without -p, compose picks "prep-app-staging" from
+	@# the dir name and the new container lands in a different project
+	@# space with no traefik_proxy network attachment).
+	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && cd $(VPS_PROJECT) && sudo docker rollout -p prep -f docker-compose.yml -f deploy/vps.compose.yml -w 90 prep'
 	@# Smoke check: hit the prepcards.app health surface from the VPS so
 	@# we verify nginx → container path, not just container health.
 	@$(SSH_VPS) "curl -sS -o /dev/null -w 'prepcards.app / → %{http_code}\\n' --max-time 10 https://prepcards.app/ || true"
