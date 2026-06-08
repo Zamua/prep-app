@@ -24,7 +24,7 @@ export PREP_DEV ?= 1
 
 .PHONY: help setup tools deps build dev run-app run-worker run-temporal \
         lint format hooks clean wipe-temporal-state test e2e ci \
-        deploy-stag deploy-prod promote logs-stag logs-prod down-stag down-prod \
+        deploy-devel deploy-prod promote logs-devel logs-prod down-devel down-prod \
         deploy-vps promote-vps logs-vps
 
 help:
@@ -35,18 +35,18 @@ help:
 	@echo "  make lint     — ruff check + go vet (read-only)"
 	@echo "  make format   — ruff format + gofmt (writes)"
 	@echo "  make test     — pytest (python unit + integration tests)"
-	@echo "  make e2e      — Playwright/httpx smoke against \$$E2E_BASE_URL (defaults to staging)"
+	@echo "  make e2e      — Playwright/httpx smoke against \$$E2E_BASE_URL (defaults to devel)"
 	@echo "  make ci       — lint + test + e2e. Used by promote; also fine to run by hand."
 	@echo "  make hooks    — install pre-commit hook (idempotent; runs as part of \`make setup\`)"
 	@echo "  make clean    — kill stray dev processes; preserve data"
 	@echo ""
 	@echo "Deploy (single-checkout, two stacks side-by-side):"
-	@echo "  make deploy-stag           — build current working tree, deploy as 'stag' on :8082"
+	@echo "  make deploy-devel           — build current working tree, deploy as 'devel' on :8082"
 	@echo "  make deploy-prod           — build the tag in .prod-version, deploy as 'prod' on :8081"
 	@echo "  make promote v=v0.X.Y      — write v to .prod-version, commit, push, deploy-prod"
-	@echo "  make logs-stag             — tail the 'stag' stack"
+	@echo "  make logs-devel             — tail the 'devel' stack"
 	@echo "  make logs-prod             — tail the 'prod' stack"
-	@echo "  make down-stag             — stop 'stag' (data volumes preserved)"
+	@echo "  make down-devel             — stop 'devel' (data volumes preserved)"
 	@echo "  make down-prod             — stop 'prod' (data volumes preserved)"
 	@echo ""
 	@echo "Public VPS (prepcards.app):"
@@ -105,7 +105,7 @@ test: tools
 
 # ----- e2e -----
 # Drives Playwright + an httpx client against a deployed prep instance
-# (staging by default; override target with `E2E_BASE_URL=...`). Each
+# (devel by default; override target with `E2E_BASE_URL=...`). Each
 # session creates a throwaway `e2e-test-deck` via the app's HTTP routes,
 # runs assertions, then deletes it — so create + delete + cascade are
 # themselves under test. Tests live under tests/e2e/ (excluded from
@@ -114,7 +114,7 @@ test: tools
 # Pre-flight: the deployed instance has to be up. We check `/` returns
 # 200 first; bail with a clear error otherwise rather than wasting
 # minutes on per-test timeouts.
-E2E_BASE_URL ?= https://macmini.trout-chimera.ts.net/prep-staging
+E2E_BASE_URL ?= https://macmini.trout-chimera.ts.net/prep-devel
 
 e2e: tools
 	@echo "→ e2e against $(E2E_BASE_URL)"
@@ -136,7 +136,7 @@ e2e: tools
 
 # ----- CI bundle -----
 # What `make promote` runs before tagging prod: lint + test (in-process)
-# + e2e (against staging). Each step exits non-zero on failure so promote
+# + e2e (against devel). Each step exits non-zero on failure so promote
 # halts cleanly.
 ci: lint test e2e
 
@@ -158,8 +158,8 @@ wipe-temporal-state:
 
 # ----- two-stack deploy from one checkout -----
 # Staging tracks main; prod is pinned to the tag in .prod-version.
-# Each stack is a distinct compose project (-p stag / -p prod) with
-# its own image tag (prep:staging / prep:vX.Y.Z) and named volumes
+# Each stack is a distinct compose project (-p devel / -p prod) with
+# its own image tag (prep:devel / prep:vX.Y.Z) and named volumes
 # (prep-data / prod-data). Both run on the same docker daemon.
 #
 # Promote = update .prod-version (the source of truth for "what is
@@ -176,26 +176,26 @@ DEPLOY_BUILD_DIR := /tmp/prep-build
 # session. On this two-image project (prep + agent) the parallelism
 # saves a measurable chunk of wall time on every deploy — both images
 # share the same builder-go base layer, so bake can dedup the work.
-# Both deploy-stag and deploy-prod inherit this.
+# Both deploy-devel and deploy-prod inherit this.
 export COMPOSE_BAKE := true
 
-deploy-stag:
-	@echo "→ deploy-stag (image=prep:staging, project=stag, port=8082)"
+deploy-devel:
+	@echo "→ deploy-devel (image=prep:devel, project=devel, port=8082)"
 	@# Pass PREP_DEFAULT_USER='' explicitly. compose's ${VAR-guest}
 	@# (single dash) treats this as "set to empty" → no bypass → real
 	@# Tailscale auth required. Without this, the Makefile's `make dev`
 	@# export of dev@example.com would leak through.
 	@# --wait blocks until both services pass their healthcheck (see
 	@# the `healthcheck:` blocks in docker-compose.yml). Surfaces boot
-	@# failures here instead of in an after-the-fact `make logs-stag`.
+	@# failures here instead of in an after-the-fact `make logs-devel`.
 	@# Auto-source local .env (gitignored secrets like PREP_INTERNAL_TOKEN
 	@# + CLAUDE_CODE_OAUTH_TOKEN) if it exists. Layered ON TOP of
-	@# deploy/staging.env so per-machine values override the tracked
-	@# deploy shape. Without this, `make deploy-stag` from a fresh
+	@# deploy/devel.env so per-machine values override the tracked
+	@# deploy shape. Without this, `make deploy-devel` from a fresh
 	@# shell fails compose's ${VAR:?} guards.
 	set -a; [ -f .env ] && . ./.env; set +a; \
-	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
-	  docker compose --env-file deploy/staging.env -p stag up -d --build --wait --remove-orphans
+	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=devel \
+	  docker compose --env-file deploy/devel.env -p devel up -d --build --wait --remove-orphans
 
 deploy-prod:
 	@if [ -z "$(DEPLOY_PROD_TAG)" ]; then \
@@ -205,7 +205,7 @@ deploy-prod:
 	@echo "→ deploy-prod (image=prep:$(DEPLOY_PROD_TAG), project=prod, port=8081)"
 	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
 	git worktree add --detach $(DEPLOY_BUILD_DIR) $(DEPLOY_PROD_TAG)
-	@# Same .env-sourcing trick as deploy-stag — secrets (PREP_INTERNAL_TOKEN,
+	@# Same .env-sourcing trick as deploy-devel — secrets (PREP_INTERNAL_TOKEN,
 	@# CLAUDE_CODE_OAUTH_TOKEN) live in the workspace .env, not the prod
 	@# git worktree. Without this, compose's ${VAR:?} guards fail.
 	set -a; [ -f .env ] && . ./.env; set +a; \
@@ -222,7 +222,7 @@ promote:
 	@if [ -z "$(v)" ]; then echo "usage: make promote v=v0.X.Y"; exit 1; fi
 	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
 	  echo "tag $(v) doesn't exist — create it first: \`git tag -a $(v) && git push --tags\`"; exit 1; fi
-	@# Pre-flight: lint + python tests + e2e against staging. Run BEFORE
+	@# Pre-flight: lint + python tests + e2e against devel. Run BEFORE
 	@# mutating .prod-version so a failure exits cleanly (no half-bumped
 	@# .prod-version, no orphaned tag pointing at the wrong commit). The
 	@# pre-commit hook also runs lint+test at commit time; promote re-runs
@@ -230,12 +230,12 @@ promote:
 	@# build. Stranded-tag incidents on 2026-05-03 + a prod outage on
 	@# 2026-05-07 (httpx missing from runtime deps, would've been caught
 	@# by e2e) motivate gating here. Don't regress.
-	@echo "→ pre-flight: redeploy staging from tag $(v) so e2e runs against the same code we'll ship"
-	$(MAKE) deploy-stag-from-tag v=$(v)
+	@echo "→ pre-flight: redeploy devel from tag $(v) so e2e runs against the same code we'll ship"
+	$(MAKE) deploy-devel-from-tag v=$(v)
 	@echo "→ pre-flight: lint + python tests"
 	$(MAKE) lint
 	$(MAKE) test
-	@echo "→ pre-flight: e2e against staging"
+	@echo "→ pre-flight: e2e against devel"
 	$(MAKE) e2e
 	@echo "→ promoting $(v) to prod"
 	@echo "$(v)" > .prod-version
@@ -244,15 +244,15 @@ promote:
 	git push origin main
 	$(MAKE) deploy-prod
 
-# Internal helper: build + bring up staging from a specific tag's
+# Internal helper: build + bring up devel from a specific tag's
 # commit (rather than the working tree). Used by `make promote` so e2e
 # verifies exactly the bytes we're about to ship to prod, not the
 # tree the contributor happens to have checked out. Mirrors the prod
 # build path (git worktree at the tag, build from there). Cleans up
 # the worktree on success or failure.
-.PHONY: deploy-stag-from-tag
-deploy-stag-from-tag:
-	@if [ -z "$(v)" ]; then echo "usage: make deploy-stag-from-tag v=v0.X.Y"; exit 1; fi
+.PHONY: deploy-devel-from-tag
+deploy-devel-from-tag:
+	@if [ -z "$(v)" ]; then echo "usage: make deploy-devel-from-tag v=v0.X.Y"; exit 1; fi
 	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
 	  echo "tag $(v) not found locally"; exit 1; fi
 	@if [ -d $(DEPLOY_BUILD_DIR) ]; then git worktree remove --force $(DEPLOY_BUILD_DIR) 2>/dev/null; rm -rf $(DEPLOY_BUILD_DIR); fi
@@ -260,23 +260,23 @@ deploy-stag-from-tag:
 	@# Source local .env from the workspace (where secrets live) so
 	@# compose's ${VAR:?} guards pass — the worktree itself has no .env.
 	set -a; [ -f .env ] && . ./.env; set +a; \
-	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=staging \
+	PREP_DEFAULT_USER= PREP_DEV= IMAGE_TAG=devel \
 	  docker compose \
 	    -f docker-compose.yml \
 	    --project-directory $(DEPLOY_BUILD_DIR) \
-	    --env-file deploy/staging.env \
-	    -p stag \
+	    --env-file deploy/devel.env \
+	    -p devel \
 	    up -d --build --wait --remove-orphans
 	git worktree remove --force $(DEPLOY_BUILD_DIR)
 
-logs-stag:
-	docker compose -p stag logs -f --tail=200
+logs-devel:
+	docker compose -p devel logs -f --tail=200
 
 logs-prod:
 	docker compose -p prod logs -f --tail=200
 
-down-stag:
-	docker compose -p stag down
+down-devel:
+	docker compose -p devel down
 
 down-prod:
 	docker compose -p prod down
@@ -335,7 +335,14 @@ deploy-vps:
 	@# resolves to the right binary. The Dockerfile defaults to arm64
 	@# (Mac mini is M-series); without this override the VPS amd64 host
 	@# downloads an arm64 temporal CLI binary → Exec format error.
-	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) up -d --wait --remove-orphans'
+	@# Build the new image (with arch arg) then roll the running service
+	@# over via the docker-rollout plugin. Per infra/APP-PATTERN.md
+	@# "Deploy strategy": single replica + rolling overlap, zero-downtime
+	@# via traefik active healthcheck. prep's startup is slow-ish
+	@# (~30-60s for temporal devserver + worker to come up) so we lean
+	@# on docker-rollout's --timeout to wait long enough for the new
+	@# container's /healthz to flip green.
+	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && sudo docker rollout -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) --timeout 120 prep'
 	@# Smoke check: hit the prepcards.app health surface from the VPS so
 	@# we verify nginx → container path, not just container health.
 	@$(SSH_VPS) "curl -sS -o /dev/null -w 'prepcards.app / → %{http_code}\\n' --max-time 10 https://prepcards.app/ || true"
@@ -344,15 +351,15 @@ promote-vps:
 	@if [ -z "$(v)" ]; then echo "usage: make promote-vps v=v0.X.Y"; exit 1; fi
 	@if ! git rev-parse --verify "$(v)" >/dev/null 2>&1; then \
 	  echo "tag $(v) doesn't exist — create it first: \`git tag -a $(v) && git push --tags\`"; exit 1; fi
-	@# Same pre-flight as `make promote`: rebuild staging from the tag,
+	@# Same pre-flight as `make promote`: rebuild devel from the tag,
 	@# lint + test + e2e before mutating the VPS pin. Catches anything
 	@# the contributor's working-tree dropped on the floor.
-	@echo "→ pre-flight: redeploy staging from tag $(v) so e2e runs against the same code we'll ship"
-	$(MAKE) deploy-stag-from-tag v=$(v)
+	@echo "→ pre-flight: redeploy devel from tag $(v) so e2e runs against the same code we'll ship"
+	$(MAKE) deploy-devel-from-tag v=$(v)
 	@echo "→ pre-flight: lint + python tests"
 	$(MAKE) lint
 	$(MAKE) test
-	@echo "→ pre-flight: e2e against staging"
+	@echo "→ pre-flight: e2e against devel"
 	$(MAKE) e2e
 	@echo "→ promoting $(v) to prepcards.app"
 	@echo "$(v)" > .vps-version
