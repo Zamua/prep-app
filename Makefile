@@ -339,10 +339,12 @@ deploy-vps:
 	@# over via the docker-rollout plugin. Per infra/APP-PATTERN.md
 	@# "Deploy strategy": single replica + rolling overlap, zero-downtime
 	@# via traefik active healthcheck. prep's startup is slow-ish
-	@# (~30-60s for temporal devserver + worker to come up) so we lean
-	@# on docker-rollout's --timeout to wait long enough for the new
-	@# container's /healthz to flip green.
-	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && sudo docker rollout -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) --timeout 120 prep'
+	@# (~30-60s for temporal devserver + worker to come up) so we use
+	@# -w 90 to wait long enough for the new container's /healthz to
+	@# flip green before stopping the old.
+	@# docker rollout doesn't accept --project-directory; cd into the
+	@# project dir so relative -f paths resolve.
+	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && cd $(VPS_PROJECT) && sudo docker rollout -f docker-compose.yml -f deploy/vps.compose.yml -w 90 prep'
 	@# Smoke check: hit the prepcards.app health surface from the VPS so
 	@# we verify nginx → container path, not just container health.
 	@$(SSH_VPS) "curl -sS -o /dev/null -w 'prepcards.app / → %{http_code}\\n' --max-time 10 https://prepcards.app/ || true"

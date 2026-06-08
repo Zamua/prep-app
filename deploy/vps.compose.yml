@@ -11,6 +11,12 @@ services:
   prep:
     networks:
       - traefik_proxy
+    # No host port binding on the VPS — traefik reaches the container
+    # via the docker network. Critical for docker-rollout: scaling to
+    # 2 replicas with the same host port allocation would fail with
+    # "Bind for 127.0.0.1:<port> failed: port is already allocated".
+    # Explicit empty list overrides the base compose's ports stanza.
+    ports: !reset []
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_proxy"
