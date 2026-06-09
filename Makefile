@@ -288,11 +288,14 @@ down-prod:
 # proxies to the prep container on :8082.
 #
 # Layout on the VPS (set up 2026-04-20 with the admin/apps/dema user split):
-#   /home/apps/projects/prep    — git checkout, owned by apps (non-sudoer)
-#   /home/apps/projects/prep/.env — secrets (CLERK_*, PREP_INTERNAL_TOKEN,
-#                                   PREP_KEY_ENCRYPTION_SECRET, …), root:0600
-#                                   compose auto-loads it from the project dir
-#   /etc/nginx/sites-enabled/multi-project — server block for prepcards.app
+#   /home/apps/projects/prep      : git checkout, owned by apps (non-sudoer)
+#   /home/admin/infra/prep/.env   : secrets (CLERK_*, PREP_INTERNAL_TOKEN,
+#                                   PREP_KEY_ENCRYPTION_SECRET, ...), 0600.
+#                                   Operator-side; lives outside the public
+#                                   source repo. Loaded via --env-file.
+#   /home/admin/infra/prep/compose.yml: VPS-only overlay (traefik labels,
+#                                   ports !reset). Operator-side.
+#   /etc/nginx/sites-enabled/multi-project : server block for prepcards.app
 #
 # Deploy model mirrors the local two-stack flow:
 #   .vps-version is the source of truth for "what's running on prepcards.app".
@@ -309,6 +312,12 @@ down-prod:
 VPS_HOST       ?= vps
 VPS_PROJECT    ?= /home/apps/projects/prep
 DEPLOY_VPS_TAG := $(shell test -f .vps-version && tr -d '[:space:]' < .vps-version)
+
+# Operator-side compose + env for the VPS deploy. Lives OUTSIDE the
+# public source repo (in the operator's own infra checkout). See
+# infra/APP-PATTERN.md + global CLAUDE.md "App deployment pattern".
+# Override by setting OPS_DEPLOY_DIR=... when invoking make.
+OPS_DEPLOY_DIR ?= /home/admin/infra/prep
 
 # Wraps an SSH'd command. The remote shell is bash so we can chain
 # with && / use heredocs cleanly. -o BatchMode=yes refuses interactive
@@ -348,7 +357,7 @@ deploy-vps:
 	@# prep-prep-1 (without -p, compose picks "prep-app-staging" from
 	@# the dir name and the new container lands in a different project
 	@# space with no traefik_proxy network attachment).
-	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && cd $(VPS_PROJECT) && sudo docker rollout -p prep -f docker-compose.yml -f deploy/vps.compose.yml -w 90 prep'
+	$(SSH_VPS) 'ARCH=$$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/); echo "→ target arch: $$ARCH"; sudo docker compose --env-file $(OPS_DEPLOY_DIR)/.env -f $(VPS_PROJECT)/docker-compose.yml -f $(OPS_DEPLOY_DIR)/compose.yml --project-directory $(VPS_PROJECT) build --build-arg TARGETARCH=$$ARCH && cd $(VPS_PROJECT) && sudo docker rollout -p prep -f docker-compose.yml -f $(OPS_DEPLOY_DIR)/compose.yml --env-file $(OPS_DEPLOY_DIR)/.env -w 90 prep'
 	@# Smoke check: hit the prepcards.app health surface from the VPS so
 	@# we verify nginx → container path, not just container health.
 	@$(SSH_VPS) "curl -sS -o /dev/null -w 'prepcards.app / → %{http_code}\\n' --max-time 10 https://prepcards.app/ || true"
@@ -375,4 +384,4 @@ promote-vps:
 	$(MAKE) deploy-vps
 
 logs-vps:
-	$(SSH_VPS) "sudo docker compose -f $(VPS_PROJECT)/docker-compose.yml -f $(VPS_PROJECT)/deploy/vps.compose.yml --project-directory $(VPS_PROJECT) logs -f --tail=200"
+	$(SSH_VPS) "sudo docker compose --env-file $(OPS_DEPLOY_DIR)/.env -f $(VPS_PROJECT)/docker-compose.yml -f $(OPS_DEPLOY_DIR)/compose.yml --project-directory $(VPS_PROJECT) logs -f --tail=200"

@@ -43,3 +43,11 @@ push-subscriptions.json.archived-*
 # docker-compose env file (per-deployment config; .env.example is the
 # committed template).
 .env
+
+# Operator-side VPS deploy artifacts (compose overlay + .env). These
+# live in the operator's private infra repo (see CLAUDE.md "App
+# deployment pattern" and infra/APP-PATTERN.md). The OPS_DEPLOY_DIR
+# Makefile var points at /home/admin/infra/prep/ on the VPS and
+# ~/Dropbox/workspace/macmini/infra/prep/ locally.
+/deploy/vps/
+/deploy/vps.compose.yml
