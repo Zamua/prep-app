@@ -143,9 +143,8 @@ def test_details_toggle_skips_close_on_action_taps(http: httpx.Client):
     handler must skip closing when the tap is on an actionable element
     (link/button/role=button/submit input). Without that exemption,
     iOS PWA cancels the click navigation when the close shifts layout
-    mid-tap. Reported 2026-05-07 19:44 UTC: 'tap Next while Explain
-    open does nothing'; 'tap back link while interval popover open
-    does nothing'."""
+    mid-tap. Symptoms: 'tap Next while Explain open does nothing';
+    'tap back link while interval popover open does nothing'."""
     home = http.get("/").text
     m = re.search(r"/static/js/v(\d+)/", home)
     assert m, "no versioned import path"

@@ -179,7 +179,7 @@
      - the summary needs to read like a plain menu row (icon + label)
      - the popover needs to flow INLINE inside the menu (push items
        below it) instead of floating outside, otherwise it lands
-       outside the menu's bounds (the "janky" 2026-05-12 incident).
+       outside the menu's bounds (where it looks visually broken).
 */
 .deck-overflow-body .notif-edit { display: block; }
 .deck-overflow-body .notif-pill,

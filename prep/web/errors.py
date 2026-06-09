@@ -58,11 +58,12 @@ def _wants_json(request: Request) -> bool:
     accept = request.headers.get("accept", "")
     if "application/json" in accept and "text/html" not in accept:
         return True
-    # /notify/* JSON endpoints don't get an HTML error page — the
-    # demo / settings JS expects JSON. The previous `endswith("/test")`
+    # /notify/* JSON endpoints don't get an HTML error page (the
+    # demo / settings JS expects JSON). A previous `endswith("/test")`
     # rule wrongly matched any deck named "test" (so
     # /trivia/session/test returned `{"detail": "not authenticated"}`
-    # to a browser instead of a Clerk redirect). Hit 2026-06-01.
+    # to a browser instead of a Clerk redirect); the explicit suffix
+    # list below is intentionally narrow.
     path = request.url.path
     if any(path.endswith(s) for s in _JSON_ENDPOINT_SUFFIXES):
         return True

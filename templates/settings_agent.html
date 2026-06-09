@@ -150,7 +150,7 @@
      mistake it for a personal-key field. Visibility:
        - Hidden entirely on clerk-mode (multi-user public deploys
          can't have a deploy-wide token; see selector.py
-         `_subscription_path_allowed()` + the 2026-06-02 incident).
+         `_subscription_path_allowed()`).
        - Visible on tailscale (single-user local installs), where one
          operator runs prep on their own box. #}
   {% if auth_provider != 'clerk' %}

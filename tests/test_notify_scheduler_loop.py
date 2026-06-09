@@ -1,9 +1,9 @@
-"""Regression test for the 2026-05-07 19:30 UTC outage.
+"""Regression test for an event-loop-blocking failure mode.
 
-The notify scheduler's `_tick` coroutine called the (sync) trivia
-scheduler tick directly, which could block on `urllib.urlopen` deep
-inside `generate_batch` for up to 900s. That blocks the asyncio event
-loop and looks like prod is down.
+The notify scheduler's `_tick` coroutine used to call the (sync)
+trivia scheduler tick directly, which could block on `urllib.urlopen`
+deep inside `generate_batch` for up to 900s. That blocks the asyncio
+event loop and looks like prod is down.
 
 Fix: notify._tick now does `await asyncio.to_thread(_trivia_tick, ...)`.
 
@@ -82,6 +82,7 @@ async def test_notify_tick_does_not_block_event_loop_during_trivia_refill(monkey
 
     src = inspect.getsource(ns._tick)
     assert "asyncio.to_thread" in src, (
-        "notify._tick no longer calls trivia tick via asyncio.to_thread — "
-        "this is the regression that took prod down on 2026-05-07."
+        "notify._tick no longer calls trivia tick via asyncio.to_thread; "
+        "this is the regression that blocks the event loop and looks "
+        "like a full outage to users."
     )

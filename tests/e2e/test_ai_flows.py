@@ -1,13 +1,13 @@
 """End-to-end coverage for the AI-driven workflows: transform, plan,
 trivia generation.
 
-The bug class these guard against: the htmx-polling regression on
-2026-05-10 where button-press routes hung on `await handle.result()`,
-and `make e2e` did not catch it because no test exercised these flows
-end-to-end. Each test below drives the workflow from the form-POST
-through to a terminal status, then asserts on the final fragment HTML
-(state markers, presence/absence of the htmx polling trigger, presence
-of the user-visible action UI).
+The bug class these guard against: htmx-polling regressions where
+button-press routes hang on `await handle.result()`, and a
+fragment-only `make e2e` doesn't catch it because no test exercises
+these flows end-to-end. Each test below drives the workflow from the
+form-POST through to a terminal status, then asserts on the final
+fragment HTML (state markers, presence/absence of the htmx polling
+trigger, presence of the user-visible action UI).
 
 Structure mirrors `test_smoke.py` (httpx-only, against a deployed
 prep instance — staging by default, override via `E2E_BASE_URL`).
@@ -190,7 +190,7 @@ def test_transform_flow_drives_to_awaiting_apply(http: httpx.Client, test_deck: 
 
     This is the canonical "drive the htmx-polling lifecycle to
     terminal" e2e: covers the route-template-temporal-claude
-    integration that broke 2026-05-10."""
+    integration end-to-end."""
     name = test_deck["name"]
     # Fire the transform — small, scoped prompt so claude returns a
     # plan quickly. The intent is a no-op edit (rephrase prompts), not
@@ -402,9 +402,9 @@ def test_trivia_generation_flow_drives_to_done(http: httpx.Client, e2e_trivia_de
 def test_no_blocking_handle_result_in_polling_routes(http: httpx.Client, test_deck: dict):
     """Each fragment-poll route MUST return promptly even when the
     workflow id is bogus / not-found / not-owned. If a future refactor
-    re-introduces `await handle.result()` in the route handler (the
-    2026-05-10 regression), this test will hang for the temporal
-    long-poll timeout instead of returning <500ms.
+    re-introduces `await handle.result()` in the route handler, this
+    test will hang for the temporal long-poll timeout instead of
+    returning <500ms.
 
     Not marked slow — it's the cheapest test in this file (3 HTTP
     roundtrips, all expected to error fast). Lives here rather than in

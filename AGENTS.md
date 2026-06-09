@@ -361,13 +361,12 @@ implementations:
 Check `PRAGMA table_info(<table>)` first, then ALTER. Existing
 examples: `editor_input_mode`, `notification_prefs`, `context_prompt`.
 
-**FK CASCADE gotcha (the v0.4.1 incident).** If you ever rebuild a
+**FK CASCADE gotcha (fixed in v0.4.1).** If you ever rebuild a
 table that's referenced by an FK, follow the SQLite-recommended
 pattern: `PRAGMA foreign_keys=OFF` OUTSIDE any transaction, then
-`BEGIN; ...rebuild...; PRAGMA foreign_key_check; COMMIT;`. v0.3.0
-shipped a naive `DROP TABLE decks` and cascaded through
-questions/cards/reviews — wiped a real prod DB. v0.4.1 fixed it.
-Don't regress.
+`BEGIN; ...rebuild...; PRAGMA foreign_key_check; COMMIT;`. A naive
+`DROP TABLE decks` cascades through questions/cards/reviews and
+wipes user data. Don't regress.
 
 ---
 
@@ -472,10 +471,11 @@ prep emits Prometheus metrics + structured logs to the LGTM-stack
 running under `~/Dropbox/workspace/macmini/observability/`.
 
 **Metrics** (`prep/web/metrics.py`, exposed at `GET /metrics`):
-- `prep_anyio_threadpool_borrowed` / `_capacity` — gauge. Sampled
+- `prep_anyio_threadpool_borrowed` / `_capacity` (gauge). Sampled
   just-in-time on every scrape. **The leak/exhaustion canary** for
-  the failure mode that took prod down on 2026-05-07; sustained
-  borrowed≈capacity = sync handlers piling up on the threadpool.
+  threadpool exhaustion: sustained borrowed approx. capacity means
+  sync handlers piling up on the threadpool (a known prod-down
+  failure mode).
 - `prep_claude_grade_duration_seconds{verdict}` — histogram. Labels:
   `right`, `wrong`, `unknown`, `fallback_unavailable`, `fallback_bad_json`.
   Buckets up to 30s so the 12s timeout tail is visible.
@@ -559,9 +559,9 @@ the importmap is at the bottom of `<body>` (legacy layout) and a
 page renders an inline module script higher in the body via
 `{% block main %}`, the inline script's `import "@/..."` silently
 dies at parse time — taking every behavior wired up in that block
-with it (polling, click handlers, …). 2026-05-10 outage: htmx
-polling + refresh-link in transform.html stopped working because of
-exactly this. Fix: keep importmap in `<head>` always.
+with it (polling, click handlers, etc.). This pattern has caused a
+production outage where htmx polling + refresh-link in transform.html
+stopped working entirely. Fix: keep importmap in `<head>` always.
 
 **Polling pattern is htmx, not JS modules.** `templates/transform.html`,
 `plan.html`, `grading.html`, `trivia/generating.html` use
@@ -570,7 +570,7 @@ status fragments. Server controls polling lifecycle: a non-terminal
 fragment includes `hx-trigger="every 2s"`, a terminal fragment omits
 it → htmx auto-stops. No client state machine. The dead pattern (a
 JS `startPoller` module + `setInterval` + `visibilitychange`) is gone
-as of 2026-05-10. If you add a new "wait for backend → swap UI"
+from the codebase. If you add a new "wait for backend, swap UI"
 flow, follow the htmx pattern; don't reach for `setInterval`.
 
 **Don't block HTTP routes on `await handle.result()`.** Temporal's
@@ -626,8 +626,8 @@ don't trust its `logged_in` field.
    - **browser tests** (test_browser_smoke.py, marked `slow` +
      `browser`): drive Chromium via Playwright at iPhone-15-Pro
      viewport. **Catches**: inline `<script type="module">` parse +
-     execute (the 2026-05-10 importmap-ordering bug class), htmx
-     polling actually firing client-side, in-place fragment swaps
+     execute (the importmap-ordering bug class), htmx polling
+     actually firing client-side, in-place fragment swaps
      (no navigation on accept/reject), `HX-Redirect` followed by the
      browser. Without these, the server returning the right HTML is
      a green light even when every page's JS is dead.

@@ -3,7 +3,7 @@
  * Plain <a href="...export.prepdeck"> works fine in desktop browsers
  * but breaks on iOS PWAs (Safari's WebKit hijacks the entire view
  * with a full-screen "Open in..." preview that has no obvious back
- * button — see the screenshot from 2026-06-03).
+ * button).
  *
  * The fix is the Web Share API with files. We fetch the export as a
  * Blob, build a File, and call navigator.share() — iOS pops the

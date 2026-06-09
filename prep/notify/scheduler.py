@@ -159,11 +159,11 @@ async def _tick() -> None:
     #
     # Run the tick OFF the event loop. The trivia tick can call
     # `generate_batch()` to refill a deck, which uses sync `run_prompt`
-    # → `urllib.urlopen` → blocks for up to the 900s generation timeout.
-    # Doing that inside this async coroutine wedges the entire asyncio
-    # loop and looks like "prod is down" to the user (caught with py-spy
-    # at 19:30 UTC on 2026-05-07). `asyncio.to_thread` runs the sync
-    # tick on a separate thread, leaving the loop free to serve requests.
+    # -> `urllib.urlopen` -> blocks for up to the 900s generation
+    # timeout. Doing that inside this async coroutine wedges the
+    # entire asyncio loop and looks like "prod is down" to the user.
+    # `asyncio.to_thread` runs the sync tick on a separate thread,
+    # leaving the loop free to serve requests.
     try:
         from prep.trivia.scheduler import tick as _trivia_tick
 

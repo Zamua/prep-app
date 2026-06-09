@@ -1,10 +1,10 @@
-# Docker compose for prep — single-container architecture.
+# Docker compose for prep (single-container architecture).
 #
-# Post-SDK-migration (2026-05-30): there used to be a sister `agent`
-# container that wrapped the `claude` CLI. The Python `claude-agent-sdk`
-# package replaced it — Claude calls now happen in-process inside the
-# prep container (FastAPI + Temporal devserver + Go worker all under
-# goreman, same as before). One service, one volume.
+# There used to be a sister `agent` container that wrapped the
+# `claude` CLI; the Python `claude-agent-sdk` package replaced it, so
+# Claude calls now happen in-process inside the prep container
+# (FastAPI + Temporal devserver + Go worker, all under goreman, same
+# as before). One service, one volume.
 #
 # `docker compose up -d` works out of the box with no .env file. Set
 # CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token` on a machine you
@@ -77,10 +77,10 @@ services:
 
       # ---- BYOK encryption (per-user Anthropic API keys) ------------
       # 32-byte hex master key used to AES-256-GCM encrypt every BYOK
-      # row before it lands in the DB. `openssl rand -hex 32`; lives
-      # in /home/admin/prep.env on the VPS alongside the Clerk + token
-      # secrets. Optional: leave unset and BYOK feature 503s with a
-      # clear operator message; the rest of prep works.
+      # row before it lands in the DB. `openssl rand -hex 32`; supply
+      # via .env alongside the Clerk + token secrets. Optional: leave
+      # unset and the BYOK feature 503s with a clear operator message;
+      # the rest of prep works.
       PREP_KEY_ENCRYPTION_SECRET: ${PREP_KEY_ENCRYPTION_SECRET:-}
 
 volumes:

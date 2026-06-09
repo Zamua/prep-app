@@ -472,12 +472,11 @@ def init() -> None:
             CREATE INDEX IF NOT EXISTS idx_active_workflows_user
                 ON active_workflows(user_login, terminal_at);
 
-            -- 2026-05-30: agent_usage table dropped along with its
-            -- repo + UI. The token-scoped rollup didn't model what
-            -- Anthropic actually meters (per-account credit pool, not
-            -- per-token), and stale leftover rows on staging would
-            -- confuse future debugging. Safe to drop — the table
-            -- never went to prod.
+            -- agent_usage table dropped along with its repo + UI.
+            -- The token-scoped rollup didn't model what Anthropic
+            -- actually meters (per-account credit pool, not per-
+            -- token), and stale leftover rows would confuse future
+            -- debugging. Safe to drop: the table never went to prod.
             DROP TABLE IF EXISTS agent_usage;
         """)
 
@@ -500,14 +499,15 @@ def init() -> None:
         if "notifications_muted_until" not in dcols:
             c.execute("ALTER TABLE decks ADD COLUMN notifications_muted_until TEXT")
 
-        # 14. Auth providers became pluggable on 2026-05-31 — Tailscale
-        #     on the mac-mini, Clerk on the public VPS. The users table
-        #     primary key (`tailscale_login`) is now opaque and may hold
-        #     a Clerk user_id; add a separate `email` column so we can
-        #     surface the user's address in UI + emails regardless of
-        #     which provider supplied identity. Tailscale rows backfill
-        #     to email == tailscale_login (login IS the email there);
-        #     Clerk rows get email set by the user.created webhook.
+        # 14. Auth providers are pluggable: Tailscale (single-tenant
+        #     local) or Clerk (multi-user public). The users table
+        #     primary key (`tailscale_login`) is now opaque and may
+        #     hold a Clerk user_id; add a separate `email` column so
+        #     we can surface the user's address in UI + emails
+        #     regardless of which provider supplied identity.
+        #     Tailscale rows backfill to email == tailscale_login
+        #     (login IS the email there); Clerk rows get email set by
+        #     the user.created webhook.
         ucols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
         if "email" not in ucols:
             c.execute("ALTER TABLE users ADD COLUMN email TEXT")
@@ -611,13 +611,13 @@ def init() -> None:
         if "desired_retention" not in ucols2:
             c.execute("ALTER TABLE users ADD COLUMN desired_retention REAL")
 
-        # 20. Trivia decks never needed a `cards` row — their queue lives
-        #     in `trivia_queue` — but QuestionRepo.add() used to create
-        #     one unconditionally. The result: orphaned rows that the
-        #     index page's due-count query happily summed, inflating the
-        #     "X due" badge on trivia decks (audit 2026-06-02).
-        #     One-shot cleanup; idempotent because new trivia inserts
-        #     post-fix don't create cards rows.
+        # 20. Trivia decks never needed a `cards` row (their queue
+        #     lives in `trivia_queue`), but QuestionRepo.add() used to
+        #     create one unconditionally. The result was orphaned rows
+        #     that the index page's due-count query happily summed,
+        #     inflating the "X due" badge on trivia decks. One-shot
+        #     cleanup; idempotent because new trivia inserts post-fix
+        #     don't create cards rows.
         c.execute(
             """DELETE FROM cards
                 WHERE question_id IN (

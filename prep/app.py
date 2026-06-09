@@ -17,7 +17,7 @@ module just starts workflows + polls them. All AI calls go through
 the in-process `claude-agent-sdk` adapter (prep.agent.sdk_adapter);
 the Go worker POSTs `/api/agent/run` against its own host to invoke
 it. The retired sidecar container (worker-go/cmd/agent-server) was
-removed during the SDK migration on 2026-05-30.
+removed during the SDK migration.
 """
 
 from __future__ import annotations

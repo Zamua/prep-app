@@ -24,7 +24,7 @@
   {# PWA install — manifest + iOS-specific meta. iOS doesn't read the
      manifest's icons[]; it reads `apple-touch-icon` instead, and the home
      screen label comes from `apple-mobile-web-app-title` (else page <title>
-     gets truncated to "[staging] decks · p..." which we hit on 2026-04-27). #}
+     gets truncated to e.g. "[staging] decks · p..." on the home screen). #}
   <link rel="manifest" href="{{ root }}/manifest.json">
   <link rel="apple-touch-icon" href="{{ root }}/static/pwa/icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -76,12 +76,12 @@
      are set by the prep.web.templates context_processor on
      PREP_AUTH_MODE=clerk deploys; None on Tailscale).
 
-     Loading on EVERY page (not just landing) is the fix for the
-     2026-06-01 bug where /settings/agent worked on first arrival but
-     a form POST minutes later 401'd: Clerk JWTs are short-lived (~60s)
-     and only ClerkJS-on-page silently refreshes them. Without this
-     script, leaving any tab open past the JWT TTL and then posting
-     a form would bounce through Clerk sign-in and lose the form data.
+     Loading on EVERY page (not just landing) is the fix for a
+     class of bug where a page works on first arrival but a form POST
+     minutes later 401s: Clerk JWTs are short-lived (~60s) and only
+     ClerkJS-on-page silently refreshes them. Without this script,
+     leaving any tab open past the JWT TTL and then posting a form
+     would bounce through Clerk sign-in and lose the form data.
 
      The bootstrap is fire-and-forget — `Clerk.load()` reads
      `__client_uat`, fetches a fresh `__session` JWT from

@@ -227,9 +227,9 @@ promote:
 	@# .prod-version, no orphaned tag pointing at the wrong commit). The
 	@# pre-commit hook also runs lint+test at commit time; promote re-runs
 	@# them so a contributor that bypassed the hook doesn't ship a broken
-	@# build. Stranded-tag incidents on 2026-05-03 + a prod outage on
-	@# 2026-05-07 (httpx missing from runtime deps, would've been caught
-	@# by e2e) motivate gating here. Don't regress.
+	@# build. Catches the failure modes where a stranded tag, or a
+	@# runtime dep missing from the image (a kind of bug e2e would catch
+	@# but the unit suite wouldn't), reaches prod.
 	@echo "→ pre-flight: redeploy devel from tag $(v) so e2e runs against the same code we'll ship"
 	$(MAKE) deploy-devel-from-tag v=$(v)
 	@echo "→ pre-flight: lint + python tests"
@@ -281,21 +281,26 @@ down-devel:
 down-prod:
 	docker compose -p prod down
 
-# ----- prepcards.app on the Hetzner VPS -----
-# The public-internet prep deploy. Lives on the VPS (SSH alias `vps`,
-# defined in ~/.ssh/config), not the Mac mini, since the Mac mini is
-# tailnet-only. Nginx terminates SSL at prepcards.app and reverse-
-# proxies to the prep container on :8082.
+# ----- prepcards.app on a remote VPS -----
+# The public-internet prep deploy. Runs on a remote host (reverse
+# proxy at the host terminates TLS for prepcards.app and forwards to
+# the prep container on :8082).
 #
-# Layout on the VPS (set up 2026-04-20 with the admin/apps/dema user split):
-#   /home/apps/projects/prep      : git checkout, owned by apps (non-sudoer)
-#   /home/admin/infra/prep/.env   : secrets (CLERK_*, PREP_INTERNAL_TOKEN,
-#                                   PREP_KEY_ENCRYPTION_SECRET, ...), 0600.
-#                                   Operator-side; lives outside the public
-#                                   source repo. Loaded via --env-file.
-#   /home/admin/infra/prep/compose.yml: VPS-only overlay (traefik labels,
-#                                   ports !reset). Operator-side.
-#   /etc/nginx/sites-enabled/multi-project : server block for prepcards.app
+# Deployment shape (operator-managed pieces are NOT in this repo;
+# only the app-side Makefile + docker-compose.yml are tracked here):
+#
+#   $VPS_PROJECT        : git checkout of this repo on the VPS
+#   $OPS_DEPLOY_DIR/.env: secrets (CLERK_*, PREP_INTERNAL_TOKEN,
+#                         PREP_KEY_ENCRYPTION_SECRET, ...), 0600.
+#                         Operator-managed; loaded via --env-file.
+#   $OPS_DEPLOY_DIR/compose.yml: VPS-only compose overlay (reverse-
+#                         proxy labels, ports reset, etc.). Operator-
+#                         managed; layered on top of the tracked
+#                         docker-compose.yml.
+#
+# The OPS_DEPLOY_DIR convention keeps operator config (which can
+# differ per deploy + holds secrets) out of the public app repo. See
+# the shared infra repo's APP-PATTERN.md.
 #
 # Deploy model mirrors the local two-stack flow:
 #   .vps-version is the source of truth for "what's running on prepcards.app".
@@ -306,17 +311,16 @@ down-prod:
 # Why git pull + build on the VPS (rather than build locally + push image):
 # the VPS already has docker + buildkit set up, the prep image's build
 # context isn't huge, and avoiding a private registry keeps ops simple.
-# Trade-off accepted: build CPU runs on the VPS during deploy. The
-# 2-core Hetzner CX22 builds prep in ~90s warm, ~3min cold.
+# Trade-off accepted: build CPU runs on the VPS during deploy.
 
 VPS_HOST       ?= vps
 VPS_PROJECT    ?= /home/apps/projects/prep
 DEPLOY_VPS_TAG := $(shell test -f .vps-version && tr -d '[:space:]' < .vps-version)
 
-# Operator-side compose + env for the VPS deploy. Lives OUTSIDE the
-# public source repo (in the operator's own infra checkout). See
-# infra/APP-PATTERN.md + global CLAUDE.md "App deployment pattern".
-# Override by setting OPS_DEPLOY_DIR=... when invoking make.
+# Operator-side compose + env for the VPS deploy. Lives OUTSIDE this
+# repo (in an operator-managed infra checkout). See the shared infra
+# repo's APP-PATTERN.md. Override by setting OPS_DEPLOY_DIR=... when
+# invoking make; the default below matches the canonical layout.
 OPS_DEPLOY_DIR ?= /home/admin/infra/prep
 
 # Wraps an SSH'd command. The remote shell is bash so we can chain

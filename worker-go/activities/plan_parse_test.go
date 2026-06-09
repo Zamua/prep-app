@@ -25,7 +25,7 @@ func TestParsePlanJSONHandlesObservedShapes(t *testing.T) {
 			in:   "```json\n[{\"title\":\"x\",\"brief\":\"y\",\"type\":\"short\"}]\n```",
 		},
 		{
-			name: "preamble + fenced block (the 2026-06-02 prod failure)",
+			name: "preamble + fenced block (a real prod failure mode)",
 			in: "Here is the new 63-card plan, expanded to cover every item in your outline: ```json\n" +
 				`[{"title":"List: add ops","brief":"What do append, extend, and insert do?","type":"short"}]` +
 				"\n```",

@@ -2,12 +2,12 @@
 
 Why this file exists separately from test_smoke.py / test_ai_flows.py:
 those drive the app over httpx, so they can prove the server returns
-the right HTML — but they can't prove the page actually works in a
-browser. The 2026-05-10 outage was the canonical example: every server
-route returned 200 with the expected fragment, but every page with an
-inline `<script type="module">` silently died because the importmap
-was reachable too late in the document. httpx tests stayed green; the
-UI was completely broken.
+the right HTML, but they can't prove the page actually works in a
+browser. The canonical example of this gap: an importmap-ordering bug
+where every server route returns 200 with the expected fragment, but
+every page with an inline `<script type="module">` silently dies
+because the importmap is reachable too late in the document. httpx
+tests stay green; the UI is completely broken.
 
 A real browser test catches that class of bug because it runs the JS,
 follows imports, fires htmx polls, and observes DOM swaps. Everything
@@ -58,9 +58,9 @@ _INLINE_MODULE_PAGES = [
     # bootstrap-only — still proves the importmap → app.js → modules
     # chain resolves on the most-trafficked surface.
     ("index", lambda d: "/"),
-    # inline-in-body — deck.html imports 4 modules from `@/modules/...`
-    # via an importmap-bare specifier; the canonical 2026-05-10
-    # regression target.
+    # inline-in-body: deck.html imports 4 modules from `@/modules/...`
+    # via an importmap-bare specifier; the canonical importmap-
+    # ordering regression target.
     ("deck", lambda d: f"/deck/{d['name']}"),
     # inline-in-body — notify_settings.html imports notify-settings.js.
     ("notify-settings", lambda d: "/notify"),
@@ -117,13 +117,12 @@ def test_inline_module_scripts_execute_on_every_page(
       - failed /static/ network requests (any module the importmap
         was supposed to resolve)
 
-    This is the test that would have caught the 2026-05-10 importmap-
-    ordering regression on the FIRST run. The bug pattern: the
-    importmap moved out of <head>, inline `import "@/foo.js"` blocks
-    in the page body silently failed at parse time, every behavior
-    wired up in those blocks (htmx polling, click handlers, etc.) went
-    dead, but every server route returned the same HTML it always
-    had. httpx couldn't see it; chromium can.
+    This is the test that catches the importmap-ordering regression
+    class. The bug pattern: the importmap moves out of <head>, inline
+    `import "@/foo.js"` blocks in the page body silently fail at parse
+    time, every behavior wired up in those blocks (htmx polling,
+    click handlers, etc.) goes dead, but every server route returns
+    the same HTML it always had. httpx can't see it; chromium can.
     """
     path = path_fn(test_deck)
     url = f"{base_url}{path}"
@@ -193,9 +192,9 @@ def test_transform_polling_fires_in_browser(
       - the accept/reject buttons appear in the DOM WITHOUT a full
         page navigation (proves the htmx swap landed)
 
-    This test would have caught the 2026-05-10 outage from the OTHER
-    direction: even if a future regression made all inline modules
-    parse OK but htmx itself failed to wire (e.g. wrong attr, racing
+    This test catches the OTHER direction of the importmap-class
+    outage: even if a future regression makes all inline modules
+    parse OK but htmx itself fails to wire (e.g. wrong attr, racing
     boot order, htmx script 404), this assertion goes red.
     """
     name = test_deck["name"]

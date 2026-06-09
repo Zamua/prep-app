@@ -14,7 +14,8 @@ is just a few extra notes for people sending PRs.
 - Go: `gofmt` + `go vet`.
 - HTML/CSS/JS: 2-space indent.
 - Comments: explain *why* (the non-obvious constraint, the gotcha,
-  the past incident). Don't narrate *what* — the code does that.
+  the failure mode the code is guarding against). Don't narrate
+  *what*; the code does that.
 
 `make setup` installs a pre-commit hook that runs `ruff format --check`,
 `ruff check`, `gofmt -l`, AND `pytest -x` against staged python/go.

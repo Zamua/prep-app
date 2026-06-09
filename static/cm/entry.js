@@ -1,7 +1,8 @@
 // Entry for the CodeMirror bundle that study.html loads. Bundling everything
 // here (rather than letting esm.sh resolve transitive deps in the browser)
 // avoids the "multiple instances of @codemirror/state are loaded, breaking
-// instanceof checks" failure mode you hit on 2026-04-27.
+// instanceof checks" failure mode that happens when the resolver pulls
+// the same package twice from different versioned URLs.
 //
 // Build with `bun run build` from this dir. The output cm-bundle.js is a
 // single ESM file with stable internal references.

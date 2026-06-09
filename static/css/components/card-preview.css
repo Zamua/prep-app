@@ -43,7 +43,7 @@
 /* Flex layout ONLY when the dialog is open. Without the [open] gate,
    `display: flex` here overrides the UA's `dialog:not([open]) {
    display: none }` rule and the (empty) dialog renders inline at the
-   bottom of the deck page. (Hit on 2026-04-28.) */
+   bottom of the deck page. */
 .card-preview[open] {
   display: flex;
   flex-direction: column;

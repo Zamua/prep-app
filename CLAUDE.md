@@ -61,11 +61,11 @@ form when the user pastes a `claude setup-token` output, loaded into
 `CLAUDE_CODE_OAUTH_TOKEN` on app boot. Deleting the file (or hitting
 `/settings/agent/disconnect`) wipes auth in-place.
 
-**History:** the architecture used to be two containers — prep + an
-`agent` sidecar (Node + Claude Code CLI + a Go HTTP wrapper at port
-9999) — but the SDK migration on 2026-05-30 collapsed it. The
-sidecar binary at `worker-go/cmd/agent-server/` is retired; the
-orphaned `prep-agent-data` volume was removed.
+**History:** the architecture used to be two containers (prep + an
+`agent` sidecar running Node + Claude Code CLI + a Go HTTP wrapper at
+port 9999), but a migration to the in-process `claude-agent-sdk`
+collapsed it. The sidecar binary at `worker-go/cmd/agent-server/` is
+retired.
 
 ---
 
@@ -406,13 +406,12 @@ billing account.
 Check `PRAGMA table_info(<table>)` first, then ALTER. Existing
 examples: `editor_input_mode`, `notification_prefs`, `context_prompt`.
 
-**FK CASCADE gotcha (the v0.4.1 incident).** If you ever rebuild a
+**FK CASCADE gotcha (fixed in v0.4.1).** If you ever rebuild a
 table that's referenced by an FK, follow the SQLite-recommended
 pattern: `PRAGMA foreign_keys=OFF` OUTSIDE any transaction, then
-`BEGIN; ...rebuild...; PRAGMA foreign_key_check; COMMIT;`. v0.3.0
-shipped a naive `DROP TABLE decks` and cascaded through
-questions/cards/reviews — wiped a real prod DB. v0.4.1 fixed it.
-Don't regress.
+`BEGIN; ...rebuild...; PRAGMA foreign_key_check; COMMIT;`. A naive
+`DROP TABLE decks` cascades through questions/cards/reviews and
+wipes user data. Don't regress.
 
 ---
 
@@ -457,78 +456,77 @@ For the staging-vs-prod two-stack split, use `make deploy-stag` /
 
 ## Deploy model (single checkout, THREE deploys)
 
-One checkout (`prep-app-staging/`, on `main`), three deploys built
-from it. Two stacks share the local docker daemon (stag + prod-tailnet);
-the third is the public-internet deploy on the Hetzner VPS.
+One checkout (on `main`), three deploys built from it. Two stacks
+share a local docker daemon (stag + prod-tailnet, both tailnet-only);
+the third is the public-internet deploy of prepcards.app on a remote
+host.
 
-- **stag** (Mac mini, tailnet) — image `prep:staging`, project `stag`,
+- **stag** (local, tailnet) — image `prep:staging`, project `stag`,
   host port 8082, single `prep-data` volume. Tailscale serves at
   `/prep-staging/`. Tailscale auth. Built from current working tree
-  on every `make deploy-stag`. No pin file — always the latest commit.
-- **prod-tailnet** (Mac mini, tailnet) — image `prep:<tag>`, project
+  on every `make deploy-stag`. No pin file (always the latest commit).
+- **prod-tailnet** (local, tailnet) — image `prep:<tag>`, project
   `prod`, host port 8081, single `prod-data` volume. Tailscale serves
-  at `/prep/`. Tailscale auth. **Single-user** (the operator's own
-  /prep instance). Built from `git worktree add --detach <tag>` against
-  the tag in `.prod-version`.
-- **prepcards.app** (Hetzner VPS, public internet) — image `prep:vps`,
-  compose project `prep`. nginx at the VPS terminates TLS and reverse-
-  proxies to the container on :8082. **Clerk auth, multi-user.** Lives
-  at `/home/apps/projects/prep` on the VPS (`ssh vps`). Built from
-  the tag in `.vps-version` via `make deploy-vps` (SSHes to the VPS,
-  `git fetch --tags && git checkout <tag> && docker compose build && up -d`).
+  at `/prep/`. Tailscale auth. **Single-user** (operator's own /prep
+  instance). Built from `git worktree add --detach <tag>` against the
+  tag in `.prod-version`.
+- **prepcards.app** (remote host, public internet) — image `prep:vps`,
+  compose project `prep`. Reverse proxy at the remote host terminates
+  TLS and forwards to the container on :8082. **Clerk auth,
+  multi-user.** Built from the tag in `.vps-version` via
+  `make deploy-vps` (SSHes to the host, `git fetch --tags && git
+  checkout <tag> && docker compose build && up -d`). Operator-side
+  overlay (compose.yml + .env with Clerk + token secrets) lives
+  OUTSIDE this repo: the Makefile points at it via
+  `OPS_DEPLOY_DIR ?= <operator-managed-path>`. Pattern documented in
+  the shared infra repo's `APP-PATTERN.md`.
 
-(Pre-SDK-migration there was a second per-env `*-agent-data` volume
-for the sidecar's OAuth token. With the token now in `prep-data` at
-`/data/claude-oauth-token`, those volumes are retired —
-`prep-agent-data` was removed on 2026-05-30.)
-
-**Two pin files — DON'T conflate them:**
-- `.prod-version` → Mac mini /prep (tailnet, single-user)
+**Two pin files (DON'T conflate them):**
+- `.prod-version` → local /prep (tailnet, single-user)
 - `.vps-version` → prepcards.app (public, multi-user)
 
 **Per-deploy config** lives in `deploy/staging.env` + `deploy/prod.env`
-(tracked, used by Mac mini stacks) and `/home/apps/projects/prep/.env`
-(on the VPS, NOT in git — holds Clerk keys + PREP_AUTH_MODE=clerk +
-secrets). A local `.env` (gitignored) layers on top of the Mac mini
-stacks for per-machine overrides. `PREP_DEFAULT_USER` is deliberately
-unset in all three deploys — every request must authenticate.
+(tracked, used by the local stacks) and an operator-managed `.env`
+at `$OPS_DEPLOY_DIR/.env` on the VPS (NOT in git, holds Clerk keys +
+PREP_AUTH_MODE=clerk + secrets). A local `.env` (gitignored) layers
+on top of the local stacks for per-machine overrides.
+`PREP_DEFAULT_USER` is deliberately unset in all three deploys: every
+request must authenticate.
 
-**Promote flow** — tag once, promote per-target:
+**Promote flow** (tag once, promote per-target):
 ```bash
 # tag whatever's on main
 git tag -a v0.X.Y -m "..."
 git push origin --tags
 
-# promote to Mac mini /prep (tailnet, single-user) — writes .prod-version,
+# promote to local /prep (tailnet, single-user): writes .prod-version,
 # commits, pushes, builds at the tag, brings up local prod stack.
 make promote v=v0.X.Y
 
-# promote to prepcards.app (public, multi-user) — writes .vps-version,
+# promote to prepcards.app (public, multi-user): writes .vps-version,
 # commits, pushes, SSH'd build + up on the VPS.
 make promote-vps v=v0.X.Y
 ```
 
 `make deploy-prod` / `make deploy-vps` (without `v=`) redeploy whatever
-the respective pin already says — idempotent. Use after editing the
+the respective pin already says (idempotent). Use after editing the
 deploy env file or to recreate containers from the same tag.
 
 **"Promote to prepcards.app" = `make promote-vps`, not `make promote`.**
-The two are NOT interchangeable. Past incident (2026-06-02): a
-security-relevant change was promoted via `make promote` and Claude
-believed the public deploy was updated; only the tailnet /prep instance
-got it, and prepcards.app stayed on the old version for 15 more minutes
-until the user pointed out the form they were trying to remove was
-still visible to multi-user signups. When in doubt about which deploy
-the user means, check both pin files (`cat .prod-version .vps-version`)
-and the running images (`docker ps` locally, `ssh vps "sudo docker ps"`
-on the VPS).
+The two are NOT interchangeable. `make promote` only updates the
+tailnet /prep instance; `make promote-vps` updates the public
+multi-user deploy. Past failure mode: confusing the two and believing
+the public deploy got a security-relevant change when only the
+tailnet instance did. When in doubt about which deploy the user
+means, check both pin files (`cat .prod-version .vps-version`) and
+the running images.
 
-**Important — wait for go-ahead before any prod deploy.** Default to
+**Important: wait for go-ahead before any prod deploy.** Default to
 `make deploy-stag` during a session; wait for the user to say "deploy
 prod" / "promote" / equivalent before running `make promote`,
 `make deploy-prod`, `make promote-vps`, or `make deploy-vps`. For
 security-relevant changes, prefer rolling out to prepcards.app FIRST
-(highest stakes — multi-user), confirm visually, then promote to the
+(highest stakes, multi-user), confirm visually, then promote to the
 tailnet /prep too.
 
 Image tags are versioned (`prep:staging`, `prep:v0.13.3`) so all
@@ -544,14 +542,16 @@ reverse proxy required.
 
 ## Observability
 
-prep emits Prometheus metrics + structured logs to the LGTM-stack
-running under `~/Dropbox/workspace/macmini/observability/`.
+prep emits Prometheus metrics + structured logs to an operator-side
+LGTM-stack (Loki + Grafana + Tempo + Mimir) running on the same
+docker daemon.
 
 **Metrics** (`prep/web/metrics.py`, exposed at `GET /metrics`):
-- `prep_anyio_threadpool_borrowed` / `_capacity` — gauge. Sampled
+- `prep_anyio_threadpool_borrowed` / `_capacity` (gauge). Sampled
   just-in-time on every scrape. **The leak/exhaustion canary** for
-  the failure mode that took prod down on 2026-05-07; sustained
-  borrowed≈capacity = sync handlers piling up on the threadpool.
+  threadpool exhaustion: sustained borrowed approx. capacity means
+  sync handlers piling up on the threadpool (a known prod-down
+  failure mode).
 - `prep_claude_grade_duration_seconds{verdict}` — histogram. Labels:
   `right`, `wrong`, `unknown`, `fallback_unavailable`, `fallback_bad_json`.
   Buckets up to 30s so the 12s timeout tail is visible.
@@ -575,11 +575,10 @@ StreamHandler at INFO (override via `PREP_LOG_LEVEL`); use
 `logger = logging.getLogger(__name__)` in any module — info-level
 messages reach stdout (and thus Loki) by default.
 
-**Prometheus scrape config** lives in
-`~/Dropbox/workspace/macmini/observability/prometheus/prometheus.yml`
-under the `prep-prod` and `prep-staging` jobs (`host.docker.internal:8081`
-and `:8082` respectively, `metrics_path: /metrics`). After editing,
-`make reload-prom` from the obs/ dir picks up changes without a restart.
+**Prometheus scrape config** is operator-side (lives in the obs
+stack's checkout, not this repo). The jobs target
+`host.docker.internal:8081` (prod) and `:8082` (staging) on
+`metrics_path: /metrics`.
 
 **Traces are NOT emitted yet.** Tempo/Jaeger isn't part of the
 obs-stack today; logs + metrics carry the load. If a future debug
@@ -643,19 +642,19 @@ the importmap is at the bottom of `<body>` (legacy layout) and a
 page renders an inline module script higher in the body via
 `{% block main %}`, the inline script's `import "@/..."` silently
 dies at parse time — taking every behavior wired up in that block
-with it (polling, click handlers, …). 2026-05-10 outage: htmx
-polling + refresh-link in transform.html stopped working because of
-exactly this. Fix: keep importmap in `<head>` always.
+with it (polling, click handlers, etc.). This pattern has caused a
+production outage where htmx polling + refresh-link in transform.html
+stopped working entirely. Fix: keep importmap in `<head>` always.
 
 **Polling pattern is htmx, not JS modules.** `templates/transform.html`,
 `plan.html`, `grading.html`, `trivia/generating.html` use
 `hx-get="/<resource>/{wid}/fragment" hx-trigger="every 2s"` to poll
 status fragments. Server controls polling lifecycle: a non-terminal
 fragment includes `hx-trigger="every 2s"`, a terminal fragment omits
-it → htmx auto-stops. No client state machine. The dead pattern (a
-JS `startPoller` module + `setInterval` + `visibilitychange`) is gone
-as of 2026-05-10. If you add a new "wait for backend → swap UI"
-flow, follow the htmx pattern; don't reach for `setInterval`.
+it (htmx auto-stops). No client state machine. The dead pattern (a
+JS `startPoller` module + `setInterval` + `visibilitychange`) was
+removed. If you add a new "wait for backend, swap UI" flow, follow
+the htmx pattern; don't reach for `setInterval`.
 
 **Don't block HTTP routes on `await handle.result()`.** Temporal's
 `handle.result()` long-polls for workflow completion. Calling it
@@ -717,9 +716,9 @@ activities without the dedupe shield.
    - **browser tests** (test_browser_smoke.py, marked `slow` +
      `browser`): drive Chromium via Playwright at iPhone-15-Pro
      viewport. **Catches**: inline `<script type="module">` parse +
-     execute (the 2026-05-10 importmap-ordering bug class), htmx
-     polling actually firing client-side, in-place fragment swaps
-     (no navigation on accept/reject), `HX-Redirect` followed by the
+     execute (the importmap-ordering bug class), htmx polling
+     actually firing client-side, in-place fragment swaps (no
+     navigation on accept/reject), `HX-Redirect` followed by the
      browser. Without these, the server returning the right HTML is
      a green light even when every page's JS is dead.
 
@@ -769,8 +768,8 @@ add an e2e that drives it to terminal — don't ship blind.
   modeled the wrong thing — dropped. Now we just handle
   `AgentBudgetExhausted` gracefully (429 + UI message) and wait for
   Anthropic to expose a real per-token usage API.
-- A separate AI sidecar. The 2026-05-30 SDK migration pulled the
-  agent in-process; the old `worker-go/cmd/agent-server/` binary +
+- A separate AI sidecar. The SDK migration pulled the agent
+  in-process; the old `worker-go/cmd/agent-server/` binary +
   `Dockerfile.agent` are gone.
 - Cloud SaaS / multi-tenant auth. prep is single-tenant
   per-deployment.
@@ -781,8 +780,8 @@ add an e2e that drives it to terminal — don't ship blind.
 ## Versioning
 
 Semver via git tags. Pre-1.0 we're permissive about minor-vs-patch
-boundaries. Tag from `prep-app-staging/` (where `main` lives), then
-checkout that tag in `prep-app/` (the prod checkout) and `docker
-compose build && up -d`.
+boundaries. Tag from `main`, then use `make promote v=<tag>` (local
+tailnet /prep) or `make promote-vps v=<tag>` (prepcards.app) to build
++ deploy at the tag.
 
-Current version visible via `git describe --tags` in either checkout.
+Current version visible via `git describe --tags`.

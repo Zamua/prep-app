@@ -5,7 +5,7 @@
  * in a single tight row; open state reveals the connect form. The
  * active provider opens by default; others stay collapsed so the
  * page reads as a 4-row list instead of four stacked full-height
- * panels (the pre-2026-06-02 layout was ~2700px tall on mobile).
+ * panels (an earlier all-open layout was ~2700px tall on mobile).
  *
  * Key entry uses <input type="password"> with a peek-toggle button.
  * Single-line, browser/password-manager friendly, secret-by-default;

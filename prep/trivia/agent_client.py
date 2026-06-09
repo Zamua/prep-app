@@ -54,10 +54,10 @@ def run_prompt(
     API key) and falls back to the subscription OAuth token when None
     or the user has no BYOK row. See `prep.agent.selector`.
 
-    Caught the hard way at 19:30 UTC on 2026-05-07 (pre-migration):
-    a request-path call blocked the event loop until the upstream
-    timeout fired, taking down all request handling. The async
-    variant (run_prompt_async) is the request-path safe option."""
+    Important: a sync request-path call here would block the event
+    loop until the upstream timeout fires, taking down all request
+    handling (a known prod-down failure mode). The async variant
+    (run_prompt_async) is the request-path safe option."""
     return asyncio.run(run_prompt_async(prompt, user_id=user_id, timeout_s=timeout_s))
 
 

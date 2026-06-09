@@ -133,11 +133,11 @@ def _subscription_path_allowed() -> bool:
     one person operates the deploy AND consumes the AI; the token
     funds their own use.
 
-    NO on multi-user public deploys (Clerk mode) — every signup would
+    NO on multi-user public deploys (Clerk mode): every signup would
     silently consume the operator's Anthropic credit pool without
-    knowing it. After the 2026-06-02 incident on prepcards.app we
-    hard-gate the subscription path off for `PREP_AUTH_MODE=clerk`,
-    even if `CLAUDE_CODE_OAUTH_TOKEN` is somehow set.
+    knowing it. The subscription path is hard-gated off for
+    `PREP_AUTH_MODE=clerk`, even if `CLAUDE_CODE_OAUTH_TOKEN` is
+    somehow set.
 
     See also: prep/agent/routes.py — the /settings/agent/connect POST
     refuses to save a token under the same condition; settings_agent.html
@@ -223,11 +223,11 @@ def agent_for_user(user_id: str | None) -> AgentPort:
             # user.
             logger.exception("agent: BYOK lookup failed for user %s; falling through", user_id)
 
-    # 2. Deploy-wide subscription OAuth token — single-user local installs
-    #    only. `_subscription_path_allowed()` returns False on clerk-mode
-    #    deploys so a stray CLAUDE_CODE_OAUTH_TOKEN can't silently fund
-    #    every signup from the operator's credit pool (the 2026-06-02
-    #    incident on prepcards.app).
+    # 2. Deploy-wide subscription OAuth token (single-user local
+    #    installs only). `_subscription_path_allowed()` returns False
+    #    on clerk-mode deploys so a stray CLAUDE_CODE_OAUTH_TOKEN
+    #    can't silently fund every signup from the operator's credit
+    #    pool.
     if _subscription_path_allowed() and (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip():
         from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
 

@@ -141,8 +141,8 @@ func renderPriorPlan(items []shared.PlanItem) string {
 //   - a wrapper object {"plan": [...]} (claude sometimes hedges)
 //   - a fenced ```json block (despite our "no fences" instruction)
 //   - any of the above PRECEDED by a chatty preamble ("Here is the new
-//     63-card plan: ```json [...] ```") — the failure mode that hit
-//     a real user on 2026-06-02
+//     63-card plan: ```json [...] ```"): a failure mode that has hit
+//     real users in production
 func parsePlanJSON(raw []byte) ([]shared.PlanItem, error) {
 	body := extractJSON(strings.TrimSpace(string(raw)))
 

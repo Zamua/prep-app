@@ -50,8 +50,7 @@ header. That route resolves the per-user adapter via the selector
 shape the retired sidecar used, so the worker code didn't change.
 
 The retired sidecar (`worker-go/cmd/agent-server/`) and its
-`prep-agent-data` volume were removed during the SDK migration on
-2026-05-30.
+`prep-agent-data` volume were removed during the SDK migration.
 
 The Temporal devserver runs *inside* the prep container (not a
 separate service). The Go worker connects to it on `127.0.0.1:7233`.
@@ -275,7 +274,7 @@ GradeAnswer activity):
 5. Return `CardState(...)` so the route can render "next review in
    N days" without a re-query.
 
-**Caveat — Go worker still uses the legacy ladder.** As of 2026-06-02,
+**Caveat: the Go worker still uses the legacy ladder.**
 `worker-go/activities/grading.go` writes `cards.step` + `next_due`
 from a hardcoded `srsLadderMinutes` array. The Python path migrated
 to FSRS; the Go path didn't. Hybrid behavior in practice: sync
@@ -344,14 +343,13 @@ table-rebuild blocks for each historical migration step. Adding a
 new column? Append another `PRAGMA table_info` check + `ALTER` to
 `init()`.
 
-**FK CASCADE gotcha (real production incident, v0.4.1):** if you
-ever rebuild a table that's referenced by an FK, follow the
-SQLite-recommended pattern — `PRAGMA foreign_keys = OFF` *outside*
-any transaction, then `BEGIN; …rebuild…; PRAGMA foreign_key_check;
-COMMIT;`. v0.3.0 shipped a naive `DROP TABLE decks` that cascaded
-through questions/cards/reviews and wiped a real prod DB. The
-`decks` rebuild block in `prep/infrastructure/db.py` shows the
-correct pattern.
+**FK CASCADE gotcha (fixed in v0.4.1):** if you ever rebuild a
+table that's referenced by an FK, follow the SQLite-recommended
+pattern. `PRAGMA foreign_keys = OFF` *outside* any transaction, then
+`BEGIN; …rebuild…; PRAGMA foreign_key_check; COMMIT;`. A naive
+`DROP TABLE decks` cascades through questions/cards/reviews and wipes
+user data. The `decks` rebuild block in `prep/infrastructure/db.py`
+shows the correct pattern.
 
 ---
 

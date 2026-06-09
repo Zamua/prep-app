@@ -94,8 +94,8 @@ def _clerk_bootstrap_context(request: Request) -> dict:
     """Expose Clerk publishable key + frontend API host to base.html
     so it can load ClerkJS on every page (not just the landing). The
     JS keeps the short-lived `__session` cookie refreshed in the
-    background — without it, an idle tab's POST would 401 → bounce
-    through Clerk sign-in and lose form data (the 2026-06-01 bug).
+    background; without it, an idle tab's POST would 401 and bounce
+    through Clerk sign-in, losing form data.
 
     Returns Nones on Tailscale-mode deploys; base.html's `{% if %}`
     guard then renders nothing.

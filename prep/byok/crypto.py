@@ -9,8 +9,8 @@ unwraps ciphertext — keep that invariant.
 
 - **At rest, the DB stores ciphertext.** A stolen sqlite file or
   backup yields nothing without `PREP_KEY_ENCRYPTION_SECRET`. The
-  master lives in `/home/admin/prep.env` (chmod 600, root + admin
-  only), separate from the data volume.
+  master should be supplied via a 0600 .env file separate from the
+  data volume, not committed alongside the application.
 - **AES-256-GCM** is the standard authenticated-encryption choice.
   Confidentiality + integrity, single primitive, no padding oracle
   to worry about. `cryptography.hazmat.primitives.ciphers.aead.AESGCM`.

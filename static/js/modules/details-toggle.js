@@ -59,9 +59,9 @@ export function init() {
   //     synthesized click resolves, and the click either cancels or
   //     re-targets to the now-shifted element underneath. Symptom is
   //     "tap registers but nothing happens; second tap works"
-  //     (reported 2026-05-07 19:44 UTC: tap Next-card while Explain
-  //     is open → Explain closes, no nav; tap "all decks" while
-  //     interval popover is open → popover closes, no nav).
+  //     (e.g. tap Next-card while Explain is open: Explain closes,
+  //     no nav; tap "all decks" while interval popover is open:
+  //     popover closes, no nav).
   //
   // Net behavior: open details persist through taps on actions until
   // the user re-taps the summary (toggle), presses Escape, or taps a

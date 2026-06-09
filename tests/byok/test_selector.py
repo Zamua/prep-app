@@ -89,9 +89,8 @@ def test_byok_lookup_failure_does_not_break_other_users(monkeypatch, initialized
 def test_subscription_path_blocked_on_clerk_mode(monkeypatch, initialized_db):
     """Cut 1: a stray CLAUDE_CODE_OAUTH_TOKEN on a multi-user clerk
     deploy must NOT silently fund every user's AI from the operator's
-    Max credit pool (the 2026-06-02 incident on prepcards.app).
-    Gating happens in _subscription_path_allowed(); when off, the
-    selector falls all the way through to noop."""
+    Max credit pool. Gating happens in _subscription_path_allowed();
+    when off, the selector falls all the way through to noop."""
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-leftover-from-local-dev")
     monkeypatch.setenv("PREP_AUTH_MODE", "clerk")
 

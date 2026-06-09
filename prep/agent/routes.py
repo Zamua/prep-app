@@ -284,9 +284,8 @@ async def settings_agent_connect(request: Request, user: dict = Depends(current_
 
     HARD-GATED to non-clerk deploys. A clerk-mode deploy is multi-user;
     a single deploy-wide token would fund every signup's AI usage from
-    the operator's Anthropic credit pool (the 2026-06-02 incident on
-    prepcards.app). Per-user subscription tokens are tracked separately
-    as task #326."""
+    the operator's Anthropic credit pool. Per-user subscription tokens
+    are tracked separately as task #326."""
     if (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower() == "clerk":
         # Use byok_error (not error) — `error` only renders inside the
         # subscription <details> panel, which is hidden on clerk mode.

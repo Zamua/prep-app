@@ -179,9 +179,10 @@ def _delete_test_decks_by_display(http: httpx.Client) -> None:
 # type="module">` parse errors, importmap resolution misses, htmx
 # polling not actually firing, button click handlers not attached, DOM
 # swaps not landing. Every page returns 200 with the right HTML, but
-# the JS quietly dies. The 2026-05-10 outage was exactly this shape —
-# transform polling stopped because an importmap-ordering regression
-# nuked every inline module on the page, but `make e2e` was green.
+# the JS quietly dies. An importmap-ordering regression has caused
+# exactly this shape of outage in the past: transform polling stopped
+# because every inline module on the page died at parse time, but the
+# httpx-only `make e2e` stayed green.
 #
 # These fixtures wire Playwright into the same pytest session as the
 # httpx fixtures above. Browser tests live in test_browser_smoke.py and

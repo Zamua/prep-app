@@ -41,10 +41,10 @@ def redirect(request: Request, path: str, status_code: int = 303) -> RedirectRes
     """Build a RedirectResponse whose Location header includes the
     request's root_path.
 
-    FastAPI's RedirectResponse takes the URL verbatim — it does NOT
-    auto-prepend root_path — so a bare /deck/foo would land outside
+    FastAPI's RedirectResponse takes the URL verbatim (it does NOT
+    auto-prepend root_path), so a bare /deck/foo would land outside
     the /prep/ Tailscale Serve mount and the user would see a white
-    screen. This was hit on 2026-04-26; preserve it here.
+    screen. Preserve the prefix-aware behavior.
     """
     prefix = request.scope.get("root_path", "") or ""
     if path.startswith("/"):

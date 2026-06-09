@@ -1,16 +1,15 @@
 """Prometheus metrics emission.
 
 Wires four prep-specific signals into a process-local prometheus
-registry. Scraped by the obs-stack Prometheus running on the same
-docker daemon (see ~/Dropbox/workspace/macmini/observability/).
+registry. Scraped by a Prometheus running on the same docker daemon.
 
 Why the four below:
 
 - `anyio_threadpool_borrowed` / `anyio_threadpool_capacity`: directly
-  answer "are we exhausting the threadpool / leaking threads?" — the
-  failure mode that took prod down on 2026-05-07. Sampled lazily on
-  every /metrics scrape, so we get a real-time picture without an
-  always-on background task.
+  answer "are we exhausting the threadpool / leaking threads?" (a
+  known prod-down failure mode). Sampled lazily on every /metrics
+  scrape, so we get a real-time picture without an always-on
+  background task.
 - `prep_claude_grade_duration_seconds`: histogram of every claude_grade
   call's wall time, tagged with verdict (right/wrong/fallback). Lets
   us see latency tail + correlate with claude-side slowdowns.
@@ -36,7 +35,7 @@ _THREADPOOL_BORROWED = Gauge(
     "prep_anyio_threadpool_borrowed",
     "Threads currently held by sync route handlers (anyio default limiter). "
     "Approaching capacity = blocking I/O is parking threads faster than they "
-    "return; sustained capacity = exhaustion (the 2026-05-07 outage signal).",
+    "return; sustained capacity = exhaustion (a known prod-down signal).",
 )
 
 _THREADPOOL_CAPACITY = Gauge(
