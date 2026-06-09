@@ -449,12 +449,21 @@ clauses (cross-user lookups return None as if the row didn't exist).
 | New icon | `curl -o static/icons/<n>.svg https://raw.githubusercontent.com/phosphor-icons/core/main/assets/light/<n>-light.svg` |
 
 To validate ad-hoc: `docker compose build && docker compose up -d`.
-For the staging-vs-prod two-stack split, use `make deploy-stag` /
-`make deploy-prod` (see below).
+For the staging-vs-prod two-stack split, use the operator's
+`make -C infra/prep deploy-devel` / `deploy-prod` (see below).
 
 ---
 
 ## Deploy model (single checkout, THREE deploys)
+
+**Operator targets live in a separate private repo.** The
+`make deploy-devel`, `make deploy-prod`, `make deploy-vps`,
+`make promote`, `make promote-vps`, `make logs-*`, `make down-*`
+commands referenced throughout this section are defined in
+`infra/prep/Makefile` (operator's private infra repo) and invoked
+via `make -C ~/Dropbox/workspace/macmini/infra/prep <target>`. The
+shapes / pin files / flow described below are unchanged; only the
+location of the Makefile moved.
 
 One checkout (on `main`), three deploys built from it. Two stacks
 share a local docker daemon (stag + prod-tailnet, both tailnet-only);

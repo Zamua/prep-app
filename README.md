@@ -82,16 +82,9 @@ FSRS scheduler, BYOK adapter precedence, single-container deploy shape.
 
 ### Two-stack deploy
 
-Run staging plus prod side-by-side on one docker host:
-
-```bash
-make deploy-stag                       # prep:staging on :8082
-git tag -a v0.X.Y && git push --tags
-make promote v=v0.X.Y                  # pins .prod-version, builds, :8081
-```
-
-`.prod-version` tracks what's in prod. `make deploy-prod` redeploys the
-pinned tag.
+Self-hosters run plain `docker compose` (see "Day-to-day" above). The
+operator behind prepcards.app uses a private infra repo with extra
+Makefile targets for the two-stack tailnet + VPS rollout.
 
 ## License
 

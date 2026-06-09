@@ -64,18 +64,11 @@ What's intentionally out of scope (so don't expect these to land):
 ## Releasing (author convention)
 
 For your fork, use whatever workflow you like — the codebase doesn't
-depend on it. The bundled flow is two compose stacks (`stag` +
-`prod`) running side-by-side on a single docker host, both driven
-from one checkout. The README's "Two-stack deploy" section walks
-through the mechanics; the short version:
-
-- `make deploy-stag` builds current `main` and brings up the staging
-  stack on `:8082`.
-- `make promote v=v0.X.Y` writes `v0.X.Y` to `.prod-version`,
-  commits, pushes, builds *that tag* in a temporary git worktree,
-  and brings up the prod stack on `:8081`.
-- `make deploy-prod` (no `v=`) idempotently redeploys whatever tag
-  `.prod-version` already pins.
+depend on it. The bundled `docker-compose.yml` boots one container
+running uvicorn + temporal-devserver + the Go worker under goreman,
+which is enough for self-hosting. The author's release flow (tagging,
+multi-stack rollout, VPS promotion) lives in a separate private
+operator repo and is not part of this codebase.
 
 Tags are semver: `v0.X.Y`. Bump minor for features, patch for
 fixes. Pre-1.0 we're permissive about the minor/patch boundary.
