@@ -454,45 +454,54 @@ For the staging-vs-prod two-stack split, use the operator's
 
 ---
 
-## Deploy model (single checkout, THREE deploys)
+## Deploy model (two VPS deploys: staging + prod — hostthis-style)
 
-**Operator targets live in a separate private repo.** The
-`make deploy-devel`, `make deploy-prod`, `make deploy-vps`,
-`make promote`, `make promote-vps`, `make logs-*`, `make down-*`
-commands referenced throughout this section are defined in
-`infra/prep/Makefile` (operator's private infra repo) and invoked
-via `make -C ~/Dropbox/workspace/macmini/infra/prep <target>`. The
-shapes / pin files / flow described below are unchanged; only the
-location of the Makefile moved.
+**As of 2026-06-24 prep follows the hostthis model: staging AND prod both
+run on the Hetzner fleet (k8s), and the two LOCAL macmini stacks are
+RETIRED.** A change is validated on `staging.prepcards.app`, then promoted
+to `prepcards.app` — the same staging gate hostthis uses. Operator deploy
+targets live in `infra/prep/` (invoked via
+`make -C ~/Dropbox/workspace/macmini/infra/prep <target>`).
 
-One checkout (on `main`), three deploys built from it. Two stacks
-share a local docker daemon (stag + prod-tailnet, both tailnet-only);
-the third is the public-internet deploy of prepcards.app on a remote
-host.
+- **staging** — `staging.prepcards.app`, on the **Hetzner 3-node staging
+  cluster** (the same mirror hostthis stages on; kubeconfig
+  `infra/iac/ansible/.kube/staging.yaml`), namespace `prep-staging`, image
+  `ghcr.io/zamua/prep:staging`. **Clerk auth, multi-user** (mirrors prod, so
+  config like the agent path below is exercised here for real). This is the
+  gate: deploy + verify here before prod.
+- **prod** — `prepcards.app`, on **vps2** k8s, namespace `prep`, image
+  `ghcr.io/zamua/prep:<tag>` pinned by `.vps-version` (v0.42.5 at this
+  writing). **Clerk auth, multi-user.** Promote the SAME tag validated on
+  staging.
 
-- **stag** (local, tailnet) — image `prep:staging`, project `stag`,
-  host port 8082, single `prep-data` volume. Tailscale serves at
-  `/prep-staging/`. Tailscale auth. Built from current working tree
-  on every `make deploy-stag`. No pin file (always the latest commit).
-- **prod-tailnet** (local, tailnet) — image `prep:<tag>`, project
-  `prod`, host port 8081, single `prod-data` volume. Tailscale serves
-  at `/prep/`. Tailscale auth. **Single-user** (operator's own /prep
-  instance). Built from `git worktree add --detach <tag>` against the
-  tag in `.prod-version`.
-- **prepcards.app** (remote host, public internet) — image `prep:vps`,
-  compose project `prep`. Reverse proxy at the remote host terminates
-  TLS and forwards to the container on :8082. **Clerk auth,
-  multi-user.** Built from the tag in `.vps-version` via
-  `make deploy-vps` (SSHes to the host, `git fetch --tags && git
-  checkout <tag> && docker compose build && up -d`). Operator-side
-  overlay (compose.yml + .env with Clerk + token secrets) lives
-  OUTSIDE this repo: the Makefile points at it via
-  `OPS_DEPLOY_DIR ?= <operator-managed-path>`. Pattern documented in
-  the shared infra repo's `APP-PATTERN.md`.
+**RETIRED 2026-06-24** (do not resurrect): the two local macmini docker
+stacks — `stag` (`prep:staging`, tailscale `/prep-staging`, :8082) and
+`prod-tailnet` (the operator's single-user `/prep`, :8081, `.prod-version`
+pin). Their tailscale-serve `/prep` + `/prep-staging` mounts are removed.
+`.prod-version` is dead; `.vps-version` is the only live pin now.
 
-**Two pin files (DON'T conflate them):**
-- `.prod-version` → local /prep (tailnet, single-user)
-- `.vps-version` → prepcards.app (public, multi-user)
+**KNOWN DRIFT to reconcile:** `infra/prep/Makefile`'s `deploy-vps` still
+shells docker-compose, but live prod + staging are BOTH k8s now (the
+docker→k3s migration moved them). The live k8s manifests are in
+`infra/prep/k8s/` (+ overlays); rework the Makefile to the hostthis
+kubectl/overlay shape.
+
+**Agent model — BYOK-only on the public deploys (the thing not to break):**
+both staging + prod run `PREP_AUTH_MODE=clerk`, which HARD-GATES the
+deploy-wide subscription / app-wide token off
+(`prep/agent/selector.py::_subscription_path_allowed()`) — so a stray
+`CLAUDE_CODE_OAUTH_TOKEN` can NEVER fund random signups from the operator's
+pool. Every user is BYOK: their own Anthropic API key (`sk-ant-api03-…`) or a
+per-user `claude setup-token` (used via `ClaudeAgentSdkAdapter(token=…)`, NOT
+the deploy-wide env). The Go worker reaches the agent via
+`PREP_AGENT_URL=http://localhost:8082/api/agent` (the loopback to prep's own
+`/api/agent/run`); it threads `user_id` end-to-end so the selector picks THAT
+user's BYOK key at the endpoint. **`PREP_AGENT_URL` is REQUIRED on both
+deploys** (it was missing on prod → `ComputeTransform` failed `NoAgent`; set
+2026-06-24) and is NOT an app-wide token — just the worker→endpoint URL.
+
+**One pin file:** `.vps-version` → `prepcards.app` (prod). Staging tracks
+`prep:staging` (latest validated build), no pin.
 
 **Per-deploy config** lives in `deploy/staging.env` + `deploy/prod.env`
 (tracked, used by the local stacks) and an operator-managed `.env`
