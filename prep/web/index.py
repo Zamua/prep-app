@@ -72,6 +72,92 @@ def healthz() -> PlainTextResponse:
     return PlainTextResponse("ok")
 
 
+@router.get("/debug/session", response_class=HTMLResponse, include_in_schema=False)
+def debug_session(request: Request) -> HTMLResponse:
+    """Un-gated session-state readout for diagnosing the PWA
+    'always prompts to sign in' bug. Shows side by side what the SERVER
+    saw on THIS request (did it resolve a user? which Clerk cookies
+    arrived?) and what CLIENT-side ClerkJS hydrates (Clerk.user, the
+    cookies in document.cookie, standalone-PWA flag). Cookie NAMES and
+    booleans only — no values, no secrets, only the requester's own
+    state. Removable once the PWA session bug is closed."""
+    import json
+    import os
+
+    from prep.web.templates import _clerk_bootstrap_context
+
+    user = optional_current_user(request)
+    cookie_hdr = request.headers.get("cookie", "")
+    names = sorted({c.split("=", 1)[0].strip() for c in cookie_hdr.split(";") if "=" in c})
+    uid = user.get("tailscale_login") if user else None
+    ctx = _clerk_bootstrap_context(request)
+    pk = (ctx.get("clerk_publishable_key") or "").strip()
+    host = (ctx.get("clerk_frontend_api_host") or "").strip()
+    server = {
+        "server_resolved_user": user is not None,
+        "server_uid_suffix": (uid[-6:] if uid else None),
+        "auth_mode": (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower(),
+        "cookie___session_present": "__session" in names,
+        "cookie___client_uat_present": "__client_uat" in names,
+        "all_cookie_names": names,
+        "user_agent": request.headers.get("user-agent", ""),
+    }
+    server_json = json.dumps(server, indent=2)
+    clerk_src = (
+        f"https://{host}/npm/@clerk/clerk-js@5/dist/clerk.browser.js" if (pk and host) else ""
+    )
+    clerk_tag = (
+        f'<script async crossorigin="anonymous" data-clerk-publishable-key="{pk}" '
+        f'src="{clerk_src}"></script>'
+        if clerk_src
+        else "<!-- clerk not configured -->"
+    )
+    html_doc = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<title>prep session debug</title>"
+        "<style>body{font:14px/1.5 ui-monospace,Menlo,monospace;margin:1rem;"
+        "background:#111;color:#eee}h2{font-size:13px;color:#9cf;margin:1rem 0 .25rem}"
+        "pre{background:#000;padding:.75rem;border-radius:6px;overflow:auto;"
+        "white-space:pre-wrap;word-break:break-word}.k{color:#6c6}</style>"
+        f"{clerk_tag}</head><body>"
+        "<h1 style='font-size:15px'>prep · /debug/session</h1>"
+        "<p>Open this in the PWA right after a cold launch (while it shows "
+        "signed-out). Compare SERVER vs CLIENT below.</p>"
+        "<h2 class='k'>SERVER saw (this request)</h2>"
+        f"<pre>{server_json}</pre>"
+        "<h2 class='k'>CLIENT (ClerkJS after load)</h2>"
+        "<pre id='client'>loading ClerkJS…</pre>"
+        "<script>"
+        "(async function(){"
+        "function cookieHas(n){return document.cookie.split(';').some(function(c){"
+        "return c.trim().indexOf(n+'=')===0});}"
+        "var out=document.getElementById('client');"
+        "var waited=0;while(!window.Clerk&&waited<6000){"
+        "await new Promise(function(r){setTimeout(r,50)});waited+=50;}"
+        "var loaded=false,err=null;"
+        "if(window.Clerk){try{await window.Clerk.load();loaded=true;}"
+        "catch(e){err=String(e);}}"
+        "var c=window.Clerk;"
+        "var ss;try{ss=sessionStorage.getItem('clerk_reauth_reload');}catch(e){ss='n/a';}"
+        "var data={"
+        "standalone_pwa:(window.navigator.standalone===true)||"
+        "window.matchMedia('(display-mode: standalone)').matches,"
+        "clerkjs_present:!!window.Clerk,clerk_loaded:loaded,clerk_load_error:err,"
+        "clerk_user_present:!!(c&&c.user),"
+        "clerk_user_id_suffix:(c&&c.user)?String(c.user.id).slice(-6):null,"
+        "clerk_session_present:!!(c&&c.session),"
+        "cookie___session_present:cookieHas('__session'),"
+        "cookie___client_uat_present:cookieHas('__client_uat'),"
+        "sessionStorage_clerk_reauth_reload:ss"
+        "};"
+        "out.textContent=JSON.stringify(data,null,2);"
+        "})();"
+        "</script></body></html>"
+    )
+    return HTMLResponse(html_doc)
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(
     request: Request,

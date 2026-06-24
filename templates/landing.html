@@ -162,27 +162,8 @@
 </section>
 {% endif %}
 
-{# Post-signup reload — when a freshly-signed-in user lands here, base.html
-   loads ClerkJS, which mints the apex __session cookie from the
-   __client_uat the Account Portal set. We then reload once so the
-   server sees the session and serves the dashboard instead of this
-   landing. The sessionStorage guard prevents a reload loop if the
-   cookie still doesn't reach the server (third-party cookie blocking,
-   etc.). ClerkJS itself is loaded by base.html and runs on every
-   page — this script only handles the landing-specific reload. #}
-{% if clerk_publishable_key %}
-<script>
-  (async function () {
-    let waited = 0;
-    while (!window.Clerk && waited < 5000) {
-      await new Promise(r => setTimeout(r, 50));
-      waited += 50;
-    }
-    if (window.Clerk && window.Clerk.user && !sessionStorage.getItem("clerk_bootstrap_done")) {
-      sessionStorage.setItem("clerk_bootstrap_done", "1");
-      window.location.reload();
-    }
-  })();
-</script>
-{% endif %}
+{# The post-signup / session-recovery reload now lives centrally in
+   base.html's Clerk bootstrap (it runs on every page and, crucially,
+   awaits Clerk.load() before checking Clerk.user — this landing-only
+   copy raced that and skipped the reload on slow PWA cold launches). #}
 {% endblock %}

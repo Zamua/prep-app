@@ -94,6 +94,13 @@
           data-clerk-publishable-key="{{ clerk_publishable_key }}"
           src="https://{{ clerk_frontend_api_host }}/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
           type="text/javascript"></script>
+  {# Did the SERVER resolve a user on THIS render? The server renders
+     signed-out whenever it doesn't see a valid (short-lived ~60s)
+     __session JWT — the common PWA cold-launch case where the JWT
+     expired but the durable __client_uat still marks the user signed
+     in. The bootstrap below uses this to recover after ClerkJS
+     rehydrates the session client-side. #}
+  <script>window.__prepServerSignedOut = {{ 'false' if user else 'true' }};</script>
   <script>
     (async function () {
       let waited = 0;
@@ -101,10 +108,30 @@
         await new Promise(r => setTimeout(r, 50));
         waited += 50;
       }
-      if (window.Clerk) {
-        try { await window.Clerk.load(); } catch (e) {
-          console.warn("Clerk bootstrap failed:", e);
-        }
+      if (!window.Clerk) return;
+      // MUST await load() before reading Clerk.user — `window.Clerk`
+      // existing only means the script parsed; the session isn't
+      // hydrated until load() resolves. (The old landing-only reload
+      // raced this and skipped the recovery reload on slow PWA launches.)
+      try {
+        await window.Clerk.load();
+      } catch (e) {
+        console.warn("Clerk bootstrap failed:", e);
+        return;
+      }
+      if (!window.__prepServerSignedOut) {
+        // Server already saw us; clear the one-shot guard so a later
+        // cold launch (where the cookie may be stale) gets a fresh try.
+        try { sessionStorage.removeItem("clerk_reauth_reload"); } catch (e) {}
+        return;
+      }
+      // Server missed our session but ClerkJS hydrated a real user from
+      // __client_uat → reload ONCE so the server sees the fresh __session
+      // cookie load() just minted. The guard prevents a loop if the
+      // cookie still never reaches the server (3rd-party-cookie blocking).
+      if (window.Clerk.user && !sessionStorage.getItem("clerk_reauth_reload")) {
+        sessionStorage.setItem("clerk_reauth_reload", "1");
+        window.location.reload();
       }
     })();
   </script>
