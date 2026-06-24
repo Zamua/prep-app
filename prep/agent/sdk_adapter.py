@@ -51,6 +51,34 @@ def _is_budget_exhausted(err_text: str) -> bool:
     return any(m in low for m in _BUDGET_EXHAUSTED_MARKERS)
 
 
+def _raise_for_agent_error(api_status: int | None, err_text: str | None) -> None:
+    """Translate an SDK / Anthropic API failure into the right typed
+    `AgentPort` exception with an operator-actionable message. Never
+    returns - always raises.
+
+    `api_status` is the upstream HTTP status the SDK captured on the
+    error `ResultMessage` (`api_error_status`); it's None when the SDK
+    raised without surfacing one. `err_text` is the SDK's error/result
+    text. We lead with the budget markers (a credit-exhaustion message
+    can arrive under various statuses), then map the status so a BYOK
+    user sees WHY their generation failed - an invalid/expired key
+    (401/403) reads as "re-add it", not an opaque 502.
+    """
+    text = (err_text or "").strip() or "agent reported error"
+    if _is_budget_exhausted(text):
+        raise AgentBudgetExhausted("monthly Claude agent-SDK allocation exhausted: " + text)
+    if api_status in (401, 403):
+        raise AgentUnavailable(
+            f"agent authentication failed (HTTP {api_status}): the Claude API key "
+            f"or setup-token is invalid or expired - re-add it in Settings. ({text})"
+        )
+    if api_status == 429:
+        raise AgentBudgetExhausted(f"agent rate-limited or out of quota (HTTP 429): {text}")
+    if api_status is not None:
+        raise AgentUnavailable(f"agent error (HTTP {api_status}): {text}")
+    raise AgentUnavailable(f"claude-agent-sdk error: {text}")
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -127,6 +155,16 @@ class ClaudeAgentSdkAdapter(AgentPort):
                 elif isinstance(msg, ResultMessage):
                     result_msg = msg
         except Exception as e:  # noqa: BLE001 — funnel any SDK fault as Unavailable
+            # The SDK commonly yields an error ResultMessage (which carries
+            # the real api_error_status) and THEN raises a generic wrapper
+            # ("...returned an error result: success"). Prefer the captured
+            # status/text over the opaque exception so a BYOK user sees WHY
+            # (e.g. 401 invalid token) instead of a meaningless 502.
+            if result_msg is not None and getattr(result_msg, "is_error", False):
+                _raise_for_agent_error(
+                    getattr(result_msg, "api_error_status", None),
+                    getattr(result_msg, "result", None),
+                )
             err = str(e)
             if _is_budget_exhausted(err):
                 raise AgentBudgetExhausted(
@@ -135,12 +173,12 @@ class ClaudeAgentSdkAdapter(AgentPort):
             raise AgentUnavailable(f"claude-agent-sdk error: {e}") from e
 
         # Some SDK error paths come back inside a ResultMessage with
-        # is_error=True instead of raising. Map those too.
+        # is_error=True without raising. Map those too.
         if result_msg is not None and getattr(result_msg, "is_error", False):
-            err = (getattr(result_msg, "result", None) or "").strip() or "agent reported error"
-            if _is_budget_exhausted(err):
-                raise AgentBudgetExhausted("monthly Claude agent-SDK allocation exhausted: " + err)
-            raise AgentUnavailable(f"claude-agent-sdk error: {err}")
+            _raise_for_agent_error(
+                getattr(result_msg, "api_error_status", None),
+                getattr(result_msg, "result", None),
+            )
 
         text = "".join(text_parts).strip()
         if not text:
