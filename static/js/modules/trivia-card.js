@@ -67,6 +67,10 @@ function bindNextCardSwap() {
     if (!prefetchedHtml || prefetchedUrl !== nextLink.href) {
       // Pre-fetch hasn't landed — fall through to default navigation.
       // Keyboard won't show on iOS this once; subsequent cards fine.
+      // Show pending state for the round-trip (the swap path below is
+      // synchronous and needs none). Reset on pageshow in init() so a
+      // bfcache back-nav doesn't restore a spinning link.
+      nextLink.classList.add("is-loading");
       return;
     }
     e.preventDefault();
@@ -74,6 +78,7 @@ function bindNextCardSwap() {
     const newMain = doc.querySelector("main.folio");
     const curMain = document.querySelector("main.folio");
     if (!newMain || !curMain) {
+      nextLink.classList.add("is-loading");
       window.location.href = nextLink.href;
       return;
     }
@@ -107,5 +112,9 @@ function bindAll() {
 
 export function init() {
   window.addEventListener("popstate", onPopState);
+  window.addEventListener("pageshow", () => {
+    const cta = document.querySelector(".trivia-next-cta");
+    if (cta) cta.classList.remove("is-loading");
+  });
   bindAll();
 }
