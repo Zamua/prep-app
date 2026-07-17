@@ -138,11 +138,14 @@ class ClerkProvider(IdentityProvider):
         # Clerk's hosted UI lives at the configured frontend URL.
         # /sign-in + /sign-out + /user are the conventional paths;
         # we pass redirect_url so the user lands back on prep after.
-        # Templates substitute the current page URL into ?return_to
-        # before navigating.
+        # The deploy's own origin is the first CLERK_AUTHORIZED_PARTIES
+        # entry -- per-deploy config, so staging redirects to staging
+        # and prod to prod (a hardcoded prod URL here once bounced
+        # staging sign-ins onto prepcards.app).
+        back = quote_plus(self._authorized_parties[0] + "/")
         return SignInUrls(
-            sign_in=f"{self._frontend}/sign-in?redirect_url={quote_plus('https://prepcards.app/')}",
-            sign_out=f"{self._frontend}/sign-out?redirect_url={quote_plus('https://prepcards.app/')}",
+            sign_in=f"{self._frontend}/sign-in?redirect_url={back}",
+            sign_out=f"{self._frontend}/sign-out?redirect_url={back}",
             account=f"{self._frontend}/user",
         )
 

@@ -208,9 +208,24 @@ def test_clerk_urls_include_redirect(monkeypatch):
 
     urls = ClerkProvider().urls()
     assert urls.sign_in.startswith("https://accounts.prepcards.app/sign-in")
-    assert "redirect_url=" in urls.sign_in
+    # redirect_url must be THIS deploy's origin (first authorized
+    # party), not a hardcoded prod URL -- staging sign-ins once
+    # bounced onto prepcards.app because of that.
+    assert "redirect_url=https%3A%2F%2Fprepcards.app%2F" in urls.sign_in
     assert urls.sign_out.startswith("https://accounts.prepcards.app/sign-out")
     assert urls.account == "https://accounts.prepcards.app/user"
+
+
+def test_clerk_urls_redirect_to_own_deploy_origin(monkeypatch):
+    """Staging config redirects back to staging, never prod."""
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test_fake")
+    monkeypatch.setenv("CLERK_AUTHORIZED_PARTIES", "https://staging.prepcards.app")
+    monkeypatch.setenv("CLERK_FRONTEND_API_URL", "https://perfect-bengal-99.accounts.dev")
+    from prep.auth.providers.clerk import ClerkProvider
+
+    urls = ClerkProvider().urls()
+    assert "redirect_url=https%3A%2F%2Fstaging.prepcards.app%2F" in urls.sign_in
+    assert "redirect_url=https%3A%2F%2Fstaging.prepcards.app%2F" in urls.sign_out
 
 
 # ---- has_dormant_session (the PWA cold-launch handshake state) -----
