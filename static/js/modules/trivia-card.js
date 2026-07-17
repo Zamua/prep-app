@@ -12,11 +12,16 @@
 //     restrictions.
 //
 // Submit-pending state on the answer + regrade buttons is handled by
-// the shared submit-pending module (auto-attached in app.js) via the
-// `data-submit-pending` attribute on the forms — no per-page binding.
+// the shared submit-pending module via the `data-submit-pending`
+// attribute on the forms. app.js attaches it to the initial page;
+// bindAll() re-attaches after each Next-card DOM swap, because the
+// swap replaces main.folio wholesale and the fresh form arrives
+// without listeners (the original no-feedback-on-cards-2..N bug).
 //
 // Standalone /trivia/<qid> deep links use the default navigation;
 // no Next-card / keyboard concern there.
+
+import {attachDeclarative as attachSubmitPending} from "@/modules/submit-pending.js";
 
 let prefetchedHtml = null;
 let prefetchedUrl = null;
@@ -97,6 +102,7 @@ function bindAll() {
   bindNextCardSwap();
   prefetchNextCard();
   autoFocusInput();
+  attachSubmitPending();
 }
 
 export function init() {
