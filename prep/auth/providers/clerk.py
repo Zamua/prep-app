@@ -124,6 +124,16 @@ class ClerkProvider(IdentityProvider):
             provider=self.name,
         )
 
+    def has_dormant_session(self, request: Request) -> bool:
+        # __client_uat is Clerk's durable "user auth timestamp" cookie,
+        # set on the app's eTLD+1 precisely so servers can see client
+        # session state without the (FAPI-domain) __client cookie. A
+        # non-zero value means ClerkJS holds a live client session even
+        # though the ~60s __session JWT may have expired -- Clerk's
+        # "handshake" state. "0" / absent means genuinely signed out.
+        uat = request.cookies.get("__client_uat")
+        return bool(uat and uat.strip() != "0")
+
     def urls(self) -> SignInUrls:
         # Clerk's hosted UI lives at the configured frontend URL.
         # /sign-in + /sign-out + /user are the conventional paths;

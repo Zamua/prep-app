@@ -1,0 +1,40 @@
+{# Session-restoring shell — rendered by GET / instead of the landing
+   page when the identity provider reports a dormant session (Clerk's
+   "handshake" state: durable __client_uat present, short-lived
+   __session JWT expired — the PWA cold-launch case). base.html's
+   Clerk bootstrap does the actual work: Clerk.load() re-mints the
+   session cookie and the one-shot reload lands on the dashboard.
+   This template only has to look intentional for the ~1-2s that
+   takes, and bail out to the landing page if recovery stalls. #}
+{% extends "base.html" %}
+{% block title %}prep{% endblock %}
+{% block page_class %}reauth{% endblock %}
+{% block main %}
+<section class="reauth-shell" aria-busy="true" aria-live="polite">
+  <p class="reauth-note">Signing you in<span class="grading-spinner" aria-hidden="true"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span></span></p>
+  <noscript>
+    <p><a href="{{ request.scope.get('root_path','') }}/">Continue to prep</a></p>
+  </noscript>
+</section>
+<script type="module">
+  // Escape hatch. The happy path needs nothing from this script:
+  // base.html's bootstrap reloads into the dashboard once ClerkJS
+  // re-mints the session. Two unhappy paths land here instead:
+  //   - ClerkJS hydrates NO user (stale __client_uat, session dead)
+  //   - recovery stalls (Clerk unreachable, or the one-shot
+  //     clerk_reauth_reload guard was already spent this tab)
+  // Both fall back to the landing page. The 60s cookie tells the
+  // server to skip this shell so the fallback cannot loop.
+  const root = "{{ request.scope.get('root_path','') }}";
+  const fallback = () => {
+    document.cookie = "prep_reauth_fallback=1; path=" + (root || "/") + "; max-age=60";
+    window.location.replace((root || "") + "/");
+  };
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const c = window.Clerk;
+    if (c && c.loaded && !c.user) { clearInterval(iv); fallback(); return; }
+    if (Date.now() - t0 > 8000) { clearInterval(iv); fallback(); }
+  }, 250);
+</script>
+{% endblock %}

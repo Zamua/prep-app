@@ -43,6 +43,11 @@ class FakeProvider(IdentityProvider):
     def resolve(self, request: Request) -> ResolvedUser | None:
         return self._user if self._signed_in else None
 
+    def has_dormant_session(self, request: Request) -> bool:
+        # Header-injected identity never expires between requests --
+        # there is no "stale token, returning user" state to detect.
+        return False
+
     def urls(self) -> SignInUrls:
         return SignInUrls(
             sign_in="/fake/sign-in",

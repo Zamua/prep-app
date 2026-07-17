@@ -79,6 +79,16 @@ class IdentityProvider(Protocol):
         """Return the (provider-specific) URLs for the sign-in flow."""
         ...
 
+    def has_dormant_session(self, request: Request) -> bool:
+        """True when the request carries evidence that this browser
+        HELD a session the current credentials no longer prove -- the
+        "returning user, stale short-lived token" state. Routes with a
+        public branch use it to render a session-restoring shell
+        instead of signed-out UI (the PWA cold-launch landing flash).
+        Providers whose credentials don't expire between requests
+        (Tailscale headers) always return False."""
+        ...
+
 
 class AuthConfigError(RuntimeError):
     """Raised at boot when a provider is mis-configured (missing

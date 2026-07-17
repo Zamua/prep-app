@@ -211,3 +211,28 @@ def test_clerk_urls_include_redirect(monkeypatch):
     assert "redirect_url=" in urls.sign_in
     assert urls.sign_out.startswith("https://accounts.prepcards.app/sign-out")
     assert urls.account == "https://accounts.prepcards.app/user"
+
+
+# ---- has_dormant_session (the PWA cold-launch handshake state) -----
+
+
+def test_clerk_dormant_session_from_client_uat(monkeypatch):
+    """Non-zero __client_uat with no valid JWT = Clerk's handshake
+    state: the browser holds a live client session the server can't
+    verify. That's "dormant", not "signed out"."""
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test_fake")
+    monkeypatch.setenv("CLERK_AUTHORIZED_PARTIES", "https://prepcards.app")
+    monkeypatch.setenv("CLERK_FRONTEND_API_URL", "https://accounts.prepcards.app")
+    from prep.auth.providers.clerk import ClerkProvider
+
+    p = ClerkProvider()
+    assert p.has_dormant_session(_make_request({"cookie": "__client_uat=1752768000"}))
+    # "0" is Clerk's explicit signed-out marker; absence means the
+    # browser never had a session. Neither is dormant.
+    assert not p.has_dormant_session(_make_request({"cookie": "__client_uat=0"}))
+    assert not p.has_dormant_session(_make_request())
+
+
+def test_tailscale_never_reports_dormant_session():
+    p = TailscaleProvider()
+    assert not p.has_dormant_session(_make_request({"cookie": "__client_uat=1752768000"}))

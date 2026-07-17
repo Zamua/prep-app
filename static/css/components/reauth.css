@@ -1,0 +1,18 @@
+/* Session-restoring shell (templates/reauth.html) — shown for the
+ * ~1-2s while ClerkJS re-mints an expired session on PWA cold
+ * launch. Centered single line + the shared grading-spinner dots;
+ * deliberately quiet so the hop into the dashboard reads as one
+ * continuous launch, not a page change. */
+
+.page-reauth .reauth-shell {
+  min-height: 55vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reauth-note {
+  font-style: italic;
+  font-size: 1.05rem;
+  color: var(--ink-soft);
+}

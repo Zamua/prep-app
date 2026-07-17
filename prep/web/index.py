@@ -176,7 +176,24 @@ def index(
     you're a first-time visitor or a returning user."""
     user = optional_current_user(request)
     if user is None:
-        urls = get_provider().urls()
+        provider = get_provider()
+        # Returning user whose short-lived session token expired (the
+        # PWA cold-launch case): don't flash the marketing landing page
+        # at someone who IS signed in client-side. Render a minimal
+        # "signing you in" shell instead; base.html's Clerk bootstrap
+        # recovers the session and reloads into the dashboard. The
+        # prep_reauth_fallback cookie is the shell's escape hatch --
+        # it sets the cookie and reloads when recovery fails, and this
+        # branch then falls through to the landing page (no loop).
+        if (
+            provider.has_dormant_session(request)
+            and request.cookies.get("prep_reauth_fallback") != "1"
+        ):
+            return templates.TemplateResponse(
+                "reauth.html",
+                {"request": request, "user": None},
+            )
+        urls = provider.urls()
         # ClerkJS itself is loaded by base.html on every page (see
         # _clerk_bootstrap_context in prep.web.templates). The landing
         # template uses `clerk_publishable_key` (also context-processor

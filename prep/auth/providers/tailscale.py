@@ -42,6 +42,11 @@ class TailscaleProvider(IdentityProvider):
             provider=self.name,
         )
 
+    def has_dormant_session(self, request: Request) -> bool:
+        # Header-injected identity never expires between requests --
+        # there is no "stale token, returning user" state to detect.
+        return False
+
     def urls(self) -> SignInUrls:
         # Tailscale auth is implicit (you're either on the tailnet or
         # not). No sign-in/out UI to point at — the template uses None
