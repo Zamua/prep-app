@@ -22,6 +22,13 @@
 </section>
 
 <script>
+  // Set SYNCHRONOUSLY, before base.html's Clerk bootstrap finishes its
+  // load() await: this page renders signed-out chrome while a live
+  // session still exists, which is exactly the state the bootstrap
+  // would "fix" with a reload -- restarting /sign-out mid-sign-out.
+  window.__prepSuppressReauth = true;
+</script>
+<script>
   (async function () {
     const home = {{ redirect_url|tojson }};
     let waited = 0;

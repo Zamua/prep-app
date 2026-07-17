@@ -129,6 +129,10 @@
       // __client_uat → reload ONCE so the server sees the fresh __session
       // cookie load() just minted. The guard prevents a loop if the
       // cookie still never reaches the server (3rd-party-cookie blocking).
+      // Pages that intentionally run signed-out-while-a-session-exists
+      // (the /sign-out interstitial) set __prepSuppressReauth so this
+      // reload can't fire mid-sign-out and restart the page.
+      if (window.__prepSuppressReauth) return;
       if (window.Clerk.user && !sessionStorage.getItem("clerk_reauth_reload")) {
         sessionStorage.setItem("clerk_reauth_reload", "1");
         window.location.reload();

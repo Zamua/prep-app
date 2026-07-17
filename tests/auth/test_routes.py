@@ -94,6 +94,11 @@ def test_sign_out_renders_interstitial_on_clerk(client: TestClient, initialized_
         # Interstitial renders the page chrome + ClerkJS call.
         assert "Signing out" in r.text
         assert "Clerk.signOut" in r.text
+        # The suppress flag must be present: without it, base.html's
+        # reauth bootstrap sees signed-out chrome + a live Clerk user
+        # and reloads /sign-out mid-sign-out (the sign-out-does-
+        # nothing bug on the clerk deploys).
+        assert "__prepSuppressReauth" in r.text
     finally:
         set_provider(None)
 
