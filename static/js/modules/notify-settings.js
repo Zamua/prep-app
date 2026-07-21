@@ -88,13 +88,20 @@ export async function init({rootPath = "", vapidKey = ""} = {}) {
   async function loadLocalSub() {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
     try {
-      reg = await navigator.serviceWorker.register(rootPath + "/sw.js", {
-        scope: rootPath + "/",
-      });
-      await navigator.serviceWorker.ready;
+      // Registration is app-wide in app.js; this module only waits for
+      // the active registration. `ready` never rejects, so cap the
+      // wait: if registration failed, treat push as unsupported here
+      // (reg stays null and doEnable surfaces the error message).
+      reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("service worker not ready")), 8000)
+        ),
+      ]);
       localSub = await reg.pushManager.getSubscription();
     } catch (e) {
-      console.warn("SW register failed:", e);
+      console.warn("SW not ready:", e);
+      reg = null;
     }
   }
 
@@ -141,6 +148,26 @@ export async function init({rootPath = "", vapidKey = ""} = {}) {
 
   // ------- Enable / Disable / Test -------------------------------
   async function doEnable() {
+    if (!reg) {
+      // The load-time snapshot capped its wait at 8s, and a FIRST
+      // install now precaches the whole offline manifest before the
+      // SW activates, so on a slow connection the snapshot can miss a
+      // registration that is merely still installing. Re-await at
+      // user-gesture time before declaring push unsupported.
+      if ("serviceWorker" in navigator) {
+        setStatus("Waiting for the service worker…");
+        try {
+          reg = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("service worker not ready")), 15000)
+            ),
+          ]);
+        } catch (e) {
+          console.warn("SW still not ready:", e);
+        }
+      }
+    }
     if (!reg) {
       setStatus("This browser doesn't support web push.", "error");
       return;

@@ -66,5 +66,6 @@
 @import "./components/notify-log.css" layer(components);
 @import "./components/landing.css" layer(components);
 @import "./components/reauth.css" layer(components);
+@import "./components/offline.css" layer(components);
 @import "./components/pwa-install.css" layer(components);
 @import "./components/mobile.css" layer(components);

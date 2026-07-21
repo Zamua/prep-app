@@ -171,6 +171,15 @@ COPY templates/ ./templates/
 # only this layer + the export.
 COPY prep/ ./prep/
 
+# Build identity for the versioned asset URL space + the service
+# worker precache. Passed by the deploy tooling (git SHA, SHA prefix,
+# or image tag); prep/web/templates.py derives the build-stable token
+# from it. When absent (ad-hoc builds), the app falls back to hashing
+# the static tree at boot, which is still stable across restarts of
+# the same image because the file mtimes are baked into the layers.
+ARG PREP_BUILD_ID=
+ENV PREP_BUILD_ID=${PREP_BUILD_ID}
+
 ENV PORT=8082 \
     HOST=0.0.0.0 \
     PREP_DB_PATH=/data/prep/data.sqlite \

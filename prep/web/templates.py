@@ -13,6 +13,9 @@ The two context_processors plug into:
 
 from __future__ import annotations
 
+import hashlib
+import os
+import re
 from pathlib import Path
 
 from fastapi import Request
@@ -56,27 +59,84 @@ def _agent_context(request: Request) -> dict:
 
 # Cache-bust the static-asset URLs (CSS link + importmap base) in
 # base.html so deploys actually invalidate the browser's cached copy.
-# Computed once at module import (i.e. per app boot — the container
-# restarts on every `make deploy-stag`/`make deploy-prod`, which is
-# the only time static assets can change in production).
 #
-# Why not file mtime: we tried `static/css/index.css.mtime` first, but
-# editing a JS module without touching CSS left the cache-bust token
-# unchanged, and browsers (notably iOS PWA standalone) kept serving
-# the prior deploy's modules off the same versioned URL. Using boot
-# time guarantees every deploy gets a fresh URL space regardless of
-# which subset of assets actually changed. Mounted volumes can't
-# reset this because the prep code lives in the image, not the volume.
-import time as _time
+# The token must be BUILD-stable, not boot-stable: the service-worker
+# precache (prep/web/pwa.py) keys its cache on this value, so a token
+# that changed on every process restart would push every client
+# through a full SW reinstall (re-downloading the whole asset tree)
+# for bytes that did not change, and multi-replica deploys would
+# flip-flop /sw.js between per-pod tokens. Resolution order:
+#
+# 1. PREP_BUILD_ID env var already token-shaped (lowercase hex,
+#    7-40 chars: a git SHA or SHA prefix): used verbatim.
+# 2. PREP_BUILD_ID set but shaped differently (an image tag like
+#    "v0.44.0"): sha1 of the value, first 12 hex chars.
+# 3. Unset (dev): sha1 over the sorted relative paths + mtimes +
+#    sizes of every file under static/ plus templates/offline.html,
+#    first 12 hex chars, computed once at import. Identical bytes
+#    produce an identical token across restarts; an edited asset
+#    mints a new token on the next boot.
+#
+# The lowercase-hex 7-40 shape is load-bearing: after the "v" prefix
+# strip on the versioned asset routes (prep/app.py), a token can
+# never collide with a real path segment under static/js or
+# static/css (the directories are "components", "modules", "offline",
+# "vendor"; every file name carries a dot).
 
-_STATIC_BUILD_VERSION = int(_time.time())
+_BUILD_TOKEN_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def _hash_static_tree() -> str:
+    """Dev fallback: fingerprint the static tree + the offline shell
+    template. Relative paths, mtimes, and sizes are enough to change
+    the token whenever an asset changes, without hashing contents."""
+    h = hashlib.sha1()
+    files = [p for p in sorted((_REPO_ROOT / "static").rglob("*")) if p.is_file()]
+    offline_tpl = _REPO_ROOT / "templates" / "offline.html"
+    if offline_tpl.is_file():
+        files.append(offline_tpl)
+    for p in files:
+        st = p.stat()
+        rel = p.relative_to(_REPO_ROOT).as_posix()
+        h.update(f"{rel}\n{st.st_mtime_ns}\n{st.st_size}\n".encode())
+    return h.hexdigest()[:12]
+
+
+def _resolve_build_token() -> str:
+    raw = (os.environ.get("PREP_BUILD_ID") or "").strip()
+    if _BUILD_TOKEN_RE.fullmatch(raw):
+        return raw
+    if raw:
+        return hashlib.sha1(raw.encode()).hexdigest()[:12]
+    return _hash_static_tree()
+
+
+_BUILD_TOKEN = _resolve_build_token()
+
+
+def get_build_token() -> str:
+    """The deploy's build-stable asset token. Same value templates see
+    as `static_css_mtime`; the pwa/offline routes use it for the SW
+    precache manifest and the offline shell's ?build= echo."""
+    return _BUILD_TOKEN
+
+
+def is_accepted_version_token(segment: str) -> bool:
+    """True when a versioned-asset URL segment (the part after the
+    "v" prefix) is an acceptable build token: the current lowercase
+    hex shape, or the legacy all-digit boot stamps still referenced
+    by pages cached from pre-offline deploys. ASCII digits only:
+    str.isdigit() alone also accepts Unicode digit codepoints, which
+    would widen the echo/alias charset past the SW's ASCII regex."""
+    return bool(_BUILD_TOKEN_RE.fullmatch(segment)) or (segment.isascii() and segment.isdigit())
 
 
 def _assets_context(request: Request) -> dict:
-    """Expose static-asset cache-bust tokens to all templates. Both
-    the CSS `?v=` query and the importmap base path use the same
-    boot-stamped version."""
-    return {"static_css_mtime": _STATIC_BUILD_VERSION}
+    """Expose the static-asset cache-bust token to all templates. The
+    context key keeps its legacy name (the value used to be a file
+    mtime, then a boot stamp) so every template consuming
+    `static_css_mtime` keeps working unchanged."""
+    return {"static_css_mtime": _BUILD_TOKEN}
 
 
 def _auth_provider_context(request: Request) -> dict:

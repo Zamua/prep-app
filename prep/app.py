@@ -43,13 +43,14 @@ from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
 from prep.dev import preview as dev_preview
 from prep.notify.routes import router as notify_router
+from prep.offline.routes import router as offline_router
 from prep.study.routes import router as study_router
 from prep.trivia.routes import router as trivia_router
 from prep.web import errors as _errors_mod
 from prep.web.index import router as index_router
 from prep.web.legal import router as legal_router
 from prep.web.pwa import router as pwa_router
-from prep.web.templates import templates
+from prep.web.templates import is_accepted_version_token, templates
 from prep.workflows.routes import router as workflows_router
 
 # templates/ + static/ live at the repo root, one above the prep package.
@@ -322,12 +323,16 @@ def _versioned_js(build: str, path: str):
     # FastAPI's `v{build}` path-param is greedy on any string after
     # `/static/js/v`, so this route also catches `/static/js/vendor/…`
     # (build="endor"), `/static/js/version.txt` etc. Disambiguate:
-    # if `build` looks like our timestamp, strip it and serve from
-    # static/js/{path} with immutable cache. Otherwise treat the
-    # whole `v{build}/{path}` as the literal sub-path under static/js
-    # (no version stripping, no immutable cache — same handling the
-    # StaticFiles mount would have given it).
-    is_versioned = build.isdigit()
+    # if `build` looks like a build token (the lowercase-hex shape,
+    # or the legacy all-digit boot stamps pre-offline pages still
+    # reference), strip it and serve from static/js/{path} with
+    # immutable cache. The token is opaque: ANY accepted value serves
+    # the current build's bytes, which is what lets a page from the
+    # previous build keep resolving assets across a deploy. Otherwise
+    # treat the whole `v{build}/{path}` as the literal sub-path under
+    # static/js (no version stripping, no immutable cache; the same
+    # handling the StaticFiles mount would have given it).
+    is_versioned = is_accepted_version_token(build)
     if is_versioned:
         rel = path
     else:
@@ -360,7 +365,10 @@ def _versioned_css(build: str, path: str):
     from fastapi import HTTPException
     from fastapi.responses import FileResponse
 
-    is_versioned = build.isdigit()
+    # Same token-acceptance rule as the JS route above: current hex
+    # tokens or legacy digit stamps strip-and-serve with immutable
+    # cache; anything else is a literal sub-path.
+    is_versioned = is_accepted_version_token(build)
     if is_versioned:
         rel = path
     else:
@@ -415,6 +423,7 @@ app.include_router(api_router)
 app.include_router(auth_router)
 app.include_router(index_router)
 app.include_router(legal_router)
+app.include_router(offline_router)
 app.include_router(pwa_router)
 app.include_router(workflows_router)
 

@@ -1,0 +1,44 @@
+/* Offline study surface (templates/offline.html + static/js/offline/).
+ * M1 is read-only: per-deck counts + the due-now prompt list. Styling
+ * mirrors deck-list's quiet rows so the offline page reads as the same
+ * product, just leaner. */
+
+.offline-deck-list,
+.offline-due-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+
+.offline-deck {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.8rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--hairline, rgba(0, 0, 0, 0.08));
+}
+.offline-deck:last-child { border-bottom: none; }
+
+.offline-deck-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.offline-deck-counts {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+.offline-due-card {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--hairline, rgba(0, 0, 0, 0.08));
+  overflow-wrap: anywhere;
+}
+.offline-due-card:last-child { border-bottom: none; }
+
+.offline-snapshot-stamp {
+  margin-top: 1.6rem;
+  font-size: 0.85rem;
+}

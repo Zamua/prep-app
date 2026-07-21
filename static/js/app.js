@@ -26,6 +26,33 @@ initRowOverflow();
 attachByokToggles();
 attachCopyButtons();
 
+// ---- Service worker (always-on) --------------------------------------
+// Registered app-wide so an installed PWA has a SW even if the user
+// never touched notifications (the offline shell depends on it).
+// Registration is idempotent: calling register() with the same URL +
+// scope on every page load is a no-op after the first.
+//
+// The deploy's root path is derived from this module's own URL:
+// base.html loads app.js at <root>/static/js/..., so stripping the
+// /static/js/ tail leaves the root prefix ("" on a bare-host deploy).
+// Same prefix the manifest route uses for scope/start_url
+// (prep/web/pwa.py), just resolved client-side.
+const ROOT_PATH = new URL(import.meta.url).pathname.replace(/\/static\/js\/.*$/, "");
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register(ROOT_PATH + "/sw.js", {scope: ROOT_PATH + "/"})
+    .catch((e) => console.warn("SW register failed:", e));
+}
+
+// ---- Offline snapshot refresh (fire-and-forget) ----------------------
+// Keeps the IndexedDB snapshot warm on online pages so an offline cold
+// launch has decks + cards to show. Lazy dynamic import so a failure
+// here can never take the page's other behaviors down with it.
+import("@/offline/sync.js")
+  .then((m) => m.init())
+  .catch((e) => console.warn("offline sync unavailable:", e));
+
 // Workflow polling pages (transform, plan, grading, trivia gen) now
 // drive their polling via htmx's `hx-trigger="every Ns"` on a fragment
 // route — see partials/*_progress.html. The old `[data-poll-url]` hook
