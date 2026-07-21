@@ -70,6 +70,33 @@
   line-height: 1.5;
 }
 
+/* M4 authoring form. The controls themselves ride the shared
+ * .freetext chrome from forms.css (which keeps them at 1rem = 16px,
+ * the iOS no-auto-zoom floor); only page glue lives here. */
+.offline-author-blurb {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.author-form .freetext {
+  margin-top: 0.9rem;
+}
+
+.author-error {
+  margin: 0.7rem 0 0;
+  font-size: 0.92rem;
+  font-style: italic;
+  color: var(--wrong, #a03030);
+}
+.author-error[hidden] { display: none; }
+
+.offline-newcards-note {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
 /* Buttons that read as links (the study nav's Pause affordance reuses
  * the .back link chrome on a <button>). */
 .offline-linkbtn {

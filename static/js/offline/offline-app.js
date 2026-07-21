@@ -11,13 +11,21 @@
 // when back online) plus the local ladder overlay via scheduler.js so
 // studied cards re-surface on the offline schedule (docs/OFFLINE.md
 // section 5). Reconnect shows a banner, flushes, and toasts the
-// result. Authoring arrives in M4; confirm-wipe + needs-attention in
-// M5.
+// result.
+//
+// M4 scope: offline AUTHORING. An "Add a card" form (front, back,
+// deck picker defaulting to the inbox) writes a local_cards row that
+// joins the study queue immediately as due, mirroring the online
+// "shows up as due immediately" behavior. Local cards study as short
+// self-verdict cards; their verdicts queue reviews keyed by
+// card_client_id instead of question_id, and sync.js sends the cards
+// themselves ahead of any review. Confirm-wipe + needs-attention
+// arrive in M5.
 //
 // Plain DOM building, no framework, no innerHTML for data (card
 // prompts, choices, and answers are user content; textContent only).
 
-import {getAll, metaGet, put, uuid, withLock} from "./store.js";
+import {get, getAll, metaGet, put, uuid, withLock} from "./store.js";
 import {flushOutbox, refreshSnapshot, showToast} from "./sync.js";
 import * as grader from "./grader.js";
 import * as scheduler from "./scheduler.js";
@@ -136,6 +144,7 @@ const state = {
   owner: null,
   decks: [],
   cards: [],
+  localCards: [],
   outboxCount: 0,
 };
 
@@ -143,16 +152,26 @@ let root = null;
 let viewName = "loading";
 
 async function reloadLocal() {
-  const [owner, decks, cards, outbox] = await Promise.all([
+  const [owner, decks, cards, localCards, outbox] = await Promise.all([
     metaGet("owner"),
     getAll("decks"),
     getAll("cards"),
+    getAll("local_cards"),
     getAll("outbox_reviews"),
   ]);
   state.owner = owner;
   state.decks = decks;
   state.cards = cards;
+  state.localCards = localCards;
   state.outboxCount = outbox.length;
+}
+
+// The study queue draws from both snapshot cards and locally authored
+// ones. A local card has client_id and no question_id; it studies as
+// a short self-verdict card (no type field, so grader.grade returns
+// null and the reveal flow takes over).
+function allStudyCards() {
+  return state.cards.concat(state.localCards);
 }
 
 function show(node, name) {
@@ -176,19 +195,25 @@ async function recordVerdict(card, verdict, userAnswer, gradedBy) {
   const reviewedAt = new Date().toISOString();
   const seedStep = card.local_step ?? card.step ?? 0;
   const t = scheduler.transition(seedStep, verdict);
+  // A locally authored card is identified by its client UUID; the
+  // server resolves card_client_id through the created card's
+  // idempotency mapping at sync time (docs/OFFLINE.md section 4).
+  const isLocal = Boolean(card.client_id);
   // Locked against sync.js's snapshot-refresh overlay merge: a
   // refresh in flight between our outbox write and overlay write
   // would wipe the overlay this tap creates (its pending-ids
   // snapshot predates us). The lock makes tap and merge take turns.
   const updated = await withLock(async () => {
-    await put("outbox_reviews", {
+    const review = {
       client_id: uuid(),
-      question_id: card.question_id,
       verdict,
       user_answer: userAnswer,
       graded_by: gradedBy,
       reviewed_at: reviewedAt,
-    });
+    };
+    if (isLocal) review.card_client_id = card.client_id;
+    else review.question_id = card.question_id;
+    await put("outbox_reviews", review);
     const row = {
       ...card,
       local_step: t.step,
@@ -197,11 +222,29 @@ async function recordVerdict(card, verdict, userAnswer, gradedBy) {
       // lexicographic-ordering contract by construction.
       local_next_due: scheduler.nextDueIso(Date.now(), t.next_due_minutes),
     };
-    await put("cards", row);
+    // The local ladder overlay lives ON the local_cards row for an
+    // authored card (the snapshot knows nothing about it yet). But a
+    // stale closure can outlive the row: if a background sync
+    // created the card and deleted the row while this view was open,
+    // re-putting it would resurrect a zombie copy next to the
+    // snapshot card. The review above still syncs fine by
+    // card_client_id (the server resolves it via the idempotency
+    // mapping), so on a missing row we skip the overlay write.
+    if (isLocal) {
+      const live = await get("local_cards", card.client_id);
+      if (live) await put("local_cards", row);
+    } else {
+      await put("cards", row);
+    }
     return row;
   });
-  const i = state.cards.findIndex((c) => c.question_id === card.question_id);
-  if (i !== -1) state.cards[i] = updated;
+  if (isLocal) {
+    const i = state.localCards.findIndex((c) => c.client_id === card.client_id);
+    if (i !== -1) state.localCards[i] = updated;
+  } else {
+    const i = state.cards.findIndex((c) => c.question_id === card.question_id);
+    if (i !== -1) state.cards[i] = updated;
+  }
   state.outboxCount += 1;
   return t;
 }
@@ -240,7 +283,9 @@ function studyNav(card) {
   back.appendChild(document.createTextNode(" Pause"));
   back.addEventListener("click", () => renderOverview());
   nav.appendChild(back);
-  nav.appendChild(el("span", "card-id", "№ " + card.question_id));
+  nav.appendChild(
+    el("span", "card-id", card.question_id ? "№ " + card.question_id : "new card")
+  );
   return nav;
 }
 
@@ -362,7 +407,7 @@ function renderEmpty() {
 
 function renderOverview() {
   const now = Date.now();
-  const dueCards = state.cards
+  const dueCards = allStudyCards()
     .filter((card) => isDueNow(card, now))
     .sort((a, b) => dueTime(a) - dueTime(b));
 
@@ -378,15 +423,19 @@ function renderOverview() {
       : "Nothing is due right now.");
   frag.appendChild(prelude("Offline study", "Your cards,", "offline", lede));
 
-  // ---- study CTA ----------------------------------------------------
+  // ---- study CTA + authoring entry ----------------------------------
+  const actions = el("div", "study-actions offline-study-cta");
   if (dueCards.length) {
-    const actions = el("div", "study-actions offline-study-cta");
     const studyBtn = el("button", "btn btn-primary", "Study");
     studyBtn.type = "button";
     studyBtn.addEventListener("click", () => startStudy());
     actions.appendChild(studyBtn);
-    frag.appendChild(actions);
   }
+  const addBtn = el("button", "btn btn-quiet", "Add a card");
+  addBtn.type = "button";
+  addBtn.addEventListener("click", () => renderAuthor());
+  actions.appendChild(addBtn);
+  frag.appendChild(actions);
 
   // ---- per-deck counts ----------------------------------------------
   const deckSection = el("section", "offline-decks");
@@ -448,6 +497,17 @@ function renderOverview() {
       )
     );
   }
+  if (state.localCards.length) {
+    frag.appendChild(
+      el(
+        "p",
+        "muted offline-newcards-note",
+        state.localCards.length +
+          (state.localCards.length === 1 ? " new card" : " new cards") +
+          " waiting to sync."
+      )
+    );
+  }
   if (state.owner.snapshot_at) {
     const stamp = Date.parse(state.owner.snapshot_at);
     const label = Number.isFinite(stamp)
@@ -464,7 +524,7 @@ function renderOverview() {
 // naturally returns later in a long sitting.
 function nextDueCard() {
   const now = Date.now();
-  const dueCards = state.cards.filter((card) => isDueNow(card, now));
+  const dueCards = allStudyCards().filter((card) => isDueNow(card, now));
   if (!dueCards.length) return null;
   dueCards.sort((a, b) => dueTime(a) - dueTime(b));
   return dueCards[0];
@@ -670,7 +730,7 @@ function renderVerdict(card, verdict, userAnswer, opts) {
 function nextDueInMinutes() {
   const now = Date.now();
   let best = null;
-  for (const card of state.cards) {
+  for (const card of allStudyCards()) {
     const t = Date.parse(effectiveDue(card) || "");
     if (!Number.isFinite(t) || t <= now) continue;
     if (best === null || t < best) best = t;
@@ -696,12 +756,135 @@ function renderCaughtUp() {
         : "The next card comes due in " + humanMinutes(minutes) + "."
     )
   );
+  const actions = el("div", "study-actions caughtup-actions");
+  const add = el("button", "btn btn-primary", "Add a card");
+  add.type = "button";
+  add.addEventListener("click", () => renderAuthor());
+  actions.appendChild(add);
   const back = el("button", "btn btn-quiet", "Back to overview");
   back.type = "button";
   back.addEventListener("click", () => renderOverview());
-  section.appendChild(back);
+  actions.appendChild(back);
+  section.appendChild(actions);
   frag.appendChild(section);
   show(frag, "caughtup");
+}
+
+// ---- authoring (M4) --------------------------------------------------
+
+// The add-a-card form: front, back, deck picker (snapshot decks plus
+// the inbox default). Saving writes a local_cards row that is due
+// immediately (local_next_due null) and studies as a short
+// self-verdict card; sync.js sends it as a new_cards item ahead of
+// any review that references it.
+function renderAuthor() {
+  const frag = document.createDocumentFragment();
+
+  const nav = el("nav", "study-nav");
+  const back = el("button", "offline-linkbtn back");
+  back.type = "button";
+  back.appendChild(icon("arrow-left", "icon icon-inline"));
+  back.appendChild(document.createTextNode(" Back"));
+  back.addEventListener("click", () => renderOverview());
+  nav.appendChild(back);
+  frag.appendChild(nav);
+
+  const article = el("article", "study-card author-card");
+  article.appendChild(sectionEyebrow("Add a card"));
+  article.appendChild(
+    el(
+      "p",
+      "muted offline-author-blurb",
+      "Saved to this device now, added to your account next time you " +
+        "sync. It studies as a reveal-and-self-grade card and is due " +
+        "immediately."
+    )
+  );
+
+  const form = document.createElement("form");
+  form.className = "study-form author-form";
+
+  // All three controls sit in .freetext wrappers: the shared forms.css
+  // chrome styles them AND keeps the font at 1rem (16px), which is
+  // what stops iOS Safari's auto-zoom-on-focus.
+  const promptWrap = el("label", "freetext");
+  promptWrap.appendChild(el("span", "freetext-label", "Front"));
+  const promptTa = document.createElement("textarea");
+  promptTa.rows = 4;
+  promptTa.placeholder = "The question you want to be asked.";
+  promptWrap.appendChild(promptTa);
+  form.appendChild(promptWrap);
+
+  const answerWrap = el("label", "freetext");
+  answerWrap.appendChild(el("span", "freetext-label", "Back"));
+  const answerInput = document.createElement("input");
+  answerInput.type = "text";
+  answerInput.placeholder = "The canonical answer.";
+  answerWrap.appendChild(answerInput);
+  form.appendChild(answerWrap);
+
+  const deckWrap = el("label", "freetext");
+  deckWrap.appendChild(el("span", "freetext-label", "Deck"));
+  const deckSelect = document.createElement("select");
+  const inboxOption = document.createElement("option");
+  inboxOption.value = "";
+  inboxOption.textContent = "inbox (default)";
+  deckSelect.appendChild(inboxOption);
+  for (const deck of state.decks) {
+    const option = document.createElement("option");
+    option.value = String(deck.id);
+    option.textContent = deck.display_name || deck.name;
+    deckSelect.appendChild(option);
+  }
+  deckWrap.appendChild(deckSelect);
+  form.appendChild(deckWrap);
+
+  const errorLine = el("p", "author-error", "");
+  errorLine.setAttribute("role", "alert");
+  errorLine.hidden = true;
+  form.appendChild(errorLine);
+
+  const actions = el("div", "study-actions");
+  const saveBtn = el("button", "btn btn-primary", "Save card");
+  saveBtn.type = "submit";
+  actions.appendChild(saveBtn);
+  form.appendChild(actions);
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runPending(saveBtn, async () => {
+      const prompt = promptTa.value.trim();
+      const answer = answerInput.value.trim();
+      if (!prompt || !answer) {
+        errorLine.textContent = "Both the front and the back are required.";
+        errorLine.hidden = false;
+        return;
+      }
+      errorLine.hidden = true;
+      const row = {
+        client_id: uuid(),
+        deck_id: deckSelect.value ? Number(deckSelect.value) : null,
+        prompt,
+        answer,
+        created_at: new Date().toISOString(),
+        local_step: 0,
+        // null = due now, mirroring the online "shows up as due
+        // immediately" behavior for manual authoring.
+        local_next_due: null,
+      };
+      // Locked for the same reason as recordVerdict: local_cards rows
+      // must not be written while flushOutbox is mid-drain deciding
+      // which rows it already sent.
+      await withLock(() => put("local_cards", row));
+      state.localCards.push(row);
+      showToast("Card added");
+      renderOverview();
+    });
+  });
+
+  article.appendChild(form);
+  frag.appendChild(article);
+  show(frag, "author");
 }
 
 // ---- reconnect + sync ------------------------------------------------
@@ -756,13 +939,23 @@ async function syncOnReconnect() {
   if (syncing) return;
   syncing = true;
   try {
-    const queued = await getAll("outbox_reviews");
-    if (!queued.length) return;
+    const [queued, localCards] = await Promise.all([
+      getAll("outbox_reviews"),
+      getAll("local_cards"),
+    ]);
+    if (!queued.length && !localCards.length) return;
     if (!(await probeOnline())) return;
     showBanner("Back online - syncing…");
     const result = await flushOutbox();
-    const moved = (result.flushed || 0) + (result.rejected || 0);
-    if (result.disabled || result.status || moved === 0) {
+    const moved =
+      (result.flushed || 0) +
+      (result.rejected || 0) +
+      (result.created || 0) +
+      (result.rejectedCards || 0);
+    if (result.disabled || result.status || result.partial || moved === 0) {
+      // partial = a transient failure mid-flush left chunks queued;
+      // a success toast here would read as "all synced" while it
+      // is not. Keep the handoff banner instead.
       showBanner("Back online.", {href: ROOT_PATH + "/", label: "Open prep to finish syncing."});
       return;
     }
@@ -770,10 +963,14 @@ async function syncOnReconnect() {
     await reloadLocal();
     hideBanner();
     const bits = [];
+    if (result.created) {
+      bits.push(result.created === 1 ? "1 card added" : result.created + " cards added");
+    }
     if (result.flushed) {
       bits.push(result.flushed === 1 ? "1 review synced" : result.flushed + " reviews synced");
     }
-    if (result.rejected) bits.push(result.rejected + " rejected");
+    const rejectedTotal = (result.rejected || 0) + (result.rejectedCards || 0);
+    if (rejectedTotal) bits.push(rejectedTotal + " rejected");
     showToast(bits.join(", "));
     if (viewName === "overview") renderOverview();
     else if (viewName === "caughtup") renderCaughtUp();
