@@ -648,3 +648,31 @@ def init() -> None:
         dcols3 = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}
         if "display_name" not in dcols3:
             c.execute("ALTER TABLE decks ADD COLUMN display_name TEXT")
+
+        # 23. Offline sync idempotency. Maps (user_id, client_id) to
+        #     the outcome of one POST /api/offline/sync item so a
+        #     retried batch replays as pure lookups: same response, no
+        #     duplicate review rows, no double-advanced FSRS state, no
+        #     duplicate cards. Same shield grading_idempotency gives
+        #     the grading workflow, extended to sync. `kind` is 'card'
+        #     or 'review'; `status` is the effectful outcome ('created',
+        #     'applied', 'logged_no_reschedule'); `question_id` is the
+        #     created (card) or reviewed (review) question -- for cards
+        #     it is also how later reviews resolve a `card_client_id`.
+        #     Rejections are deliberately NOT pinned here: a rejection
+        #     has no side effect, so re-validating on retry is already
+        #     idempotent, and pinning one would wedge the
+        #     interrupted-flush recovery (a review rejected for an
+        #     unknown card_client_id must succeed on the next flush
+        #     once its card lands).
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS offline_sync_idempotency (
+                user_id     TEXT NOT NULL,
+                client_id   TEXT NOT NULL,
+                kind        TEXT NOT NULL,      -- 'card' | 'review'
+                status      TEXT NOT NULL,      -- 'created' | 'applied' | 'logged_no_reschedule'
+                question_id INTEGER,
+                created_at  TEXT NOT NULL,
+                PRIMARY KEY (user_id, client_id)
+            );
+        """)

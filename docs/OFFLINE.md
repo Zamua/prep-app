@@ -565,9 +565,13 @@ authenticated user):
 **Idempotency.** Every item carries a client-generated UUID. A new
 `offline_sync_idempotency` table maps
 `(user_id, client_id) -> outcome` (created question id, or applied /
-rejected status), written in the same transaction as the item's
-effect. A retried batch (network flap mid-response, double-tap,
-crashed tab) replays as pure lookups: same response, no duplicate
+logged_no_reschedule status), written in the same transaction as the
+item's effect. Rejections are deliberately not pinned: a rejected
+item has no side effects, and a retried rejection is re-validated
+from scratch, so it may legitimately succeed on a later flush (the
+interrupted-flush recovery below depends on exactly that). A retried
+batch (network flap mid-response, double-tap, crashed tab) replays
+committed items as pure lookups: same response, no duplicate
 review rows, no double-advanced SRS state, no duplicate cards. This
 is the same shield the grading workflow already uses
 (`grading_idempotency`), extended to sync. Items are processed in

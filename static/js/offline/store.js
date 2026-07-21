@@ -14,10 +14,12 @@
 //   decks           keyPath "id"           {id, name, display_name}
 //   cards           keyPath "question_id"  snapshot card + local overlay
 //                                          fields {local_step, local_next_due}
-//   local_cards     keyPath "client_id"    created now, unused until M4
-//   outbox_reviews  keyPath "client_id"    created now, unused until M3;
-//                                          index "reviewed_at"
-//   rejects         keyPath "client_id"    created now, unused until M3+
+//   local_cards     keyPath "client_id"    written from M4 (authoring)
+//   outbox_reviews  keyPath "client_id"    written from M3 (study);
+//                                          index "reviewed_at"; drained
+//                                          by sync.js flushOutbox
+//   rejects         keyPath "client_id"    permanent server rejects,
+//                                          written by sync.js flushOutbox
 
 const DB_NAME = "prep-offline";
 const DB_VERSION = 1;
@@ -128,6 +130,13 @@ export async function put(storeName, value, key) {
   // must not be given one.
   if (key === undefined) tx.objectStore(storeName).put(value);
   else tx.objectStore(storeName).put(value, key);
+  await txDone(tx);
+}
+
+export async function remove(storeName, key) {
+  const db = await openDb();
+  const tx = db.transaction(storeName, "readwrite");
+  tx.objectStore(storeName).delete(key);
   await txDone(tx);
 }
 
