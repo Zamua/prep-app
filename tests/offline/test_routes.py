@@ -242,6 +242,35 @@ def test_precache_covers_every_module_reachable_from_offline_app(client: TestCli
         assert versioned in urls, f"reachable module missing from precache: {rel}"
 
 
+# ---- landing-page "study offline" link ------------------------------------
+
+
+def test_landing_ships_hidden_offline_link(unauthed_client: TestClient):
+    """The landing page carries the "study offline" escape hatch
+    (docs/OFFLINE.md section 3): it is the page a returning user sees
+    when the server is reachable but their session is not, so it must
+    link the offline shell. The server always ships the link HIDDEN
+    with the data-offline-link hook; modules/offline-link.js reveals
+    it client-side only when this device holds a snapshot. Pin the
+    markup contract the reveal module depends on: the hook, the
+    hidden attribute, and the /offline href inside the hook."""
+    r = unauthed_client.get("/")
+    assert r.status_code == 200
+    body = r.text
+    # This really is the anonymous landing render, not the dashboard.
+    assert "landing-hero" in body
+
+    m = re.search(r"<p\b[^>]*data-offline-link[^>]*>", body)
+    assert m, "landing page lost the data-offline-link hook"
+    hook_tag = m.group(0)
+    assert re.search(r"\bhidden\b", hook_tag), (
+        "the offline link must ship hidden; only the client-side " "snapshot check may reveal it"
+    )
+    end = body.index("</p>", m.start())
+    hook_block = body[m.start() : end]
+    assert 'href="/offline"' in hook_block, "the hook must wrap a link to the offline shell"
+
+
 # ---- versioned asset routes ----------------------------------------------
 
 

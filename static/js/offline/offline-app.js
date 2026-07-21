@@ -19,14 +19,20 @@
 // "shows up as due immediately" behavior. Local cards study as short
 // self-verdict cards; their verdicts queue reviews keyed by
 // card_client_id instead of question_id, and sync.js sends the cards
-// themselves ahead of any review. Confirm-wipe + needs-attention
-// arrive in M5.
+// themselves ahead of any review.
+//
+// M5 scope: the designed edges. The overview gains the
+// needs-attention list (server-rejected items with per-row dismiss)
+// and a quiet storage readout (estimate + persisted flag); the
+// reconnect flow surfaces sync.js's confirm-then-wipe dialog when
+// the owner guard trips (a different account signed in on this
+// device) instead of only handing off to the online app.
 //
 // Plain DOM building, no framework, no innerHTML for data (card
 // prompts, choices, and answers are user content; textContent only).
 
-import {get, getAll, metaGet, put, uuid, withLock} from "./store.js";
-import {flushOutbox, refreshSnapshot, showToast} from "./sync.js";
+import {get, getAll, metaGet, put, remove, uuid, withLock} from "./store.js";
+import {flushOutbox, maybeConfirmOwnerConflict, refreshSnapshot, showToast} from "./sync.js";
 import * as grader from "./grader.js";
 import * as scheduler from "./scheduler.js";
 
@@ -146,24 +152,53 @@ const state = {
   cards: [],
   localCards: [],
   outboxCount: 0,
+  rejects: [],
+  storage: null,
 };
 
 let root = null;
 let viewName = "loading";
 
+// navigator.storage.estimate() + persisted(), folded into one small
+// readout for the overview's footer line. Null when the platform
+// hides the API (older WebKit): the line is simply omitted.
+async function readStorage() {
+  try {
+    if (!navigator.storage || !navigator.storage.estimate) return null;
+    const [estimate, persisted] = await Promise.all([
+      navigator.storage.estimate(),
+      navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(false),
+    ]);
+    return {usage: estimate.usage || 0, persisted: Boolean(persisted)};
+  } catch (e) {
+    return null;
+  }
+}
+
+function humanBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1).replace(/\.0$/, "") + " KB";
+  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1).replace(/\.0$/, "") + " MB";
+  return (n / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
+
 async function reloadLocal() {
-  const [owner, decks, cards, localCards, outbox] = await Promise.all([
+  const [owner, decks, cards, localCards, outbox, rejects, storage] = await Promise.all([
     metaGet("owner"),
     getAll("decks"),
     getAll("cards"),
     getAll("local_cards"),
     getAll("outbox_reviews"),
+    getAll("rejects"),
+    readStorage(),
   ]);
   state.owner = owner;
   state.decks = decks;
   state.cards = cards;
   state.localCards = localCards;
   state.outboxCount = outbox.length;
+  state.rejects = rejects;
+  state.storage = storage;
 }
 
 // The study queue draws from both snapshot cards and locally authored
@@ -485,6 +520,9 @@ function renderOverview() {
   }
   frag.appendChild(dueSection);
 
+  // ---- needs attention (server-rejected items) ----------------------
+  if (state.rejects.length) frag.appendChild(renderRejects());
+
   // ---- footer lines -------------------------------------------------
   if (state.outboxCount) {
     frag.appendChild(
@@ -515,8 +553,116 @@ function renderOverview() {
       : state.owner.snapshot_at;
     frag.appendChild(el("p", "muted offline-snapshot-stamp", "Snapshot from " + label + "."));
   }
+  if (state.storage) {
+    // Quiet debugging readout (docs/OFFLINE.md section 3), not a nag:
+    // how much the origin is using, and whether the platform granted
+    // the persistence request sync.js makes after snapshot writes.
+    frag.appendChild(
+      el(
+        "p",
+        "muted offline-storage-note",
+        "Offline storage: " + humanBytes(state.storage.usage) + " used" +
+          (state.storage.persisted ? " · persistent" : "") + "."
+      )
+    );
+  }
+  // Safari-tab nudge (docs/OFFLINE.md section 3): a plain browser tab
+  // is subject to Safari's 7-day script-storage cap; the installed
+  // app is exempt and is the supported multi-day offline vehicle.
+  if (window.matchMedia && !window.matchMedia("(display-mode: standalone)").matches) {
+    frag.appendChild(
+      el(
+        "p",
+        "muted offline-tab-nudge",
+        "Tip: offline data is most durable in the installed app (Share, then Add to Home Screen)."
+      )
+    );
+  }
 
   show(frag, "overview");
+}
+
+// ---- needs attention (rejects store) ---------------------------------
+
+// Keep the disclosure open across the re-render a dismiss triggers.
+let rejectsOpen = false;
+
+// What a rejected row is ABOUT, one glanceable line: a rejected card
+// shows its own prompt; a rejected review shows its card's prompt
+// when the snapshot still has it, else the answer text it carried.
+function rejectPreview(row) {
+  if (row.kind === "card") {
+    return row.prompt || (row.item && row.item.prompt) || "(no prompt recorded)";
+  }
+  if (row.question_id) {
+    const card = state.cards.find((c) => c.question_id === row.question_id);
+    if (card && card.prompt) return card.prompt;
+  }
+  return row.user_answer
+    ? "Your answer: " + row.user_answer
+    : "(no answer recorded)";
+}
+
+function truncate(text, max) {
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+// The needs-attention list (docs/OFFLINE.md section 2): items the
+// server permanently rejected at sync, surfaced instead of silently
+// dropped. Count on the summary line, expandable rows underneath
+// (kind, server error, preview), each with a per-row dismiss that
+// deletes it from the rejects store.
+function renderRejects() {
+  const section = el("section", "offline-rejects");
+  section.appendChild(sectionEyebrow("Needs attention"));
+  const details = el("details", "offline-rejects-details");
+  details.open = rejectsOpen;
+  details.addEventListener("toggle", () => {
+    rejectsOpen = details.open;
+  });
+  const n = state.rejects.length;
+  const summary = el(
+    "summary",
+    "offline-rejects-summary",
+    n + (n === 1 ? " item" : " items") + " couldn't sync"
+  );
+  // iOS 26 standalone swallows the synthesized click on <summary> for
+  // ~5s after load (the details-toggle.js gotcha; that module is not
+  // loaded in the shell). Own the toggle on pointerup and suppress
+  // the late compatibility click.
+  let toggledAt = 0;
+  summary.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    toggledAt = Date.now();
+    details.open = !details.open;
+  });
+  summary.addEventListener("click", (e) => {
+    if (Date.now() - toggledAt < 500) e.preventDefault();
+  });
+  details.appendChild(summary);
+  const list = el("ul", "offline-rejects-list");
+  for (const row of state.rejects) {
+    const item = el("li", "offline-reject");
+    const head = el("div", "offline-reject-head");
+    head.appendChild(el("span", "tag tag-type", row.kind === "card" ? "card" : "review"));
+    head.appendChild(el("span", "offline-reject-error", row.error || "rejected"));
+    item.appendChild(head);
+    item.appendChild(el("p", "offline-reject-preview", truncate(rejectPreview(row), 140)));
+    const dismiss = el("button", "offline-linkbtn offline-reject-dismiss", "Dismiss");
+    dismiss.type = "button";
+    dismiss.addEventListener("click", () => {
+      runPending(dismiss, async () => {
+        await withLock(() => remove("rejects", row.client_id));
+        state.rejects = state.rejects.filter((r) => r.client_id !== row.client_id);
+        renderOverview();
+      });
+    });
+    item.appendChild(dismiss);
+    list.appendChild(item);
+  }
+  details.appendChild(list);
+  section.appendChild(details);
+  return section;
 }
 
 // The queue is recomputed on every advance (docs/OFFLINE.md section
@@ -952,6 +1098,28 @@ async function syncOnReconnect() {
       (result.rejected || 0) +
       (result.created || 0) +
       (result.rejectedCards || 0);
+    if (result.disabled) {
+      // The owner guard tripped: the signed-in session does not match
+      // this device's snapshot owner. Surface the explicit
+      // confirm-then-wipe dialog (never silent, never automatic);
+      // after a wipe the stores hold the new account's snapshot, so
+      // re-render from scratch. If the user already chose "keep" for
+      // this account the prompt declines to re-open and the plain
+      // handoff banner below takes over.
+      const prompted = await maybeConfirmOwnerConflict({
+        onWiped: async () => {
+          await reloadLocal();
+          // A reseed that failed mid-blip leaves no owner; the empty
+          // state is the honest render then (same rule as boot).
+          if (state.owner) renderOverview();
+          else renderEmpty();
+        },
+      });
+      if (prompted) {
+        hideBanner();
+        return;
+      }
+    }
     if (result.disabled || result.status || result.partial || moved === 0) {
       // partial = a transient failure mid-flush left chunks queued;
       // a success toast here would read as "all synced" while it

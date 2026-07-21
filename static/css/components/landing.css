@@ -313,3 +313,24 @@
   min-height: 2.1rem;
   font-size: 0.92rem;
 }
+
+/* M5: the hidden "study offline" escape hatch at the foot of the
+ * landing content. Revealed by modules/offline-link.js only when
+ * this device holds an offline snapshot; hidden it costs nothing. */
+.landing-offline-link {
+  margin: 1.6rem 0 0.4rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--ink-mute);
+}
+.landing-offline-link[hidden] { display: none; }
+.landing-offline-link a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+.landing-offline-aside {
+  display: block;
+  margin-top: 0.15rem;
+  font-style: italic;
+  font-size: 0.82rem;
+}

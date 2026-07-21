@@ -162,3 +162,111 @@
   animation: rise 300ms cubic-bezier(.2, .7, .2, 1) both;
   pointer-events: none;
 }
+
+/* M5: owner-mismatch confirm-then-wipe dialog. Built by sync.js on
+ * BOTH surfaces (online pages via init(), the shell via the
+ * reconnect flow), hence no .page-offline scoping. Chrome mirrors
+ * the session-confirm dialog (centered card, dim backdrop, danger
+ * action) so the destructive choice reads like the app's other
+ * destructive confirms. */
+.offline-owner-dialog {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 1.05rem 1.1rem 0.95rem;
+  max-width: 24rem;
+  box-shadow: 0 18px 36px -18px rgba(0, 0, 0, 0.5);
+}
+.offline-owner-dialog::backdrop {
+  background: rgba(20, 14, 8, 0.4);
+  backdrop-filter: blur(1px);
+}
+.offline-owner-dialog h3 {
+  margin: 0 0 0.35rem;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 480;
+}
+.offline-owner-dialog p {
+  margin: 0 0 0.7rem;
+  font-size: 0.86rem;
+  color: var(--ink-mute);
+  line-height: 1.45;
+}
+.offline-owner-keep-note {
+  font-style: italic;
+}
+.offline-owner-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.9rem;
+}
+.offline-owner-actions button {
+  font: inherit;
+  font-size: 0.93rem;
+  font-weight: 500;
+  padding: 0.6rem 1.15rem;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.offline-owner-actions button.danger {
+  background: var(--wrong);
+  color: var(--paper);
+  border-color: var(--wrong);
+}
+.offline-owner-actions button.danger:hover { filter: brightness(0.92); }
+
+/* M5: needs-attention list (server-rejected sync items). */
+.offline-rejects-details {
+  margin-top: 0.6rem;
+}
+.offline-rejects-summary {
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  -webkit-tap-highlight-color: transparent;
+}
+.offline-rejects-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+.offline-reject {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--hairline, rgba(0, 0, 0, 0.08));
+}
+.offline-reject:last-child { border-bottom: none; }
+.offline-reject-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.offline-reject-error {
+  font-size: 0.86rem;
+  color: var(--ink-mute);
+  overflow-wrap: anywhere;
+}
+.offline-reject-preview {
+  margin: 0.25rem 0 0.35rem;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.offline-reject-dismiss {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* M5: quiet storage readout in the overview footer. */
+.offline-storage-note {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+}

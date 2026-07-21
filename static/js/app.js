@@ -45,6 +45,18 @@ if ("serviceWorker" in navigator) {
     .catch((e) => console.warn("SW register failed:", e));
 }
 
+// ---- Landing "study offline" link (hook-gated) -----------------------
+// The landing template ships the link hidden; the module reveals it
+// only when this device already holds an offline snapshot. Lazy
+// import gated on the hook so every other page (and every visitor
+// without the hook) pays one querySelector and nothing else.
+const offlineLinkHook = document.querySelector("[data-offline-link]");
+if (offlineLinkHook) {
+  import("@/modules/offline-link.js")
+    .then((m) => m.init(offlineLinkHook))
+    .catch((e) => console.warn("offline link module unavailable:", e));
+}
+
 // ---- Offline snapshot refresh (fire-and-forget) ----------------------
 // Keeps the IndexedDB snapshot warm on online pages so an offline cold
 // launch has decks + cards to show. Lazy dynamic import so a failure

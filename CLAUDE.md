@@ -295,6 +295,7 @@ in a `<script type="module">` block.
 | `<form data-submit-pending>` | `submit-pending.js` | disable + label-swap on submit |
 | `[data-poll-url]`      | `poller.js`          | poll URL on interval, dispatch handler|
 | `[data-details-body]`  | `details-toggle.js`  | mark a sibling popover body so the outside-click handler doesn't close the related details when the body is tapped (use when a `<details>` body must live OUTSIDE the `<details>` element for layout reasons — e.g. trivia card explore body) |
+| `[data-offline-link]`  | `offline-link.js`    | landing-only: reveal the hidden "study offline" link when this device holds an offline snapshot (lazy-imported by app.js when the hook is present) |
 
 **Per-page inline `<script>` blocks**: still allowed when the page
 has unique logic that doesn't generalize (e.g. card-preview filling,

@@ -350,6 +350,132 @@ async ({prefix, regexId, mcqId}) => {
 """
 
 
+# ---- M5: owner-mismatch confirm-then-wipe, pinned at module level -----
+
+_OWNER_CONFLICT_SETUP_JS = """
+async ({prefix, mcqId}) => {
+  const store = await import(prefix + "offline/store.js");
+  const sync = await import(prefix + "offline/sync.js");
+  // Plant a FOREIGN owner under the real session: the server still
+  // resolves the seeded e2e user, so the next identity-bearing sync
+  // call must trip the guard.
+  const owner = await store.metaGet("owner");
+  await store.put(
+    "meta",
+    {...owner, user_id: "other-account@example.com", display_name: "Somebody Else"},
+    "owner"
+  );
+  await store.put("outbox_reviews", {
+    client_id: store.uuid(),
+    question_id: mcqId,
+    verdict: "right",
+    user_answer: "planted-by-owner-test",
+    graded_by: "auto",
+    reviewed_at: new Date().toISOString(),
+  });
+  const flushResult = await sync.flushOutbox();
+  const outboxAfterFlush = await store.getAll("outbox_reviews");
+  const ownerAfterFlush = await store.metaGet("owner");
+  // The guard alone must neither wipe nor prompt: refusing is all it
+  // does. The dialog only appears through the explicit confirm call.
+  const dialogAfterFlush = Boolean(document.querySelector("dialog.offline-owner-dialog"));
+  const prompted = await sync.maybeConfirmOwnerConflict();
+  return {
+    disabled: Boolean(flushResult.disabled),
+    outboxLenAfterFlush: outboxAfterFlush.length,
+    ownerAfterFlush: ownerAfterFlush && ownerAfterFlush.user_id,
+    dialogAfterFlush,
+    prompted,
+  };
+}
+"""
+
+_OWNER_CONFLICT_REPROMPT_JS = """
+async ({prefix}) => {
+  const store = await import(prefix + "offline/store.js");
+  const sync = await import(prefix + "offline/sync.js");
+  // The recorded "keep" must suppress the prompt for this account...
+  const suppressed = await sync.maybeConfirmOwnerConflict();
+  const dialogWhileSuppressed = Boolean(document.querySelector("dialog.offline-owner-dialog"));
+  // ...and only the recorded choice suppresses it: with the flag
+  // gone (stand-in for a DIFFERENT mismatched account, whose id
+  // would not match dismissed_user_id) the dialog re-opens.
+  await store.remove("meta", "owner_conflict");
+  const reprompted = await sync.maybeConfirmOwnerConflict();
+  return {suppressed, dialogWhileSuppressed, reprompted};
+}
+"""
+
+
+def test_owner_mismatch_confirm_then_wipe(offline_server, offline_page):
+    """M5's confirm-then-wipe (docs/OFFLINE.md sections 3 and 6),
+    against the real modules and the real dialog DOM: the guard
+    refuses without wiping or prompting on its own; the dialog is
+    explicit; Keep records the choice (no re-prompt for the same
+    account) and discards nothing; Wipe clears every store and
+    reseeds as the signed-in account."""
+    from tests.e2e.conftest import OFFLINE_E2E_LOGIN
+
+    offline_server.start()  # idempotent; heals a prior test's failure state
+    page = offline_page
+    _prime_online(page, offline_server.base_url)
+    prefix = _module_prefix(page)
+
+    setup = page.evaluate(
+        _OWNER_CONFLICT_SETUP_JS,
+        {"prefix": prefix, "mcqId": offline_server.seed["mcq_id"]},
+    )
+    # The guard tripped, refused the flush, and touched nothing.
+    assert setup["disabled"] is True
+    assert setup["outboxLenAfterFlush"] == 1
+    assert setup["ownerAfterFlush"] == "other-account@example.com"
+    assert setup["dialogAfterFlush"] is False, "guard must not prompt by itself"
+    assert setup["prompted"] is True
+
+    dialog = page.locator("dialog.offline-owner-dialog[open]")
+    dialog.wait_for()
+    dialog_text = dialog.inner_text()
+    assert "Somebody Else" in dialog_text
+    assert "1 unsynced review" in dialog_text
+    assert "discarded" in dialog_text
+
+    # -- Keep: records the choice, discards nothing --------------------
+    page.get_by_role("button", name="Keep").click()
+    page.locator("dialog.offline-owner-dialog").wait_for(state="detached")
+    conflict_flag = page.evaluate(_IDB_META_GET_JS, "owner_conflict")
+    assert conflict_flag and conflict_flag["dismissed_user_id"] == OFFLINE_E2E_LOGIN
+    assert len(_idb_all(page, "outbox_reviews")) == 1
+    owner = page.evaluate(_IDB_META_GET_JS, "owner")
+    assert owner["user_id"] == "other-account@example.com"
+
+    reprompt = page.evaluate(_OWNER_CONFLICT_REPROMPT_JS, {"prefix": prefix})
+    assert reprompt["suppressed"] is False
+    assert reprompt["dialogWhileSuppressed"] is False
+    assert reprompt["reprompted"] is True
+
+    # -- Wipe and start fresh: every store cleared, reseeded ----------
+    page.get_by_role("button", name="Wipe and start fresh").click()
+    page.locator("dialog.offline-owner-dialog").wait_for(state="detached")
+
+    def _reseeded():
+        page.evaluate("() => 0")  # pump the event loop for route handlers
+        record = page.evaluate(_IDB_META_GET_JS, "owner")
+        return record if record and record.get("user_id") == OFFLINE_E2E_LOGIN else None
+
+    owner = _wait_for(_reseeded, message="owner reseeded as the signed-in account")
+    assert owner["display_name"] == "Offline Tester"
+    assert _idb_all(page, "outbox_reviews") == []
+    assert _idb_all(page, "local_cards") == []
+    assert _idb_all(page, "rejects") == []
+    assert len(_idb_all(page, "cards")) == 3
+    assert len(_idb_all(page, "decks")) >= 1
+    # The wipe took the keep-flag with it (meta cleared wholesale) and
+    # a fresh device id was minted.
+    assert page.evaluate(_IDB_META_GET_JS, "owner_conflict") is None
+    device = page.evaluate(_IDB_META_GET_JS, "device")
+    assert device and device["device_id"]
+
+
 def test_snapshot_refresh_preserves_overlays_only_for_queued_cards(offline_server, offline_page):
     """Trap (a) from the M2 review, exercised against the real modules
     in a real browser: refreshSnapshot's full replace must preserve

@@ -11,6 +11,10 @@
 //                     "owner"  {user_id, display_name, snapshot_at, build}
 //                     "device" {device_id}  (UUID minted on first open)
 //                     "sync"   {last_refresh_at}  (throttle bookkeeping)
+//                     "owner_conflict" {dismissed_user_id, dismissed_at}
+//                              (the "keep" choice from the owner-
+//                              mismatch dialog; suppresses re-prompts
+//                              until the mismatched account changes)
 //   decks           keyPath "id"           {id, name, display_name}
 //   cards           keyPath "question_id"  snapshot card + local overlay
 //                                          fields {local_step, local_next_due}
@@ -172,6 +176,23 @@ export async function bulkReplace(storeName, records) {
   os.clear();
   for (const record of records) os.put(record);
   await txDone(tx);
+}
+
+// Owner-change wipe (docs/OFFLINE.md section 3, identity): clear
+// EVERY object store in one readwrite transaction, so the wipe
+// commits whole or rolls back whole -- there is no observable state
+// where one account's cards sit next to another's outbox. The device
+// record goes with the rest (it lives in meta) and is re-minted
+// fresh afterwards; the id is device bookkeeping, not owner data,
+// but a new owner may as well start with a clean one. Callers
+// serialize against in-flight flush/refresh work via withLock.
+export async function wipeAll() {
+  const db = await openDb();
+  const names = Array.from(db.objectStoreNames);
+  const tx = db.transaction(names, "readwrite");
+  for (const name of names) tx.objectStore(name).clear();
+  await txDone(tx);
+  await put("meta", {device_id: uuid()}, "device");
 }
 
 // ---- meta convenience ------------------------------------------------

@@ -377,8 +377,12 @@ and safer than per-store composite keys.
 **Snapshot refresh.** While online, `sync.js` (running inside
 `app.js` on authenticated pages) refreshes the snapshot from
 `GET /api/offline/snapshot` (contract in section 4): on dashboard
-loads, throttled to once per hour, and always immediately after a
-successful outbox flush. Decks and cards are text and small; the
+loads. The hourly throttle applies only to devices with no owner
+snapshot yet; once a snapshot exists the refresh runs on every
+online page load, because the same request doubles as the
+owner-mismatch check (a different signed-in account must be
+discovered on load, not up to an hour later). It always runs
+immediately after a successful outbox flush. Decks and cards are text and small; the
 snapshot is a full replace of the `decks` and `cards` stores (with
 local overlay fields for cards that still have queued reviews
 preserved). A full replace sidesteps tombstone bookkeeping for

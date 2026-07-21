@@ -13,9 +13,13 @@
 // owner-mismatch guard ships with the flush, not after it: syncing
 // under a mismatched sign-in would replay one account's outbox into
 // another. On mismatch, sync disables entirely for the session -- no
-// flush, no snapshot write (the confirm-then-wipe UX arrives in M5).
+// flush, no snapshot write -- and the M5 confirm-then-wipe dialog
+// (maybeConfirmOwnerConflict below) offers the signed-in user an
+// EXPLICIT choice: wipe this device's offline data and reseed as the
+// new account, or keep the other account's data with sync off. Never
+// silent, never automatic.
 
-import {get, getAll, bulkReplace, metaGet, metaPut, put, remove, withLock} from "./store.js";
+import {get, getAll, bulkReplace, metaGet, metaPut, put, remove, wipeAll, withLock} from "./store.js";
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -26,8 +30,14 @@ const CARDS_PER_CHUNK = 100;
 const REVIEWS_PER_CHUNK = 500;
 
 // Flipped on owner mismatch; every sync entry point then refuses to
-// touch the network or the local stores until the next page load.
+// touch the network or the local stores until the next page load (or
+// until the user chooses wipe-and-reseed in the conflict dialog).
 let syncDisabled = false;
+
+// Set by ownerAllows when the guard trips: {owner, serverUser}. The
+// raw material for maybeConfirmOwnerConflict; null while no mismatch
+// has been observed this session.
+let ownerConflict = null;
 
 // The deploy's root path, derived from this module's own URL (it is
 // served under <root>/static/js/..., versioned prefix included).
@@ -49,10 +59,12 @@ function buildToken() {
 // A device with no owner yet (fresh install) passes; a mismatch
 // disables sync for the whole session so the mismatched sign-in can
 // neither absorb the other account's outbox nor overwrite its data.
-async function ownerAllows(serverUserId) {
+async function ownerAllows(serverUser) {
   const owner = await metaGet("owner");
+  const serverUserId = serverUser && serverUser.id;
   if (owner && owner.user_id && serverUserId && owner.user_id !== serverUserId) {
     syncDisabled = true;
+    ownerConflict = {owner, serverUser};
     console.warn(
       "offline sync disabled: signed-in user does not match this device's snapshot owner"
     );
@@ -84,7 +96,8 @@ export async function refreshSnapshot({force = false} = {}) {
   if (syncDisabled) return {ok: false, disabled: true};
   if (!force) {
     const sync = await metaGet("sync");
-    if (sync && sync.last_refresh_at) {
+    const ownerMeta = await metaGet("owner").catch(() => null);
+    if (sync && sync.last_refresh_at && !ownerMeta) {
       const age = Date.now() - Date.parse(sync.last_refresh_at);
       if (Number.isFinite(age) && age >= 0 && age < REFRESH_INTERVAL_MS) {
         return {ok: true, skipped: true};
@@ -97,7 +110,7 @@ export async function refreshSnapshot({force = false} = {}) {
   const fetched = await fetchSnapshotPayload();
   if (!fetched.ok) return fetched;
   const snapshot = fetched.snapshot;
-  if (!(await ownerAllows(snapshot.user.id))) return {ok: false, disabled: true};
+  if (!(await ownerAllows(snapshot.user))) return {ok: false, disabled: true};
 
   // Full replace sidesteps tombstone bookkeeping for deletions. Local
   // ladder overlays are seeded null EXCEPT for cards that still have
@@ -152,7 +165,34 @@ export async function refreshSnapshot({force = false} = {}) {
     build: buildToken(),
   });
   await metaPut("sync", {last_refresh_at: new Date().toISOString()});
+  // Ask the platform to shield this origin's storage from eviction
+  // (docs/OFFLINE.md section 3, "Storage persistence and eviction
+  // margin"): fire-and-forget after a successful snapshot write, so
+  // the request always follows real data worth keeping.
+  requestPersistence();
   return {ok: true};
+}
+
+// navigator.storage.persist(), guarded and swallowed: persistence is
+// a margin-widener, never a correctness dependency. Skips the call
+// when the grant already exists so repeated refreshes cannot nag on
+// engines that surface a permission prompt.
+async function requestPersistence() {
+  try {
+    if (!navigator.storage || !navigator.storage.persist) return;
+    const already = await navigator.storage.persisted().catch(() => false);
+    if (already) return;
+    // Ask ONCE per device (spec: "on the first successful snapshot
+    // write"). Browsers with prompt-based UX (Firefox) would re-nag
+    // on every hourly refresh otherwise. The stamp dies with a wipe,
+    // which is the right moment to ask again anyway.
+    const stamped = await metaGet("persist_requested").catch(() => null);
+    if (stamped) return;
+    await metaPut("persist_requested", {at: new Date().toISOString()});
+    navigator.storage.persist().catch(() => {});
+  } catch (e) {
+    // cosmetic; never let a storage API quirk break sync
+  }
 }
 
 // Project a local_cards record onto the new_cards wire shape: the
@@ -261,7 +301,7 @@ export async function flushOutbox() {
   // outbox belongs to meta.owner, and only that account may sync it.
   const fetched = await fetchSnapshotPayload();
   if (!fetched.ok) return {flushed: 0, created: 0, status: fetched.status};
-  if (!(await ownerAllows(fetched.snapshot.user.id))) {
+  if (!(await ownerAllows(fetched.snapshot.user))) {
     return {flushed: 0, created: 0, disabled: true};
   }
 
@@ -389,12 +429,198 @@ export function showToast(text) {
   }
 }
 
+// ---- owner-mismatch confirm-then-wipe (M5) ---------------------------
+
+// Tiny DOM helper for the dialog below. Data (display names, counts)
+// only ever lands via textContent; nothing here touches innerHTML.
+function makeEl(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+// Clear every prep-offline store and reseed from the signed-in
+// account's snapshot. The wipe itself is one IDB transaction
+// (store.wipeAll) taken under the store lock so an in-flight flush
+// or refresh cannot interleave; the reseed is a forced snapshot
+// refresh under the new identity (which also re-stamps meta.owner).
+export async function wipeAndReseed() {
+  await withLock(() => wipeAll());
+  syncDisabled = false;
+  ownerConflict = null;
+  return refreshSnapshot({force: true});
+}
+
+function conflictSummaryText(owner, serverUser) {
+  const ownerName = owner.display_name || owner.user_id || "another account";
+  const serverName = serverUser.display_name || serverUser.id || "this account";
+  return (
+    "This device holds offline study data for " + ownerName +
+    ". You're signed in as " + serverName + "."
+  );
+}
+
+function discardLineText(outboxCount, localCardCount) {
+  const parts = [];
+  if (outboxCount) {
+    parts.push(outboxCount + (outboxCount === 1 ? " unsynced review" : " unsynced reviews"));
+  }
+  if (localCardCount) {
+    parts.push(localCardCount + (localCardCount === 1 ? " unsynced new card" : " unsynced new cards"));
+  }
+  if (!parts.length) {
+    return "Starting fresh replaces that snapshot with this account's cards.";
+  }
+  return (
+    parts.join(" and ") +
+    " from that account will be discarded if you start fresh."
+  );
+}
+
+function showOwnerConflictDialog({owner, serverUser, outboxCount, localCardCount, onWiped}) {
+  const previous = document.querySelector("dialog.offline-owner-dialog");
+  if (previous) previous.remove();
+
+  const dialog = document.createElement("dialog");
+  dialog.className = "offline-owner-dialog";
+  // Same data-dialog convention the online templates use; the
+  // backdrop-close wiring is done inline below because this node is
+  // created long after dialog.js's attachDeclarative pass ran.
+  dialog.setAttribute("data-dialog", "");
+  dialog.setAttribute("aria-labelledby", "offline-owner-title");
+
+  const title = makeEl("h3", null, "Offline data from another account");
+  title.id = "offline-owner-title";
+  dialog.appendChild(title);
+  dialog.appendChild(makeEl("p", null, conflictSummaryText(owner, serverUser)));
+  dialog.appendChild(makeEl("p", null, discardLineText(outboxCount, localCardCount)));
+  dialog.appendChild(
+    makeEl(
+      "p",
+      "offline-owner-keep-note",
+      "Keep leaves that data in place; offline study and sync stay off " +
+        "for this account on this device."
+    )
+  );
+
+  const actions = makeEl("div", "offline-owner-actions");
+  const keepBtn = makeEl("button", null, "Keep");
+  keepBtn.type = "button";
+  const wipeBtn = makeEl("button", "danger", "Wipe and start fresh");
+  wipeBtn.type = "button";
+  actions.appendChild(keepBtn);
+  actions.appendChild(wipeBtn);
+  dialog.appendChild(actions);
+
+  let busy = false;
+
+  // Backdrop click closes, same signal dialog.js keys on: the event
+  // target is the dialog element itself only when the click missed
+  // every descendant. Esc is native to showModal(). Either way the
+  // close records NOTHING -- no meta flag, no wipe -- so the dialog
+  // simply re-prompts on the next page load. Undecided is not "keep".
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog && !busy) dialog.close();
+  });
+  dialog.addEventListener("cancel", (e) => {
+    if (busy) e.preventDefault();
+  });
+  dialog.addEventListener("close", () => dialog.remove());
+
+  keepBtn.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      // The recorded choice suppresses re-prompts for THIS mismatched
+      // account only; a different account signing in later prompts
+      // again (its id will not match dismissed_user_id).
+      await metaPut("owner_conflict", {
+        dismissed_user_id: serverUser.id,
+        dismissed_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn("offline owner-conflict keep failed:", e);
+    } finally {
+      busy = false;
+      dialog.close();
+    }
+  });
+
+  wipeBtn.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true;
+    wipeBtn.classList.add("is-loading");
+    try {
+      const result = await wipeAndReseed();
+      dialog.close();
+      showToast(
+        result && result.ok
+          ? "Offline data reset for this account"
+          : "Offline data cleared. Cards will re-save next time prep loads online."
+      );
+      if (onWiped) await onWiped();
+    } catch (e) {
+      console.warn("offline owner-conflict wipe failed:", e);
+      dialog.close();
+      showToast("Could not reset offline data. Try again.");
+    } finally {
+      busy = false;
+      wipeBtn.classList.remove("is-loading");
+    }
+  });
+
+  document.body.appendChild(dialog);
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+}
+
+// Surface the confirm-then-wipe dialog if (and only if) the owner
+// guard tripped this session and the user has not already chosen
+// "keep" for this same mismatched account. Returns true when the
+// dialog was shown. Both surfaces call it: init() below after the
+// online flush/refresh chain reports disabled, and the offline
+// shell's reconnect flow (which passes onWiped to re-render from the
+// freshly reseeded stores).
+export async function maybeConfirmOwnerConflict({onWiped} = {}) {
+  // An open dialog means the user is mid-decision (possibly mid-wipe);
+  // a connectivity flap re-running the chain must not yank it.
+  if (document.querySelector("dialog.offline-owner-dialog")) return;
+  if (!ownerConflict) return false;
+  try {
+    const dismissed = await metaGet("owner_conflict");
+    if (dismissed && dismissed.dismissed_user_id === ownerConflict.serverUser.id) {
+      return false;
+    }
+    const [outbox, localCards] = await Promise.all([
+      getAll("outbox_reviews"),
+      getAll("local_cards"),
+    ]);
+    showOwnerConflictDialog({
+      owner: ownerConflict.owner,
+      serverUser: ownerConflict.serverUser,
+      outboxCount: outbox.length,
+      localCardCount: localCards.length,
+      onWiped,
+    });
+    return true;
+  } catch (e) {
+    console.warn("offline owner-conflict prompt failed:", e);
+    return false;
+  }
+}
+
 // Entry point for app.js on online pages. Flush first (a no-op while
-// the outbox is empty), then refresh the snapshot -- forced after a
-// real flush so local SRS state converges to the server's FSRS truth
-// immediately. The force matters doubly for created cards: their
+// the outbox is empty), then refresh the snapshot -- forced after any
+// flush that MOVED items, acked or rejected: acked reviews need the
+// server's FSRS truth pulled down, and a rejected review means the
+// server never rescheduled that card, so its local overlay must snap
+// back to server state now rather than linger for up to the throttle
+// window. The force matters doubly for created cards: their
 // local_cards rows are deleted on ack and the refresh is what
-// delivers them back as real snapshot cards. Fire-and-forget: must
+// delivers them back as real snapshot cards. If the owner guard
+// tripped anywhere in the chain, surface the confirm-then-wipe
+// dialog (never silent, never automatic). Fire-and-forget: must
 // never throw into the page, and must never block page behaviors.
 export function init() {
   try {
@@ -417,9 +643,13 @@ export function init() {
         }
         if (bits.length) showToast(bits.join(", "));
         return refreshSnapshot({
-          force: Boolean(result && (result.flushed || result.created)),
+          force: Boolean(
+            result &&
+              (result.flushed || result.created || result.rejected || result.rejectedCards)
+          ),
         });
       })
+      .then(() => maybeConfirmOwnerConflict())
       .catch((e) => {
         console.warn("offline sync failed:", e);
       });

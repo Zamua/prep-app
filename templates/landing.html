@@ -162,6 +162,20 @@
 </section>
 {% endif %}
 
+{# "Study offline" escape hatch (docs/OFFLINE.md section 3): the
+   landing page is what a returning user sees when the server is
+   reachable but their session (or the identity provider's CDN) is
+   not, so it links to the offline shell -- but ONLY when this device
+   already holds an offline snapshot. The check is client-side
+   (IndexedDB), so the link ships hidden and modules/offline-link.js
+   (lazy-imported by app.js when this hook is present) reveals it.
+   First-time visitors never see it and pay nothing beyond one
+   querySelector. #}
+<p class="landing-offline-link" data-offline-link hidden>
+  <a href="{{ request.scope.get('root_path','') }}/offline">Study offline</a>
+  <span class="landing-offline-aside">your saved cards work without a connection</span>
+</p>
+
 {# The post-signup / session-recovery reload now lives centrally in
    base.html's Clerk bootstrap (it runs on every page and, crucially,
    awaits Clerk.load() before checking Clerk.user — this landing-only
