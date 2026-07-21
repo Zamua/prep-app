@@ -306,3 +306,258 @@ def page(browser_session, base_url, default_user_header):
         yield p
     finally:
         ctx.close()
+
+
+# ---- Local offline-suite fixtures -------------------------------------
+#
+# The offline e2e suite (test_offline_parity.py, test_offline_study_e2e.py)
+# cannot run against staging: staging is PREP_AUTH_MODE=clerk, which the
+# Tailscale header injection does nothing for, and the suite needs to
+# stop/start the server to simulate a genuinely unreachable network (see
+# below). So it drives a LOCAL tailscale-mode uvicorn on a scratch port
+# with PREP_DB_PATH under tmp and PREP_DEFAULT_USER unset, using the
+# same route-based header injection as the `page` fixture above.
+#
+# Two empirically-verified Playwright/service-worker facts shape these
+# fixtures (probed against Chromium before the suite was written):
+#
+# - ctx.route() header injection reaches page-context fetches even on a
+#   SW-controlled page (the SW's fetch handler passes non-precache GETs
+#   and all POSTs through without respondWith), but it does NOT reach
+#   requests the SW re-issues itself (the navigation-fallback race's
+#   fetch(request)). Priming must therefore happen on the first,
+#   uncontrolled page load, and no test may depend on an authenticated
+#   NAVIGATION after the SW has claimed the page.
+# - ctx.set_offline(True) does not apply to the service worker target:
+#   with a live server the SW's navigation fetch succeeds and the
+#   offline fallback never fires. Real offline is simulated by STOPPING
+#   the local server (connection refused rejects the SW's fetch
+#   instantly); set_offline is used only to fire the window
+#   online/offline events the offline app listens for.
+
+import json as _json
+import socket as _socket
+import sqlite3 as _sqlite3
+import subprocess as _subprocess
+import sys as _sys
+import time as _time
+from datetime import datetime as _datetime
+from datetime import timedelta as _timedelta
+from datetime import timezone as _timezone
+from pathlib import Path as _Path
+
+_REPO_ROOT = _Path(__file__).resolve().parents[2]
+
+OFFLINE_E2E_LOGIN = "offline-e2e@example.com"
+OFFLINE_E2E_NAME = "Offline Tester"
+
+# Deterministic non-secret test value: the app refuses byok work (and
+# logs a boot-time stack) without a 32-byte hex master key in env.
+_TEST_KEY_ENCRYPTION_SECRET = "ab" * 32
+
+
+def _free_port() -> int:
+    s = _socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def _seed_offline_db(db_path: _Path) -> dict:
+    """Initialize the scratch sqlite via the app's own db.init() (run in
+    a subprocess so this pytest process never imports prep with a
+    monkeyed DB path), then insert one SRS deck with three cards all
+    due in the past, oldest-first ordering pinned by distinct next_due
+    values: an mcq, a short with a usable answer_regex, and a plain
+    short (the reveal + self-verdict path). Returns the seeded ids."""
+    _subprocess.run(
+        [_sys.executable, "-c", "from prep.infrastructure import db; db.init()"],
+        cwd=_REPO_ROOT,
+        env={**os.environ, "PREP_DB_PATH": str(db_path)},
+        check=True,
+    )
+    now = _datetime.now(_timezone.utc)
+    ts = now.isoformat()
+    conn = _sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO users (tailscale_login, display_name, created_at, last_seen_at) "
+            "VALUES (?,?,?,?)",
+            (OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME, ts, ts),
+        )
+        deck_id = conn.execute(
+            "INSERT INTO decks (user_id, name, display_name, deck_type, created_at) "
+            "VALUES (?,?,?,?,?)",
+            (OFFLINE_E2E_LOGIN, "offline-e2e", "Offline E2E", "srs", ts),
+        ).lastrowid
+
+        def add_question(qtype, prompt, answer, choices=None, answer_regex=None, due_hours_ago=1):
+            qid = conn.execute(
+                "INSERT INTO questions (user_id, deck_id, type, prompt, choices, answer, "
+                " answer_regex, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    OFFLINE_E2E_LOGIN,
+                    deck_id,
+                    qtype,
+                    prompt,
+                    _json.dumps(choices) if choices else None,
+                    answer,
+                    answer_regex,
+                    ts,
+                ),
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO cards (question_id, step, next_due) VALUES (?,0,?)",
+                (qid, (now - _timedelta(hours=due_hours_ago)).isoformat()),
+            )
+            return qid
+
+        mcq_id = add_question(
+            "mcq",
+            "Capital of France?",
+            "Paris",
+            choices=["Paris", "Lyon", "Marseille"],
+            due_hours_ago=3,
+        )
+        regex_id = add_question(
+            "short",
+            "Capital of Peru?",
+            "Lima",
+            answer_regex="lima",
+            due_hours_ago=2,
+        )
+        short_id = add_question(
+            "short",
+            "What does the acronym SRS stand for?",
+            "Spaced repetition system.",
+            due_hours_ago=1,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"deck_id": deck_id, "mcq_id": mcq_id, "regex_id": regex_id, "short_id": short_id}
+
+
+class LocalOfflineServer:
+    """A stop/start-able local uvicorn running prep against a scratch
+    sqlite. stop()/start() exist so the offline study test can make the
+    server genuinely unreachable (the only offline simulation that
+    reaches the service worker; see the fixture-block comment)."""
+
+    def __init__(self, db_path: _Path):
+        self.db_path = db_path
+        self.port = _free_port()
+        self.base_url = f"http://127.0.0.1:{self.port}"
+        self.seed: dict = {}
+        self._proc: _subprocess.Popen | None = None
+
+    def start(self, timeout: float = 30.0) -> None:
+        if self._proc is not None and self._proc.poll() is None:
+            return
+        env = {**os.environ}
+        env.pop("PREP_DEFAULT_USER", None)
+        env.pop("PREP_AUTH_MODE", None)  # default tailscale
+        env["PREP_DB_PATH"] = str(self.db_path)
+        env["PREP_KEY_ENCRYPTION_SECRET"] = _TEST_KEY_ENCRYPTION_SECRET
+        self._proc = _subprocess.Popen(
+            [
+                _sys.executable,
+                "-m",
+                "uvicorn",
+                "prep.app:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(self.port),
+                "--log-level",
+                "warning",
+            ],
+            cwd=_REPO_ROOT,
+            env=env,
+        )
+        deadline = _time.time() + timeout
+        while _time.time() < deadline:
+            if self._proc.poll() is not None:
+                raise RuntimeError(
+                    f"local prep server exited during startup (code {self._proc.returncode})"
+                )
+            try:
+                r = httpx.get(f"{self.base_url}/healthz", timeout=1.0)
+                if r.status_code == 200:
+                    return
+            except httpx.HTTPError:
+                _time.sleep(0.2)
+        self.stop()
+        raise RuntimeError("local prep server did not become healthy in time")
+
+    def stop(self) -> None:
+        if self._proc is None:
+            return
+        if self._proc.poll() is None:
+            self._proc.terminate()
+            try:
+                self._proc.wait(timeout=10)
+            except _subprocess.TimeoutExpired:
+                self._proc.kill()
+                self._proc.wait(timeout=10)
+        self._proc = None
+
+
+@pytest.fixture(scope="session")
+def offline_server(tmp_path_factory) -> Iterator[LocalOfflineServer]:
+    """Session-scoped local server for the offline suite: scratch db,
+    seeded SRS deck (ids on `.seed`), uvicorn on a free port."""
+    db_path = tmp_path_factory.mktemp("offline-e2e") / "data.sqlite"
+    server = LocalOfflineServer(db_path)
+    server.seed = _seed_offline_db(db_path)
+    server.start()
+    try:
+        yield server
+    finally:
+        server.stop()
+
+
+@pytest.fixture(scope="function")
+def offline_ctx(browser_session, offline_server):
+    """Browser context against the LOCAL offline-suite server: same
+    iPhone shape and route-based Tailscale header injection as the
+    `page` fixture, but scoped to the local origin. Function-scoped so
+    each test gets fresh IndexedDB + service-worker state."""
+    ctx = browser_session.new_context(
+        user_agent=(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+            "Version/17.4 Mobile/15E148 Safari/604.1"
+        ),
+        viewport={"width": 393, "height": 852},
+        device_scale_factor=3,
+        is_mobile=True,
+        has_touch=True,
+    )
+    ctx.set_default_timeout(15_000)
+    ctx.set_default_navigation_timeout(15_000)
+
+    base = offline_server.base_url
+
+    def _inject_header(route, request):
+        if request.url.startswith(base):
+            headers = {
+                **request.headers,
+                "tailscale-user-login": OFFLINE_E2E_LOGIN,
+                "tailscale-user-name": OFFLINE_E2E_NAME,
+            }
+            route.continue_(headers=headers)
+        else:
+            route.continue_()
+
+    ctx.route("**/*", _inject_header)
+    try:
+        yield ctx
+    finally:
+        ctx.close()
+
+
+@pytest.fixture(scope="function")
+def offline_page(offline_ctx):
+    return offline_ctx.new_page()

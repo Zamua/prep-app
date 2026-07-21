@@ -1,0 +1,377 @@
+{
+  "description": "Shared local-ladder parity cases (docs/OFFLINE.md section 5). Same case shape as grader_cases.json, against static/js/offline/scheduler.js. ladder_minutes is the table both sides must export/derive. Timestamp args always carry an explicit offset: JS Date.parse reads naive ISO strings as LOCAL time, so a naive instant would make parity machine-dependent.",
+  "ladder_minutes": [
+    10,
+    1440,
+    4320,
+    10080,
+    20160,
+    43200
+  ],
+  "cases": [
+    {
+      "id": "transition-right-from-0",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        0,
+        "right"
+      ],
+      "expected": {
+        "step": 1,
+        "next_due_minutes": 1440
+      }
+    },
+    {
+      "id": "transition-right-from-1",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        1,
+        "right"
+      ],
+      "expected": {
+        "step": 2,
+        "next_due_minutes": 4320
+      }
+    },
+    {
+      "id": "transition-right-from-2",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        2,
+        "right"
+      ],
+      "expected": {
+        "step": 3,
+        "next_due_minutes": 10080
+      }
+    },
+    {
+      "id": "transition-right-from-3",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        3,
+        "right"
+      ],
+      "expected": {
+        "step": 4,
+        "next_due_minutes": 20160
+      }
+    },
+    {
+      "id": "transition-right-from-4",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        4,
+        "right"
+      ],
+      "expected": {
+        "step": 5,
+        "next_due_minutes": 43200
+      }
+    },
+    {
+      "id": "transition-right-from-5",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        5,
+        "right"
+      ],
+      "expected": {
+        "step": 5,
+        "next_due_minutes": 43200
+      }
+    },
+    {
+      "id": "transition-wrong-from-0",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        0,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-wrong-from-1",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        1,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-wrong-from-2",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        2,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-wrong-from-3",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        3,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-wrong-from-4",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        4,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-wrong-from-5",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        5,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-right-clamps-negative",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        -1,
+        "right"
+      ],
+      "expected": {
+        "step": 1,
+        "next_due_minutes": 1440
+      }
+    },
+    {
+      "id": "transition-right-clamps-above-terminal",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        6,
+        "right"
+      ],
+      "expected": {
+        "step": 5,
+        "next_due_minutes": 43200
+      }
+    },
+    {
+      "id": "transition-wrong-clamps-above-terminal",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        9,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-null-step-right",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        null,
+        "right"
+      ],
+      "expected": {
+        "step": 1,
+        "next_due_minutes": 1440
+      },
+      "note": "a card with no step yet transitions as a fresh card"
+    },
+    {
+      "id": "transition-null-step-wrong",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        null,
+        "wrong"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      }
+    },
+    {
+      "id": "transition-fractional-step-truncates",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        2.7,
+        "right"
+      ],
+      "expected": {
+        "step": 3,
+        "next_due_minutes": 10080
+      }
+    },
+    {
+      "id": "transition-unknown-verdict-resets",
+      "module": "scheduler",
+      "fn": "transition",
+      "args": [
+        2,
+        "meh"
+      ],
+      "expected": {
+        "step": 0,
+        "next_due_minutes": 10
+      },
+      "note": "anything that is not exactly 'right' fails toward more reviews"
+    },
+    {
+      "id": "due-past-true",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-02T00:00:00.000Z",
+        "2030-01-01T23:59:00.000Z"
+      ],
+      "expected": true
+    },
+    {
+      "id": "due-exactly-now-true",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-01T12:00:00.000Z",
+        "2030-01-01T12:00:00.000Z"
+      ],
+      "expected": true
+    },
+    {
+      "id": "due-future-false",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-01T12:00:00.000Z",
+        "2030-01-01T12:01:00.000Z"
+      ],
+      "expected": false
+    },
+    {
+      "id": "due-null-true",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-01T12:00:00.000Z",
+        null
+      ],
+      "expected": true,
+      "note": "no local or snapshot due time means due now"
+    },
+    {
+      "id": "due-empty-true",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-01T12:00:00.000Z",
+        ""
+      ],
+      "expected": true
+    },
+    {
+      "id": "due-unparseable-true",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-01T12:00:00.000Z",
+        "not-a-timestamp"
+      ],
+      "expected": true,
+      "note": "unparseable due times surface the card: an extra review never harms retention"
+    },
+    {
+      "id": "due-server-offset-form-true",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-01T12:00:00.000Z",
+        "2030-01-01T11:00:00+00:00"
+      ],
+      "expected": true,
+      "note": "snapshot next_due arrives in the +00:00 offset form"
+    },
+    {
+      "id": "due-nonzero-offset-future-false",
+      "module": "scheduler",
+      "fn": "due",
+      "args": [
+        "2030-01-01T00:00:00.000Z",
+        "2030-01-01T05:00:00+02:00"
+      ],
+      "expected": false,
+      "note": "05:00+02:00 is 03:00Z, still in the future"
+    },
+    {
+      "id": "next-due-iso-ten-minutes",
+      "module": "scheduler",
+      "fn": "nextDueIso",
+      "args": [
+        "2030-01-01T00:00:00.000Z",
+        10
+      ],
+      "expected": "2030-01-01T00:10:00.000Z"
+    },
+    {
+      "id": "next-due-iso-thirty-days",
+      "module": "scheduler",
+      "fn": "nextDueIso",
+      "args": [
+        "2030-01-01T00:00:00.000Z",
+        43200
+      ],
+      "expected": "2030-01-31T00:00:00.000Z"
+    },
+    {
+      "id": "next-due-iso-normalizes-offset-to-utc",
+      "module": "scheduler",
+      "fn": "nextDueIso",
+      "args": [
+        "2030-06-15T05:00:00+02:00",
+        10
+      ],
+      "expected": "2030-06-15T03:10:00.000Z",
+      "note": "output is always the uniform-offset toISOString shape"
+    }
+  ]
+}

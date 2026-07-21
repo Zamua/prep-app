@@ -3,15 +3,15 @@
 // every online page (via init below); the offline app only reads what
 // it wrote.
 //
-// M2 scope: the flush is real (reads outbox_reviews, POSTs batches to
-// /api/offline/sync, prunes acked items, records rejects) but vacuous
-// in practice until M3's study surface writes to the outbox. The
-// owner-mismatch guard ships with the flush, not after it: syncing
-// under a mismatched sign-in would replay one account's outbox into
-// another. On mismatch, sync disables entirely for the session -- no
-// flush, no snapshot write (the confirm-then-wipe UX arrives in M5).
+// The flush reads outbox_reviews (written by the M3 study surface),
+// POSTs batches to /api/offline/sync, prunes acked items, and records
+// rejects. The owner-mismatch guard ships with the flush, not after
+// it: syncing under a mismatched sign-in would replay one account's
+// outbox into another. On mismatch, sync disables entirely for the
+// session -- no flush, no snapshot write (the confirm-then-wipe UX
+// arrives in M5).
 
-import {get, getAll, bulkReplace, metaGet, metaPut, put, remove} from "./store.js";
+import {get, getAll, bulkReplace, metaGet, metaPut, put, remove, withLock} from "./store.js";
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -94,17 +94,45 @@ export async function refreshSnapshot({force = false} = {}) {
   if (!(await ownerAllows(snapshot.user.id))) return {ok: false, disabled: true};
 
   // Full replace sidesteps tombstone bookkeeping for deletions. Local
-  // overlay fields are seeded null; M3's refresh will preserve them
-  // for cards with queued reviews (nothing writes the outbox yet).
-  await bulkReplace("decks", snapshot.decks || []);
-  await bulkReplace(
-    "cards",
-    (snapshot.cards || []).map((card) => ({
-      ...card,
-      local_step: null,
-      local_next_due: null,
-    }))
-  );
+  // ladder overlays are seeded null EXCEPT for cards that still have
+  // reviews queued in the outbox: those keep their overlay (and only
+  // those). Without this, the forced refresh after a PARTIAL flush
+  // would snap unsynced cards back to the server's stale next_due,
+  // resurfacing cards the user already studied offline. Cards whose
+  // reviews all flushed converge to the server's FSRS truth here.
+  // The whole read-merge-replace runs under the store lock so a
+  // verdict tap on the interactive offline page cannot land between
+  // our pending-ids snapshot and the cards replace (it would be
+  // wiped; the lock makes the tap wait its turn and survive).
+  await withLock(async () => {
+    const queuedReviews = await getAll("outbox_reviews");
+    const pendingIds = new Set(
+      queuedReviews
+        .filter((r) => r.question_id !== undefined && r.question_id !== null)
+        .map((r) => r.question_id)
+    );
+    let overlays = new Map();
+    if (pendingIds.size) {
+      const existing = await getAll("cards");
+      overlays = new Map(
+        existing
+          .filter((card) => pendingIds.has(card.question_id))
+          .map((card) => [card.question_id, card])
+      );
+    }
+    await bulkReplace("decks", snapshot.decks || []);
+    await bulkReplace(
+      "cards",
+      (snapshot.cards || []).map((card) => {
+        const prev = overlays.get(card.question_id);
+        return {
+          ...card,
+          local_step: prev ? (prev.local_step ?? null) : null,
+          local_next_due: prev ? (prev.local_next_due ?? null) : null,
+        };
+      })
+    );
+  });
   await metaPut("owner", {
     user_id: snapshot.user.id,
     display_name: snapshot.user.display_name || "",
@@ -229,6 +257,26 @@ export async function flushOutbox() {
   return {flushed, rejected};
 }
 
+// Minimal self-removing status toast (styled by components/offline.css,
+// which the online stylesheet imports too). Lives here because both
+// surfaces use it: init() below toasts after a background flush on
+// online pages, and the offline shell's reconnect flow reuses it.
+// Cosmetic only: failures are swallowed.
+export function showToast(text) {
+  try {
+    const previous = document.querySelector(".offline-toast");
+    if (previous) previous.remove();
+    const node = document.createElement("div");
+    node.className = "offline-toast";
+    node.setAttribute("role", "status");
+    node.textContent = text;
+    document.body.appendChild(node);
+    setTimeout(() => node.remove(), 4000);
+  } catch (e) {
+    // never let a toast break the page
+  }
+}
+
 // Entry point for app.js on online pages. Flush first (a no-op while
 // the outbox is empty), then refresh the snapshot -- forced after a
 // real flush so local SRS state converges to the server's FSRS truth
@@ -237,7 +285,16 @@ export async function flushOutbox() {
 export function init() {
   try {
     flushOutbox()
-      .then((result) => refreshSnapshot({force: Boolean(result && result.flushed)}))
+      .then((result) => {
+        if (result && result.flushed) {
+          showToast(
+            result.flushed === 1
+              ? "1 offline review synced"
+              : result.flushed + " offline reviews synced"
+          );
+        }
+        return refreshSnapshot({force: Boolean(result && result.flushed)});
+      })
       .catch((e) => {
         console.warn("offline sync failed:", e);
       });

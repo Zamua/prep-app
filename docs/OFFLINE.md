@@ -370,8 +370,8 @@ and safer than per-store composite keys.
 | `meta` | name (string) | `owner` = `{user_id, display_name, snapshot_at, build}`; `device` = `{device_id}` (UUID minted on first open). |
 | `decks` | `id` | Snapshot of the user's SRS decks: `{id, name, display_name}`. |
 | `cards` | `question_id` | Snapshot of every non-suspended question in an SRS deck: `{question_id, deck_id, type, prompt, choices, answer, answer_regex, rubric, skeleton, step, next_due}` plus local overlay fields `{local_step, local_next_due}` (null until studied offline). |
-| `local_cards` | `client_id` (UUIDv4) | Cards authored offline: `{client_id, deck_id (nullable), prompt, answer, created_at, local_step, local_next_due, sync_status}`. |
-| `outbox_reviews` | `client_id` (UUIDv4) | Queued reviews: `{client_id, question_id OR card_client_id, verdict, user_answer, graded_by ("auto" or "self"), reviewed_at, sync_status}`. Index on `reviewed_at`. |
+| `local_cards` | `client_id` (UUIDv4) | Cards authored offline: `{client_id, deck_id (nullable), prompt, answer, created_at, local_step, local_next_due}`. |
+| `outbox_reviews` | `client_id` (UUIDv4) | Queued reviews: `{client_id, question_id OR card_client_id, verdict, user_answer, graded_by ("auto" or "self"), reviewed_at}`. A row's presence IS its status (queued); acked rows are deleted and rejected ones move to `rejects`. Index on `reviewed_at`. |
 | `rejects` | `client_id` | Items the server permanently rejected, with the error, for the "needs attention" list. |
 
 **Snapshot refresh.** While online, `sync.js` (running inside
@@ -683,7 +683,7 @@ lifetime of exactly one offline period.
 | Device clock ahead of server | Future `reviewed_at` clamped to server-now at sync; ordering preserved. |
 | Deploy while a user is offline | Old SW and old cache keep serving the old shell + assets (internally consistent build). The update lands on the next online navigation. |
 | Snapshot card deleted server-side while its review was queued | The review's `question_id` no longer resolves for this user: `rejected` with `unknown question_id`, surfaced in the needs-attention list. |
-| Regex differences between engines | The stored `answer_regex` was authored for the server's regex engine; the offline grader compiles it defensively (try/catch, length cap, anchored whole-string match, case-insensitive + dot-all flags) and any compile failure falls through to self-verdict. A locally "auto" verdict from a regex is replayed server-side as a verdict, not re-graded, so engine mismatch can only ever change which grading UI the user saw, never corrupt state. |
+| Regex differences between engines | The stored `answer_regex` was authored for the server's regex engine; the offline grader compiles it defensively (try/catch, length cap, anchored whole-string match, case-insensitive + dot-all flags) and any compile failure falls through to self-verdict. A locally "auto" verdict from a regex is replayed server-side as a verdict, not re-graded. Compile-failure divergence therefore only changes which grading UI the user saw. Patterns that compile in BOTH engines with different semantics (the shorthand classes: JS \w \d \b are ASCII-only even under the u flag, Python's are Unicode) could misgrade, so the offline grader refuses to auto-grade when a shorthand class meets non-ASCII content on either side and falls to self-verdict instead; the divergence is pinned in the parity fixtures. |
 | Offline app opened online with a stale build | The shell is served by the SW only when the network fails; online, `/offline` comes from the server at the current build. |
 
 ---

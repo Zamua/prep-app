@@ -26,7 +26,22 @@ const DB_VERSION = 1;
 
 let dbPromise = null;
 
-function uuid() {
+// Exported for outbox client_id minting (offline-app.js); also used
+// for the device record below.
+// Serialize multi-transaction read-modify-write sequences. IndexedDB
+// gives per-transaction atomicity only; the snapshot-refresh overlay
+// merge spans several transactions and must not interleave with a
+// verdict write (the merge would wipe the overlay the tap just
+// wrote). Single promise chain: cheap, starvation-free at this scale.
+let _chain = Promise.resolve();
+
+export function withLock(fn) {
+  const run = _chain.then(fn, fn);
+  _chain = run.catch(() => {});
+  return run;
+}
+
+export function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
   // Secure-context fallback; RFC 4122 v4 from raw random bytes.
   const bytes = crypto.getRandomValues(new Uint8Array(16));

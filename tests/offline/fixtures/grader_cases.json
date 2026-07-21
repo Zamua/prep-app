@@ -1,0 +1,696 @@
+{
+  "description": "Shared grader parity cases. Each case is {id, module, fn, args, expected[, expected_py][, note]}: the browser suite imports static/js/offline/grader.js and asserts module[fn](...args) deep-equals expected; tests/offline/test_parity_fixtures.py re-derives the same expectation from prep/domain/grading.py (using expected_py where the engines deliberately diverge). All instants and strings are plain JSON data.",
+  "cases": [
+    {
+      "id": "mcq-exact-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "Paris"
+        },
+        "Paris"
+      ],
+      "expected": {
+        "verdict": "right"
+      }
+    },
+    {
+      "id": "mcq-wrong-choice",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "Paris"
+        },
+        "London"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      }
+    },
+    {
+      "id": "mcq-whitespace-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "  Paris\n"
+        },
+        "Paris"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "both sides are stripped before comparing"
+    },
+    {
+      "id": "mcq-case-sensitive-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "Paris"
+        },
+        "paris"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      },
+      "note": "mcq comparison is deliberately case-sensitive, same as online"
+    },
+    {
+      "id": "mcq-empty-vs-empty-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": ""
+        },
+        ""
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "pins the online grader's empty==empty edge"
+    },
+    {
+      "id": "mcq-unicode-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "café"
+        },
+        "café"
+      ],
+      "expected": {
+        "verdict": "right"
+      }
+    },
+    {
+      "id": "mcq-unicode-nfd-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "café"
+        },
+        "café"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      },
+      "note": "neither side normalizes unicode; NFC vs NFD is a miss in both engines"
+    },
+    {
+      "id": "mcq-regex-chars-are-literal-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "C++"
+        },
+        "C++"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "mcq is plain string comparison, never regex"
+    },
+    {
+      "id": "mcq-null-answer-empty-user-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": null
+        },
+        ""
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "a null card answer coerces to the empty string (the `or \"\"` path)"
+    },
+    {
+      "id": "multi-exact-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\", \"B\"]"
+        },
+        "[\"A\", \"B\"]"
+      ],
+      "expected": {
+        "verdict": "right"
+      }
+    },
+    {
+      "id": "multi-order-independent-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\", \"B\", \"C\"]"
+        },
+        "[\"C\", \"A\", \"B\"]"
+      ],
+      "expected": {
+        "verdict": "right"
+      }
+    },
+    {
+      "id": "multi-subset-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\", \"B\"]"
+        },
+        "[\"A\"]"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      }
+    },
+    {
+      "id": "multi-superset-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\", \"B\"]"
+        },
+        "[\"A\", \"B\", \"C\"]"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      }
+    },
+    {
+      "id": "multi-empty-user-answer-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\"]"
+        },
+        ""
+      ],
+      "expected": {
+        "verdict": "wrong"
+      },
+      "note": "an empty user answer is an empty selection"
+    },
+    {
+      "id": "multi-duplicate-picks-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\", \"B\"]"
+        },
+        "[\"A\", \"A\", \"B\"]"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "set semantics collapse duplicate selections"
+    },
+    {
+      "id": "multi-case-sensitive-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\"]"
+        },
+        "[\"a\"]"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      }
+    },
+    {
+      "id": "multi-both-empty-arrays-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[]"
+        },
+        "[]"
+      ],
+      "expected": {
+        "verdict": "right"
+      }
+    },
+    {
+      "id": "multi-unicode-order-independent-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"日本\", \"한국\"]"
+        },
+        "[\"한국\", \"日本\"]"
+      ],
+      "expected": {
+        "verdict": "right"
+      }
+    },
+    {
+      "id": "multi-malformed-user-json-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "[\"A\", \"B\"]"
+        },
+        "definitely not json"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "pins the online quirk: any parse failure resets BOTH sides to the empty set, and empty == empty grades right; unreachable from the checkbox UI, mirrored so the ports cannot drift"
+    },
+    {
+      "id": "multi-json-null-card-answer-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "multi",
+          "answer": "null"
+        },
+        "[\"A\"]"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "a non-array card answer is a parse failure too: both sides reset, grades right"
+    },
+    {
+      "id": "idk-mcq-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "mcq",
+          "answer": "A"
+        },
+        "",
+        true
+      ],
+      "expected": {
+        "verdict": "wrong"
+      }
+    },
+    {
+      "id": "idk-code-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "code",
+          "answer": "x"
+        },
+        "",
+        true
+      ],
+      "expected": {
+        "verdict": "wrong"
+      },
+      "note": "idk short-circuits before type dispatch, so it grades even non-deterministic types"
+    },
+    {
+      "id": "short-regex-hit-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "paris|the city of paris"
+        },
+        "Paris"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "case-insensitive in both engines"
+    },
+    {
+      "id": "short-regex-strips-answer-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "paris"
+        },
+        "  paris  "
+      ],
+      "expected": {
+        "verdict": "right"
+      }
+    },
+    {
+      "id": "short-regex-miss-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "paris"
+        },
+        "london"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      }
+    },
+    {
+      "id": "short-regex-fullmatch-wrong",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "par"
+        },
+        "paris"
+      ],
+      "expected": {
+        "verdict": "wrong"
+      },
+      "note": "fullmatch semantics: a partial hit is a miss"
+    },
+    {
+      "id": "short-regex-dotall-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "a.b"
+        },
+        "a\nb"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "dot matches newline in both engines (DOTALL / s flag)"
+    },
+    {
+      "id": "short-regex-unicode-fold-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "café"
+        },
+        "CAFÉ"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "unicode case folding: E-acute matches under IGNORECASE / iu"
+    },
+    {
+      "id": "short-regex-invalid-null",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "(unclosed"
+        },
+        "x"
+      ],
+      "expected": null
+    },
+    {
+      "id": "short-regex-null-null",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": null
+        },
+        "x"
+      ],
+      "expected": null
+    },
+    {
+      "id": "short-regex-empty-null",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": ""
+        },
+        "x"
+      ],
+      "expected": null
+    },
+    {
+      "id": "short-regex-key-absent-null",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer"
+        },
+        "x"
+      ],
+      "expected": null,
+      "note": "locally authored cards have no answer_regex field at all"
+    },
+    {
+      "id": "short-regex-overlong-null",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "x"
+      ],
+      "expected": null,
+      "note": "one past MAX_REGEX_LEN (500)"
+    },
+    {
+      "id": "short-regex-at-cap-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "exactly MAX_REGEX_LEN still grades"
+    },
+    {
+      "id": "short-regex-python-named-group-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "(?P<x>yes|no)"
+        },
+        "YES"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "(?P<name> normalizes to the JS (?<name> spelling"
+    },
+    {
+      "id": "short-regex-python-named-backref-right",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "(?P<w>ha)(?P=w)"
+        },
+        "haha"
+      ],
+      "expected": {
+        "verdict": "right"
+      },
+      "note": "(?P=name) normalizes to \\k<name>"
+    },
+    {
+      "id": "short-regex-python-anchors-diverge",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "\\Aparis\\Z"
+        },
+        "paris"
+      ],
+      "expected": null,
+      "expected_py": {
+        "verdict": "right"
+      },
+      "note": "deliberate divergence: \\A/\\Z are Python anchors; under the JS u flag they throw, so the offline grader falls to self-verdict instead of silently matching the literal letters A/Z"
+    },
+    {
+      "id": "short-regex-inline-flag-diverges",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "short",
+          "answer": "the canonical answer",
+          "answer_regex": "(?i)paris"
+        },
+        "PARIS"
+      ],
+      "expected": null,
+      "expected_py": {
+        "verdict": "right"
+      },
+      "note": "deliberate divergence: bare inline flags are invalid JS regex syntax; Python compiles them, the offline grader falls to self-verdict"
+    },
+    {
+      "id": "code-null",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "code",
+          "answer": "x",
+          "rubric": "r"
+        },
+        "anything"
+      ],
+      "expected": null
+    },
+    {
+      "id": "unknown-type-null",
+      "module": "grader",
+      "fn": "grade",
+      "args": [
+        {
+          "type": "weird",
+          "answer": "x"
+        },
+        "x"
+      ],
+      "expected": null
+    },
+    {
+      "id": "matchregex-hit-true",
+      "module": "grader",
+      "fn": "matchRegex",
+      "args": [
+        "yes|yep",
+        "YES"
+      ],
+      "expected": true
+    },
+    {
+      "id": "matchregex-miss-false",
+      "module": "grader",
+      "fn": "matchRegex",
+      "args": [
+        "yes",
+        "no"
+      ],
+      "expected": false
+    },
+    {
+      "id": "matchregex-no-pattern-null",
+      "module": "grader",
+      "fn": "matchRegex",
+      "args": [
+        null,
+        "x"
+      ],
+      "expected": null
+    },
+    {
+      "id": "matchregex-invalid-null",
+      "module": "grader",
+      "fn": "matchRegex",
+      "args": [
+        "[unclosed",
+        "x"
+      ],
+      "expected": null
+    },
+    {
+      "id": "regex-shorthand-nonascii-null",
+      "module": "grader",
+      "fn": "matchRegex",
+      "args": [
+        "caf\\w+",
+        "café"
+      ],
+      "expected": null,
+      "expected_py": true,
+      "note": "JS \\w is ASCII-only even under u; Python's is Unicode. Shorthand + non-ASCII falls to self-verdict in JS instead of a false wrong."
+    },
+    {
+      "id": "regex-shorthand-ascii-still-grades",
+      "module": "grader",
+      "fn": "matchRegex",
+      "args": [
+        "cat\\d+",
+        "cat42"
+      ],
+      "expected": true,
+      "note": "Shorthand with pure-ASCII pattern and answer is dialect-safe and keeps auto-grading."
+    }
+  ]
+}

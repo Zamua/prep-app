@@ -1,7 +1,11 @@
 /* Offline study surface (templates/offline.html + static/js/offline/).
- * M1 is read-only: per-deck counts + the due-now prompt list. Styling
- * mirrors deck-list's quiet rows so the offline page reads as the same
- * product, just leaner. */
+ * The overview mirrors deck-list's quiet rows; the M3 study flow
+ * reuses the online study components wholesale (study-card, choices,
+ * verdict-block, answer-grid, prose-answer, reproduction, buttons).
+ * The rules below cover only what is offline-specific: the reconnect
+ * banner, the sync toast, and small layout glue. The toast is also
+ * used by sync.js on ONLINE pages (the post-flush "N reviews synced"
+ * note), so it must not depend on .page-offline scoping. */
 
 .offline-deck-list,
 .offline-due-list {
@@ -39,6 +43,95 @@
 .offline-due-card:last-child { border-bottom: none; }
 
 .offline-snapshot-stamp {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+}
+
+/* The offline shell renders muted asides with a bare `muted` class;
+ * scope the treatment to this page so the utility never leaks into
+ * the online surfaces. */
+.page-offline .muted {
+  color: var(--ink-mute);
+}
+
+.offline-outbox-note {
   margin-top: 1.6rem;
   font-size: 0.85rem;
+  font-style: italic;
+}
+
+.offline-study-cta {
+  margin: 1.2rem 0 0.4rem;
+}
+
+.offline-selfgrade-blurb {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Buttons that read as links (the study nav's Pause affordance reuses
+ * the .back link chrome on a <button>). */
+.offline-linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Reconnect banner. Fixed so showing/hiding never reflows the page
+ * (UX rail: no layout shift on interaction). */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: calc(0.6rem + env(safe-area-inset-top)) 1rem 0.6rem;
+  background: var(--warm);
+  border-bottom: 1px solid var(--hairline);
+  font-size: 0.92rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.offline-banner[hidden] { display: none; }
+.offline-banner a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+/* Sync-result toast. Shared with the online app (sync.js appends it
+ * after a background flush), hence no .page-offline scoping. */
+.offline-toast {
+  position: fixed;
+  /* Centered via auto margins, NOT translateX: the rise keyframes
+   * animate transform (fill-mode both), which would clobber a
+   * transform-based centering at the animation's end state. */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: fit-content;
+  bottom: calc(1.2rem + env(safe-area-inset-bottom));
+  z-index: 40;
+  max-width: min(90vw, 26rem);
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.92rem;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+  animation: rise 300ms cubic-bezier(.2, .7, .2, 1) both;
+  pointer-events: none;
 }
