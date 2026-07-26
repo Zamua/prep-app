@@ -282,6 +282,161 @@ def test_find_active_decodes_cached_verdict_and_state(session_repo: SessionRepo,
     assert resumed.last_answered_state["interval_minutes"] == 10
 
 
+# ---- due ordering ---------------------------------------------------
+#
+# The reported bug: every session replayed the deck in the same order.
+# A deck generated (or imported) in one batch has all its cards due at
+# effectively the same moment, so ordering on `next_due` alone fell
+# back to sqlite's row order and the sequence never moved.
+#
+# Why the variance tests below are NOT flaky. Each builds the queue N
+# times over K cards that are due at the same moment. A false red needs
+# all N runs to agree by chance: roughly (1/K!)^(N-1). With K=6, N=10
+# that is (1/720)^9 ≈ 1e-26. A red here means the shuffle is gone, not
+# that we got unlucky: do NOT "stabilize" these by seeding random,
+# dropping the loop, or weakening the assertion.
+#
+# Each loop also re-asserts the priority invariant on EVERY iteration
+# so a shuffle can never quietly start outranking genuine overdueness.
+
+_RUNS = 10
+
+
+def _set_next_due(qid: int, iso: str) -> None:
+    from prep.infrastructure.db import cursor
+
+    with cursor() as c:
+        c.execute("UPDATE cards SET next_due = ? WHERE question_id = ?", (iso, qid))
+
+
+def _seed_batch_deck(user: str, n: int = 6) -> tuple[int, list[int]]:
+    """A deck whose cards were all created in one batch, i.e. what an
+    AI-generated or imported deck looks like: every card due now.
+
+    Every card is pinned to ONE explicit next_due rather than left on
+    the wall clock. Real inserts land microseconds apart, which is the
+    same bucket in practice but not by guarantee: a batch straddling a
+    bucket boundary would split the deck into groups that always play
+    in group order, making the variance assertions below fail
+    deterministically instead of with the probability their comments
+    claim. Pinning makes the tie exact, so a red really does mean the
+    shuffle is gone."""
+    deck_id = DeckRepo().create(user, "batch-deck")
+    qids = [
+        QuestionRepo().add(
+            user,
+            deck_id,
+            NewQuestion(type=QuestionType.SHORT, prompt=f"Q{i}?", answer=f"A{i}"),
+        )
+        for i in range(n)
+    ]
+    # ONE timestamp shared by every card: exact by construction, and
+    # still "due now" so tests that add a genuinely-older card keep
+    # their relative meaning (a fixed past date would make the batch
+    # itself the most overdue thing in the deck).
+    from datetime import datetime, timezone
+
+    stamp = datetime.now(timezone.utc).isoformat()
+    for qid in qids:
+        _set_next_due(qid, stamp)
+    return deck_id, qids
+
+
+def test_due_questions_order_varies_for_batch_created_deck(
+    review_repo: ReviewRepo, initialized_db: str
+):
+    """The user-visible fix: a batch-created deck does not hand back
+    the same sequence session after session."""
+    user = initialized_db
+    deck_id, qids = _seed_batch_deck(user, n=6)
+    sequences = set()
+    for _ in range(_RUNS):
+        ids = [q["id"] for q in review_repo.due_questions(user, deck_id, limit=6)]
+        # Invariant on every run: the whole deck, each card exactly once.
+        assert sorted(ids) == sorted(qids)
+        sequences.add(tuple(ids))
+    assert len(sequences) > 1
+
+
+def test_due_questions_selection_varies_when_limited(review_repo: ReviewRepo, initialized_db: str):
+    """With more equally-due cards than the limit, WHICH cards come
+    back varies too: otherwise the tail of the deck never surfaces."""
+    user = initialized_db
+    deck_id, qids = _seed_batch_deck(user, n=8)
+    selections = set()
+    for _ in range(_RUNS):
+        ids = [q["id"] for q in review_repo.due_questions(user, deck_id, limit=3)]
+        assert len(ids) == 3
+        assert len(set(ids)) == 3
+        assert set(ids) <= set(qids)
+        selections.add(frozenset(ids))
+    assert len(selections) > 1
+
+
+def test_due_questions_more_overdue_card_still_first(review_repo: ReviewRepo, initialized_db: str):
+    """Randomizing the tie must not flatten genuine priority: a card
+    that has been waiting a day outranks the batch every time."""
+    from datetime import datetime, timedelta, timezone
+
+    user = initialized_db
+    deck_id, qids = _seed_batch_deck(user, n=6)
+    overdue = qids[-1]
+    _set_next_due(overdue, (datetime.now(timezone.utc) - timedelta(days=1)).isoformat())
+    for _ in range(_RUNS):
+        ids = [q["id"] for q in review_repo.due_questions(user, deck_id, limit=6)]
+        assert ids[0] == overdue
+
+
+def test_pick_next_question_varies_for_batch_created_deck(
+    session_repo: SessionRepo, initialized_db: str
+):
+    """Same fix on the session path: the first card of a fresh session
+    is not always the same card."""
+    user = initialized_db
+    deck_id, qids = _seed_batch_deck(user, n=6)
+    picked = set()
+    for _ in range(_RUNS):
+        sid = session_repo.create(user, deck_id, "Mac")
+        first = session_repo.get(user, sid).current_question_id
+        assert first in qids
+        picked.add(first)
+        session_repo.abandon(user, sid)
+    assert len(picked) > 1
+
+
+def test_pick_next_question_more_overdue_card_still_first(
+    session_repo: SessionRepo, initialized_db: str
+):
+    """Overdue priority survives the randomized tiebreak on the
+    session path too."""
+    from datetime import datetime, timedelta, timezone
+
+    user = initialized_db
+    deck_id, qids = _seed_batch_deck(user, n=6)
+    overdue = qids[-1]
+    _set_next_due(overdue, (datetime.now(timezone.utc) - timedelta(days=1)).isoformat())
+    for _ in range(_RUNS):
+        sid = session_repo.create(user, deck_id, "Mac")
+        assert session_repo.get(user, sid).current_question_id == overdue
+        session_repo.abandon(user, sid)
+
+
+def test_pick_next_question_skips_not_yet_due(session_repo: SessionRepo, initialized_db: str):
+    """The random tiebreak must not drag a not-yet-due card into the
+    session: only cards past their next_due are candidates."""
+    from datetime import datetime, timedelta, timezone
+
+    user = initialized_db
+    deck_id, qids = _seed_batch_deck(user, n=3)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    for qid in qids[1:]:
+        _set_next_due(qid, future)
+    for _ in range(_RUNS):
+        sid = session_repo.create(user, deck_id, "Mac")
+        assert session_repo.get(user, sid).current_question_id == qids[0]
+        session_repo.abandon(user, sid)
+
+
 # ---- snooze --------------------------------------------------------
 
 

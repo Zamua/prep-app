@@ -74,7 +74,12 @@ There are three ways into the offline surface:
 ### The offline study flow, per card type
 
 The offline queue is: local cards and snapshot cards whose effective
-due time is in the past, oldest-due first. One card at a time, same
+due time is in the past, oldest-due first. Cards that came due within
+the same minute count as equally due and are shuffled against each
+other (matching the online queue), so a deck created in one batch does
+not replay in creation order every sitting. The shuffle key is drawn
+once per card per page load, so the order holds steady for a sitting
+instead of jumping between renders. One card at a time, same
 one-card-per-screen rhythm as the online session flow.
 
 | Type | Offline flow |

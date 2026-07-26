@@ -17,12 +17,13 @@ from pydantic import BaseModel
 class TriviaQueueEntry(BaseModel):
     """Per-question state inside a trivia deck's rotation.
 
-    `queue_position` is monotonically increasing within the deck.
-    Lower values = "next to fire". After answering, the entry's
-    queue_position is bumped to `max(queue_position)+1`, rotating it
-    to the back of the queue. `last_answered_at IS NULL` means the
-    card has never been served; the picker prefers those over
-    rotated-already cards.
+    `queue_position` is monotonically increasing within the deck and
+    is bumped to `max(queue_position)+1` after an answer. It carries
+    the deck's export/import ordering, NOT the pick order: selection
+    ranks on answer state (`last_answered_correctly`,
+    `last_answered_at`) and randomizes ties. `last_answered_at IS
+    NULL` means the card has never been served; the picker prefers
+    those over already-answered cards.
     """
 
     question_id: int

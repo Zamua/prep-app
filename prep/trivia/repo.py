@@ -4,15 +4,17 @@ Owns reads + writes against `trivia_queue` plus the trivia-deck-aware
 joins against `questions`. The queue rules:
 
 - New questions get inserted with `queue_position = max(queue_position)+1`
-  for their deck (so newly-generated cards go to the back of the queue
-  by default, and the scheduler hits never-answered cards in
-  generation-order).
-- `pick_next_for_deck` prefers never-answered cards (`last_answered_at
-  IS NULL`) over rotated cards, then orders by ascending queue_position
-  so the longest-since-shown card wins.
+  for their deck. The column is deck-ordering state for archive export
+  and re-import round-trips; it is NOT a picker input. Nothing in the
+  selection path reads it.
+- Selection ranks by answer state: wrong-answered first, then
+  never-answered, then correctly-answered. Within a rank the
+  longest-since-answered card wins at hour resolution, and cards that
+  tie inside an hour are ordered at random, so a deck generated in one
+  batch does not replay in insertion order forever.
 - `mark_answered` stamps `last_answered_at`/`last_answered_correctly`
-  AND bumps `queue_position` to `max+1` so the just-answered card
-  rotates to the back.
+  (the recency signal the picker actually reads) and bumps
+  `queue_position` to keep export ordering coherent.
 - `count_unanswered` powers the regen trigger — when it hits zero, the
   scheduler asks the agent for another batch before firing the next
   notification.
@@ -20,6 +22,7 @@ joins against `questions`. The queue rules:
 
 from __future__ import annotations
 
+import random
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -69,17 +72,29 @@ class TriviaQueueRepo:
             )
 
     def pick_next_for_deck(self, deck_id: int) -> Optional[NextCard]:
-        """Pick the next card to notify on for `deck_id`.
+        """Pick a single next card for `deck_id`.
+
+        NOT on the live notification path: the scheduler builds a
+        whole mini-session via `pick_session_for_deck`. This remains
+        as the single-card primitive (and its precedence rules are
+        the same ones that method's tiers encode), so its tests are
+        deliberate coverage of the shared ranking, not of a route.
 
         Weighted precedence (srs-lite for trivia):
-          1. wrong-answered cards (`last_answered_correctly=0`),
-             longest-since-shown first — these come back fast so the
-             user gets a second chance while it still feels fresh
-          2. never-answered cards (`last_answered_at IS NULL`),
-             longest queued first — fresh content
-          3. right-answered cards (`last_answered_correctly=1`),
-             longest-since-shown first — review the well-known stuff
-             after we've drained the more important categories
+          1. wrong-answered cards (`last_answered_correctly=0`):
+             these come back fast so the user gets a second chance
+             while it still feels fresh
+          2. never-answered cards (`last_answered_at IS NULL`):
+             fresh content
+          3. right-answered cards (`last_answered_correctly=1`):
+             review the well-known stuff after we've drained the more
+             important categories
+
+        The tier decides WHICH card wins; within a tier the pick is
+        random. `queue_position` is a plain insertion counter, so
+        ordering by it made every deck replay in generation order.
+        Randomizing the tie means a batch-generated deck varies run to
+        run while the precedence above still holds.
 
         The `is_fresh` flag preserves "never been shown" for the
         scheduler's gen-on-empty heuristic.
@@ -98,7 +113,8 @@ class TriviaQueueRepo:
                     WHEN tq.last_answered_at IS NULL    THEN 1
                     ELSE 2
                   END ASC,
-                  tq.queue_position ASC
+                  substr(COALESCE(tq.last_answered_at, ""), 1, 13) ASC,
+                  RANDOM()
                 LIMIT 1
                 """,
                 (deck_id,),
@@ -161,10 +177,13 @@ class TriviaQueueRepo:
             )
 
     def mark_answered(self, question_id: int, correct: bool) -> None:
-        """Record an answer + rotate the card to the back of its
-        deck's queue. Bumping `queue_position` happens in the same
-        UPDATE so the rotation is atomic w.r.t. the scheduler's
-        next pick.
+        """Record an answer and move the card to the back of the
+        deck's export ordering.
+
+        `last_answered_at` is what the picker reads (longest-since-
+        answered first, ties inside an hour shuffled); the
+        `queue_position` bump in the same UPDATE keeps the archive
+        export's deck order coherent, and costs one statement.
         """
         with cursor() as c:
             deck_id = self._deck_id_for_question(c, question_id)
@@ -325,9 +344,16 @@ class TriviaQueueRepo:
         plus `target_size - fresh_target` review cards (default 2).
         Within the review slot, wrong-answered cards outrank
         correctly-answered ones (matches the single-card weighted
-        precedence). Order returned: review first, fresh last — the
-        idea is to clear accumulated debt before being rewarded with
-        fresh content.
+        precedence).
+
+        **The tiering governs SELECTION, not sequence.** Which cards
+        make the cut is the wrong-then-fresh-then-correct precedence
+        above; the order they are SHOWN in is shuffled before the list
+        is returned. Ties inside a tier are broken at random too
+        (`queue_position` is an insertion counter, so ordering by it
+        replayed a batch-generated deck in generation order every
+        time). A trivia session persists its queue, so shuffling once
+        here is enough to keep the order stable for the whole sitting.
 
         Backfill: if either pool comes up short, the other fills the
         gap. A brand-new deck (no review yet) becomes 3 fresh; a deck
@@ -364,7 +390,8 @@ class TriviaQueueRepo:
                     WHERE q.deck_id = ? AND tq.last_answered_at IS NOT NULL
                     ORDER BY
                       CASE WHEN tq.last_answered_correctly = 0 THEN 0 ELSE 1 END,
-                      tq.queue_position
+                      substr(tq.last_answered_at, 1, 13) ASC,
+                      RANDOM()
                     LIMIT ?
                     """,
                     (deck_id, review_slots),
@@ -379,7 +406,7 @@ class TriviaQueueRepo:
                     FROM questions q
                     JOIN trivia_queue tq ON tq.question_id = q.id
                     WHERE q.deck_id = ? AND tq.last_answered_at IS NULL
-                    ORDER BY tq.queue_position
+                    ORDER BY RANDOM()
                     LIMIT ?
                     """,
                     (deck_id, fresh_target),
@@ -407,12 +434,18 @@ class TriviaQueueRepo:
                         WHEN tq.last_answered_at IS NULL    THEN 1
                         ELSE 2
                       END,
-                      tq.queue_position
+                      substr(COALESCE(tq.last_answered_at, ""), 1, 13) ASC,
+                      RANDOM()
                     LIMIT ?
                     """,
                     (deck_id, *picked_ids, short),
                 ).fetchall()
-        ordered = list(review_rows) + list(fresh_rows) + list(backfill_rows)
+        # Truncate FIRST, shuffle SECOND. The tiered concatenation is
+        # what decides which cards make the cut, so cutting to
+        # target_size has to happen while that order still means
+        # something; only then is the presentation order randomized.
+        selected = (list(review_rows) + list(fresh_rows) + list(backfill_rows))[:target_size]
+        random.shuffle(selected)
         return [
             NextCard(
                 question_id=r["question_id"],
@@ -420,7 +453,7 @@ class TriviaQueueRepo:
                 prompt=r["prompt"],
                 is_fresh=bool(r["is_fresh"]),
             )
-            for r in ordered[:target_size]
+            for r in selected
         ]
 
     def prompt_for_question(self, question_id: int) -> str | None:

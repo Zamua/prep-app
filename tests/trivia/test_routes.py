@@ -310,8 +310,12 @@ def test_session_no_cards_param_picks_and_redirects(client: TestClient, initiali
     assert r.status_code == 303
     loc = r.headers["location"]
     assert "/trivia/session/geo?cards=" in loc
-    for qid in qids[:3]:
-        assert str(qid) in loc
+    # Which 3 of the 5 equally-fresh cards get picked (and in what
+    # order) is randomized, so parse the queue rather than pinning ids.
+    queued = [int(x) for x in loc.split("?cards=", 1)[1].split(",")]
+    assert len(queued) == 3
+    assert len(set(queued)) == 3
+    assert set(queued) <= set(qids)
 
 
 def test_session_renders_head_card_with_progress(client: TestClient, initialized_db: str):

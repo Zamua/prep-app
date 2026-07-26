@@ -128,6 +128,62 @@ function dueTime(card) {
   return Number.isFinite(t) ? t : 0;
 }
 
+// ---- study ordering --------------------------------------------------
+//
+// Priority stays the selection rule: a genuinely more-overdue card
+// still comes first. What was stale is the TIE: a deck created in one
+// batch comes due all at once, so sorting on due time alone left the
+// order to array position and every sitting replayed the same
+// sequence.
+//
+// "Tie" has to mean same-MINUTE, not same-millisecond. Each card's
+// next_due is stamped from its own clock read, so a batch's
+// timestamps land microseconds apart and a millisecond comparison is
+// a total order in creation order: the tiebreak would never fire.
+// DUE_BUCKET_MS mirrors the server's _DUE_BUCKET (prep/study/repo.py)
+// so the offline queue and the online queue agree on what counts as
+// equally due: the wall-clock hour, wide enough that a generation
+// batch spanning seconds cannot split across buckets and replay in
+// creation order.
+//
+// The queue is recomputed on every render, so a random comparator
+// would reshuffle cards mid-sitting and make them jump between
+// screens. Instead each card gets ONE random key the first time it is
+// seen in this page load; the key lives until reload, which is the
+// span of a single sitting.
+
+const DUE_BUCKET_MS = 3600000;
+
+const shuffleKeys = new Map();
+
+// Snapshot cards are identified by question_id, locally authored ones
+// by client_id (a local card has no question_id). Namespaced so the
+// two id spaces can never collide.
+function cardIdentity(card) {
+  return card.client_id ? "local:" + card.client_id : "q:" + card.question_id;
+}
+
+function shuffleKey(card) {
+  const id = cardIdentity(card);
+  let key = shuffleKeys.get(id);
+  if (key === undefined) {
+    key = Math.random();
+    shuffleKeys.set(id, key);
+  }
+  return key;
+}
+
+// The minute a card came due. Cards sharing one bucket are treated as
+// equally due and get shuffled against each other.
+function dueBucket(card) {
+  return Math.floor(dueTime(card) / DUE_BUCKET_MS);
+}
+
+// Oldest effective due first; random-but-stable within the minute.
+function compareStudyOrder(a, b) {
+  return dueBucket(a) - dueBucket(b) || shuffleKey(a) - shuffleKey(b);
+}
+
 // Format a minute count the way the online result page does:
 // min / hr / day / week / month.
 function humanMinutes(m) {
@@ -444,7 +500,7 @@ function renderOverview() {
   const now = Date.now();
   const dueCards = allStudyCards()
     .filter((card) => isDueNow(card, now))
-    .sort((a, b) => dueTime(a) - dueTime(b));
+    .sort(compareStudyOrder);
 
   const frag = document.createDocumentFragment();
 
@@ -667,12 +723,15 @@ function renderRejects() {
 
 // The queue is recomputed on every advance (docs/OFFLINE.md section
 // 2): oldest effective due first, so a card answered wrong (+10m)
-// naturally returns later in a long sitting.
+// naturally returns later in a long sitting. Cards sharing a due time
+// fall back to their per-sitting shuffle key, so the batch that was
+// generated together varies run to run without jumping around
+// mid-sitting.
 function nextDueCard() {
   const now = Date.now();
   const dueCards = allStudyCards().filter((card) => isDueNow(card, now));
   if (!dueCards.length) return null;
-  dueCards.sort((a, b) => dueTime(a) - dueTime(b));
+  dueCards.sort(compareStudyOrder);
   return dueCards[0];
 }
 

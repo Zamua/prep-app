@@ -16,6 +16,8 @@ Design notes:
 - All mutation methods filter on `user_id` in the WHERE clause as
   defense-in-depth — even a forgetful route can't accidentally let
   one user mutate another's session.
+- Queue order (which due card comes next) is "most overdue first,
+  random within the same minute": see `_DUE_BUCKET`.
 """
 
 from __future__ import annotations
@@ -34,6 +36,35 @@ from prep.study.entities import (
     SessionStatus,
     StudySession,
 )
+
+# ---- due-order bucket --------------------------------------------------
+#
+# The ORDER BY key for "which due card comes next". Priority is kept:
+# a genuinely more-overdue card still sorts ahead. What this drops is
+# the sub-minute part of the timestamp, so cards that came due within
+# the same minute form ONE tie group that a trailing RANDOM() then
+# shuffles.
+#
+# Why bucket at all: every card's `next_due` is written from its own
+# `now()` call, so a deck created (or imported, or scheduled) in one
+# batch gets timestamps microseconds apart. Ordering on the raw column
+# is therefore a total order that mirrors creation order exactly, and
+# a RANDOM() tiebreak on it never fires because the values never
+# actually tie. That is the "every quiz shows the same cards in the
+# same sequence" bug.
+#
+# The 13-char prefix of an ISO-8601 timestamp is `YYYY-MM-DDTHH`, so
+# the bucket is the wall-clock hour. Slicing the string (rather than
+# parsing) matches how `next_due` is already compared in this module:
+# lexicographic, on the UTC ISO form that `now()` writes.
+#
+# The hour (not the minute) is the width because the generation path
+# inserts cards sequentially over seconds: an AI apply loop straddling
+# a minute boundary would split one batch into two groups that always
+# played in group order. Ordering among cards that came due within the
+# same hour carries no pedagogical meaning, so nothing is lost.
+_DUE_BUCKET = "substr(cards.next_due, 1, 13)"
+
 
 # ---- StaleVersionError -------------------------------------------------
 #
@@ -442,7 +473,15 @@ class SessionRepo:
         that's due AND hasn't been answered in this session yet. Used
         by `create` (initial card) and `advance` (next card after a
         grade). Re-fetches the question via QuestionRepo so the
-        skeleton seed comes through."""
+        skeleton seed comes through.
+
+        Ordering: most-overdue first, ties broken at random, where
+        "tie" is same-minute (`_DUE_BUCKET`). A batch-created deck
+        writes each card's `next_due` from its own `now()`, so the
+        timestamps differ by microseconds: ordering on the raw column
+        made every session replay the deck in creation order, and a
+        RANDOM() tiebreak on the raw column never fired because there
+        was no exact tie to break."""
         from prep.decks.repo import QuestionRepo
 
         ts = now()
@@ -458,7 +497,9 @@ class SessionRepo:
                    AND q.id NOT IN (
                        SELECT question_id FROM study_session_answers WHERE session_id = ?
                    )
-                 ORDER BY cards.next_due ASC
+                 ORDER BY """
+                + _DUE_BUCKET
+                + """ ASC, RANDOM()
                  LIMIT 1
                 """,
                 (deck_id, user_id, ts, sid),
@@ -739,9 +780,16 @@ class ReviewRepo:
         return int(row["n"]) if row else 0
 
     def due_questions(self, user_id: str, deck_id: int, limit: int = 3) -> list[dict]:
-        """Cards due now, oldest-due first. Returns full Question-shaped
-        dicts so the legacy /study route can render them without an
-        extra round-trip per id."""
+        """Cards due now, oldest-due first, shuffled within the minute
+        (`_DUE_BUCKET`). Returns full Question-shaped dicts so the
+        legacy /study route can render them without an extra
+        round-trip per id.
+
+        The bucket is what makes the tiebreak real: a batch-created
+        deck stamps each card's `next_due` from its own `now()`, so
+        the raw column is a total order in creation order and nothing
+        ever ties. Truncating to the minute puts one batch in one tie
+        group; RANDOM() then varies it run to run."""
         from prep.decks.repo import QuestionRepo
 
         ts = now()
@@ -754,7 +802,9 @@ class ReviewRepo:
                  WHERE q.deck_id = ? AND q.user_id = ?
                    AND COALESCE(q.suspended, 0) = 0
                    AND cards.next_due <= ?
-                 ORDER BY cards.next_due ASC
+                 ORDER BY """
+                + _DUE_BUCKET
+                + """ ASC, RANDOM()
                  LIMIT ?
                 """,
                 (deck_id, user_id, ts, limit),

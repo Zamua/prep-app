@@ -96,16 +96,17 @@ def test_tick_sends_push_for_due_deck(monkeypatch, fixtures):
     monkeypatch.setattr("prep.notify.push.send_to_user", fake_send)
     sched.tick(datetime.now(timezone.utc))
     assert len(sent) == 1
-    assert sent[0]["body"] == "Q0?"  # first card in queue
     # Deep link → session route with the picked queue encoded in
     # ?cards= so the route renders this exact session (instead of
     # re-picking and possibly diverging from what the body teased).
     assert sent[0]["url"].startswith("/trivia/session/capitals?cards=")
     # Body matches the FIRST card in the encoded queue — no
     # divergence between the notification preview and the card
-    # that actually opens.
-    head_id = int(sent[0]["url"].split("?cards=", 1)[1].split(",", 1)[0])
-    assert head_id == qids[0]
+    # that actually opens. WHICH card leads is randomized (both cards
+    # are equally fresh), so the assertion is the match, not the id.
+    queued = [int(x) for x in sent[0]["url"].split("?cards=", 1)[1].split(",")]
+    assert set(queued) == set(qids)
+    assert sent[0]["body"] == TriviaQueueRepo().prompt_for_question(queued[0])
     assert sent[0]["title"] == "capitals"
     # Per-deck tag so iOS coalesces stacked pushes for this deck.
     assert sent[0]["tag"] == "trivia-capitals"
