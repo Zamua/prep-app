@@ -136,3 +136,21 @@ def test_topic_placeholder_rotates_from_the_pool(
     monkeypatch.setattr(_random, "choice", real_choice)
     body = client.get("/").text
     assert any(f'placeholder="{p}"' in body for p in index_mod.TOPIC_PLACEHOLDERS)
+
+
+def test_install_nudge_hidden_for_anonymous_visitors(
+    client, initialized_db, visitor_provider, free_tier
+):
+    """iOS gives an installed PWA storage separate from Safari, so a
+    guest who installs opens an empty app while their local-only deck
+    stays behind. The install surfaces render for signed-in users
+    only."""
+    body = client.get("/").text
+    assert "pwa-install-root" not in body
+    assert "colophon-install" not in body
+
+
+def test_install_nudge_renders_for_signed_in_users(client, initialized_db, authed_headers):
+    body = client.get("/", headers=authed_headers).text
+    assert "pwa-install-root" in body
+    assert "colophon-install" in body

@@ -227,8 +227,15 @@
     {# PWA install nudge — pill + modal. JS in modules/pwa-install.js
        handles platform detection + lifecycle. Sits outside .folio so
        it's not affected by main-content layout rules. The module
-       no-ops on already-installed PWAs and on dismissed/hidden state. #}
+       no-ops on already-installed PWAs and on dismissed/hidden state.
+       Signed-in users only: on iOS an installed PWA has storage
+       separate from Safari, so an anonymous guest who installs opens
+       an empty app while their local-only deck stays behind in the
+       browser. Once signed in, the data is server-side and install
+       is safe on every platform. #}
+    {% if user %}
     {% include "partials/pwa_install_nudge.html" %}
+    {% endif %}
     <footer class="colophon">
       <span class="rule"></span>
       {# Same footer regardless of auth mode — Privacy describes data
@@ -246,12 +253,15 @@
            user can always re-open the install drawer. JS in
            modules/pwa-install.js hides this in standalone mode and on
            unsupported browsers; visible otherwise. Same click handler
-           as the bottom pill — opens the platform-aware modal. #}
+           as the bottom pill — opens the platform-aware modal.
+           Signed-in only, same reason as the nudge partial above. #}
+        {% if user %}
         <span aria-hidden="true" class="colophon-install-sep" hidden>·</span>
         <button type="button" class="colophon-install pwa-install-trigger" hidden>
           {{ icon('download-simple', class_='icon icon-inline') }}
           <span>Install app</span>
         </button>
+        {% endif %}
       </nav>
     </footer>
   </div>
