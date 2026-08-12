@@ -162,7 +162,7 @@ _FREE_ENV_EXTRA_BODY = "PREP_FREE_INFERENCE_EXTRA_BODY"
 _FREE_TIER_MAX_TOKENS = 32768
 
 
-def free_tier_agent() -> AgentPort | None:
+def free_tier_agent(max_output_tokens: int | None = None) -> AgentPort | None:
     """Build the deploy-configured free-tier adapter, or None.
 
     Configured iff BASE_URL + API_KEY + MODEL are all set. NEVER
@@ -170,7 +170,10 @@ def free_tier_agent() -> AgentPort | None:
     context processor on every page render, so an escaping exception
     would be a deploy-wide 500, not a degraded AI feature. Every
     config failure logs at ERROR (operator-actionable) and returns
-    None (free tier off)."""
+    None (free tier off).
+
+    `max_output_tokens` overrides the transform-sized default output
+    cap; None keeps `_FREE_TIER_MAX_TOKENS`."""
     try:
         base_url = (os.environ.get(_FREE_ENV_BASE_URL) or "").strip()
         api_key = (os.environ.get(_FREE_ENV_API_KEY) or "").strip()
@@ -220,7 +223,9 @@ def free_tier_agent() -> AgentPort | None:
                 model=model,
                 extra_body=extra_body,
                 shared=True,
-                max_tokens=_FREE_TIER_MAX_TOKENS,
+                max_tokens=(
+                    max_output_tokens if max_output_tokens is not None else _FREE_TIER_MAX_TOKENS
+                ),
                 provider_label="free AI",
             )
         except Exception:

@@ -17,10 +17,11 @@ Directly constructible: a vendor is a set of constructor arguments
 OpenRouter) pre-bake their endpoint / default model / key-prefix
 check as class attrs, which the constructor falls back to.
 
-`shared=True` marks a deploy-wide credential (the free tier): 429s,
-quota-coded error bodies, and timeouts then map to `AgentBusy`
-(shared-capacity contention, not the user's budget) instead of
-`AgentBudgetExhausted` / `AgentUnavailable`.
+`shared=True` marks a deploy-wide credential (the free tier): 429s
+and quota-coded error bodies then map to `AgentBusy` (shared-capacity
+contention, not the user's budget) instead of `AgentBudgetExhausted`
+/ `AgentUnavailable`; timeouts map to `AgentTimeout` (an `AgentBusy`
+subclass that also signals the call may have spent upstream tokens).
 
 Cost is reported as None: these APIs don't return a dollar figure in
 the response (dashboards compute it from token counts × per-model
@@ -39,6 +40,7 @@ from prep.agent.port import (
     AgentBusy,
     AgentPort,
     AgentResult,
+    AgentTimeout,
     AgentUnavailable,
 )
 
@@ -90,13 +92,18 @@ class OpenAICompatAdapter(AgentPort):
         self._base_url = (base_url or self._api_base).rstrip("/")
         self._model = model or self._default_model
         self._extra_body = dict(extra_body) if extra_body else {}
-        if "messages" in self._extra_body:
-            # extra_body carries deploy knobs, never the conversation.
-            logger.warning(
-                "%s adapter: extra_body may not override 'messages'; dropping the key",
-                self._provider_label,
-            )
-            self._extra_body.pop("messages")
+        for key in ("messages", "max_tokens"):
+            # extra_body carries deploy knobs, never the conversation
+            # or the output cap: callers rely on the cap they bound at
+            # construction (the instant endpoint's abuse arithmetic
+            # assumes it holds per call).
+            if key in self._extra_body:
+                logger.warning(
+                    "%s adapter: extra_body may not override %r; dropping the key",
+                    self._provider_label,
+                    key,
+                )
+                self._extra_body.pop(key)
         self._shared = shared
         self._max_tokens = max_tokens
         self._transport = transport
@@ -115,7 +122,8 @@ class OpenAICompatAdapter(AgentPort):
         timeout_s: float = 120.0,
     ) -> AgentResult:
         # Merge order: adapter defaults < extra_body (deploy knobs) <
-        # caller args. `messages` is never overridable.
+        # caller args. `messages` and `max_tokens` are never
+        # overridable (scrubbed in __init__).
         body: dict = {
             "model": self._model,
             "max_tokens": self._max_tokens,
@@ -142,7 +150,9 @@ class OpenAICompatAdapter(AgentPort):
                 # from the caller's perspective, not their fault. The
                 # message is user-visible (workflow error surfaces
                 # render it verbatim), so it carries the remedy.
-                raise AgentBusy(
+                # AgentTimeout (not plain AgentBusy): the request was
+                # issued, so spend-metering callers count it as spent.
+                raise AgentTimeout(
                     f"{self._provider_label} timed out after {timeout_s}s; "
                     "try again later, or add your own key in Settings for "
                     "dedicated capacity"

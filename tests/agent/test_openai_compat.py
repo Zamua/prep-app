@@ -19,7 +19,7 @@ import pytest
 from prep.agent.openai_api import OpenAIAdapter
 from prep.agent.openai_compat import OpenAICompatAdapter
 from prep.agent.openrouter import OpenRouterAdapter
-from prep.agent.port import AgentBudgetExhausted, AgentBusy, AgentUnavailable
+from prep.agent.port import AgentBudgetExhausted, AgentBusy, AgentTimeout, AgentUnavailable
 
 _BASE = "https://inference.example/v1"
 
@@ -143,18 +143,33 @@ def test_merge_precedence_caller_beats_extra_body_beats_defaults():
         "k",
         base_url=_BASE,
         model="constructor-model",
-        extra_body={"model": "extra-body-model", "max_tokens": 128},
+        extra_body={"model": "extra-body-model"},
         transport=_capture_transport(captured),
     )
     _run(adapter)
     body = json.loads(captured[0].content)
     assert body["model"] == "extra-body-model"
-    assert body["max_tokens"] == 128
 
     result = _run(adapter, model="caller-model")
     body = json.loads(captured[1].content)
     assert body["model"] == "caller-model"
     assert result.model == "caller-model"
+
+
+def test_extra_body_cannot_override_max_tokens():
+    """The output cap is bound at construction; a deploy-wide
+    extra_body knob must never silently raise it."""
+    captured: list[httpx.Request] = []
+    adapter = OpenAICompatAdapter(
+        "k",
+        base_url=_BASE,
+        model="m",
+        max_tokens=2048,
+        extra_body={"max_tokens": 99999},
+        transport=_capture_transport(captured),
+    )
+    _run(adapter)
+    assert json.loads(captured[0].content)["max_tokens"] == 2048
 
 
 def test_max_tokens_constructor_arg_reaches_the_wire():
@@ -211,8 +226,10 @@ def test_429_byok_mode_is_budget_exhausted():
 
 
 def test_429_shared_mode_is_busy():
-    with pytest.raises(AgentBusy):
+    with pytest.raises(AgentBusy) as ei:
         _run(_adapter(_error_transport(429, {"error": {"message": "rate limited"}}), shared=True))
+    # A refusal spends nothing; the timeout flavor must not appear.
+    assert not isinstance(ei.value, AgentTimeout)
 
 
 def test_quota_coded_body_at_other_status_byok_mode():
@@ -259,8 +276,11 @@ def test_timeout_byok_mode_is_plain_unavailable():
     _assert_plain_unavailable(ei.value)
 
 
-def test_timeout_shared_mode_is_busy():
-    with pytest.raises(AgentBusy):
+def test_timeout_shared_mode_is_timeout_flavored_busy():
+    """Transport timeout on the shared credential raises AgentTimeout:
+    busy for existing catch-sites, distinct for callers that meter
+    upstream spend (the request was issued)."""
+    with pytest.raises(AgentTimeout):
         _run(_adapter(_timeout_transport(), shared=True))
 
 
@@ -311,3 +331,9 @@ def test_busy_is_an_unavailable_subclass():
     swallowing AgentBusy; only busy-aware callers catch it first."""
     assert issubclass(AgentBusy, AgentUnavailable)
     assert not issubclass(AgentBusy, AgentBudgetExhausted)
+
+
+def test_timeout_is_a_busy_subclass():
+    """AgentTimeout degrades like AgentBusy everywhere except at
+    spend-metering catch sites."""
+    assert issubclass(AgentTimeout, AgentBusy)

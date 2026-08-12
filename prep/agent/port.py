@@ -68,6 +68,13 @@ class AgentBusy(AgentUnavailable):
     same way; catch this first for the distinct busy UX."""
 
 
+class AgentTimeout(AgentBusy):
+    """Subclass surfaced when a shared-capacity call times out in
+    transport. Unlike the other busy shapes (refusals that spend
+    nothing), the request WAS issued: the provider may have processed
+    it, so callers metering upstream spend must count it as spent."""
+
+
 class AgentPort(Protocol):
     """Provider-agnostic agent interface.
 
