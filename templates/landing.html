@@ -13,6 +13,49 @@
 {% endblock %}
 {% block main %}
 
+{% if instant_enabled and sign_in_url %}
+{# Instant-start hero (docs/INSTANT-START.md section 2): the landing
+   IS the product. Renders only when the deploy's free tier is
+   configured AND the provider has a sign-in URL for the nudges to
+   link; either gate failing falls through to the marketing hero
+   below. Driven by modules/instant-start.js (lazy-imported by app.js
+   on the data-instant-start hook). #}
+<section class="prelude landing-hero landing-hero-instant"
+         data-instant-start
+         data-sign-in-url="{{ sign_in_url }}">
+  <p class="eyebrow">prep</p>
+  <h1 class="display">What do you want to <em>learn</em> today?</h1>
+
+  {# Continue-studying strip: filled + revealed by instant-start.js
+     when this device holds a guest deck (owner-absent only). #}
+  <div class="instant-continue" data-instant-continue hidden></div>
+
+  <form class="instant-form" data-instant-form>
+    <label class="freetext instant-topic">
+      <span class="freetext-label">Topic</span>
+      <textarea name="topic" rows="3" maxlength="500" required
+                placeholder="Postgres MVCC: what vacuum does, how visibility maps work, what xmin/xmax mean"></textarea>
+    </label>
+    <div class="instant-actions">
+      {# Disabled until the module loads; instant-start.js enables it.
+         The spinner slot is CSS-reserved so is-loading never resizes
+         the button. #}
+      <button type="submit" class="btn btn-primary instant-generate" disabled>Generate my deck</button>
+    </div>
+    <p class="instant-status" data-instant-status role="status" hidden></p>
+    <p class="instant-error" data-instant-error role="alert" hidden></p>
+  </form>
+  <div class="instant-ready" data-instant-ready hidden></div>
+  <p class="instant-disclosure">
+    Deck generation runs on a shared free AI service; the text you
+    type is sent there. Create an account and add your own key for a
+    provider of your choosing.
+  </p>
+  <noscript>
+    <p class="instant-noscript">Instant decks need JavaScript. Sign in to build decks instead.</p>
+  </noscript>
+</section>
+{% else %}
 <section class="prelude landing-hero">
   <p class="eyebrow">prep</p>
   <h1 class="display"><em>Remember</em> anything.</h1>
@@ -28,6 +71,7 @@
     </p>
   {% endif %}
 </section>
+{% endif %}
 
 {# Walkthrough: three steps with their own sample artifact so the
    visitor sees the flow end-to-end — type a topic → get back cards

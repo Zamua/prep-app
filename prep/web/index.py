@@ -17,6 +17,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
+from prep.agent.selector import free_tier_configured
 from prep.auth.identity import optional_current_user
 from prep.auth.providers import get_provider
 from prep.decks.repo import DeckRepo
@@ -198,12 +199,19 @@ def index(
         # _clerk_bootstrap_context in prep.web.templates). The landing
         # template uses `clerk_publishable_key` (also context-processor
         # supplied) only to gate its one-shot post-signup reload.
+        #
+        # The instant hero renders only behind BOTH gates: the deploy
+        # serves a free tier AND the provider exposes a sign-in URL for
+        # the account nudges to link. The template requires both
+        # (instant_enabled and sign_in_url); failing either renders the
+        # marketing hero unchanged.
         return templates.TemplateResponse(
             "landing.html",
             {
                 "request": request,
                 "user": None,
                 "sign_in_url": urls.sign_in,
+                "instant_enabled": free_tier_configured(),
             },
         )
     uid = user["tailscale_login"]

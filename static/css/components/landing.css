@@ -305,6 +305,154 @@
   }
 }
 
+/* --- instant hero (the topic form that replaces the marketing hero
+ * when the deploy's free tier + sign-in gates pass) --- */
+.instant-form {
+  margin-block-start: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.instant-form[hidden] { display: none; }
+.instant-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+.instant-generate {
+  padding-block: 0.85rem;
+  padding-inline: 1.6rem;
+  font-size: 1.05rem;
+  justify-content: center;
+}
+/* One box across idle and is-loading: transparent spinner slots are
+ * always reserved on both sides (the ::after mirrors the ::before so
+ * the label stays centered); is-loading only paints the left one. */
+.instant-generate::before,
+.instant-generate::after {
+  content: "";
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.instant-status {
+  margin: 0;
+  font-style: italic;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+.instant-error {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--wrong, #a33);
+}
+.instant-error a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.instant-disclosure,
+.instant-noscript {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--ink-mute);
+  line-height: 1.5;
+}
+
+/* returning-visitor strip: one tappable card above the input */
+.instant-continue { margin-block-start: 1.1rem; }
+.instant-continue[hidden] { display: none; }
+.instant-continue-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.7rem;
+  padding: 0.75rem 1rem 0.85rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tint) 30%, var(--paper));
+  text-decoration: none;
+  color: var(--ink);
+}
+.instant-continue-eyebrow {
+  flex-basis: 100%;
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent, var(--ink));
+}
+.instant-continue-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.instant-continue-counts {
+  font-family: var(--mono, monospace);
+  font-size: 0.82rem;
+  color: var(--ink-mute);
+}
+
+/* ready panel: heading + first-3 preview + Start studying */
+.instant-ready { margin-block-start: 1.1rem; }
+.instant-ready[hidden] { display: none; }
+.instant-ready-heading {
+  font-family: var(--serif);
+  font-weight: 450;
+  font-size: 1.25rem;
+  line-height: 1.3;
+  margin: 0 0 0.7rem;
+  overflow-wrap: anywhere;
+}
+.instant-preview {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.instant-preview-prompt {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.instant-preview-card {
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.instant-preview-card .instant-preview-prompt {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.instant-preview-answer {
+  margin: 0.35rem 0 0;
+  font-family: var(--mono, monospace);
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.instant-save-error {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+.instant-save-error a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
 .masthead-cta {
   /* Compact pill that sits in the masthead slot where the user-chip
    * lives for authed users — keeps the header's right edge balanced. */

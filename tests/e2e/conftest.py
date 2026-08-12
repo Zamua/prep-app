@@ -445,11 +445,15 @@ class LocalOfflineServer:
     server genuinely unreachable (the only offline simulation that
     reaches the service worker; see the fixture-block comment)."""
 
-    def __init__(self, db_path: _Path):
+    def __init__(self, db_path: _Path, extra_env: dict[str, str] | None = None):
         self.db_path = db_path
         self.port = _free_port()
         self.base_url = f"http://127.0.0.1:{self.port}"
         self.seed: dict = {}
+        # Applied last in start(), so a suite can boot a different
+        # deploy shape (e.g. clerk mode + free tier for the instant
+        # landing) without forking the server harness.
+        self.extra_env: dict[str, str] = dict(extra_env or {})
         self._proc: _subprocess.Popen | None = None
 
     def start(self, timeout: float = 30.0) -> None:
@@ -460,6 +464,7 @@ class LocalOfflineServer:
         env.pop("PREP_AUTH_MODE", None)  # default tailscale
         env["PREP_DB_PATH"] = str(self.db_path)
         env["PREP_KEY_ENCRYPTION_SECRET"] = _TEST_KEY_ENCRYPTION_SECRET
+        env.update(self.extra_env)
         self._proc = _subprocess.Popen(
             [
                 _sys.executable,

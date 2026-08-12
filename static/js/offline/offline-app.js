@@ -204,6 +204,8 @@ function humanMinutes(m) {
 
 const state = {
   owner: null,
+  guest: null,
+  guestNudge: null,
   decks: [],
   cards: [],
   localCards: [],
@@ -214,6 +216,24 @@ const state = {
 
 let root = null;
 let viewName = "loading";
+
+// Where the guest-mode account nudges send the visitor; supplied by
+// the /offline route as a data attribute on the root element (empty
+// on providers without a hosted sign-in flow). Read at boot.
+let signInUrl = "";
+
+// Guest mode is a client-side derivation: no snapshot owner, but
+// guest data present (meta.guest, or owner-absent local cards). Same
+// definition as sync.js guestAdoptionPending.
+function isGuest() {
+  return !state.owner && Boolean(state.guest || state.localCards.length);
+}
+
+function guestDeckName() {
+  if (state.guest && state.guest.display_name) return state.guest.display_name;
+  const withName = state.localCards.find((c) => c.deck_name);
+  return withName ? withName.deck_name : "Your cards";
+}
 
 // navigator.storage.estimate() + persisted(), folded into one small
 // readout for the overview's footer line. Null when the platform
@@ -239,16 +259,21 @@ function humanBytes(n) {
 }
 
 async function reloadLocal() {
-  const [owner, decks, cards, localCards, outbox, rejects, storage] = await Promise.all([
-    metaGet("owner"),
-    getAll("decks"),
-    getAll("cards"),
-    getAll("local_cards"),
-    getAll("outbox_reviews"),
-    getAll("rejects"),
-    readStorage(),
-  ]);
+  const [owner, guest, guestNudge, decks, cards, localCards, outbox, rejects, storage] =
+    await Promise.all([
+      metaGet("owner"),
+      metaGet("guest"),
+      metaGet("guest_nudge"),
+      getAll("decks"),
+      getAll("cards"),
+      getAll("local_cards"),
+      getAll("outbox_reviews"),
+      getAll("rejects"),
+      readStorage(),
+    ]);
   state.owner = owner;
+  state.guest = guest;
+  state.guestNudge = guestNudge;
   state.decks = decks;
   state.cards = cards;
   state.localCards = localCards;
@@ -505,14 +530,23 @@ function renderOverview() {
   const frag = document.createDocumentFragment();
 
   // ---- prelude + owner line -----------------------------------------
-  const who = state.owner.display_name || "you";
-  const lede =
-    "Studying as " + who + ". " +
-    (dueCards.length
-      ? dueCards.length + (dueCards.length === 1 ? " card is" : " cards are") +
-        " due right now."
-      : "Nothing is due right now.");
-  frag.appendChild(prelude("Offline study", "Your cards,", "offline", lede));
+  const dueLede = dueCards.length
+    ? dueCards.length + (dueCards.length === 1 ? " card is" : " cards are") +
+      " due right now."
+    : "Nothing is due right now.";
+  if (state.owner) {
+    const who = state.owner.display_name || "you";
+    frag.appendChild(prelude("Offline study", "Your cards,", "offline", "Studying as " + who + ". " + dueLede));
+  } else {
+    // Guest mode: no owner to study as; the deck's own name is the
+    // headline. Owner-null guard, not just copy: the boot gate admits
+    // owner-absent guest data.
+    const section = el("section", "prelude");
+    section.appendChild(el("p", "eyebrow", "Your deck"));
+    section.appendChild(el("h1", "display", guestDeckName()));
+    section.appendChild(el("p", "lede", dueLede));
+    frag.appendChild(section);
+  }
 
   // ---- study CTA + authoring entry ----------------------------------
   const actions = el("div", "study-actions offline-study-cta");
@@ -531,7 +565,24 @@ function renderOverview() {
   // ---- per-deck counts ----------------------------------------------
   const deckSection = el("section", "offline-decks");
   deckSection.appendChild(sectionEyebrow("Decks"));
-  if (state.decks.length === 0) {
+  if (isGuest()) {
+    // The snapshot decks store is empty for guests: the one guest
+    // deck renders from meta.guest with live counts.
+    const total = state.localCards.length;
+    const due = state.localCards.filter((card) => isDueNow(card, now)).length;
+    const list = el("ul", "offline-deck-list");
+    const item = el("li", "offline-deck");
+    item.appendChild(el("span", "offline-deck-name", guestDeckName()));
+    item.appendChild(
+      el(
+        "span",
+        "offline-deck-counts muted",
+        due + " due · " + total + (total === 1 ? " card" : " cards")
+      )
+    );
+    list.appendChild(item);
+    deckSection.appendChild(list);
+  } else if (state.decks.length === 0) {
     deckSection.appendChild(el("p", "muted", "No decks in the snapshot."));
   } else {
     const byDeck = new Map();
@@ -602,12 +653,16 @@ function renderOverview() {
       )
     );
   }
-  if (state.owner.snapshot_at) {
+  if (state.owner && state.owner.snapshot_at) {
     const stamp = Date.parse(state.owner.snapshot_at);
     const label = Number.isFinite(stamp)
       ? new Date(stamp).toLocaleString()
       : state.owner.snapshot_at;
     frag.appendChild(el("p", "muted offline-snapshot-stamp", "Snapshot from " + label + "."));
+  } else if (isGuest()) {
+    // The persistent account nudge replaces the snapshot-stamp line:
+    // there is no snapshot, only this device.
+    frag.appendChild(guestDisclosureLine());
   }
   if (state.storage) {
     // Quiet debugging readout (docs/OFFLINE.md section 3), not a nag:
@@ -636,6 +691,22 @@ function renderOverview() {
   }
 
   show(frag, "overview");
+}
+
+// The persistent guest account nudge (footer line). Quiet, always
+// present in guest mode, never animated, never blocking.
+function guestDisclosureLine() {
+  const line = el("p", "muted offline-guest-note");
+  line.appendChild(document.createTextNode("This deck is stored only on this device. "));
+  if (signInUrl) {
+    const a = el("a", null, "Create an account");
+    a.href = signInUrl;
+    line.appendChild(a);
+  } else {
+    line.appendChild(document.createTextNode("Create an account"));
+  }
+  line.appendChild(document.createTextNode(" to keep it across your devices."));
+  return line;
 }
 
 // ---- needs attention (rejects store) ---------------------------------
@@ -902,7 +973,9 @@ function renderVerdict(card, verdict, userAnswer, opts) {
   block.appendChild(el("h1", "verdict-headline", right ? "Right." : "Not yet."));
   const sub = el("p", "verdict-sub", "Next review in ");
   sub.appendChild(el("strong", null, humanMinutes(opts.minutes)));
-  sub.appendChild(document.createTextNode(" · offline schedule"));
+  // The "offline schedule" qualifier marks divergence from the
+  // server's FSRS truth; for a guest the ladder IS the schedule.
+  if (!isGuest()) sub.appendChild(document.createTextNode(" · offline schedule"));
   block.appendChild(sub);
   frag.appendChild(block);
 
@@ -944,8 +1017,63 @@ function nextDueInMinutes() {
   return Math.max(1, Math.ceil((best - now) / 60000));
 }
 
+// Post-session account nudge: shown at most once per page load, only
+// in guest mode, only until dismissed, never as a modal, never over a
+// card. "Not now" stamps meta.guest.nudge_dismissed_at, or the
+// meta.guest_nudge record when no guest record exists (the footer
+// disclosure line stays).
+let nudgeShownThisLoad = false;
+
+function guestNudgeBanner() {
+  const banner = el("section", "offline-guest-nudge");
+  banner.appendChild(
+    el(
+      "p",
+      "offline-guest-nudge-copy",
+      "Nice work. This deck lives only on this device so far. " +
+        "Create a free account to keep it and study anywhere."
+    )
+  );
+  const actions = el("div", "offline-guest-nudge-actions");
+  const cta = el("a", "btn btn-primary", "Create a free account");
+  cta.href = signInUrl;
+  actions.appendChild(cta);
+  const dismiss = el("button", "btn btn-quiet", "Not now");
+  dismiss.type = "button";
+  dismiss.addEventListener("click", () => {
+    runPending(dismiss, async () => {
+      if (state.guest) {
+        const stamped = {...state.guest, nudge_dismissed_at: new Date().toISOString()};
+        await withLock(() => put("meta", stamped, "guest"));
+        state.guest = stamped;
+      } else {
+        // Authored-only guest (owner-absent local cards, no
+        // meta.guest record): the dismissal needs its own meta key
+        // to survive a reload.
+        const stamped = {dismissed_at: new Date().toISOString()};
+        await withLock(() => put("meta", stamped, "guest_nudge"));
+        state.guestNudge = stamped;
+      }
+      banner.remove();
+    });
+  });
+  actions.appendChild(dismiss);
+  banner.appendChild(actions);
+  return banner;
+}
+
 function renderCaughtUp() {
   const frag = document.createDocumentFragment();
+  if (
+    isGuest() &&
+    signInUrl &&
+    !nudgeShownThisLoad &&
+    !(state.guest && state.guest.nudge_dismissed_at) &&
+    !(state.guestNudge && state.guestNudge.dismissed_at)
+  ) {
+    nudgeShownThisLoad = true;
+    frag.appendChild(guestNudgeBanner());
+  }
   const section = el("section", "empty-state");
   const h = el("h2", "empty-headline", "All caught up ");
   h.appendChild(el("em", null, "offline"));
@@ -1217,6 +1345,7 @@ async function syncOnReconnect() {
 
 async function boot() {
   root = document.getElementById("offline-root") || document.body;
+  signInUrl = (root.dataset && root.dataset.signInUrl) || "";
   try {
     await reloadLocal();
   } catch (e) {
@@ -1226,9 +1355,17 @@ async function boot() {
     renderEmpty();
     return;
   }
-  if (!state.owner) {
+  // Empty only when there is neither an owner nor guest data;
+  // owner-absent with guest data boots into the guest-mode overview.
+  if (!state.owner && !isGuest()) {
     renderEmpty();
     return;
+  }
+  if (isGuest()) {
+    // Guest mode reads as the app, not the fallback: plain "Prep",
+    // no "offline" suffix.
+    const brand = document.querySelector(".masthead .brand-word");
+    if (brand) brand.textContent = "Prep";
   }
   renderOverview();
   window.addEventListener("online", () => {

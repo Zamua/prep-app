@@ -57,6 +57,16 @@ if (offlineLinkHook) {
     .catch((e) => console.warn("offline link module unavailable:", e));
 }
 
+// ---- Instant-start landing hero (hook-gated) --------------------------
+// The anonymous generation form. Hook-gated like offline-link so
+// only the instant landing loads the module.
+const instantStartHook = document.querySelector("[data-instant-start]");
+if (instantStartHook) {
+  import("@/modules/instant-start.js")
+    .then((m) => m.init(instantStartHook))
+    .catch((e) => console.warn("instant start module unavailable:", e));
+}
+
 // ---- Offline snapshot refresh (fire-and-forget) ----------------------
 // Keeps the IndexedDB snapshot warm on online pages so an offline cold
 // launch has decks + cards to show. Lazy dynamic import so a failure

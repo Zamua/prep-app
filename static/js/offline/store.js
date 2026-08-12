@@ -15,6 +15,13 @@
 //                              (the "keep" choice from the owner-
 //                              mismatch dialog; suppresses re-prompts
 //                              until the mismatched account changes)
+//                     "guest"  {deck_client_id, display_name, topic,
+//                              created_at, nudge_dismissed_at?}
+//                              (instant-start guest deck identity;
+//                              owner-absent devices only)
+//                     "guest_nudge" {dismissed_at}  (account-nudge
+//                              dismissal for a guest with no "guest"
+//                              record)
 //   decks           keyPath "id"           {id, name, display_name}
 //   cards           keyPath "question_id"  snapshot card + local overlay
 //                                          fields {local_step, local_next_due}

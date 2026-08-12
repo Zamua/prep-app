@@ -48,7 +48,7 @@
        card / verdict / empty) rendered from IndexedDB. If the module
        never runs, the user sees an honest static message instead of
        a blank page. #}
-    <main class="folio" id="offline-root" data-offline-root>
+    <main class="folio" id="offline-root" data-offline-root data-sign-in-url="{{ sign_in_url }}">
       <section class="empty-state">
         <p>Loading your offline study queue&hellip;</p>
         <noscript><p>Offline study needs JavaScript enabled.</p></noscript>
