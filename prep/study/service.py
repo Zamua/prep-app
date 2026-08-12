@@ -171,3 +171,22 @@ def grading_landed(
     Records the cached verdict + state on the session row. Idempotent:
     second call once we're already in showing-result is a no-op."""
     repo.grading_completed(user_id, sid, question_id, verdict, state, workflow_id)
+
+
+def parse_grading_wid(wid: str) -> tuple[str, int] | None:
+    """`grade-<deck>-q<qid>-<rand>` -> (deck_name, question_id).
+    Walks from the right since deck names may contain hyphens.
+    Returns None when the id does not match the shape."""
+    if not wid.startswith("grade-"):
+        return None
+    parts = wid[len("grade-") :].split("-")
+    if len(parts) < 3:
+        return None
+    qid_part = parts[-2]
+    if not qid_part.startswith("q"):
+        return None
+    try:
+        qid = int(qid_part[1:])
+    except ValueError:
+        return None
+    return "-".join(parts[:-2]), qid

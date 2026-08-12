@@ -121,6 +121,37 @@ class SessionAnswer(BaseModel):
     workflow_id: str | None = None  # set if grading went via Temporal
 
 
+class StudyCard(BaseModel):
+    """A card as the browser study components consume it, before an
+    answer is recorded.
+
+    Field names mirror the offline snapshot card (prep.offline.entities
+    .SnapshotCard) so one set of views renders either source without
+    branching. The canonical answer is deliberately absent: the online
+    loop grades server-side, so the browser has no use for it until the
+    reveal (see RevealedCard), and the HTML study templates withhold it
+    the same way."""
+
+    question_id: int
+    deck_id: int
+    type: str
+    prompt: str
+    choices: list[str] | None = None
+    skeleton: str | None = None
+    language: str | None = None
+    # Not on the snapshot card: the offline queue has no topic chips.
+    # Absent rather than empty when the question carries none.
+    topic: str | None = None
+
+
+class RevealedCard(StudyCard):
+    """A card plus the canonical answer fields, released once the
+    answer is recorded: the reveal, self-grade, and verdict screens."""
+
+    answer: str
+    rubric: str | None = None
+
+
 class CardState(BaseModel):
     """The mutable SRS state on a card — step + next-due + last-review.
 

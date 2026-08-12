@@ -1,8 +1,12 @@
 // components.js: the study-loop views as standalone functions. Each
 // takes plain card data plus callbacks and returns detached DOM; no
-// IndexedDB access, no sync knowledge, no navigation. The caller
-// (today the offline shell, later the online app) owns state, mounts
-// the returned nodes, and decides what renders next.
+// IndexedDB access, no sync knowledge, no navigation. The two hosts
+// (the offline shell and the signed-in study page) own state, mount
+// the returned nodes, and decide what renders next.
+//
+// Copy that only one surface can truthfully say (the offline blurbs,
+// the AI feedback block, the chat handoff) is a per-call option with a
+// default, never a branch on which host is calling.
 //
 // Plain DOM building, no framework. Card prompts, choices, and
 // answers are user content: prompts render via the escape-first
@@ -182,14 +186,19 @@ function compareSections(card, userAnswer, opts) {
 
 // The answer-entry card. Callbacks: onAnswer(answerString) grades and
 // records (or decides the reveal flow is next), onIdk() records a
-// wrong verdict, onPause() leaves the loop.
-export function studyCardView(card, {onAnswer, onIdk, onPause}) {
+// wrong verdict, onPause() leaves the loop, onDraft(text) sees every
+// keystroke (a host with server-side autosave debounces it).
+//
+// `draft` seeds the text area when the host has a saved one; a code
+// card falls back to its skeleton.
+export function studyCardView(card, {onAnswer, onIdk, onPause, onDraft, draft}) {
   const frag = document.createDocumentFragment();
   frag.appendChild(studyNav(card, onPause));
 
   const article = el("article", "study-card");
   const head = el("header", "study-head");
   head.appendChild(el("span", "tag tag-type tag-" + (card.type || "short"), card.type || "short"));
+  if (card.topic) head.appendChild(el("span", "tag tag-topic", card.topic));
   article.appendChild(head);
   article.appendChild(promptNode(card));
 
@@ -234,10 +243,14 @@ export function studyCardView(card, {onAnswer, onIdk, onPause}) {
       ta.className = "code-area";
       ta.spellcheck = false;
       ta.placeholder = "Write it out. Pseudocode is fine if the idea is clear.";
-      if (card.skeleton) ta.value = card.skeleton;
+      ta.value = typeof draft === "string" ? draft : card.skeleton || "";
+      if (card.language) ta.dataset.language = card.language;
+      if (card.skeleton) ta.dataset.skeleton = card.skeleton;
     } else {
       ta.placeholder = "A sentence or two.";
+      if (typeof draft === "string") ta.value = draft;
     }
+    if (onDraft) ta.addEventListener("input", () => onDraft(ta.value));
     wrap.appendChild(ta);
     form.appendChild(wrap);
     collect = () => ta.value;
@@ -266,24 +279,22 @@ export function studyCardView(card, {onAnswer, onIdk, onPause}) {
   return frag;
 }
 
-// Reveal + self-verdict: the offline analogue of self_grade.html, for
-// card types with no deterministic grader (code, short without a
-// usable regex). onVerdict("right"|"wrong") records the choice.
-export function revealView(card, answer, {onVerdict, onPause}) {
+const DEFAULT_REVEAL_BLURB =
+  "No deterministic grader applies offline, so you're the judge. " +
+  "Compare what you wrote against the canonical answer and pick " +
+  "honestly. The scheduler works either way.";
+
+// Reveal + self-verdict, for card types with no grader available
+// (code, short without a usable regex; online, no configured AI
+// grader). onVerdict("right"|"wrong") records the choice. `blurb`
+// says WHY the user is judging, which differs per host.
+export function revealView(card, answer, {onVerdict, onPause, blurb}) {
   const frag = document.createDocumentFragment();
   frag.appendChild(studyNav(card, onPause));
 
   const article = el("article", "study-card");
   article.appendChild(sectionEyebrow("Self-grade"));
-  article.appendChild(
-    el(
-      "p",
-      "muted offline-selfgrade-blurb",
-      "No deterministic grader applies offline, so you're the judge. " +
-        "Compare what you wrote against the canonical answer and pick " +
-        "honestly. The scheduler works either way."
-    )
-  );
+  article.appendChild(el("p", "muted offline-selfgrade-blurb", blurb || DEFAULT_REVEAL_BLURB));
   article.appendChild(sectionEyebrow("The question"));
   article.appendChild(promptNode(card));
   const sections = compareSections(card, answer, {
@@ -309,8 +320,63 @@ export function revealView(card, answer, {onVerdict, onPause}) {
   return frag;
 }
 
+// Grading-in-flight: the screen between a submitted answer and a
+// verdict computed somewhere else. Same chrome as the server-rendered
+// grading page (.grading-panel), so the two surfaces read alike.
+//
+// `pending` is the source's Pending ({settled, cancel, ...}). The
+// caller awaits `pending.settled` and renders the verdict it resolves
+// to; this view only shows the wait. Nothing in it swaps text or
+// resizes, so the panel holds one box for as long as the grade takes.
+export function pendingView(card, pending, {onPause}) {
+  const frag = document.createDocumentFragment();
+  // A session resumed mid-grade knows the workflow but not the card
+  // it belongs to, so the nav takes whatever is known.
+  frag.appendChild(
+    studyNav(card || {}, () => {
+      // The workflow is durable and keeps running; only the client's
+      // polling loop stops, so a resumed session re-enters this view.
+      if (pending && pending.cancel) pending.cancel();
+      onPause();
+    })
+  );
+
+  const panel = el("section", "grading-panel");
+  panel.appendChild(sectionEyebrow("Grading"));
+  const headline = el("h1", "display gen-headline");
+  headline.appendChild(el("em", null, "Reading your answer."));
+  panel.appendChild(headline);
+
+  const status = el("p", "gen-status");
+  status.setAttribute("role", "status");
+  status.appendChild(el("span", "status-dot status-grading"));
+  status.appendChild(el("span", null, "Grading"));
+  const spinner = el("span", "grading-spinner");
+  spinner.setAttribute("aria-hidden", "true");
+  for (const n of ["d1", "d2", "d3"]) spinner.appendChild(el("span", "dot " + n));
+  status.appendChild(spinner);
+  panel.appendChild(status);
+
+  const hint = el("p", "gen-hint");
+  hint.appendChild(
+    el(
+      "em",
+      null,
+      "Usually 5 to 20 seconds. The grade runs on the server, so it " +
+        "finishes even if you leave this screen."
+    )
+  );
+  panel.appendChild(hint);
+
+  frag.appendChild(panel);
+  return frag;
+}
+
 // The post-verdict screen. opts: minutes (until next review), idk,
-// scheduleNote (string appended after the interval, or null).
+// scheduleNote (string appended after the interval, or null),
+// feedback (the grader's markdown note, when a grader wrote one), and
+// extras (host-built nodes placed after the answer compare, e.g. the
+// chat handoff, whose provider URLs only a server can compose).
 export function verdictView(card, verdict, userAnswer, opts, {onNext, onPause}) {
   const frag = document.createDocumentFragment();
   frag.appendChild(studyNav(card, onPause));

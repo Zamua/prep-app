@@ -45,6 +45,7 @@ from prep.dev import preview as dev_preview
 from prep.instant.routes import router as instant_router
 from prep.notify.routes import router as notify_router
 from prep.offline.routes import router as offline_router
+from prep.study.api import router as study_api_router
 from prep.study.routes import router as study_router
 from prep.trivia.routes import router as trivia_router
 from prep.web import errors as _errors_mod
@@ -417,6 +418,7 @@ _errors_mod.register(app)
 # handlers should live here.
 app.include_router(decks_router)
 app.include_router(study_router)
+app.include_router(study_api_router)
 app.include_router(trivia_router)
 app.include_router(notify_router)
 app.include_router(agent_router)

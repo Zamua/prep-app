@@ -23,6 +23,7 @@ Design notes:
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -778,6 +779,43 @@ class ReviewRepo:
                 (user_id, now()),
             ).fetchone()
         return int(row["n"]) if row else 0
+
+    def next_due_minutes(self, user_id: str, deck_id: int | None = None) -> int | None:
+        """Whole minutes until the soonest card that comes due in the
+        FUTURE, or None when nothing is scheduled ahead. Feeds the
+        caught-up screen's "next card in ..." line.
+
+        Rounds up and floors at 1: a card 20 seconds out reads as "1
+        minute", never "0" (which the screen would render as due-now
+        while the queue is empty)."""
+        ts = now()
+        sql = (
+            "SELECT MIN(cards.next_due) AS nd "
+            "  FROM cards "
+            "  JOIN questions q ON q.id = cards.question_id "
+            "  JOIN decks d ON d.id = q.deck_id AND d.user_id = q.user_id "
+            " WHERE q.user_id = ? "
+            "   AND COALESCE(q.suspended, 0) = 0 "
+            "   AND COALESCE(d.deck_type, 'srs') = 'srs' "
+            "   AND cards.next_due > ?"
+        )
+        params: list[Any] = [user_id, ts]
+        if deck_id is not None:
+            sql += " AND q.deck_id = ?"
+            params.append(deck_id)
+        with cursor() as c:
+            row = c.execute(sql, tuple(params)).fetchone()
+        raw = row["nd"] if row else None
+        if not raw:
+            return None
+        try:
+            due = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+        seconds = (due - datetime.now(timezone.utc)).total_seconds()
+        return max(1, math.ceil(seconds / 60))
 
     def due_questions(self, user_id: str, deck_id: int, limit: int = 3) -> list[dict]:
         """Cards due now, oldest-due first, shuffled within the minute

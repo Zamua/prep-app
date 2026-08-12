@@ -1,14 +1,28 @@
-// source.js: the CardSource port and its local (IndexedDB)
-// implementation. The study components never touch storage; they
-// talk to a source through this contract, so the same views can run
-// against the offline stores today and an online source later.
+// source.js: the CardSource port and its two implementations,
+// LocalSource (IndexedDB) and ServerSource (the JSON study API). The
+// study components never touch storage or the network; they talk to a
+// source through this contract, so the same views run on both
+// surfaces.
 //
 // CardSource contract (all methods async):
 //
-//   next() -> {card}                        the next due card
+//   next() -> {card, draft}                 the next due card
 //           | {caughtUp: {nextDueMinutes}}  nothing due; minutes until
 //                                           the next future due, or
 //                                           null when none is scheduled
+//           | {verdict, ...}                a verdict already waiting
+//           | {pending: Pending}            a grade already in flight
+//           | {ended: {reason}}             the session is over
+//
+//     The last three reach a host only from ServerSource: server
+//     sessions carry state across devices, so a resumed session can
+//     land on any screen of the loop. LocalSource returns only the
+//     first two.
+//
+//     An outcome key is NOT a tag: a settled verdict and a selfGrade
+//     both carry the revealed `card` alongside, so a host must test
+//     the keys in order (pending, verdict, selfGrade, ended, caughtUp,
+//     card) or a verdict reads as a fresh card to answer.
 //
 //   submit(card, submission) -> outcome
 //     submission: {answer}           grade this answer
@@ -17,11 +31,27 @@
 //     outcome:    {verdict, nextDueMinutes, idk}  verdict recorded
 //                 {selfGrade: true}  no deterministic grader; show the
 //                                    reveal, then submit a {verdict}
-//                 {pending: ...}     reserved for async graders;
-//                                    LocalSource never returns it
+//                 {pending: Pending} an async grader is running
 //
 //   author(input) -> the stored card row
 //     input: {prompt, answer, deck_id}
+//
+// Pending: {settled, cancel, poll, workflowId}
+//
+//   THE SOURCE OWNS THE POLLING LOOP. A host renders the pending view
+//   and awaits `settled`, which resolves to a settled outcome
+//   ({verdict, nextDueMinutes, idk, card, answer}) or rejects with a
+//   StudySourceError. Polling is I/O (intervals, backoff, retry across
+//   a network blip, abort), which belongs behind the port with every
+//   other request; a view that owned it would have to reimplement all
+//   of it per host. `cancel()` stops the loop when the host leaves the
+//   screen. LocalSource grades in-process and never returns {pending},
+//   so a host written against the promise works on both sources.
+//
+// Failures from ServerSource are StudySourceError, whose `code` a host
+// can branch on: network, unauthorized, not_found, stale_version
+// (carries currentVersion), grading_failed, grading_timeout, cancelled,
+// server, bad_response.
 
 import {get, put, uuid, withLock} from "../offline/store.js";
 import * as grader from "../offline/grader.js";
@@ -272,4 +302,296 @@ export class LocalSource {
     this.state.localCards.push(row);
     return row;
   }
+}
+
+// ---- the server source -------------------------------------------------
+
+// Every failure a host may want to act on differently, carried as a
+// `code` rather than a message string. `detail` fields land on the
+// instance (stale_version carries currentVersion).
+export class StudySourceError extends Error {
+  constructor(code, message, detail) {
+    super(message || code);
+    this.name = "StudySourceError";
+    this.code = code;
+    if (detail) Object.assign(this, detail);
+  }
+}
+
+// The deploy's root path, derived from this module's own URL: the
+// module is served under <root>/static/js/[v<build>/]study/source.js.
+const ROOT_PATH = new URL(import.meta.url).pathname.replace(/\/static\/js\/.*$/, "");
+
+// Grading polling. The interval widens as the wait goes on so a slow
+// grade costs few requests, and the deadline stops a wedged workflow
+// from polling until the tab closes.
+const POLL_MIN_MS = 700;
+const POLL_MAX_MS = 4000;
+const POLL_GROWTH = 1.4;
+const POLL_DEADLINE_MS = 300000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// CardSource over the JSON study API (prep/study/api.py). Holds no DOM
+// and no view state: just the deck/session it is pointed at, the
+// session's optimistic-concurrency version, and fetch.
+//
+// Session methods (begin/advance/saveDraft/abandon/snooze) have no
+// LocalSource counterpart. A host that drives sessions calls them
+// directly; the three contract methods work with or without one.
+export class ServerSource {
+  constructor({deck = null, sessionId = null, basePath = ROOT_PATH, fetchImpl = null} = {}) {
+    this.deck = deck;
+    this.basePath = basePath;
+    this._fetch = fetchImpl || ((...args) => fetch(...args));
+    this._session = sessionId ? {id: sessionId, version: 0, state: null, status: null} : null;
+  }
+
+  // The last session payload the server sent, or null on the
+  // deck-scoped (sessionless) path.
+  get session() {
+    return this._session;
+  }
+
+  // ---- the CardSource contract ----
+
+  async next() {
+    if (!this._session) {
+      if (!this.deck) throw new StudySourceError("no_target", "no deck or session to study");
+      return this._view(await this._request("GET", this._url(`/decks/${enc(this.deck)}/next`)));
+    }
+    // A session parked on a verdict has to be advanced past it: the
+    // read endpoint would hand back that same verdict forever.
+    if (this._session.state === "showing-result") return this.advance();
+    return this._view(
+      await this._request("GET", this._url(`/sessions/${enc(this._session.id)}/next`))
+    );
+  }
+
+  async submit(card, submission) {
+    const body = {
+      question_id: card.question_id,
+      answer: submission.answer || "",
+      idk: Boolean(submission.idk),
+    };
+    if (submission.verdict) body.verdict = submission.verdict;
+    const path = this._session
+      ? `/sessions/${enc(this._session.id)}/submit`
+      : `/decks/${enc(this.deck)}/submit`;
+    if (this._session) body.version = this._session.version;
+    return this._view(await this._request("POST", this._url(path), body));
+  }
+
+  async author(input) {
+    const body = await this._request("POST", this._url("/cards"), {
+      prompt: input.prompt,
+      answer: input.answer,
+      deck_id: input.deck_id ?? null,
+    });
+    return body.card;
+  }
+
+  // ---- session control ----
+
+  // Resume the open session on the deck, or start a new one, and
+  // return the view to render. `fresh` abandons the open one first.
+  async begin({fresh = false} = {}) {
+    if (!this.deck) throw new StudySourceError("no_target", "no deck to begin a session on");
+    const body = await this._request("POST", this._url(`/decks/${enc(this.deck)}/session`), {
+      fresh: Boolean(fresh),
+    });
+    return this._view(body);
+  }
+
+  async advance() {
+    const s = this._requireSession();
+    return this._view(
+      await this._request("POST", this._url(`/sessions/${enc(s.id)}/advance`), {
+        version: s.version,
+      })
+    );
+  }
+
+  // Autosave the in-progress answer. Returns the new version, which is
+  // also cached, so the next submit carries it.
+  async saveDraft(draft) {
+    const s = this._requireSession();
+    const body = await this._request("POST", this._url(`/sessions/${enc(s.id)}/draft`), {
+      version: s.version,
+      draft,
+    });
+    if (typeof body.version === "number") this._session = {...this._session, version: body.version};
+    return body.version;
+  }
+
+  async abandon() {
+    const s = this._requireSession();
+    return this._view(await this._request("POST", this._url(`/sessions/${enc(s.id)}/abandon`)));
+  }
+
+  async snooze({preset = null, custom = null, unit = null} = {}) {
+    const s = this._requireSession();
+    return this._view(
+      await this._request("POST", this._url(`/sessions/${enc(s.id)}/snooze`), {
+        preset,
+        custom,
+        unit,
+      })
+    );
+  }
+
+  // ---- internals ----
+
+  _requireSession() {
+    if (!this._session) throw new StudySourceError("no_target", "no session on this source");
+    return this._session;
+  }
+
+  _url(path) {
+    return `${this.basePath}/api/study${path}`;
+  }
+
+  // Cache the session the server just described, so version, state and
+  // deck name stay in step with it without the host relaying them.
+  _absorb(body) {
+    if (body && body.session) this._session = body.session;
+    return body;
+  }
+
+  // Absorb, then hand back a view a host can branch on. A {pending}
+  // payload becomes a Pending with its polling loop already running.
+  _view(body) {
+    this._absorb(body);
+    if (body && body.pending) return {pending: this._pending(body.pending)};
+    return body;
+  }
+
+  _pending(payload) {
+    const control = {cancelled: false};
+    const pending = {
+      poll: payload.poll,
+      workflowId: payload.workflow_id || "",
+      cancel: () => {
+        control.cancelled = true;
+      },
+    };
+    pending.settled = this._pollUntilSettled(payload.poll, control);
+    // The host may never await `settled` (it left the screen before
+    // the grade landed), and a lone rejection would surface as an
+    // unhandled rejection. This branch marks the promise handled; the
+    // host's own await still sees the rejection.
+    pending.settled.catch(() => {});
+    return pending;
+  }
+
+  async _pollUntilSettled(poll, control) {
+    const deadline = Date.now() + POLL_DEADLINE_MS;
+    let wait = POLL_MIN_MS;
+    for (;;) {
+      await sleep(wait);
+      if (control.cancelled) throw new StudySourceError("cancelled", "grading poll cancelled");
+      if (Date.now() > deadline) {
+        throw new StudySourceError("grading_timeout", "the grader did not answer in time");
+      }
+      let body;
+      try {
+        body = await this._request("GET", poll);
+      } catch (e) {
+        // The workflow is durable, so a dropped poll is not a lost
+        // grade: keep asking until the deadline. An auth failure is
+        // not transient and ends the loop.
+        if (e instanceof StudySourceError && e.code === "network") {
+          wait = Math.min(Math.round(wait * POLL_GROWTH), POLL_MAX_MS);
+          continue;
+        }
+        throw e;
+      }
+      if (body.pending) {
+        wait = Math.min(Math.round(wait * POLL_GROWTH), POLL_MAX_MS);
+        continue;
+      }
+      if (body.failed) {
+        throw new StudySourceError(
+          body.failed.code || "grading_failed",
+          body.failed.message || "the grader returned nothing"
+        );
+      }
+      return this._absorb(body);
+    }
+  }
+
+  async _request(method, url, body) {
+    const headers = {Accept: "application/json"};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    let res;
+    try {
+      res = await this._fetch(url, {
+        method,
+        headers,
+        // Identity rides cookies or a proxy-injected header, both of
+        // which need the request treated as same-origin credentialed.
+        credentials: "same-origin",
+        cache: "no-store",
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (e) {
+      throw new StudySourceError("network", "could not reach the server", {cause: e});
+    }
+    return this._parse(res, await res.text().catch(() => ""));
+  }
+
+  _parse(res, text) {
+    let payload = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch (e) {
+        payload = null;
+      }
+    }
+    // Accept: application/json makes the app answer 401 with JSON
+    // rather than bouncing to the identity provider, so an expired
+    // session is a status code here. A redirect that still landed on
+    // a non-JSON body is the same condition on a deploy that bounces
+    // earlier, in middleware.
+    if (res.status === 401 || res.status === 403) {
+      throw new StudySourceError("unauthorized", "you are no longer signed in");
+    }
+    if (res.redirected && payload === null) {
+      throw new StudySourceError("unauthorized", "you are no longer signed in");
+    }
+    const err = (payload && payload.error) || {};
+    if (res.status === 409 && err.code === "stale_version") {
+      const current = typeof err.current_version === "number" ? err.current_version : null;
+      // Adopt the server's version so a retry is not stale for the
+      // same reason twice; the host still gets the error and decides
+      // whether to re-read or resubmit.
+      if (this._session && current !== null) {
+        this._session = {...this._session, version: current};
+      }
+      throw new StudySourceError("stale_version", err.message || "the session moved on", {
+        currentVersion: current,
+      });
+    }
+    if (res.status === 404) {
+      throw new StudySourceError("not_found", err.message || "not found");
+    }
+    if (!res.ok) {
+      throw new StudySourceError(
+        err.code || "server",
+        err.message || `request failed (${res.status})`,
+        {status: res.status}
+      );
+    }
+    if (payload === null) {
+      throw new StudySourceError("bad_response", "the server did not answer with JSON");
+    }
+    return payload;
+  }
+}
+
+function enc(value) {
+  return encodeURIComponent(String(value));
 }

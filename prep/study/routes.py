@@ -579,22 +579,7 @@ async def study_submit(
 
 
 def _parse_grading_wid(wid: str) -> tuple[str, int] | None:
-    """`grade-<deck>-q<qid>-<rand>`. Walks from the right since deck
-    names may themselves contain hyphens. Returns (deck_name, qid)."""
-    if not wid.startswith("grade-"):
-        return None
-    parts = wid[len("grade-") :].split("-")
-    if len(parts) < 3:
-        return None
-    qid_part = parts[-2]
-    if not qid_part.startswith("q"):
-        return None
-    try:
-        qid = int(qid_part[1:])
-    except ValueError:
-        return None
-    deck_name = "-".join(parts[:-2])
-    return deck_name, qid
+    return service.parse_grading_wid(wid)
 
 
 @router.get("/grading/{wid}", response_class=HTMLResponse)
