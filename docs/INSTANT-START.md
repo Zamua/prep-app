@@ -179,23 +179,24 @@ logic changes and are specced as such):
 - Overview prelude: "Your deck" / the deck's display name, "N cards
   are due right now." No "Studying as ..." line (there is no owner).
   This is an owner-null GUARD, not just copy: `renderOverview`
-  dereferences `state.owner.display_name` (`offline-app.js:508`)
+  dereferences `state.owner.display_name` (`offline-app.js`)
   and would throw on the null owner the new boot gate admits.
 - The overview footer's snapshot-stamp line reads
-  `state.owner.snapshot_at` (`offline-app.js:605-611`) and throws
+  `state.owner.snapshot_at` (`renderOverview`'s footer) and throws
   the same way; in guest mode that line is replaced by the
   local-only disclosure line (the account nudge, below). These two
   are the complete set of owner dereferences on the guest render
   path; any new one added later must carry the same guard.
 - The deck list renders the one guest deck from `meta.guest` with
   live counts (the snapshot `decks` store is empty for guests).
-- The verdict screen's "offline schedule" qualifier
-  (`offline-app.js:904-906`) is dropped in guest mode; the ladder IS
-  the schedule for a guest.
-- The reconnect path is suppressed. `syncOnReconnect` runs on every
-  shell boot (`offline-app.js:1236`); for a guest with any queued
-  review its flush would 401 and raise the "Back online. Open prep
-  to finish syncing." banner (`offline-app.js:1182-1187`) on every
+- The verdict screen's "offline schedule" qualifier (the
+  `scheduleNote` the shell passes to `verdictView` in
+  `static/js/study/components.js`) is dropped in guest mode; the
+  ladder IS the schedule for a guest.
+- The reconnect path is suppressed. `syncOnReconnect`
+  (`offline-app.js`) runs on every shell boot; for a guest with any
+  queued review its flush would 401 and raise the "Back online. Open
+  prep to finish syncing." banner (same function) on every
   online guest session, a nag directly against "feels like the app,
   not the fallback". In guest mode the shell skips the reconnect
   flush and its banner entirely: a guest has no account to sync
@@ -209,12 +210,13 @@ logic changes and are specced as such):
 Two surfaces, both quiet, both guest-mode only:
 
 1. **Persistent line** in the overview footer (with the other footer
-   lines, `offline-app.js:582-636`): "This deck is stored only on
+   lines in `renderOverview`, `offline-app.js`): "This deck is stored only on
    this device. Create an account to keep it across your devices."
    with a Create-account link. Always present, never animated,
    never blocking.
 2. **Post-session banner**: when a guest study session reaches the
-   caught-up screen (`renderCaughtUp`, `offline-app.js:947-976`), a
+   caught-up screen (`renderCaughtUp` in `offline-app.js`, view built
+   by `caughtUpView` in `static/js/study/components.js`), a
    banner card renders above it: "Nice work. This deck lives only
    on this device so far. Create a free account to keep it and
    study anywhere." Primary CTA links the sign-in URL; a "Not now"
@@ -258,7 +260,7 @@ lands next to their existing decks.
 | JS disabled | `<noscript>` line; sign-in path unaffected. |
 | Returning anonymous visitor with a guest deck | Continue-studying strip on the landing; `/offline` works directly; studying offline-after-first-visit works via the existing SW precache (nothing new to cache: the landing module lives in `static/js/modules/`, already precached wholesale, `prep/web/pwa.py:96-104`). |
 | Anonymous visitor who already has an account | Signs in via the masthead chip; adoption confirm if guest data exists. |
-| Device already has an owner snapshot (a signed-out returning user, or a borrowed device) | The landing input still works; generated cards land in `local_cards` exactly like offline-authored cards and belong to that owner's device state. `meta.guest` is NOT written (section 3.3), so no Continue-studying strip renders and no stale guest metadata outlives the flush. The generated cards join `allStudyCards` (`offline-app.js:264-266`) and interleave with the owner's due cards in one queue; accepted v1 behavior, identical to authoring cards offline on that device. When the SAME owner signs back in, the existing silent flush applies (OFFLINE.md M4 semantics: the device is theirs, this is authoring). When a DIFFERENT user signs in, the existing owner-mismatch guard refuses and the existing conflict dialog runs (`sync.js:62-74`). The adoption gate applies only to owner-ABSENT devices. |
+| Device already has an owner snapshot (a signed-out returning user, or a borrowed device) | The landing input still works; generated cards land in `local_cards` exactly like offline-authored cards and belong to that owner's device state. `meta.guest` is NOT written (section 3.3), so no Continue-studying strip renders and no stale guest metadata outlives the flush. The generated cards join `allStudyCards` (`offline-app.js`) and interleave with the owner's due cards in one queue; accepted v1 behavior, identical to authoring cards offline on that device. When the SAME owner signs back in, the existing silent flush applies (OFFLINE.md M4 semantics: the device is theirs, this is authoring). When a DIFFERENT user signs in, the existing owner-mismatch guard refuses and the existing conflict dialog runs (`sync.js:62-74`). The adoption gate applies only to owner-ABSENT devices. |
 | Second generation before sign-up | One confirm, then replace (v1: one guest deck per device). |
 | IndexedDB unavailable | Cards render read-only from memory; account CTA replaces Start studying. |
 | Guest deck on a plain Safari tab | Subject to the 7-day script-storage cap like all offline data (OFFLINE.md section 3); the local-only disclosure is the honest mitigation, and adoption is the durable exit. |
@@ -583,14 +585,15 @@ multi-store write):
 ```
 
 Two fields are new on `local_cards` rows relative to OFFLINE.md M4
-authoring (`offline-app.js:1069-1079`): `type: "short"` +
+authoring (`LocalSource.author`, `static/js/study/source.js`):
+`type: "short"` +
 `answer_regex`, and `deck_name`. Both are additive; existing
 authored rows without them behave exactly as today.
 
 **Study works through the existing modules unchanged:**
 
 - The queue already merges `local_cards` into the study pool
-  (`allStudyCards`, `offline-app.js:264-266`); `local_next_due:
+  (`allStudyCards`, `offline-app.js`); `local_next_due:
   null` means due immediately (`scheduler.due`,
   `static/js/offline/scheduler.js:40-49`), so the whole fresh deck
   is the queue.
@@ -601,7 +604,7 @@ authored rows without them behave exactly as today.
   cross-engine rules in `grader.js:matchRegex` apply as-is); a null
   regex falls through to reveal + self-verdict. This is the "feels
   like the app" moment: type an answer, get a verdict.
-- Scheduling: `recordVerdict` (`offline-app.js:282-341`) seeds the
+- Scheduling: `recordVerdict` (`static/js/study/source.js`) seeds the
   ladder from `local_step` and writes the overlay + the outbox
   review with `card_client_id`, exactly the M4 path. Anonymous
   study is real spaced repetition on the ladder
@@ -619,7 +622,7 @@ deck's name at adoption time via the `deck_name` field on the
 new-cards wire (section 3.4), so no client-side fake numeric id
 ever exists to collide with snapshot ids.
 
-**Boot gate change.** `offline-app.js:1225` currently renders the
+**Boot gate change.** `offline-app.js` `init()` currently renders the
 empty state when `meta.owner` is absent. New rule: empty only when
 there is neither an owner nor guest data; owner-absent with guest
 data boots into guest-mode overview.
@@ -716,7 +719,7 @@ once (identity only, no store writes, reusing
 `fetchSnapshotPayload`, `sync.js:76-87`), evaluates the state
 table, and either proceeds with the normal chain or shows the
 dialog. The offline shell's reconnect path
-(`offline-app.js:1143-1210`) gets the same treatment through the
+(`syncOnReconnect`, `offline-app.js`) gets the same treatment through the
 shared module when a user is signed in; in guest mode reconnect is
 a no-op, no flush and no banner (section 2, guest-mode
 differences).
@@ -813,7 +816,7 @@ Client:
 | `static/js/modules/instant-start.js` (new) | form state machine (idle / generating / ready / error), IDB writes via `@/offline/store.js` (`meta.guest` only when `meta.owner` is absent), returning-visitor strip gated on owner-absent, replace-deck confirm (guest mode only). Lazy-imported by `app.js` on its `data-instant-start` hook (same convention as `offline-link.js`). |
 | `static/js/app.js` | one lazy-import block for the new hook. |
 | `static/js/offline/sync.js` | `guestAdoptionPending()` gate at the top of `refreshSnapshot` (`:95-174`) and `flushOutbox` (`:292-410`), opened by the in-memory `adoptionApproved` latch for Accept's own flush; `initAdoption()` state-table step in `init()` (`:625-659`); the adoption dialog (shape of `:481-576`); `toWireCard` (`:202-210`) passes `deck_name` + `answer_regex`. `ownerAllows` (`:62-74`) and the owner-conflict flow (`:585-611`) untouched. |
-| `static/js/offline/offline-app.js` | boot gate (`:1225`) admits owner-absent guest data; owner-null guards on the two `state.owner` dereferences the gate exposes (`:508`, `:605-611`); guest-mode presentation branches (prelude, deck line from `meta.guest`, verdict qualifier `:904-906`, footer disclosure line, post-session nudge banner in `renderCaughtUp` `:947-976`); reconnect (`syncOnReconnect`, `:1236`) is a no-op in guest mode (no flush, no `:1182-1187` banner) and defers to the shared adoption gate when signed in. |
+| `static/js/offline/offline-app.js` | boot gate (`init()`) admits owner-absent guest data; owner-null guards on the two `state.owner` dereferences the gate exposes (both in `renderOverview`); guest-mode presentation branches (prelude, deck line from `meta.guest`, the `scheduleNote` verdict qualifier, footer disclosure line, post-session nudge banner in `renderCaughtUp`); reconnect (`syncOnReconnect`) is a no-op in guest mode (no flush, no banner) and defers to the shared adoption gate when signed in. |
 | `templates/offline.html` | `sign_in_url` data attribute on the root element. |
 
 Untouched on purpose: `static/js/offline/grader.js`,

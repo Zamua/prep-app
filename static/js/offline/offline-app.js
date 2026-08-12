@@ -3,202 +3,41 @@
 // and no server-resolved user, so everything here reads IndexedDB
 // (docs/OFFLINE.md section 3).
 //
-// M3 scope: offline STUDY. The overview (owner line, per-deck counts,
-// due list) gains a Study flow: one card per screen, deterministic
-// grading via grader.js where the card type allows it (mcq, multi,
-// regex short-answer), reveal + self-verdict everywhere else. Every
-// verdict writes a queued review to the outbox (drained by sync.js
-// when back online) plus the local ladder overlay via scheduler.js so
-// studied cards re-surface on the offline schedule (docs/OFFLINE.md
-// section 5). Reconnect shows a banner, flushes, and toasts the
-// result.
-//
-// M4 scope: offline AUTHORING. An "Add a card" form (front, back,
-// deck picker defaulting to the inbox) writes a local_cards row that
-// joins the study queue immediately as due, mirroring the online
-// "shows up as due immediately" behavior. Local cards study as short
-// self-verdict cards; their verdicts queue reviews keyed by
-// card_client_id instead of question_id, and sync.js sends the cards
-// themselves ahead of any review.
-//
-// M5 scope: the designed edges. The overview gains the
-// needs-attention list (server-rejected items with per-row dismiss)
-// and a quiet storage readout (estimate + persisted flag); the
-// reconnect flow surfaces sync.js's confirm-then-wipe dialog when
-// the owner guard trips (a different account signed in on this
-// device) instead of only handing off to the online app.
+// The study-loop views (card, reveal, verdict, caught-up, add-a-card)
+// live in static/js/study/components.js and are storage-agnostic;
+// this shell drives them against a LocalSource (static/js/study/
+// source.js) over the offline stores. What stays here: the overview
+// (owner line, per-deck counts, due list), the needs-attention list,
+// the guest-mode nudges, the storage readout, and the reconnect flow
+// (banner, outbox flush via sync.js, owner-conflict dialog).
 //
 // Plain DOM building, no framework, no innerHTML for data (card
-// prompts, choices, and answers are user content; textContent only).
+// prompts, choices, and answers are user content; textContent only,
+// with prompts going through the study components' escape-first
+// markdown renderer).
 
-import {get, getAll, metaGet, put, remove, uuid, withLock} from "./store.js";
+import {getAll, metaGet, put, remove, withLock} from "./store.js";
 import {flushOutbox, maybeConfirmOwnerConflict, refreshSnapshot, showToast} from "./sync.js";
-import * as grader from "./grader.js";
-import * as scheduler from "./scheduler.js";
+import {el, prelude, sectionEyebrow} from "../study/dom.js";
+import {
+  authorView,
+  caughtUpView,
+  revealView,
+  runPending,
+  setActionErrorHandler,
+  studyCardView,
+  verdictView,
+} from "../study/components.js";
+import {LocalSource, compareStudyOrder, isDueNow, nextDueInMinutes} from "../study/source.js";
 
 // The deploy's root path, derived from this module's own URL (same
 // trick as sync.js: the module is served under <root>/static/js/...).
 const ROOT_PATH = new URL(import.meta.url).pathname.replace(/\/static\/js\/.*$/, "");
 
-// ---- icons -----------------------------------------------------------
-// Phosphor Light path data (copied from static/icons/*.svg). Inlined
-// because the online app's icon() helper is a server-side Jinja
-// global and the raw icon files are not in the SW precache. Trusted
-// static markup, built via createElementNS, never innerHTML.
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-const ICON_PATHS = {
-  check:
-    "M228.24,76.24l-128,128a6,6,0,0,1-8.48,0l-56-56a6,6,0,0,1,8.48-8.48L96,191.51,219.76,67.76a6,6,0,0,1,8.48,8.48Z",
-  x:
-    "M204.24,195.76a6,6,0,1,1-8.48,8.48L128,136.49,60.24,204.24a6,6,0,0,1-8.48-8.48L119.51,128,51.76,60.24a6,6,0,0,1,8.48-8.48L128,119.51l67.76-67.75a6,6,0,0,1,8.48,8.48L136.49,128Z",
-  circle:
-    "M128,26A102,102,0,1,0,230,128,102.12,102.12,0,0,0,128,26Zm0,192a90,90,0,1,1,90-90A90.1,90.1,0,0,1,128,218Z",
-  dot: "M138,128a10,10,0,1,1-10-10A10,10,0,0,1,138,128Z",
-  "arrow-left":
-    "M222,128a6,6,0,0,1-6,6H54.49l61.75,61.76a6,6,0,1,1-8.48,8.48l-72-72a6,6,0,0,1,0-8.48l72-72a6,6,0,0,1,8.48,8.48L54.49,122H216A6,6,0,0,1,222,128Z",
-};
-
-function icon(name, className = "icon") {
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", "0 0 256 256");
-  svg.setAttribute("fill", "currentColor");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("class", className);
-  const path = document.createElementNS(SVG_NS, "path");
-  path.setAttribute("d", ICON_PATHS[name] || "");
-  svg.appendChild(path);
-  return svg;
-}
-
-// ---- tiny DOM helpers ------------------------------------------------
-
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-// The prelude pattern shared with the online settings pages: eyebrow,
-// display headline (with an italic beat), lede.
-function prelude(eyebrowText, headStart, headEm, ledeText) {
-  const section = el("section", "prelude");
-  section.appendChild(el("p", "eyebrow", eyebrowText));
-  const h1 = el("h1", "display", headStart + " ");
-  h1.appendChild(el("em", null, headEm));
-  h1.appendChild(document.createTextNode("."));
-  section.appendChild(h1);
-  section.appendChild(el("p", "lede", ledeText));
-  return section;
-}
-
-function sectionEyebrow(label, aside) {
-  const p = el("p", "section-eyebrow");
-  p.appendChild(el("span", null, label));
-  p.appendChild(el("span", "rule"));
-  if (aside) p.appendChild(el("span", "eyebrow-aside", aside));
-  return p;
-}
-
-// ---- due-time math ---------------------------------------------------
-
-// A card's effective due time offline: the local ladder overlay when
-// set, else the snapshot's server-computed next_due.
-function effectiveDue(card) {
-  return card.local_next_due || card.next_due || null;
-}
-
-// Due now = effective due parses and is in the past (via the ladder's
-// due()). A null due (a card the server considers due immediately)
-// counts as due; an unparseable timestamp does not (junk must not
-// flood the queue).
-function isDueNow(card, now) {
-  // scheduler.due owns the whole contract, including the fail-open
-  // rule: a missing or unparseable next_due counts as DUE. Filtering
-  // junk out here would silently vanish the card from the queue and
-  // deck counts forever; surfacing it costs one early review.
-  return scheduler.due(now, effectiveDue(card));
-}
-
-function dueTime(card) {
-  const dueAt = effectiveDue(card);
-  if (dueAt === null) return 0;
-  const t = Date.parse(dueAt);
-  return Number.isFinite(t) ? t : 0;
-}
-
-// ---- study ordering --------------------------------------------------
-//
-// Priority stays the selection rule: a genuinely more-overdue card
-// still comes first. What was stale is the TIE: a deck created in one
-// batch comes due all at once, so sorting on due time alone left the
-// order to array position and every sitting replayed the same
-// sequence.
-//
-// "Tie" has to mean same-MINUTE, not same-millisecond. Each card's
-// next_due is stamped from its own clock read, so a batch's
-// timestamps land microseconds apart and a millisecond comparison is
-// a total order in creation order: the tiebreak would never fire.
-// DUE_BUCKET_MS mirrors the server's _DUE_BUCKET (prep/study/repo.py)
-// so the offline queue and the online queue agree on what counts as
-// equally due: the wall-clock hour, wide enough that a generation
-// batch spanning seconds cannot split across buckets and replay in
-// creation order.
-//
-// The queue is recomputed on every render, so a random comparator
-// would reshuffle cards mid-sitting and make them jump between
-// screens. Instead each card gets ONE random key the first time it is
-// seen in this page load; the key lives until reload, which is the
-// span of a single sitting.
-
-const DUE_BUCKET_MS = 3600000;
-
-const shuffleKeys = new Map();
-
-// Snapshot cards are identified by question_id, locally authored ones
-// by client_id (a local card has no question_id). Namespaced so the
-// two id spaces can never collide.
-function cardIdentity(card) {
-  return card.client_id ? "local:" + card.client_id : "q:" + card.question_id;
-}
-
-function shuffleKey(card) {
-  const id = cardIdentity(card);
-  let key = shuffleKeys.get(id);
-  if (key === undefined) {
-    key = Math.random();
-    shuffleKeys.set(id, key);
-  }
-  return key;
-}
-
-// The minute a card came due. Cards sharing one bucket are treated as
-// equally due and get shuffled against each other.
-function dueBucket(card) {
-  return Math.floor(dueTime(card) / DUE_BUCKET_MS);
-}
-
-// Oldest effective due first; random-but-stable within the minute.
-function compareStudyOrder(a, b) {
-  return dueBucket(a) - dueBucket(b) || shuffleKey(a) - shuffleKey(b);
-}
-
-// Format a minute count the way the online result page does:
-// min / hr / day / week / month.
-function humanMinutes(m) {
-  if (m < 60) return m + " min";
-  if (m < 24 * 60) return Math.floor(m / 60) + " hr";
-  const days = Math.floor(m / (24 * 60));
-  if (days === 1) return "1 day";
-  if (days < 7) return days + " days";
-  if (days < 30) {
-    const weeks = Math.floor(days / 7);
-    return weeks + " week" + (weeks > 1 ? "s" : "");
-  }
-  const months = Math.floor(days / 30);
-  return months + " month" + (months > 1 ? "s" : "");
-}
+setActionErrorHandler((e) => {
+  console.warn("offline study action failed:", e);
+  showToast("Could not save that. Try again.");
+});
 
 // ---- state -----------------------------------------------------------
 
@@ -213,6 +52,8 @@ const state = {
   rejects: [],
   storage: null,
 };
+
+const source = new LocalSource(state);
 
 let root = null;
 let viewName = "loading";
@@ -294,215 +135,6 @@ function show(node, name) {
   root.replaceChildren(node);
   viewName = name;
   window.scrollTo(0, 0);
-}
-
-// ---- the study ledger ------------------------------------------------
-
-// Every verdict writes two things (docs/OFFLINE.md section 2): the
-// queued review for sync, and the local ladder overlay so the card
-// re-surfaces offline. The transition is computed first (pure), then
-// the outbox row, then the overlay; if the overlay write loses a
-// race with a crash the card just comes back early, while the review
-// itself is already safely queued.
-async function recordVerdict(card, verdict, userAnswer, gradedBy) {
-  // reviewed_at MUST be new Date().toISOString(): flushOutbox orders
-  // rows by LEXICOGRAPHIC reviewed_at comparison, which is only
-  // chronological when every timestamp is uniform-offset UTC ISO-8601.
-  const reviewedAt = new Date().toISOString();
-  const seedStep = card.local_step ?? card.step ?? 0;
-  const t = scheduler.transition(seedStep, verdict);
-  // A locally authored card is identified by its client UUID; the
-  // server resolves card_client_id through the created card's
-  // idempotency mapping at sync time (docs/OFFLINE.md section 4).
-  const isLocal = Boolean(card.client_id);
-  // Locked against sync.js's snapshot-refresh overlay merge: a
-  // refresh in flight between our outbox write and overlay write
-  // would wipe the overlay this tap creates (its pending-ids
-  // snapshot predates us). The lock makes tap and merge take turns.
-  const updated = await withLock(async () => {
-    const review = {
-      client_id: uuid(),
-      verdict,
-      user_answer: userAnswer,
-      graded_by: gradedBy,
-      reviewed_at: reviewedAt,
-    };
-    if (isLocal) review.card_client_id = card.client_id;
-    else review.question_id = card.question_id;
-    await put("outbox_reviews", review);
-    const row = {
-      ...card,
-      local_step: t.step,
-      // nextDueIso emits the same uniform-offset UTC shape as
-      // toISOString, keeping every timestamp we write on the
-      // lexicographic-ordering contract by construction.
-      local_next_due: scheduler.nextDueIso(Date.now(), t.next_due_minutes),
-    };
-    // The local ladder overlay lives ON the local_cards row for an
-    // authored card (the snapshot knows nothing about it yet). But a
-    // stale closure can outlive the row: if a background sync
-    // created the card and deleted the row while this view was open,
-    // re-putting it would resurrect a zombie copy next to the
-    // snapshot card. The review above still syncs fine by
-    // card_client_id (the server resolves it via the idempotency
-    // mapping), so on a missing row we skip the overlay write.
-    if (isLocal) {
-      const live = await get("local_cards", card.client_id);
-      if (live) await put("local_cards", row);
-    } else {
-      await put("cards", row);
-    }
-    return row;
-  });
-  if (isLocal) {
-    const i = state.localCards.findIndex((c) => c.client_id === card.client_id);
-    if (i !== -1) state.localCards[i] = updated;
-  } else {
-    const i = state.cards.findIndex((c) => c.question_id === card.question_id);
-    if (i !== -1) state.cards[i] = updated;
-  }
-  state.outboxCount += 1;
-  return t;
-}
-
-// ---- shared render pieces --------------------------------------------
-
-// Pending affordance for the study buttons: is-loading (spinner via
-// buttons.css) + a re-entrancy guard, no disabled attribute so the
-// button's box never restyles mid-tap (no layout shift).
-let actionInFlight = false;
-
-async function runPending(button, fn) {
-  // One guard for the whole view, not per-button: Submit then "I
-  // don't know" (or right then wrong) tapped in the same beat would
-  // otherwise BOTH record, writing two outbox rows with distinct
-  // client ids that server idempotency cannot dedupe.
-  if (actionInFlight) return;
-  actionInFlight = true;
-  button.classList.add("is-loading");
-  try {
-    await fn();
-  } catch (e) {
-    console.warn("offline study action failed:", e);
-    showToast("Could not save that. Try again.");
-  } finally {
-    actionInFlight = false;
-    button.classList.remove("is-loading");
-  }
-}
-
-function studyNav(card) {
-  const nav = el("nav", "study-nav");
-  const back = el("button", "offline-linkbtn back");
-  back.type = "button";
-  back.appendChild(icon("arrow-left", "icon icon-inline"));
-  back.appendChild(document.createTextNode(" Pause"));
-  back.addEventListener("click", () => renderOverview());
-  nav.appendChild(back);
-  nav.appendChild(
-    el("span", "card-id", card.question_id ? "№ " + card.question_id : "new card")
-  );
-  return nav;
-}
-
-function parseJsonArray(text) {
-  try {
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function answerBlock(card, text, isModel) {
-  if (card.type === "code") {
-    return el("pre", "reproduction" + (isModel ? " reproduction-model" : ""), text);
-  }
-  return el("blockquote", "prose-answer" + (isModel ? " prose-answer-model" : ""), text);
-}
-
-// The post-answer choice grid, same visual states as result.html:
-// correct-picked / wrong-picked / correct-missed / idle.
-function choiceGrid(card, picked, correct) {
-  const pickedSet = new Set(picked);
-  const correctSet = new Set(correct);
-  const list = el("ul", "answer-grid");
-  list.setAttribute("role", "list");
-  const options = card.choices && card.choices.length ? card.choices : correct;
-  for (const choice of options) {
-    const wasPicked = pickedSet.has(choice);
-    const isCorrect = correctSet.has(choice);
-    const cls =
-      wasPicked && isCorrect
-        ? "correct-picked"
-        : wasPicked
-          ? "wrong-picked"
-          : isCorrect
-            ? "correct-missed"
-            : "idle";
-    const row = el("li", "answer-row state-" + cls);
-    const marker = el("span", "answer-marker");
-    const markerIcon =
-      cls === "correct-picked"
-        ? "check"
-        : cls === "wrong-picked"
-          ? "x"
-          : cls === "correct-missed"
-            ? "circle"
-            : "dot";
-    marker.appendChild(icon(markerIcon));
-    row.appendChild(marker);
-    row.appendChild(el("span", "answer-text", choice));
-    const tags = el("span", "answer-tags");
-    if (wasPicked) tags.appendChild(el("span", "tag tag-pick", "your pick"));
-    if (isCorrect) tags.appendChild(el("span", "tag tag-correct", "correct"));
-    row.appendChild(tags);
-    list.appendChild(row);
-  }
-  return list;
-}
-
-// The answer-compare sections shared by the reveal and verdict views.
-// mcq/multi render the choice grid; everything else renders the
-// user's text (skipped on idk, like the online result page) then the
-// model answer, then the rubric when present.
-function compareSections(card, userAnswer, opts) {
-  const sections = [];
-  if (card.type === "mcq" || card.type === "multi") {
-    const section = el("section", "result-section");
-    section.appendChild(
-      sectionEyebrow("Choices", card.type === "multi" ? "pick all that apply" : null)
-    );
-    const correct =
-      card.type === "multi" ? parseJsonArray(card.answer || "") : [card.answer].filter(Boolean);
-    const picked = opts.idk
-      ? []
-      : card.type === "multi"
-        ? parseJsonArray(userAnswer || "")
-        : userAnswer
-          ? [userAnswer]
-          : [];
-    section.appendChild(choiceGrid(card, picked, correct));
-    sections.push(section);
-    return sections;
-  }
-  if (!opts.idk) {
-    const mine = el("section", "result-section");
-    mine.appendChild(sectionEyebrow(opts.userLabel));
-    mine.appendChild(answerBlock(card, userAnswer || "(blank)", false));
-    sections.push(mine);
-  }
-  const model = el("section", "result-section");
-  model.appendChild(sectionEyebrow(opts.modelLabel));
-  model.appendChild(answerBlock(card, card.answer || "", true));
-  sections.push(model);
-  if (card.rubric) {
-    const rubric = el("section", "result-section");
-    rubric.appendChild(sectionEyebrow("Rubric"));
-    rubric.appendChild(el("pre", "reproduction reproduction-rubric", card.rubric));
-    sections.push(rubric);
-  }
-  return sections;
 }
 
 // ---- views -----------------------------------------------------------
@@ -803,229 +435,65 @@ function renderRejects() {
   return section;
 }
 
-// The queue is recomputed on every advance (docs/OFFLINE.md section
-// 2): oldest effective due first, so a card answered wrong (+10m)
-// naturally returns later in a long sitting. Cards sharing a due time
-// fall back to their per-sitting shuffle key, so the batch that was
-// generated together varies run to run without jumping around
-// mid-sitting.
-function nextDueCard() {
-  const now = Date.now();
-  const dueCards = allStudyCards().filter((card) => isDueNow(card, now));
-  if (!dueCards.length) return null;
-  dueCards.sort(compareStudyOrder);
-  return dueCards[0];
-}
+// ---- the study loop --------------------------------------------------
 
-function startStudy() {
-  const card = nextDueCard();
-  if (card) renderStudyCard(card);
-  else renderCaughtUp();
+async function startStudy() {
+  const result = await source.next();
+  if (result.card) renderStudyCard(result.card);
+  else renderCaughtUp(result.caughtUp);
 }
 
 function renderStudyCard(card) {
-  const frag = document.createDocumentFragment();
-  frag.appendChild(studyNav(card));
-
-  const article = el("article", "study-card");
-  const head = el("header", "study-head");
-  head.appendChild(el("span", "tag tag-type tag-" + (card.type || "short"), card.type || "short"));
-  article.appendChild(head);
-  article.appendChild(el("div", "study-prompt", card.prompt || ""));
-
-  const form = document.createElement("form");
-  form.className = "study-form";
-
-  let collect;
-  if (card.type === "mcq" || card.type === "multi") {
-    const multi = card.type === "multi";
-    const fieldset = el("fieldset", "choices" + (multi ? " choices-multi" : ""));
-    fieldset.appendChild(
-      el("legend", "visually-hidden", multi ? "Pick all that apply" : "Choose one")
-    );
-    for (const choice of card.choices || []) {
-      const label = el("label", "choice");
-      const input = document.createElement("input");
-      input.type = multi ? "checkbox" : "radio";
-      input.name = "choice";
-      input.value = choice;
-      if (!multi) input.required = true;
-      label.appendChild(input);
-      label.appendChild(el("span", "choice-marker"));
-      label.appendChild(el("span", "choice-text", choice));
-      fieldset.appendChild(label);
-    }
-    form.appendChild(fieldset);
-    collect = () => {
-      const picked = Array.from(form.querySelectorAll("input:checked"), (i) => i.value);
-      // Mirror the online wire form (prep/study/routes.py
-      // _read_user_answer): mcq stores the choice string, multi a
-      // sorted JSON array string.
-      return multi ? JSON.stringify(picked.sort()) : picked[0] || "";
-    };
-  } else {
-    const wrap = el("label", "freetext");
-    wrap.appendChild(
-      el("span", "freetext-label", card.type === "code" ? "Your code" : "Your answer")
-    );
-    const ta = document.createElement("textarea");
-    ta.rows = card.type === "code" ? 10 : 6;
-    if (card.type === "code") {
-      ta.className = "code-area";
-      ta.spellcheck = false;
-      ta.placeholder = "Write it out. Pseudocode is fine if the idea is clear.";
-      if (card.skeleton) ta.value = card.skeleton;
-    } else {
-      ta.placeholder = "A sentence or two.";
-    }
-    wrap.appendChild(ta);
-    form.appendChild(wrap);
-    collect = () => ta.value;
-  }
-
-  const actions = el("div", "study-actions");
-  const submitBtn = el("button", "btn btn-primary", "Submit");
-  submitBtn.type = "submit";
-  const idkBtn = el("button", "btn btn-quiet", "I don't know");
-  idkBtn.type = "button";
-  actions.appendChild(submitBtn);
-  actions.appendChild(idkBtn);
-  form.appendChild(actions);
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    runPending(submitBtn, async () => {
-      const answer = collect();
-      let graded = null;
-      try {
-        graded = grader.grade(card, answer);
-      } catch (e) {
-        graded = null; // an ungradeable card falls through to self-verdict
-      }
-      if (graded && graded.verdict) {
-        const t = await recordVerdict(card, graded.verdict, answer, "auto");
-        renderVerdict(card, graded.verdict, answer, {minutes: t.next_due_minutes, idk: false});
-      } else {
-        renderReveal(card, answer);
-      }
-    });
-  });
-
-  // "I don't know": wrong verdict with an empty answer, same as the
-  // online idk path. Deterministic, so graded_by stays "auto".
-  idkBtn.addEventListener("click", () => {
-    runPending(idkBtn, async () => {
-      const t = await recordVerdict(card, "wrong", "", "auto");
-      renderVerdict(card, "wrong", "", {minutes: t.next_due_minutes, idk: true});
-    });
-  });
-
-  article.appendChild(form);
-  frag.appendChild(article);
-  show(frag, "study");
+  show(
+    studyCardView(card, {
+      onPause: () => renderOverview(),
+      onAnswer: async (answer) => {
+        const result = await source.submit(card, {answer});
+        if (result.selfGrade) renderReveal(card, answer);
+        else renderVerdict(card, result.verdict, answer, {minutes: result.nextDueMinutes, idk: false});
+      },
+      onIdk: async () => {
+        const result = await source.submit(card, {idk: true});
+        renderVerdict(card, "wrong", "", {minutes: result.nextDueMinutes, idk: true});
+      },
+    }),
+    "study"
+  );
 }
 
-// Reveal + self-verdict: the offline analogue of self_grade.html, for
-// card types with no deterministic grader (code, short without a
-// usable regex).
 function renderReveal(card, answer) {
-  const frag = document.createDocumentFragment();
-  frag.appendChild(studyNav(card));
-
-  const article = el("article", "study-card");
-  article.appendChild(sectionEyebrow("Self-grade"));
-  article.appendChild(
-    el(
-      "p",
-      "muted offline-selfgrade-blurb",
-      "No deterministic grader applies offline, so you're the judge. " +
-        "Compare what you wrote against the canonical answer and pick " +
-        "honestly. The scheduler works either way."
-    )
+  show(
+    revealView(card, answer, {
+      onPause: () => renderOverview(),
+      onVerdict: async (verdict) => {
+        const result = await source.submit(card, {verdict, answer});
+        renderVerdict(card, verdict, answer, {minutes: result.nextDueMinutes, idk: false});
+      },
+    }),
+    "reveal"
   );
-  article.appendChild(sectionEyebrow("The question"));
-  article.appendChild(el("div", "study-prompt", card.prompt || ""));
-  const sections = compareSections(card, answer, {
-    idk: false,
-    userLabel: "Your answer",
-    modelLabel: "Canonical answer",
-  });
-  for (const section of sections) article.appendChild(section);
-
-  const actions = el("div", "study-actions");
-  const rightBtn = el("button", "btn btn-primary", "I got it right");
-  rightBtn.type = "button";
-  const wrongBtn = el("button", "btn btn-quiet", "I got it wrong");
-  wrongBtn.type = "button";
-  const decide = (verdict, button) =>
-    runPending(button, async () => {
-      const t = await recordVerdict(card, verdict, answer, "self");
-      renderVerdict(card, verdict, answer, {minutes: t.next_due_minutes, idk: false});
-    });
-  rightBtn.addEventListener("click", () => decide("right", rightBtn));
-  wrongBtn.addEventListener("click", () => decide("wrong", wrongBtn));
-  actions.appendChild(rightBtn);
-  actions.appendChild(wrongBtn);
-  article.appendChild(actions);
-
-  frag.appendChild(article);
-  show(frag, "reveal");
 }
 
 function renderVerdict(card, verdict, userAnswer, opts) {
-  const frag = document.createDocumentFragment();
-  frag.appendChild(studyNav(card));
-
-  const right = verdict === "right";
-  const block = el("section", "verdict-block");
-  const mark = el("span", "verdict-mark " + (right ? "verdict-mark-right" : "verdict-mark-wrong"));
-  mark.appendChild(icon(right ? "check" : "x"));
-  block.appendChild(mark);
-  block.appendChild(el("h1", "verdict-headline", right ? "Right." : "Not yet."));
-  const sub = el("p", "verdict-sub", "Next review in ");
-  sub.appendChild(el("strong", null, humanMinutes(opts.minutes)));
-  // The "offline schedule" qualifier marks divergence from the
-  // server's FSRS truth; for a guest the ladder IS the schedule.
-  if (!isGuest()) sub.appendChild(document.createTextNode(" · offline schedule"));
-  block.appendChild(sub);
-  frag.appendChild(block);
-
-  const question = el("section", "result-section");
-  question.appendChild(sectionEyebrow("The question"));
-  question.appendChild(el("div", "study-prompt", card.prompt || ""));
-  frag.appendChild(question);
-
-  const sections = compareSections(card, userAnswer, {
-    idk: opts.idk,
-    userLabel: "What you wrote",
-    modelLabel: "Model answer",
-  });
-  for (const section of sections) frag.appendChild(section);
-
-  const actions = el("div", "study-actions next-actions");
-  const nextBtn = el("button", "btn btn-primary", "Next card");
-  nextBtn.type = "button";
-  nextBtn.addEventListener("click", () => startStudy());
-  const pauseBtn = el("button", "btn btn-quiet", "Pause");
-  pauseBtn.type = "button";
-  pauseBtn.addEventListener("click", () => renderOverview());
-  actions.appendChild(nextBtn);
-  actions.appendChild(pauseBtn);
-  frag.appendChild(actions);
-
-  show(frag, "verdict");
-}
-
-function nextDueInMinutes() {
-  const now = Date.now();
-  let best = null;
-  for (const card of allStudyCards()) {
-    const t = Date.parse(effectiveDue(card) || "");
-    if (!Number.isFinite(t) || t <= now) continue;
-    if (best === null || t < best) best = t;
-  }
-  if (best === null) return null;
-  return Math.max(1, Math.ceil((best - now) / 60000));
+  show(
+    verdictView(
+      card,
+      verdict,
+      userAnswer,
+      {
+        minutes: opts.minutes,
+        idk: opts.idk,
+        // The "offline schedule" qualifier marks divergence from the
+        // server's FSRS truth; for a guest the ladder IS the schedule.
+        scheduleNote: isGuest() ? null : " · offline schedule",
+      },
+      {
+        onNext: () => startStudy(),
+        onPause: () => renderOverview(),
+      }
+    ),
+    "verdict"
+  );
 }
 
 // Post-session account nudge: shown at most once per page load, only
@@ -1073,7 +541,7 @@ function guestNudgeBanner() {
   return banner;
 }
 
-function renderCaughtUp() {
+function renderCaughtUp(summary) {
   const frag = document.createDocumentFragment();
   if (
     isGuest() &&
@@ -1085,150 +553,30 @@ function renderCaughtUp() {
     nudgeShownThisLoad = true;
     frag.appendChild(guestNudgeBanner());
   }
-  const section = el("section", "empty-state");
-  const h = el("h2", "empty-headline", "All caught up ");
-  h.appendChild(el("em", null, "offline"));
-  h.appendChild(document.createTextNode("."));
-  section.appendChild(h);
-  const minutes = nextDueInMinutes();
-  section.appendChild(
-    el(
-      "p",
-      "empty-sub",
-      minutes === null
-        ? "Nothing else is scheduled on this device."
-        : "The next card comes due in " + humanMinutes(minutes) + "."
-    )
+  frag.appendChild(
+    caughtUpView(summary || {nextDueMinutes: nextDueInMinutes(allStudyCards())}, {
+      onAdd: () => renderAuthor(),
+      onBack: () => renderOverview(),
+    })
   );
-  const actions = el("div", "study-actions caughtup-actions");
-  const add = el("button", "btn btn-primary", "Add a card");
-  add.type = "button";
-  add.addEventListener("click", () => renderAuthor());
-  actions.appendChild(add);
-  const back = el("button", "btn btn-quiet", "Back to overview");
-  back.type = "button";
-  back.addEventListener("click", () => renderOverview());
-  actions.appendChild(back);
-  section.appendChild(actions);
-  frag.appendChild(section);
   show(frag, "caughtup");
 }
 
-// ---- authoring (M4) --------------------------------------------------
-
-// The add-a-card form: front, back, deck picker (snapshot decks plus
-// the inbox default). Saving writes a local_cards row that is due
-// immediately (local_next_due null) and studies as a short
-// self-verdict card; sync.js sends it as a new_cards item ahead of
-// any review that references it.
 function renderAuthor() {
-  const frag = document.createDocumentFragment();
-
-  const nav = el("nav", "study-nav");
-  const back = el("button", "offline-linkbtn back");
-  back.type = "button";
-  back.appendChild(icon("arrow-left", "icon icon-inline"));
-  back.appendChild(document.createTextNode(" Back"));
-  back.addEventListener("click", () => renderOverview());
-  nav.appendChild(back);
-  frag.appendChild(nav);
-
-  const article = el("article", "study-card author-card");
-  article.appendChild(sectionEyebrow("Add a card"));
-  article.appendChild(
-    el(
-      "p",
-      "muted offline-author-blurb",
-      "Saved to this device now, added to your account next time you " +
-        "sync. It studies as a reveal-and-self-grade card and is due " +
-        "immediately."
-    )
-  );
-
-  const form = document.createElement("form");
-  form.className = "study-form author-form";
-
-  // All three controls sit in .freetext wrappers: the shared forms.css
-  // chrome styles them AND keeps the font at 1rem (16px), which is
-  // what stops iOS Safari's auto-zoom-on-focus.
-  const promptWrap = el("label", "freetext");
-  promptWrap.appendChild(el("span", "freetext-label", "Front"));
-  const promptTa = document.createElement("textarea");
-  promptTa.rows = 4;
-  promptTa.placeholder = "The question you want to be asked.";
-  promptWrap.appendChild(promptTa);
-  form.appendChild(promptWrap);
-
-  const answerWrap = el("label", "freetext");
-  answerWrap.appendChild(el("span", "freetext-label", "Back"));
-  const answerInput = document.createElement("input");
-  answerInput.type = "text";
-  answerInput.placeholder = "The canonical answer.";
-  answerWrap.appendChild(answerInput);
-  form.appendChild(answerWrap);
-
-  const deckWrap = el("label", "freetext");
-  deckWrap.appendChild(el("span", "freetext-label", "Deck"));
-  const deckSelect = document.createElement("select");
-  const inboxOption = document.createElement("option");
-  inboxOption.value = "";
-  inboxOption.textContent = "inbox (default)";
-  deckSelect.appendChild(inboxOption);
-  for (const deck of state.decks) {
-    const option = document.createElement("option");
-    option.value = String(deck.id);
-    option.textContent = deck.display_name || deck.name;
-    deckSelect.appendChild(option);
-  }
-  deckWrap.appendChild(deckSelect);
-  form.appendChild(deckWrap);
-
-  const errorLine = el("p", "author-error", "");
-  errorLine.setAttribute("role", "alert");
-  errorLine.hidden = true;
-  form.appendChild(errorLine);
-
-  const actions = el("div", "study-actions");
-  const saveBtn = el("button", "btn btn-primary", "Save card");
-  saveBtn.type = "submit";
-  actions.appendChild(saveBtn);
-  form.appendChild(actions);
-
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    runPending(saveBtn, async () => {
-      const prompt = promptTa.value.trim();
-      const answer = answerInput.value.trim();
-      if (!prompt || !answer) {
-        errorLine.textContent = "Both the front and the back are required.";
-        errorLine.hidden = false;
-        return;
+  show(
+    authorView(
+      {decks: state.decks},
+      {
+        onBack: () => renderOverview(),
+        onSave: async (input) => {
+          await source.author(input);
+          showToast("Card added");
+          renderOverview();
+        },
       }
-      errorLine.hidden = true;
-      const row = {
-        client_id: uuid(),
-        deck_id: deckSelect.value ? Number(deckSelect.value) : null,
-        prompt,
-        answer,
-        created_at: new Date().toISOString(),
-        local_step: 0,
-        // null = due now, mirroring the online "shows up as due
-        // immediately" behavior for manual authoring.
-        local_next_due: null,
-      };
-      // Locked for the same reason as recordVerdict: local_cards rows
-      // must not be written while flushOutbox is mid-drain deciding
-      // which rows it already sent.
-      await withLock(() => put("local_cards", row));
-      state.localCards.push(row);
-      showToast("Card added");
-      renderOverview();
-    });
-  });
-
-  article.appendChild(form);
-  frag.appendChild(article);
-  show(frag, "author");
+    ),
+    "author"
+  );
 }
 
 // ---- reconnect + sync ------------------------------------------------
