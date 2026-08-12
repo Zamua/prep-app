@@ -24,6 +24,7 @@ from prep import chat_handoff
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import QuestionRepo
 from prep.domain import grading
+from prep.domain.qa_extract import parse_qa_pairs as _parse_qa_pairs
 from prep.trivia.agent_client import AgentBusy, AgentUnavailable, run_prompt, run_prompt_async
 from prep.trivia.repo import TriviaQueueRepo
 
@@ -137,28 +138,6 @@ def _build_prompt(topic: str, batch_size: int, existing: list[str]) -> str:
         "topic": topic.strip(),
         "existing": existing_block,
     }
-
-
-def _parse_qa_pairs(stdout: str) -> list[dict]:
-    """Tolerant parse: the model sometimes wraps JSON in code fences
-    or adds a leading note even when told not to. Strip those, then
-    try `json.loads` on the bracket-bounded chunk.
-    """
-    text = stdout.strip()
-    # Strip common code-fence wrappers.
-    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\s*```\s*$", "", text)
-    # Find the first [ and last ] - the model occasionally adds a
-    # leading "Here are 25 questions:" line despite our instruction.
-    start = text.find("[")
-    end = text.rfind("]")
-    if start < 0 or end < 0 or end < start:
-        raise ValueError("agent output contained no JSON array")
-    chunk = text[start : end + 1]
-    parsed = json.loads(chunk)
-    if not isinstance(parsed, list):
-        raise ValueError("agent JSON was not a list")
-    return parsed
 
 
 def generate_batch(
