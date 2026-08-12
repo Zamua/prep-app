@@ -40,7 +40,8 @@ help:
 	@echo "  make lint     — ruff check + go vet (read-only)"
 	@echo "  make format   — ruff format + gofmt (writes)"
 	@echo "  make test     — pytest (python unit + integration tests)"
-	@echo "  make e2e      — Playwright/httpx smoke against \$$E2E_BASE_URL (defaults to devel)"
+	@echo "  make e2e      — Playwright/httpx smoke against a DEPLOYED \$$E2E_BASE_URL (needs credentials; see the e2e section)"
+	@echo "  make e2e-local— browser + offline coverage against a local server (no deploy, no credentials)"
 	@echo "  make ci       — lint + test + e2e."
 	@echo "  make hooks    — install pre-commit hook (idempotent; runs as part of \`make setup\`)"
 	@echo "  make clean    — kill stray dev processes; preserve data"
@@ -98,17 +99,27 @@ test: tools
 	$(RUN) .venv/bin/pytest -x
 
 # ----- e2e -----
-# Drives Playwright + an httpx client against a deployed prep instance
-# (devel by default; override target with `E2E_BASE_URL=...`). Each
-# session creates a throwaway `e2e-test-deck` via the app's HTTP routes,
-# runs assertions, then deletes it — so create + delete + cascade are
-# themselves under test. Tests live under tests/e2e/ (excluded from
-# `make test` via pyproject's norecursedirs).
+# Drives Playwright + an httpx client against a DEPLOYED prep instance.
+# Each session creates a throwaway `e2e-test-deck` via the app's HTTP
+# routes, runs assertions, then deletes it, so create + delete +
+# cascade are themselves under test. Tests live under tests/e2e/
+# (excluded from `make test` via pyproject's norecursedirs).
+#
+# Credentials, because the public deploys use Clerk:
+#   E2E_API_TOKEN     a `prep_pat_…` from /settings/api, for the httpx
+#                     setup fixtures.
+#   E2E_CLERK_EMAIL   a `+clerk_test` account and its password, for the
+#   E2E_CLERK_PASSWORD  browser fixtures (signed in once per session).
+# Missing either makes the deployed suites SKIP with the reason rather
+# than pass while testing nothing.
+#
+# `make e2e-local` needs none of this: it runs the browser coverage
+# that does not require a deployed worker against a local server.
 #
 # Pre-flight: the deployed instance has to be up. We check `/` returns
 # 200 first; bail with a clear error otherwise rather than wasting
 # minutes on per-test timeouts.
-E2E_BASE_URL ?= https://macmini.trout-chimera.ts.net/prep-devel
+E2E_BASE_URL ?= https://staging.prepcards.app
 
 e2e: tools
 	@echo "→ e2e against $(E2E_BASE_URL)"
@@ -127,6 +138,30 @@ e2e: tools
 	  echo "        browser tests will skip"; \
 	fi
 	E2E_BASE_URL=$(E2E_BASE_URL) $(RUN) .venv/bin/pytest -x tests/e2e
+
+# Browser + offline coverage that boots its own local server: no
+# deploy, no credentials. Run it on any machine, any time.
+#
+# One file at a time on purpose: each file starts its own uvicorn, and
+# under memory pressure a multi-file run produces false navigation
+# timeouts that look like product failures.
+E2E_LOCAL_FILES = \
+	tests/e2e/test_local_browser_smoke.py \
+	tests/e2e/test_online_study_e2e.py \
+	tests/e2e/test_study_components_e2e.py \
+	tests/e2e/test_offline_study_e2e.py \
+	tests/e2e/test_offline_author_e2e.py \
+	tests/e2e/test_offline_adoption_e2e.py \
+	tests/e2e/test_offline_m5_e2e.py \
+	tests/e2e/test_offline_parity.py \
+	tests/e2e/test_markdown_parity.py \
+	tests/e2e/test_instant_start_e2e.py
+
+e2e-local: tools
+	@for f in $(E2E_LOCAL_FILES); do \
+	  echo "→ $$f"; \
+	  $(RUN) .venv/bin/pytest -q $$f || exit 1; \
+	done
 
 # ----- CI bundle -----
 # Lint + test (in-process) + e2e (against devel). Each step exits

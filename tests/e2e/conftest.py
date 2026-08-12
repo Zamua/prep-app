@@ -22,10 +22,18 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
-# Default points at staging behind Tailscale serve. Override locally with
+# Where the deployed-target suites point. Override with
 # `E2E_BASE_URL=http://localhost:8082` (or another env) at invocation
 # time. The trailing slash is normalized off so callers can `+ "/path"`.
-DEFAULT_BASE_URL = "https://macmini.trout-chimera.ts.net/prep-staging"
+#
+# Staging authenticates with Clerk, so these suites need credentials:
+# a `prep_pat_…` in E2E_API_TOKEN for the httpx setup fixtures, and a
+# signed-in browser profile for the page fixtures (see
+# `deployed_target` and `clerk_storage_state`). Without them the
+# deployed suites SKIP with the reason; they must never silently pass
+# by testing nothing, which is what happened while this default still
+# pointed at a local stack that had been retired.
+DEFAULT_BASE_URL = "https://staging.prepcards.app"
 
 E2E_DECK_NAME = "e2e-test-deck"
 
@@ -59,15 +67,53 @@ def base_url() -> str:
 
 
 @pytest.fixture(scope="session")
-def http(base_url: str) -> Iterator[httpx.Client]:
-    """Synchronous HTTP client for setup/teardown. Tailscale serve on
-    the same machine auto-injects identity headers, so no auth setup
-    needed when running on the mac mini host. Outside that environment
-    set E2E_TAILSCALE_LOGIN to spoof for local fastapi dev."""
-    headers = {}
+def deployed_target(base_url: str) -> str:
+    """Guard for every suite that talks to a DEPLOYED prep.
+
+    Proves the target is reachable AND is really prep before any test
+    runs, then reports precisely what is missing. A wrong or retired
+    URL now fails here with the URL in the message instead of surfacing
+    as unrelated assertion noise (or, worse, as a suite that quietly
+    exercises nothing)."""
+    probe = f"{base_url}/healthz"
+    try:
+        r = httpx.get(probe, timeout=10.0, follow_redirects=False)
+    except httpx.HTTPError as e:
+        pytest.skip(f"deployed target unreachable at {probe}: {e}")
+    if r.status_code != 200:
+        pytest.skip(f"{probe} returned {r.status_code}; not a live prep deploy")
+    body = (r.text or "").lower()
+    if "ok" not in body and "healthy" not in body:
+        pytest.skip(f"{probe} answered 200 but does not look like prep: {body[:60]!r}")
+    return base_url
+
+
+@pytest.fixture(scope="session")
+def http(base_url: str, deployed_target: str) -> Iterator[httpx.Client]:
+    """Synchronous HTTP client for setup/teardown against a deployed
+    prep.
+
+    Auth, in the order the deploy shapes need it:
+      - E2E_API_TOKEN (`prep_pat_…`): the public bearer API. This is
+        what a Clerk deploy such as staging requires; mint one at
+        /settings/api while signed in.
+      - E2E_TAILSCALE_LOGIN: header spoof, for a tailscale-mode or
+        local dev server only.
+    Neither present means the suite cannot create its fixtures, so it
+    skips rather than failing test by test."""
+    token = os.environ.get("E2E_API_TOKEN")
     spoof = os.environ.get("E2E_TAILSCALE_LOGIN")
-    if spoof:
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    elif spoof:
         headers["Tailscale-User-Login"] = spoof
+    else:
+        pytest.skip(
+            "no credentials for the deployed target: set E2E_API_TOKEN "
+            "(a prep_pat_ token from /settings/api) for a Clerk deploy, "
+            "or E2E_TAILSCALE_LOGIN for a tailscale-mode server"
+        )
     with httpx.Client(
         base_url=base_url,
         headers=headers,
@@ -248,8 +294,59 @@ def default_user_header() -> str:
     return os.environ.get("E2E_TAILSCALE_LOGIN", _DEFAULT_TS_LOGIN)
 
 
+@pytest.fixture(scope="session")
+def clerk_storage_state(browser_session, base_url, deployed_target):
+    """A signed-in browser profile for Clerk deploys, or None when the
+    target does not need one.
+
+    The header spoof below only authenticates a tailscale-mode server.
+    A Clerk deploy (staging, prod) ignores it, so browser tests there
+    need a real session: this signs in ONCE with a test account and
+    hands every context the resulting storage state.
+
+    Credentials come from E2E_CLERK_EMAIL / E2E_CLERK_PASSWORD. On the
+    staging Clerk instance a `+clerk_test` address skips real email
+    delivery. Missing credentials skip the browser suites rather than
+    letting them run unauthenticated and assert on a sign-in page."""
+    probe = httpx.get(f"{base_url}/", timeout=15.0, follow_redirects=False)
+    # A tailscale-mode server serves the app (or its own 401) directly;
+    # a Clerk deploy bounces an anonymous visitor to its sign-in host.
+    needs_clerk = (
+        probe.status_code in (302, 303, 307, 308)
+        and "clerk" in (probe.headers.get("location", "") + probe.text).lower()
+    )
+    if not needs_clerk:
+        return None
+
+    email = os.environ.get("E2E_CLERK_EMAIL")
+    password = os.environ.get("E2E_CLERK_PASSWORD")
+    if not (email and password):
+        pytest.skip(
+            f"{base_url} authenticates with Clerk; set E2E_CLERK_EMAIL and "
+            "E2E_CLERK_PASSWORD (a +clerk_test account) to run browser "
+            "tests against it"
+        )
+
+    ctx = browser_session.new_context()
+    page = ctx.new_page()
+    try:
+        page.goto(f"{base_url}/", wait_until="domcontentloaded", timeout=30_000)
+        page.get_by_label("Email address").fill(email)
+        page.get_by_role("button", name="Continue").click()
+        page.get_by_label("Password").fill(password)
+        page.get_by_role("button", name="Continue").click()
+        # Landing back on the app (not the identity host) is the signal.
+        page.wait_for_url(f"{base_url}/**", timeout=30_000)
+        state = ctx.storage_state()
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"Clerk sign-in failed for {email}: {e}")
+    finally:
+        ctx.close()
+    return state
+
+
 @pytest.fixture(scope="function")
-def page(browser_session, base_url, default_user_header):
+def page(browser_session, base_url, default_user_header, clerk_storage_state):
     """Per-test browser context + page, sized to iPhone-15-Pro for
     parity with the actual primary user (PWA on phone). The context
     routes the Tailscale-User-Login header onto SAME-ORIGIN requests
@@ -279,6 +376,8 @@ def page(browser_session, base_url, default_user_header):
         device_scale_factor=3,
         is_mobile=True,
         has_touch=True,
+        # Present on Clerk deploys, None on tailscale-mode servers.
+        storage_state=clerk_storage_state,
     )
     ctx.set_default_timeout(15_000)
     ctx.set_default_navigation_timeout(15_000)
