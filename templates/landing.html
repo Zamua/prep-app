@@ -198,7 +198,11 @@
   </ul>
 </section>
 
-{% if sign_in_url %}
+{# Bottom CTA band: only on the marketing-hero variant. With the
+   instant hero active the real call to action is the topic box at
+   the top; a bottom band that bounces to the sign-in page would
+   compete with it for no benefit. #}
+{% if sign_in_url and not instant_enabled %}
 <section class="landing-cta-band">
   <h2 class="landing-cta-band-h">Start a deck.</h2>
   <p class="landing-cta-band-lede">Free for now. No card required.</p>

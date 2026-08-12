@@ -73,8 +73,10 @@ def test_both_gates_pass_renders_instant_hero(client, initialized_db, visitor_pr
     assert "Generate my deck" in body
     assert NOSCRIPT_COPY in body
     assert DISCLOSURE_COPY in body
-    # Marketing hero CTA is gone; the demoted sections stay below.
+    # Marketing hero CTA and the bottom CTA band are gone; the demoted
+    # sections stay below.
     assert MARKETING_CTA not in body
+    assert "landing-cta-band" not in body
     assert "How it works" in body
     # Masthead sign-in chip stays.
     assert 'href="/sign-in"' in body
