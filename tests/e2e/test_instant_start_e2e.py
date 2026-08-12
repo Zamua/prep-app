@@ -268,8 +268,11 @@ def test_full_anonymous_loop_generate_study_nudge(instant_server, instant_ctx):
     assert page.locator(".prelude .eyebrow").inner_text() == "Your deck"
     assert page.locator(".prelude h1").inner_text() == "World Capitals"
     assert "5 cards are due right now." in page.locator(".lede").inner_text()
-    # Guest mode reads as the app: plain brand, no "offline" suffix.
+    # Guest mode reads as the app: plain brand, no "offline" suffix,
+    # and the brand links back to the landing (the guest's only way
+    # out of the study surface).
     assert page.locator(".masthead .brand-word").inner_text() == "Prep"
+    assert page.locator("a.masthead-brand").get_attribute("href").endswith("/")
     # The one guest deck renders from meta.guest with live counts.
     assert "5 due · 5 cards" in page.locator(".offline-deck-list").inner_text()
     # Persistent disclosure line instead of the snapshot stamp.
@@ -627,12 +630,13 @@ def test_guest_shell_boot_never_shows_sync_banner(instant_server, instant_ctx):
         },
     )
 
-    # Boot with the guest data present: guest overview renders with
-    # the queued-review note, and the reconnect path stays silent.
+    # Boot with the guest data present: guest overview renders WITHOUT
+    # the account-flavored waiting-to-sync notes, and the reconnect
+    # path stays silent.
     page.goto(base + "/offline")
     page.wait_for_selector(".offline-deck-list")
     assert "2 cards are due right now." in page.locator(".lede").inner_text()
-    assert "1 review waiting to sync." in page.locator("#offline-root").inner_text()
+    assert "waiting to sync" not in page.locator("#offline-root").inner_text()
     page.wait_for_timeout(1_500)
     assert page.locator(".offline-banner").count() == 0
     assert healthz_probes == []

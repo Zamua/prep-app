@@ -36,10 +36,13 @@
 <body class="page-offline">
   <header class="masthead-wrap">
     <div class="masthead">
-      <span class="masthead-brand">
+      {# Same anchor shape as base.html's masthead: the brand is the
+         way back to the landing. Load-bearing for guests, whose only
+         other navigation is the study loop itself. #}
+      <a class="masthead-brand" href="{{ root }}/">
         <span class="brand-mark">P</span>
         <span class="brand-word">Prep&nbsp;·&nbsp;<em>offline</em></span>
-      </span>
+      </a>
     </div>
   </header>
   <div class="paper">

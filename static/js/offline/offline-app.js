@@ -615,8 +615,16 @@ function renderOverview() {
   const dueSection = el("section", "offline-due");
   dueSection.appendChild(sectionEyebrow("Due now"));
   if (dueCards.length === 0) {
+    // Guests have no account to sync against; the "come back online"
+    // clause only makes sense once an owner exists.
     dueSection.appendChild(
-      el("p", "muted", "Nothing due. Check back later, or come back online to sync.")
+      el(
+        "p",
+        "muted",
+        state.owner
+          ? "Nothing due. Check back later, or come back online to sync."
+          : "Nothing due right now. Check back later."
+      )
     );
   } else {
     const list = el("ul", "offline-due-list");
@@ -631,7 +639,10 @@ function renderOverview() {
   if (state.rejects.length) frag.appendChild(renderRejects());
 
   // ---- footer lines -------------------------------------------------
-  if (state.outboxCount) {
+  // The waiting-to-sync notes describe the flush into an ACCOUNT.
+  // Guests have nothing to sync against; the disclosure line below
+  // carries their storage story instead.
+  if (state.owner && state.outboxCount) {
     frag.appendChild(
       el(
         "p",
@@ -642,7 +653,7 @@ function renderOverview() {
       )
     );
   }
-  if (state.localCards.length) {
+  if (state.owner && state.localCards.length) {
     frag.appendChild(
       el(
         "p",
