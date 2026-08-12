@@ -8,7 +8,7 @@ the trivia queue.
 `grade_answer` — deterministic case/punctuation/whitespace-tolerant
 equivalence check. Free-text trivia answers are short by design, so a
 normalized-string compare is ~good-enough for the MVP. We can swap to
-a claude-graded path later by routing through the existing
+an AI-graded path later by routing through the existing
 `GradeAnswer` Temporal workflow without touching this seam.
 """
 
@@ -24,7 +24,7 @@ from prep import chat_handoff
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import QuestionRepo
 from prep.domain import grading
-from prep.trivia.agent_client import AgentUnavailable, run_prompt, run_prompt_async
+from prep.trivia.agent_client import AgentBusy, AgentUnavailable, run_prompt, run_prompt_async
 from prep.trivia.repo import TriviaQueueRepo
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ DEFAULT_BATCH_SIZE = 25
 @dataclass(frozen=True)
 class GenerateOutcome:
     """Result of a generate_batch call. `inserted` is the count of new
-    questions actually written; some entries from claude get rejected
-    if they're duplicates or malformed.
+    questions actually written; some entries from the model get
+    rejected if they're duplicates or malformed.
     """
 
     inserted: int
@@ -140,16 +140,16 @@ def _build_prompt(topic: str, batch_size: int, existing: list[str]) -> str:
 
 
 def _parse_qa_pairs(stdout: str) -> list[dict]:
-    """Tolerant parse: claude sometimes wraps JSON in code fences or
-    adds a leading note even when told not to. Strip those, then try
-    `json.loads` on the bracket-bounded chunk.
+    """Tolerant parse: the model sometimes wraps JSON in code fences
+    or adds a leading note even when told not to. Strip those, then
+    try `json.loads` on the bracket-bounded chunk.
     """
     text = stdout.strip()
     # Strip common code-fence wrappers.
     text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s*```\s*$", "", text)
-    # Find the first [ and last ] — claude occasionally adds a leading
-    # "Here are 25 questions:" line despite our explicit instruction.
+    # Find the first [ and last ] - the model occasionally adds a
+    # leading "Here are 25 questions:" line despite our instruction.
     start = text.find("[")
     end = text.rfind("]")
     if start < 0 or end < 0 or end < start:
@@ -203,12 +203,13 @@ def generate_batch(
             continue
         q = (raw.get("q") or "").strip()
         a = (raw.get("a") or "").strip()
-        # Explanation is optional — if claude omits it the card still
-        # works, the Deep dive section just stays hidden.
+        # Explanation is optional - if the model omits it the card
+        # still works, the Deep dive section just stays hidden.
         e = (raw.get("e") or "").strip() or None
-        # Regex is optional + validated. If claude returned something
-        # that doesn't compile or doesn't match the canonical answer,
-        # store None — the grader falls through to its legacy path.
+        # Regex is optional + validated. If the model returned
+        # something that doesn't compile or doesn't match the
+        # canonical answer, store None - the grader falls through to
+        # its legacy path.
         r_raw = raw.get("r")
         r = grading.validate_regex_update(r_raw, expected_literal=a) if r_raw else None
         if not q or not a:
@@ -266,14 +267,15 @@ def _normalize_for_grading(s: str) -> str:
 def looks_like_paraphrase(*, expected: str, given: str) -> bool:
     """True if the user's answer looks substantive enough that
     deterministic-said-wrong might be a false negative. Used by the
-    routes layer as a tie-breaker to escalate to claude.
+    routes layer as a tie-breaker to escalate to the AI grader.
 
     Signals (any one is enough):
       - given has 2+ more tokens than expected (user wrote a longer
         explanation rather than the canonical short answer)
       - given is empty/whitespace → NO (clearly didn't try)
 
-    Cheap; doesn't compare semantic content — that's claude's job.
+    Cheap; doesn't compare semantic content - that's the AI grader's
+    job.
     """
     g = given.strip()
     if not g:
@@ -286,12 +288,12 @@ def looks_like_paraphrase(*, expected: str, given: str) -> bool:
 
 def classify_grading(expected: str) -> str:
     """Decide whether a trivia answer can be reliably graded by
-    string similarity, or needs claude.
+    string similarity, or needs the AI grader.
 
-    Returns "deterministic" or "claude". Conservative: when in doubt,
-    use claude. False-deterministic-positives ("you got it wrong"
-    when you actually got it right) feel terrible; a false claude
-    call costs ~5-10s, which is fine.
+    Returns "deterministic" or "ai". Conservative: when in doubt,
+    use the AI grader. False-deterministic-positives ("you got it
+    wrong" when you actually got it right) feel terrible; a false
+    AI call costs ~5-10s, which is fine.
 
     Rules (checked top-down on the EXPECTED answer):
       - empty / whitespace → deterministic (nothing useful to grade)
@@ -300,7 +302,7 @@ def classify_grading(expected: str) -> str:
         (handles "Bobby Prince", "id Software", "Leonardo da Vinci",
         etc.; the existing token-subset matcher in grade_answer
         accepts "Newton" for "Isaac Newton")
-      - everything else → claude
+      - everything else → ai
     """
     s = expected.strip()
     if not s:
@@ -310,10 +312,10 @@ def classify_grading(expected: str) -> str:
     tokens = s.split()
     if len(tokens) <= 3 and not re.search(r"[.!?,;:]", s):
         return "deterministic"
-    return "claude"
+    return "ai"
 
 
-_CLAUDE_GRADE_PROMPT = """\
+_AI_GRADE_PROMPT = """\
 You are grading a single short-answer trivia question. As part of
 the verdict, you also decide whether the regex used to grade this
 card should evolve to accept the user's answer next time.
@@ -389,7 +391,7 @@ def _parse_grade_json(out: str) -> dict:
 _GRADE_TIMEOUT_S = 12.0
 
 
-async def claude_grade(
+async def ai_grade(
     *,
     prompt: str,
     expected: str,
@@ -397,27 +399,28 @@ async def claude_grade(
     current_regex: str | None = None,
     user_id: str | None = None,
 ) -> dict:
-    """Async claude-graded verdict. Returns
+    """Async AI-graded verdict. Returns
     `{"correct": bool, "feedback": str, "regex_update": str | None}`.
 
     `regex_update` is a validated regex the caller should persist on
-    the question (claude proposes one only when the user's answer is
-    a legitimate alternative form, not a typo). None when the verdict
-    is wrong, when the user's form is a typo, when claude didn't
-    propose one, or when the proposed regex failed validation (must
-    compile, match BOTH the canonical answer AND the user's form).
+    the question (the model proposes one only when the user's answer
+    is a legitimate alternative form, not a typo). None when the
+    verdict is wrong, when the user's form is a typo, when the model
+    didn't propose one, or when the proposed regex failed validation
+    (must compile, match BOTH the canonical answer AND the user's
+    form).
 
     Falls back to deterministic match on agent error; regex_update
     is always None on the fallback path.
 
     Async so the route can `await` the (potentially slow) agent call
     without parking a Starlette threadpool thread the whole time —
-    sync claude_grade calls had taken prod down by exhausting that
-    pool when several answers landed back-to-back.
+    sync grading calls had taken prod down by exhausting that pool
+    when several answers landed back-to-back.
     """
     if not given.strip():
         return {"correct": False, "feedback": "No answer given.", "regex_update": None}
-    prompt_text = _CLAUDE_GRADE_PROMPT % {
+    prompt_text = _AI_GRADE_PROMPT % {
         "prompt": prompt.strip(),
         "expected": expected.strip(),
         "given": given.strip(),
@@ -429,16 +432,23 @@ async def claude_grade(
     except AgentUnavailable as e:
         elapsed = time.monotonic() - t0
         logger.warning(
-            "claude_grade: agent unavailable after %.1fs, falling back to string match: %s",
+            "ai_grade: agent unavailable after %.1fs, falling back to string match: %s",
             elapsed,
             e,
         )
-        from prep.web.metrics import observe_claude_grade
+        from prep.web.metrics import observe_ai_grade
 
-        observe_claude_grade(verdict="fallback_unavailable", duration_s=elapsed)
+        observe_ai_grade(verdict="fallback_unavailable", duration_s=elapsed)
+        # Busy gets its own line: shared free-tier contention isn't
+        # "the grader broke," and the wording shouldn't imply it.
+        feedback = (
+            "(graded by string similarity - free AI was busy)"
+            if isinstance(e, AgentBusy)
+            else "(graded by string similarity - the AI grader was unreachable)"
+        )
         return {
             "correct": grade_answer(expected=expected, given=given),
-            "feedback": "(graded by string similarity — claude was unreachable)",
+            "feedback": feedback,
             "regex_update": None,
         }
     elapsed = time.monotonic() - t0
@@ -454,37 +464,41 @@ async def claude_grade(
                 regex_update = grading.validate_regex_update(
                     proposed, expected_literal=expected, prior_given=given
                 )
-        logger.info("claude_grade ok in %.1fs (verdict=%s)", elapsed, verdict)
-        from prep.web.metrics import observe_claude_grade
+        logger.info("ai_grade ok in %.1fs (verdict=%s)", elapsed, verdict)
+        from prep.web.metrics import observe_ai_grade
 
-        observe_claude_grade(verdict=verdict or "unknown", duration_s=elapsed)
+        observe_ai_grade(verdict=verdict or "unknown", duration_s=elapsed)
         return {"correct": correct, "feedback": feedback, "regex_update": regex_update}
     except (ValueError, json.JSONDecodeError, KeyError) as e:
         logger.warning(
-            "claude_grade: bad JSON after %.1fs, falling back to string match: %s",
+            "ai_grade: bad JSON after %.1fs, falling back to string match: %s",
             elapsed,
             e,
         )
-        from prep.web.metrics import observe_claude_grade
+        from prep.web.metrics import observe_ai_grade
 
-        observe_claude_grade(verdict="fallback_bad_json", duration_s=elapsed)
+        observe_ai_grade(verdict="fallback_bad_json", duration_s=elapsed)
         return {
             "correct": grade_answer(expected=expected, given=given),
-            "feedback": "(graded by string similarity — claude returned malformed JSON)",
+            "feedback": "(graded by string similarity - the AI grader returned malformed output)",
             "regex_update": None,
         }
 
 
-# claude_regrade is now an alias for claude_grade — same prompt,
-# same return shape. Kept as a name so existing callers + tests
-# that read "regrade" remain explicit about the dispute path.
-claude_regrade = claude_grade
+# ai_regrade is an alias for ai_grade - same prompt, same return
+# shape. Kept as a name so callers that read "regrade" remain
+# explicit about the dispute path.
+ai_regrade = ai_grade
+
+# Deprecated aliases, kept one release for imports.
+claude_grade = ai_grade
+claude_regrade = ai_regrade
 
 
 def grade_answer(*, expected: str, given: str) -> bool:
     """True iff `given` matches `expected` after normalization. Liberal
     enough to handle "us" / "U.S." / "United States" the user proposed
-    if claude wrote the expected answer in any of those forms — the
+    if the model wrote the expected answer in any of those forms - the
     user types the equivalent variant.
 
     Strict enough that "newton" doesn't grade as "isaac newton" — for
@@ -512,7 +526,7 @@ def grade_answer(*, expected: str, given: str) -> bool:
     return False
 
 
-# ---- Grading dispatch (deterministic + claude tie-breaker) -------------
+# ---- Grading dispatch (deterministic + AI tie-breaker) -----------------
 
 
 async def grade_with_fallback(q, user_answer: str, *, user_id: str | None = None) -> dict:
@@ -524,28 +538,28 @@ async def grade_with_fallback(q, user_answer: str, *, user_id: str | None = None
        compare via `grade_answer`. Cheap; covers the canonical-form
        case when the regex is missing or hasn't been taught the
        form yet.
-    3. **Claude** — fires when:
+    3. **AI grader** - fires when:
        - classify_grading says the answer is complex enough to need
          semantic judgment, OR
        - deterministic said wrong AND it looks like a paraphrase, OR
        - the card has a regex that missed (implies the user is
-         engaged with regex-graded content; let claude judge whether
+         engaged with regex-graded content; let the AI judge whether
          their form is a legit alt and propose a regex update).
 
     Returns `{"correct": bool, "feedback": str | None,
               "regex_update": str | None}`. regex_update is non-None
-    only when the claude path took AND claude proposed a validated
+    only when the AI path took AND the model proposed a validated
     regex update (callers should persist via QuestionRepo).
 
-    Async because the claude path is async — see claude_grade for
-    why (event-loop yielding vs. threadpool blocking)."""
+    Async because the AI path is async - see ai_grade for why
+    (event-loop yielding vs. threadpool blocking)."""
     regex_verdict = grading.match_regex(q.answer_regex, user_answer)
     if regex_verdict is True:
         return {"correct": True, "feedback": None, "regex_update": None}
 
     mode = classify_grading(q.answer)
-    if mode == "claude":
-        return await claude_grade(
+    if mode == "ai":
+        return await ai_grade(
             prompt=q.prompt,
             expected=q.answer,
             given=user_answer,
@@ -556,13 +570,13 @@ async def grade_with_fallback(q, user_answer: str, *, user_id: str | None = None
     det_correct = grade_answer(expected=q.answer, given=user_answer)
     if det_correct:
         return {"correct": True, "feedback": None, "regex_update": None}
-    # Deterministic said wrong — escalate to claude if (a) the user's
-    # answer looks substantive enough to be a paraphrase, or (b) the
-    # card has a stored regex that missed (claude can judge alt-form
-    # vs typo and propose a regex_update accordingly).
+    # Deterministic said wrong - escalate to the AI grader if (a) the
+    # user's answer looks substantive enough to be a paraphrase, or
+    # (b) the card has a stored regex that missed (the model can judge
+    # alt-form vs typo and propose a regex_update accordingly).
     has_regex = bool(q.answer_regex) and regex_verdict is False
     if has_regex or looks_like_paraphrase(expected=q.answer, given=user_answer):
-        return await claude_grade(
+        return await ai_grade(
             prompt=q.prompt,
             expected=q.answer,
             given=user_answer,

@@ -161,13 +161,13 @@ class Question(BaseModel):
     # this at write time.
     skeleton: str | None = None
     language: str | None = None
-    # Trivia-specific: short paragraph claude generates with the
+    # Trivia-specific: short paragraph the model generates with the
     # answer, surfaced as the "Deep dive" disclosure on the trivia
     # card view. NULL for srs questions and for trivia rows created
     # before the explanation column was added.
     explanation: str | None = None
     # Optional regex pattern the SHORT grader matches against before
-    # falling through to the claude-graded path. claude generates an
+    # falling through to the AI-graded path. The model generates an
     # initial regex with each card; re-grades may evolve it when the
     # user types a legitimate alternative form (synonym / abbr /
     # equivalent expression). Applied with re.IGNORECASE at match

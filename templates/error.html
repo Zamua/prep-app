@@ -17,6 +17,11 @@
 
   <div class="study-actions next-actions">
     <a class="btn btn-primary" href="{{ request.scope.get('root_path','') }}/">{{ icon('arrow-left', class_='icon icon-inline') }} Back to decks</a>
+    {# 429 = AI throttled (shared free tier busy, or a BYOK quota).
+       Offer the way out: your own key on the AI settings page. #}
+    {% if status_code == 429 %}
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/settings/agent">AI settings</a>
+    {% endif %}
   </div>
 </section>
 

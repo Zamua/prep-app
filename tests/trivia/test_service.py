@@ -2,7 +2,7 @@
 
 `generate_batch` is exercised with the agent_client.run_prompt
 monkey-patched to return canned stdout — that mirrors the pattern
-the decks/tests use to fake out claude.
+the decks/tests use to fake out the agent.
 
 `grade_answer` is pure, tested directly.
 """
@@ -36,7 +36,7 @@ def fixtures(initialized_db: str):
 
 
 def test_generate_batch_inserts_pairs(monkeypatch, fixtures):
-    """Happy path — claude returns 3 valid pairs, all 3 land in db."""
+    """Happy path - the model returns 3 valid pairs, all 3 land in db."""
     fixed = """[
         {"q": "Capital of France?", "a": "Paris"},
         {"q": "Capital of Japan?", "a": "Tokyo"},
@@ -57,7 +57,7 @@ def test_generate_batch_inserts_pairs(monkeypatch, fixtures):
 
 
 def test_generate_batch_strips_code_fences(monkeypatch, fixtures):
-    """Claude sometimes wraps JSON in ```json — we tolerate it."""
+    """The model sometimes wraps JSON in ```json - we tolerate it."""
     fixed = '```json\n[{"q": "x?", "a": "y"}]\n```'
     monkeypatch.setattr(svc, "run_prompt", lambda _p, **_kw: fixed)
     out = svc.generate_batch(
@@ -116,7 +116,7 @@ def test_generate_batch_skips_invalid_entries(monkeypatch, fixtures):
 
 
 def test_generate_batch_raises_on_unparseable(monkeypatch, fixtures):
-    """Claude returns prose only → AgentUnavailable, not silent
+    """The model returns prose only → AgentUnavailable, not silent
     write of garbage."""
     monkeypatch.setattr(svc, "run_prompt", lambda _p, **_kw: "Sorry, I can't help with that.")
     with pytest.raises(AgentUnavailable):
@@ -192,13 +192,13 @@ def test_classify_grading_picks_deterministic_for_short_answers(expected):
         "It depends on the consistency model.",  # sentence
     ],
 )
-def test_classify_grading_picks_claude_for_long_or_complex(expected):
-    assert svc.classify_grading(expected) == "claude"
+def test_classify_grading_picks_ai_for_long_or_complex(expected):
+    assert svc.classify_grading(expected) == "ai"
 
 
-# ---- claude_grade -----------------------------------------------------
+# ---- ai_grade ---------------------------------------------------------
 #
-# claude_grade is async (so it can `await` the agent without parking a
+# ai_grade is async (so it can `await` the agent without parking a
 # Starlette threadpool thread). pytest-asyncio's `asyncio_mode = "auto"`
 # means any `async def` test function is auto-marked. Tests stub
 # `run_prompt_async` (the async http client wrapper) with a small
@@ -221,15 +221,13 @@ def _afake_run_raising(exc):
     return fn
 
 
-async def test_claude_grade_parses_right_verdict(monkeypatch):
+async def test_ai_grade_parses_right_verdict(monkeypatch):
     monkeypatch.setattr(
         svc,
         "run_prompt_async",
         _afake_run('{"verdict": "right", "feedback": "Same fact, different phrasing."}'),
     )
-    out = await svc.claude_grade(
-        prompt="Q?", expected="A long answer", given="A different phrasing"
-    )
+    out = await svc.ai_grade(prompt="Q?", expected="A long answer", given="A different phrasing")
     assert out == {
         "correct": True,
         "feedback": "Same fact, different phrasing.",
@@ -237,13 +235,13 @@ async def test_claude_grade_parses_right_verdict(monkeypatch):
     }
 
 
-async def test_claude_grade_parses_wrong_verdict(monkeypatch):
+async def test_ai_grade_parses_wrong_verdict(monkeypatch):
     monkeypatch.setattr(
         svc,
         "run_prompt_async",
         _afake_run('```json\n{"verdict": "wrong", "feedback": "Missed the key fact."}\n```'),
     )
-    out = await svc.claude_grade(prompt="Q?", expected="something specific", given="something else")
+    out = await svc.ai_grade(prompt="Q?", expected="something specific", given="something else")
     assert out == {
         "correct": False,
         "feedback": "Missed the key fact.",
@@ -251,8 +249,8 @@ async def test_claude_grade_parses_wrong_verdict(monkeypatch):
     }
 
 
-async def test_claude_grade_returns_validated_regex_update_on_alt_form(monkeypatch):
-    """Initial-grade path now also returns regex_update when claude
+async def test_ai_grade_returns_validated_regex_update_on_alt_form(monkeypatch):
+    """Initial-grade path now also returns regex_update when the model
     proposes one for a legitimate alternative form (synonym/abbr).
     The grader validates it (compiles + matches both literal and
     user form) before passing to the caller."""
@@ -264,7 +262,7 @@ async def test_claude_grade_returns_validated_regex_update_on_alt_form(monkeypat
             ' "regex_update": "(write[- ]?ahead log|wal)"}'
         ),
     )
-    out = await svc.claude_grade(
+    out = await svc.ai_grade(
         prompt="What ensures durability?",
         expected="write-ahead log",
         given="wal",
@@ -274,8 +272,8 @@ async def test_claude_grade_returns_validated_regex_update_on_alt_form(monkeypat
     assert out["regex_update"] == "(write[- ]?ahead log|wal)"
 
 
-async def test_claude_grade_drops_regex_update_when_invalid(monkeypatch):
-    """A claude-proposed regex that doesn't match the canonical
+async def test_ai_grade_drops_regex_update_when_invalid(monkeypatch):
+    """A model-proposed regex that doesn't match the canonical
     expected answer is dropped — the route must never persist a
     regex that breaks future grading of the literal answer."""
     monkeypatch.setattr(
@@ -286,7 +284,7 @@ async def test_claude_grade_drops_regex_update_when_invalid(monkeypatch):
             ' "regex_update": "(wal|wahl)"}'  # doesn't match "write-ahead log"
         ),
     )
-    out = await svc.claude_grade(
+    out = await svc.ai_grade(
         prompt="?",
         expected="write-ahead log",
         given="wal",
@@ -296,29 +294,41 @@ async def test_claude_grade_drops_regex_update_when_invalid(monkeypatch):
     assert out["regex_update"] is None
 
 
-async def test_claude_grade_blank_answer_short_circuits(monkeypatch):
+async def test_ai_grade_blank_answer_short_circuits(monkeypatch):
     async def boom(*_a, **_k):
         pytest.fail("should not call agent")
 
     monkeypatch.setattr(svc, "run_prompt_async", boom)
-    out = await svc.claude_grade(prompt="Q?", expected="A long answer here", given="   ")
+    out = await svc.ai_grade(prompt="Q?", expected="A long answer here", given="   ")
     assert out["correct"] is False
 
 
-async def test_claude_grade_falls_back_on_agent_unavailable(monkeypatch):
+async def test_ai_grade_falls_back_on_agent_unavailable(monkeypatch):
     monkeypatch.setattr(svc, "run_prompt_async", _afake_run_raising(AgentUnavailable("agent down")))
     # Agent down → fall back to deterministic; "London" != "Paris" → wrong.
-    out = await svc.claude_grade(prompt="Capital of France?", expected="Paris", given="London")
+    out = await svc.ai_grade(prompt="Capital of France?", expected="Paris", given="London")
     assert out["correct"] is False
-    assert "claude was unreachable" in out["feedback"]
+    assert "the AI grader was unreachable" in out["feedback"]
 
 
-async def test_claude_grade_falls_back_on_bad_json(monkeypatch):
+async def test_ai_grade_busy_fallback_names_the_contention(monkeypatch):
+    """AgentBusy (shared free tier saturated) still string-match
+    grades, but the feedback says busy, not broken."""
+    from prep.trivia.agent_client import AgentBusy
+
+    monkeypatch.setattr(svc, "run_prompt_async", _afake_run_raising(AgentBusy("at capacity")))
+    out = await svc.ai_grade(prompt="Capital of France?", expected="Paris", given="Paris")
+    assert out["correct"] is True
+    assert "free AI was busy" in out["feedback"]
+    assert out["regex_update"] is None
+
+
+async def test_ai_grade_falls_back_on_bad_json(monkeypatch):
     monkeypatch.setattr(svc, "run_prompt_async", _afake_run("not even json"))
-    out = await svc.claude_grade(prompt="Q?", expected="anything", given="something")
+    out = await svc.ai_grade(prompt="Q?", expected="anything", given="something")
     # No JSON → fall back to deterministic match (empty token-set tests, returns False here).
     assert isinstance(out["correct"], bool)
-    assert "malformed JSON" in out["feedback"]
+    assert "malformed output" in out["feedback"]
 
 
 # ---- looks_like_paraphrase --------------------------------------------

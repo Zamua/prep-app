@@ -36,6 +36,7 @@ _ERROR_COPY = {
     ),
     409: ("Out of date.", "Something changed since this page loaded. Reload and try again."),
     422: ("Bad input.", "The form didn't validate. Go back and try again."),
+    429: ("Busy right now.", "More requests than the service can take at the moment."),
     500: ("Something broke.", "Sorry — that's on our end. The error has been logged."),
 }
 

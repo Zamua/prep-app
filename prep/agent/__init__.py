@@ -53,11 +53,17 @@ def get_agent(user_id: str | None = None) -> AgentPort:
 
 def is_available_for(user_id: str | None) -> bool:
     """Per-user availability — the multi-user safe replacement for the
-    module-level `is_available` flag. Returns True when this user's
-    BYOK row (or the deploy-wide subscription path, when allowed)
-    would yield a usable adapter. Use this in routes/templates that
-    have a resolved user; the legacy `is_available` only knew about
-    the deploy-wide file/env and misses every BYOK row on prepcards.app.
+    module-level `is_available` flag. Returns True when the selector
+    would hand this user a usable adapter (BYOK row, the deploy-wide
+    subscription path where allowed, or the free tier). Use this in
+    routes/templates that have a resolved user; the legacy
+    `is_available` only knew about the deploy-wide file/env and misses
+    every BYOK row on prepcards.app.
+
+    Availability delegates to the selector's own gating rather than
+    the raw file/env probe, so the two cannot disagree: a stray
+    CLAUDE_CODE_OAUTH_TOKEN on a clerk deploy no longer reports True
+    while the selector hands back a noop.
 
     Test overrides via `set_agent()` are honored — when the global
     override is set, that adapter's existence implies availability."""
@@ -68,32 +74,13 @@ def is_available_for(user_id: str | None) -> bool:
         # tests that want to simulate the "no AI" surface).
         return getattr(_agent_override, "available", True)
 
-    # Deploy-wide flag wins when True. Covers (a) single-user tailscale
-    # installs where CLAUDE_CODE_OAUTH_TOKEN is set on the container and
-    # the selector's subscription path is the right answer, and
-    # (b) legacy tests that just toggle `prep.agent.is_available = True`
-    # without setting up BYOK or env. Returning True here short-circuits
-    # the BYOK lookup, which is correct: the deploy-wide token covers
-    # everyone on a single-tenant install.
-    # Read via globals() to honor a test-shadowed value before falling
-    # back to the backing module's live attribute.
-    shadowed = globals().get("is_available")
-    if shadowed is not None:
-        if shadowed:
-            return True
-    else:
-        # `from prep.agent import status as _status` would resolve to the
-        # function (it shadows the submodule in this package's namespace);
-        # use importlib to get the actual module and read its live flag.
-        import importlib
+    # Test seam: a truthy value assigned directly onto this package
+    # (`prep.agent.is_available = True`) short-circuits availability
+    # without BYOK / env setup. Production never writes the package
+    # attribute, so real deploys always fall through to the selector.
+    if globals().get("is_available"):
+        return True
 
-        _status_mod = importlib.import_module("prep.agent.status")
-        if _status_mod.is_available:
-            return True
-
-    # Deploy-wide off (e.g. clerk-mode multi-user, no shared token):
-    # ask the selector whether THIS user has a BYOK row that would
-    # resolve to a usable adapter.
     from prep.agent.selector import agent_available_for_user
 
     return agent_available_for_user(user_id)

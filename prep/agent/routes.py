@@ -27,7 +27,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from prep import agent as _agent_mod
-from prep.agent.port import AgentBudgetExhausted, AgentUnavailable
+from prep.agent.port import AgentBudgetExhausted, AgentBusy, AgentUnavailable
+from prep.agent.selector import free_tier_configured
 from prep.auth import current_user
 from prep.web.templates import templates
 
@@ -46,8 +47,9 @@ class _RunRequest(BaseModel):
 
     `user_id` is plumbed end-to-end so the selector can route to the
     user's BYOK key when present. Optional for backwards compat (an
-    older worker without the field falls through to the subscription
-    OAuth adapter), but any new caller should send it.
+    older worker without the field falls through to the deploy-wide
+    precedence: subscription token where allowed, else the free
+    tier), but any new caller should send it.
     """
 
     prompt: str
@@ -76,13 +78,19 @@ async def api_agent_run(
     body: _RunRequest,
     _gate: None = Depends(_require_internal_token),
 ):
-    """Execute a single prompt via the user's configured adapter (BYOK
-    first, subscription OAuth fallback), log usage, return {stdout}
+    """Execute a single prompt via the user's configured adapter
+    (selector precedence: BYOK, then the deploy-wide providers), log
+    usage, return {stdout}
     (matching the legacy agent-server response shape so the Go
     worker doesn't notice it's hitting a different host)."""
     adapter = _agent_mod.get_agent(body.user_id)
     try:
         result = await adapter.run(body.prompt, model=body.model, reasoning=body.reasoning)
+    except AgentBusy as e:
+        logger.warning("agent busy (shared capacity saturated): %s", e)
+        # 429 like budget_exhausted, but a distinct kind: the shared
+        # free tier is contended - not this user's budget.
+        return JSONResponse({"error": str(e), "kind": "free_tier_busy"}, status_code=429)
     except AgentBudgetExhausted as e:
         logger.warning("agent budget exhausted: %s", e)
         # 429 maps cleanly to "you've been throttled" — workflow code
@@ -262,6 +270,9 @@ def _render_settings(
             "byok_sections": _byok_sections_for(user["tailscale_login"]),
             "byok_error": byok_error,
             "byok_flash": byok_flash,
+            # Drives the free-tier callout + disclosure. "Would the
+            # factory actually serve," not "are some env vars set."
+            "free_tier_configured": free_tier_configured(),
         },
         status_code=status_code,
     )

@@ -487,7 +487,21 @@ docker→k3s migration moved them). The live k8s manifests are in
 `infra/prep/k8s/` (+ overlays); rework the Makefile to the hostthis
 kubectl/overlay shape.
 
-**Agent model — BYOK-only on the public deploys (the thing not to break):**
+**Agent model — BYOK + free tier on the public deploys (updated 2026-08-11):**
+The selector precedence is: user BYOK key first, then (single-user
+installs only) the deploy-wide subscription token, then the
+deploy-configured FREE TIER (a generic OpenAI-compatible endpoint via
+PREP_FREE_INFERENCE_BASE_URL/_API_KEY/_MODEL/_EXTRA_BODY; the public
+deploys point it at Hetzner's inference API), else a noop adapter.
+Two deploy-wide credentials, two policies, BOTH deliberate: the
+subscription token stays HARD-GATED off in clerk mode (operator's
+paid pool must never fund signups), while the free-tier key is
+deploy-wide on purpose (free, rate-limited per key, not
+operator-funded). A BYOK user whose key path fails gets Noop, never
+the free tier (privacy: BYOK is the opt-out from the shared
+endpoint). Full design: docs/AI-PROVIDERS.md.
+
+**Old framing (still true for the subscription path):**
 both staging + prod run `PREP_AUTH_MODE=clerk`, which HARD-GATES the
 deploy-wide subscription / app-wide token off
 (`prep/agent/selector.py::_subscription_path_allowed()`) — so a stray
@@ -778,10 +792,8 @@ add an e2e that drives it to terminal — don't ship blind.
 
 ## What's intentionally NOT here
 
-- ANTHROPIC_API_KEY support. We use the Claude subscription path on
-  purpose — the SDK adapter authenticates via
-  `CLAUDE_CODE_OAUTH_TOKEN` (output of `claude setup-token`) only,
-  which draws from the user's Max-plan credit pool.
+- Streaming AI responses. All flows are one-shot request/response
+  through AgentPort; the polling UX covers the wait.
 - Per-token usage tracking. We had a `agent_usage` table briefly,
   but Anthropic meters per-account, not per-token, so the rollup
   modeled the wrong thing — dropped. Now we just handle

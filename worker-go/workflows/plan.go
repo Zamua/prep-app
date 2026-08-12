@@ -53,7 +53,7 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 	}
 	if in.Prompt == "" {
 		return shared.PlanGenerateResult{}, temporal.NewNonRetryableApplicationError(
-			"prompt required (the deck description seeds claude)", "BadInput", errors.New("prompt"))
+			"prompt required (the deck description seeds the model)", "BadInput", errors.New("prompt"))
 	}
 
 	progress := shared.PlanGenerateProgress{

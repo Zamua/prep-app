@@ -69,7 +69,7 @@ def test_deck_page_renders_with_type_eyebrow(http: httpx.Client, test_deck: dict
 
 def test_deterministic_grading_returns_correct(http: httpx.Client, test_deck: dict):
     """Submit the canonical answer to a seeded short-answer question;
-    expect a "right" verdict via the deterministic path (no claude
+    expect a "right" verdict via the deterministic path (no AI
     needed). Covers the answer route end-to-end without any AI flake."""
     qid = test_deck["qids"][0]
     r = http.post(f"/trivia/{qid}/answer", data={"answer": "Paris"})
@@ -77,24 +77,24 @@ def test_deterministic_grading_returns_correct(http: httpx.Client, test_deck: di
     assert "trivia-result-right" in r.text, "expected right-verdict result block"
 
 
-def test_claude_grading_round_trip(http: httpx.Client, test_deck: dict):
-    """Submit a paraphrased-correct answer to the claude-routed question
+def test_ai_grading_round_trip(http: httpx.Client, test_deck: dict):
+    """Submit a paraphrased-correct answer to the AI-routed question
     and assert the route returns within a reasonable budget with a
     verdict block. Catches:
     - the threadpool-exhaustion regression that took prod down (sync
-      claude_grade in a sync route handler) — async path now yields
+      grading in a sync route handler) - async path now yields
       the loop; if a regression makes it block again, this test will
       either fail outright or take 30s+
     - the agent-server "no model module" path, since we run a real
-      claude call here
-    - the per-call timeout (12s); if claude is slow or wedged this
+      agent call here
+    - the per-call timeout (12s); if the agent is slow or wedged this
       test surfaces it instead of looking like an outage
     """
-    qid = test_deck["qids"][3]  # the claude-routed question
+    qid = test_deck["qids"][3]  # the AI-routed question
     paraphrase = (
         "It's a mutex that prevents multiple threads from executing " "Python bytecode in parallel."
     )
-    # 30s ceiling on the request itself: 12s claude_grade timeout +
+    # 30s ceiling on the request itself: 12s ai_grade timeout +
     # margin for HTTP + handler. If the route hangs longer than this,
     # we want a hard fail with a clear message, not a silent stall.
     r = http.post(
@@ -109,20 +109,20 @@ def test_claude_grading_round_trip(http: httpx.Client, test_deck: dict):
     # this paraphrase; this test mainly proves the path didn't hang.
     assert (
         "trivia-result-right" in r.text or "trivia-result-wrong" in r.text
-    ), "no result block — the claude path didn't return a verdict"
+    ), "no result block - the AI path didn't return a verdict"
 
 
-def test_claude_regrade_round_trip(http: httpx.Client, test_deck: dict):
+def test_ai_regrade_round_trip(http: httpx.Client, test_deck: dict):
     """Re-grade flow: post a wrong answer, then call /regrade with the
     same answer + a defensible reason. Asserts the regrade route
     returns 200 with a feedback block. Covers `trivia_regrade` async
-    conversion + the claude_regrade alias — same async-grading regression
+    conversion + the ai_regrade alias - same async-grading regression
     surface as the answer route."""
     qid = test_deck["qids"][3]
     initial = "no idea"
     r = http.post(f"/trivia/{qid}/answer", data={"answer": initial}, timeout=30.0)
     assert r.status_code == 200, r.status_code
-    # Now ask claude to re-grade the same answer. The form is the
+    # Now ask the AI to re-grade the same answer. The form is the
     # same shape the UI uses (the `Re-grade` button on the result
     # panel POSTs the user's typed answer back).
     r = http.post(
@@ -134,7 +134,7 @@ def test_claude_regrade_round_trip(http: httpx.Client, test_deck: dict):
     # Re-graded note is rendered when a regrade hits the route, even
     # if the verdict didn't flip.
     assert (
-        "re-graded by claude" in r.text or "trivia-regrade-note" in r.text
+        "re-graded by AI" in r.text or "trivia-regrade-note" in r.text
     ), "regrade did not surface — route may have failed silently"
 
 
@@ -170,9 +170,9 @@ def test_metrics_exposes_threadpool_gauges(http: httpx.Client):
     assert "prep_anyio_threadpool_capacity" in body
     assert "prep_anyio_threadpool_borrowed" in body
     # Histograms surface their _bucket / _count / _sum families. The
-    # claude_grade histogram won't have observations from this test,
+    # ai_grade histogram won't have observations from this test,
     # but the metric registration alone should produce a TYPE line.
-    assert "prep_claude_grade_duration_seconds" in body
+    assert "prep_ai_grade_duration_seconds" in body
     assert "prep_http_request_duration_seconds" in body
 
 

@@ -6,16 +6,16 @@ resolve in microseconds and don't need a workflow.
 
 Free-text grading (`code` / `short` answers requiring an LLM judge)
 is NOT here; that path goes through the Temporal worker so the
-request doesn't block on a multi-second claude call. See:
+request doesn't block on a multi-second model call. See:
 
   - prep/app.py: study_submit / session_submit dispatch the slow
     path to temporal_client.start_grading
   - worker-go/activities/grading.go: the GradeFreeText activity
 
 `match_regex` + `validate_regex_update` support the SHORT-trivia
-two-phase grader: the deterministic regex match runs first; claude
+two-phase grader: the deterministic regex match runs first; the AI
 fallback only fires when the pattern is missing or fails. The
-re-grade flow may then ask claude to propose an evolved regex,
+re-grade flow may then ask the model to propose an evolved regex,
 which `validate_regex_update` admits only if it compiles, accepts
 the canonical literal answer, and isn't suspiciously catastrophic.
 """
@@ -28,9 +28,9 @@ from typing import Any
 
 from prep.domain.srs import Verdict
 
-# Hard cap on regex pattern length we'll accept from claude. Anything
-# longer is almost certainly a hallucination; trivia answers are
-# 1-5 words, the regex shouldn't be a novel.
+# Hard cap on the model-proposed regex pattern length we'll accept.
+# Anything longer is almost certainly a hallucination; trivia answers
+# are 1-5 words, the regex shouldn't be a novel.
 MAX_REGEX_LEN = 500
 
 
@@ -88,9 +88,9 @@ def match_regex(pattern: str | None, given: str) -> bool | None:
                 (caller falls back to the next grader)
 
     None vs False is an important distinction: a returned False is
-    "claude generated a regex and the user's answer doesn't satisfy
-    it"; a returned None means "we can't trust this regex to grade,
-    use the legacy path."
+    "the model generated a regex and the user's answer doesn't
+    satisfy it"; a returned None means "we can't trust this regex to
+    grade, use the legacy path."
     """
     if not pattern:
         return None
@@ -106,7 +106,7 @@ def match_regex(pattern: str | None, given: str) -> bool | None:
 def validate_regex_update(
     pattern: str, *, expected_literal: str, prior_given: str | None = None
 ) -> str | None:
-    """Validate a claude-proposed regex update. Returns the pattern
+    """Validate a model-proposed regex update. Returns the pattern
     if it's safe to persist, else None.
 
     Checks:
@@ -117,7 +117,7 @@ def validate_regex_update(
         answer next time)
       - if `prior_given` is provided, also matches it (so the form
         the user just typed is preserved by the new regex — a
-        regression sanity check on claude's output)
+        regression sanity check on the model's output)
 
     Doesn't try to detect catastrophic backtracking definitively;
     that's an open problem for arbitrary regex. The MAX_REGEX_LEN

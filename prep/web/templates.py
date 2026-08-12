@@ -38,12 +38,12 @@ def _agent_context(request: Request) -> dict:
     """Surface `agent_available` to every template. Templates use it
     to hide AI-driven controls (Generate cards, Transform, Improve)
     and surface manual paths instead — so the app stays useful as a
-    manual-flashcard SRS for users without claude installed.
+    manual-flashcard SRS for users without an AI provider configured.
 
-    Per-request, per-user: on a clerk-mode multi-user deploy the
-    module-level cached probe (file-presence of /data/claude-oauth-token)
-    misses every BYOK row, so users who saved their own key would see
-    "AI not configured" forever. We resolve `agent_for_user(uid)` here
+    Per-request, per-user: on a clerk-mode multi-user deploy a
+    deploy-wide cached probe misses every BYOK row, so users who
+    saved their own key would see "AI not configured" forever. We
+    resolve `agent_for_user(uid)` here
     — if it would hand back a usable adapter, the agent is available
     for THIS request, regardless of the deploy-wide cache. When there's
     no resolved user (error pages, public surfaces), we fall back to

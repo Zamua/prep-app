@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from prep import agent as _agent_mod
 from prep.agent.fake import FakeAgent
-from prep.agent.port import AgentBudgetExhausted, AgentResult
+from prep.agent.port import AgentBudgetExhausted, AgentBusy, AgentResult
 
 
 @pytest.fixture
@@ -112,6 +112,29 @@ def test_run_429_with_kind_when_budget_exhausted(
     assert r.status_code == 429
     body = r.json()
     assert body.get("kind") == "budget_exhausted"
+    assert "error" in body
+
+
+def test_run_429_with_kind_when_free_tier_busy(
+    client: TestClient, fake_agent: FakeAgent, internal_token: str
+):
+    """AgentBusy from the adapter (shared free-tier capacity is
+    saturated) → 429 + kind=free_tier_busy, parallel to the
+    budget_exhausted mapping but distinguishable: it's contention on
+    the shared credential, not this user's budget."""
+
+    async def _raise(*_args, **_kwargs):
+        raise AgentBusy("free AI is at capacity right now")
+
+    fake_agent.run = _raise  # type: ignore[method-assign]
+    r = client.post(
+        "/api/agent/run",
+        json={"prompt": "x"},
+        headers={"X-Internal-Token": internal_token},
+    )
+    assert r.status_code == 429
+    body = r.json()
+    assert body.get("kind") == "free_tier_busy"
     assert "error" in body
 
 

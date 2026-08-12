@@ -262,6 +262,33 @@ def test_grading_fragment_is_html_not_json(monkeypatch, client: TestClient, init
     assert not r.headers["content-type"].startswith("application/json")
 
 
+def test_grading_view_failed_renders_workflow_error(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """A failed grade workflow's progress.error (e.g. the busy free
+    tier's add-your-own-key pointer) reaches the page instead of dying
+    inside the worker. Pins the GradeProgress.Error plumbing."""
+    from prep import temporal_client
+
+    _, wid = _seed_grading_wid(initialized_db)
+    busy = (
+        "grade: free AI is busy right now (it's shared by everyone on this "
+        "deploy): rate limited; try again later, or add your own key in "
+        "Settings for dedicated capacity"
+    )
+    monkeypatch.setattr(
+        temporal_client, "get_grade_progress", _afake({"status": "failed", "error": busy})
+    )
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "FAILED"}))
+    monkeypatch.setattr(temporal_client, "get_grade_result", _afake(None))
+
+    r = client.get(f"/grading/{wid}")
+    assert r.status_code == 200
+    assert "add your own key" in r.text
+    # The generic retrieval hint still renders alongside the message.
+    assert "Back to deck" in r.text
+
+
 # ---- /session/<sid>/snooze -----------------------------------------
 
 

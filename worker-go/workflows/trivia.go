@@ -94,7 +94,7 @@ func TriviaGenerate(ctx workflow.Context, in shared.TriviaGenerateInput) (shared
 
 	if len(pairs) == 0 {
 		progress.Status = "failed"
-		progress.Error = "claude returned 0 cards"
+		progress.Error = "the AI returned 0 cards"
 		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
 		return shared.TriviaGenerateResult{}, fmt.Errorf("0 trivia cards generated")
 	}

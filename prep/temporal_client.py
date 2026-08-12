@@ -123,7 +123,7 @@ async def start_transform(
     - 'reorganize' target_id ignored (cross-deck); preview-then-apply
 
     `deck_context_prompt` is the deck's standing description (what
-    the owner said the deck is about). Passed through to claude so
+    the owner said the deck is about). Passed through to the model so
     a transform reads the deck's overall theme before deciding on
     edits — same role context_prompt plays in the plan-first
     generation flow. Empty for reorganize scope (cross-deck) and
@@ -188,9 +188,9 @@ async def signal_reject_transform(workflow_id: str) -> None:
 async def start_plan_generate(
     *, user_id: str, deck_id: int, deck_name: str, prompt: str
 ) -> StartResult:
-    """Start a PlanGenerateWorkflow. Workflow plans cards (claude returns a
-    brief outline), waits for accept/reject/feedback signals, then expands
-    + inserts cards in parallel on accept."""
+    """Start a PlanGenerateWorkflow. Workflow plans cards (the model
+    returns a brief outline), waits for accept/reject/feedback signals,
+    then expands + inserts cards in parallel on accept."""
     client = await _get_client()
     wid = f"plan-{deck_name}-{uuid.uuid4().hex[:10]}"
     handle = await client.start_workflow(
@@ -243,10 +243,10 @@ async def signal_plan_reject(workflow_id: str) -> None:
 async def start_trivia_generate(
     *, user_id: str, deck_id: int, deck_name: str, topic: str, batch_size: int = 25
 ) -> StartResult:
-    """Start a TriviaGenerateWorkflow. The workflow asks claude for a
-    batch of short-Q-short-A pairs and inserts each one into the deck's
-    trivia queue. Workflow ID encodes deck_name so the polling page
-    URL stays human-readable."""
+    """Start a TriviaGenerateWorkflow. The workflow asks the model for
+    a batch of short-Q-short-A pairs and inserts each one into the
+    deck's trivia queue. Workflow ID encodes deck_name so the polling
+    page URL stays human-readable."""
     client = await _get_client()
     wid = f"trivia-{deck_name}-{uuid.uuid4().hex[:10]}"
     handle = await client.start_workflow(

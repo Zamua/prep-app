@@ -1,5 +1,5 @@
 // improve-dialog — one shared <dialog id="improve-dialog"> on the
-// deck page that any qcard's "Improve with claude" button can open.
+// deck page that any qcard's "Improve with AI" button can open.
 // Clicking the button populates the dialog's form action +
 // card-context preview, then showModal()s. Submission is a real
 // POST so the server can kick off the transform workflow and

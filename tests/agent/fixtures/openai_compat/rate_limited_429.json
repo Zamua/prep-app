@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Rate limit exceeded: the free tier allows 60000 output tokens per minute. Please retry later.",
+    "type": "rate_limit_exceeded",
+    "code": "rate_limit_exceeded",
+    "param": null
+  }
+}

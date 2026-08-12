@@ -665,8 +665,8 @@ def deck_rename(
     return responses.redirect(request, f"/deck/{name}")
 
 
-@router.get("/deck/{name}/edit-with-claude", response_class=HTMLResponse)
-def deck_edit_with_claude(
+@router.get("/deck/{name}/edit-with-ai", response_class=HTMLResponse)
+def deck_edit_with_ai(
     request: Request,
     name: str,
     user: dict = Depends(current_user),
@@ -690,6 +690,12 @@ def deck_edit_with_claude(
             "error": None,
         },
     )
+
+
+@router.get("/deck/{name}/edit-with-claude")
+def deck_edit_with_claude_redirect(request: Request, name: str):
+    """Legacy path kept as a redirect (bookmarks, PWA history)."""
+    return responses.redirect(request, f"/deck/{name}/edit-with-ai")
 
 
 @router.get("/deck/{name}/split", response_class=HTMLResponse)
@@ -1090,7 +1096,7 @@ def reorganize_form(
 ):
     """Form for the cross-deck reorganize flow. Free-text prompt,
     plus a collapsible preview of the user's current decks so they
-    can see what claude has to work with."""
+    can see what the AI has to work with."""
     uid = user["tailscale_login"]
     decks = sorted(deck_repo.list_summaries(uid), key=lambda d: d.name)
     deck_views = []

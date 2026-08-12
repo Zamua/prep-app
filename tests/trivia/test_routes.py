@@ -2,7 +2,7 @@
 
 Exercise the card view, answer submission, and (mocked) generate
 endpoint via TestClient. Generation tests stub `run_prompt` so we
-don't shell out to claude.
+don't shell out to the agent.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from prep.trivia.repo import TriviaQueueRepo
 
 
 def _afake(value):
-    """Helper for monkeypatching the async claude_grade / claude_regrade
+    """Helper for monkeypatching the async ai_grade / ai_regrade
     functions. Returns a coroutine factory whose call accepts arbitrary
     kwargs (matching the real signature) and resolves to `value`."""
 
@@ -28,7 +28,7 @@ def _afake(value):
 
 def _afake_recording(record_into, value):
     """Like `_afake` but appends each invocation's kwargs to a list so
-    a test can later assert on what arguments claude was called with."""
+    a test can later assert on what arguments the grader was called with."""
 
     async def fn(**kw):
         record_into.append(kw)
@@ -180,6 +180,28 @@ def test_generate_route_inserts_via_mocked_agent(
 def test_generate_route_404_for_unknown_deck(client: TestClient, initialized_db: str):
     r = client.post("/trivia/decks/99999/generate", follow_redirects=False)
     assert r.status_code == 404
+
+
+def test_generate_route_429_with_busy_copy_on_agent_busy(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """AgentBusy (shared free tier saturated) → 429 error page with the
+    try-again-or-add-your-own-key copy and an AI-settings link, not the
+    generic 502."""
+    from prep.trivia.agent_client import AgentBusy
+
+    user = initialized_db
+    deck_id = DeckRepo().create(user, "history", context_prompt="World War II turning points")
+
+    def boom(_p, **_kw):
+        raise AgentBusy("at capacity")
+
+    monkeypatch.setattr(svc, "run_prompt", boom)
+    r = client.post(f"/trivia/decks/{deck_id}/generate", follow_redirects=False)
+    assert r.status_code == 429
+    assert "Free AI is busy right now" in r.text
+    assert "add your own key" in r.text
+    assert "/settings/agent" in r.text
 
 
 # ---- /decks/new chooser + /decks/new/trivia ----------------------------
@@ -602,21 +624,21 @@ def test_session_route_splits_half_fresh_half_review(client: TestClient, initial
 # ---- /trivia/<id>/regrade + /trivia/session/<deck>/regrade -----------
 
 
-def test_regrade_flips_wrong_to_right_on_claude_disagree(
+def test_regrade_flips_wrong_to_right_on_ai_disagree(
     monkeypatch, client: TestClient, initialized_db: str
 ):
     """Standalone regrade: the user typed an answer that the
-    deterministic grader rejected. Re-grade hits claude (mocked here),
-    claude says "right", queue verdict flips to correct, the rendered
+    deterministic grader rejected. Re-grade hits the AI (mocked here),
+    the AI says "right", queue verdict flips to correct, the rendered
     panel shows the correct verdict + a "re-graded" note."""
     _, qid = _seed_trivia_question(initialized_db, prompt="ACID property?", answer="durability")
     # First mark it as wrong via the queue helper (bypassing the answer
     # route — we just want a starting state where the verdict is wrong).
     TriviaQueueRepo().mark_answered(qid, correct=False)
-    # Stub claude to return "right" with feedback.
+    # Stub the AI grader to return "right" with feedback.
     monkeypatch.setattr(
         svc,
-        "claude_regrade",
+        "ai_regrade",
         _afake(
             {
                 "correct": True,
@@ -643,16 +665,14 @@ def test_regrade_flips_wrong_to_right_on_claude_disagree(
     assert row["last_answered_correctly"] == 1
 
 
-def test_regrade_keeps_wrong_when_claude_agrees(
-    monkeypatch, client: TestClient, initialized_db: str
-):
-    """If claude also says wrong on re-grade, the verdict stays wrong
-    but the page still shows the new claude feedback."""
+def test_regrade_keeps_wrong_when_ai_agrees(monkeypatch, client: TestClient, initialized_db: str):
+    """If the AI also says wrong on re-grade, the verdict stays wrong
+    but the page still shows the new AI feedback."""
     _, qid = _seed_trivia_question(initialized_db, prompt="ACID property?", answer="durability")
     TriviaQueueRepo().mark_answered(qid, correct=False)
     monkeypatch.setattr(
         svc,
-        "claude_regrade",
+        "ai_regrade",
         _afake(
             {
                 "correct": False,
@@ -680,7 +700,7 @@ def test_regrade_does_not_re_rotate_card(monkeypatch, client: TestClient, initia
         ).fetchone()["queue_position"]
     monkeypatch.setattr(
         svc,
-        "claude_regrade",
+        "ai_regrade",
         _afake({"correct": True, "feedback": "", "regex_update": None}),
     )
     client.post(f"/trivia/{qid}/regrade", data={"answer": "paris"})
@@ -702,7 +722,7 @@ def test_session_regrade_flips_done_chain_verdict(
     TriviaQueueRepo().mark_answered(qids[0], correct=False)
     monkeypatch.setattr(
         svc,
-        "claude_regrade",
+        "ai_regrade",
         _afake({"correct": True, "feedback": "", "regex_update": None}),
     )
     cards_remaining = ",".join(str(q) for q in qids[1:])
@@ -726,7 +746,7 @@ def test_session_regrade_flips_done_chain_verdict(
 def test_answer_uses_stored_regex_for_short(monkeypatch, client: TestClient, initialized_db: str):
     """SHORT-trivia grade path tries the stored regex first. With a
     regex that accepts both "write-ahead log" and "wal", a user typing
-    "wal" grades right WITHOUT calling claude."""
+    "wal" grades right WITHOUT calling the AI grader."""
     user = initialized_db
     deck_id = DeckRepo().create(user, "db")
     qid = QuestionRepo().add(
@@ -743,18 +763,18 @@ def test_answer_uses_stored_regex_for_short(monkeypatch, client: TestClient, ini
     TriviaQueueRepo().append_card(qid, deck_id)
 
     called: list = []
-    monkeypatch.setattr(svc, "claude_grade", _afake_recording(called, {"correct": False}))
+    monkeypatch.setattr(svc, "ai_grade", _afake_recording(called, {"correct": False}))
 
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "wal"})
     assert r.status_code == 200
     assert "trivia-result-right" in r.text
-    assert called == []  # regex matched, claude was never invoked
+    assert called == []  # regex matched, the AI grader was never invoked
 
 
-def test_initial_answer_persists_regex_update_when_claude_proposes_one(
+def test_initial_answer_persists_regex_update_when_ai_proposes_one(
     monkeypatch, client: TestClient, initialized_db: str
 ):
-    """Initial answer (not a re-grade): claude takes the grading
+    """Initial answer (not a re-grade): the AI takes the grading
     path AND proposes a regex update for a legitimate alternative
     form. Route persists it via QuestionRepo.set_answer_regex and
     surfaces the badge in the result panel."""
@@ -774,7 +794,7 @@ def test_initial_answer_persists_regex_update_when_claude_proposes_one(
     TriviaQueueRepo().append_card(qid, deck_id)
     monkeypatch.setattr(
         svc,
-        "claude_grade",
+        "ai_grade",
         _afake(
             {
                 "correct": True,
@@ -783,7 +803,7 @@ def test_initial_answer_persists_regex_update_when_claude_proposes_one(
             }
         ),
     )
-    # Force the claude path: short answer + answer length 2 makes
+    # Force the AI path: short answer + answer length 2 makes
     # paraphrase-heuristic kick in once deterministic says wrong.
     r = client.post(f"/trivia/{qid}/answer", data={"answer": "wal"})
     assert r.status_code == 200
@@ -796,7 +816,7 @@ def test_initial_answer_persists_regex_update_when_claude_proposes_one(
 def test_initial_answer_does_not_persist_regex_update_for_typo(
     monkeypatch, client: TestClient, initialized_db: str
 ):
-    """Initial answer where claude grades right but recognizes the
+    """Initial answer where the AI grades right but recognizes the
     user's form as a typo (regex_update is None): the badge does NOT
     appear and the stored regex is unchanged."""
     user = initialized_db
@@ -816,7 +836,7 @@ def test_initial_answer_does_not_persist_regex_update_for_typo(
     TriviaQueueRepo().append_card(qid, deck_id)
     monkeypatch.setattr(
         svc,
-        "claude_grade",
+        "ai_grade",
         _afake(
             {
                 "correct": True,
@@ -833,10 +853,10 @@ def test_initial_answer_does_not_persist_regex_update_for_typo(
     assert q.answer_regex == original_regex
 
 
-def test_regrade_persists_regex_update_when_claude_proposes_one(
+def test_regrade_persists_regex_update_when_ai_proposes_one(
     monkeypatch, client: TestClient, initialized_db: str
 ):
-    """Re-grade with a legitimate alternative form: claude proposes a
+    """Re-grade with a legitimate alternative form: the model proposes a
     regex_update, route persists it via QuestionRepo.set_answer_regex,
     badge appears in the rendered panel."""
     user = initialized_db
@@ -857,7 +877,7 @@ def test_regrade_persists_regex_update_when_claude_proposes_one(
 
     monkeypatch.setattr(
         svc,
-        "claude_regrade",
+        "ai_regrade",
         _afake(
             {
                 "correct": True,
@@ -878,7 +898,7 @@ def test_regrade_persists_regex_update_when_claude_proposes_one(
 def test_regrade_does_not_persist_regex_update_for_typo(
     monkeypatch, client: TestClient, initialized_db: str
 ):
-    """When claude returns regex_update=None (typo case), the stored
+    """When the model returns regex_update=None (typo case), the stored
     regex must remain unchanged AND the 'accepted answers expanded'
     badge must NOT show."""
     user = initialized_db
@@ -900,7 +920,7 @@ def test_regrade_does_not_persist_regex_update_for_typo(
 
     monkeypatch.setattr(
         svc,
-        "claude_regrade",
+        "ai_regrade",
         _afake(
             {
                 "correct": True,

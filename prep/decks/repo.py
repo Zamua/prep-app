@@ -278,7 +278,7 @@ class DeckRepo:
         display_name: str | None = None,
     ) -> int:
         """Create a deck with deck_type='trivia'. `topic` is stored in
-        the existing context_prompt column (claude reads it during
+        the existing context_prompt column (the model reads it during
         generation). `interval_minutes` is per-deck. `display_name`
         is the user-typed label; UI falls back to `name` when None.
         """
@@ -574,7 +574,7 @@ class QuestionRepo:
 
     def set_answer_regex(self, user_id: str, qid: int, regex: str | None) -> bool:
         """Update only the answer_regex column. Used by the re-grade
-        flow when claude proposes an evolved regex. user_id is the
+        flow when the model proposes an evolved regex. user_id is the
         IDOR guard. Returns True if a row was updated."""
         with cursor() as c:
             cur = c.execute(
@@ -649,7 +649,7 @@ class QuestionRepo:
 
     def prompts_in_deck(self, user_id: str, deck_id: int) -> list[str]:
         """Just the prompts. Used by the AI deck-transform path to
-        give claude the existing-prompts list as context without
+        give the model the existing-prompts list as context without
         passing full answer keys."""
         with cursor() as c:
             rows = c.execute(

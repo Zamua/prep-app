@@ -207,6 +207,10 @@ type GradeProgress struct {
 	StartedAt  string             `json:"started_at"`
 	FinishedAt string             `json:"finished_at,omitempty"`
 	Result     *GradeAnswerResult `json:"result,omitempty"` // populated when status=done
+	// Error carries the failure message to the grading page (e.g. a
+	// busy free tier's "add your own key" pointer), matching the other
+	// workflows' progress shapes. Populated when status=failed.
+	Error string `json:"error,omitempty"`
 }
 
 // ---- Transform workflow types -------------------------------------------

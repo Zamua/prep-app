@@ -36,7 +36,6 @@ import time
 import httpx
 
 from prep.agent.port import (
-    DEFAULT_MODEL,
     AgentBudgetExhausted,
     AgentPort,
     AgentResult,
@@ -44,6 +43,9 @@ from prep.agent.port import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Adapter-owned default model (the port names no vendor model).
+DEFAULT_MODEL = "claude-sonnet-4-6"
 
 _API_URL = "https://api.anthropic.com/v1/messages"
 _API_VERSION = "2023-06-01"

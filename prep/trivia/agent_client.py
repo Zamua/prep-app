@@ -2,14 +2,16 @@
 
 This module used to POST to the agent-server container's /run
 endpoint over HTTP. As of the SDK migration it routes through
-`prep.agent.get_agent()` (an in-process `claude-agent-sdk` adapter
-by default; FakeAgent in tests). The public API is preserved so
+`prep.agent.get_agent()` (the per-user `AgentPort` adapter;
+FakeAgent in tests). The public API is preserved so
 existing callers (`trivia.service`, `trivia.routes`, `notify.scheduler`,
 trivia.scheduler) don't need to change their imports.
 
 What you get:
 - `AgentUnavailable` — same name, same semantics; re-exported from
   `prep.agent.port`. Catching the old import path still works.
+- `AgentBusy`: the shared free-tier contention subclass, re-exported
+  so busy-aware callers can catch it before `AgentUnavailable`.
 - `run_prompt(prompt, *, timeout_s)` — sync entry point. Wraps the
   async adapter via `asyncio.run`. Safe to call ONLY from non-async
   contexts (e.g., inside `asyncio.to_thread` from the scheduler);
@@ -27,11 +29,11 @@ import asyncio
 import logging
 
 from prep import agent as _agent_mod
-from prep.agent.port import AgentUnavailable
+from prep.agent.port import AgentBusy, AgentUnavailable
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["AgentUnavailable", "run_prompt", "run_prompt_async"]
+__all__ = ["AgentBusy", "AgentUnavailable", "run_prompt", "run_prompt_async"]
 
 
 # Long timeout retained from the HTTP era — generation prompts can
@@ -50,9 +52,9 @@ def run_prompt(
     it runs the trivia refill under `asyncio.to_thread`, so this
     wrapper executes on a worker thread with no active loop.
 
-    `user_id` selects the per-user BYOK adapter when present (Anthropic
-    API key) and falls back to the subscription OAuth token when None
-    or the user has no BYOK row. See `prep.agent.selector`.
+    `user_id` selects the per-user BYOK adapter when present and
+    falls back to the deploy-wide path when None or the user has no
+    BYOK row. See `prep.agent.selector`.
 
     Important: a sync request-path call here would block the event
     loop until the upstream timeout fires, taking down all request

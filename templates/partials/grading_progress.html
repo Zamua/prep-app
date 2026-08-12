@@ -38,6 +38,13 @@
     <span class="grading-spinner" aria-hidden="true"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span></span>
   </p>
 
+  {# The workflow's failure message, set by the Go worker on the
+     failed path (e.g. a busy free tier's "add your own key"
+     pointer); same render the transform/plan/trivia partials use. #}
+  {% if progress and progress.error %}
+  <p class="form-error">{{ progress.error }}</p>
+  {% endif %}
+
   {% if failed %}
   <p class="gen-hint">
     <em>The workflow finished but the result couldn't be retrieved (probably failed).

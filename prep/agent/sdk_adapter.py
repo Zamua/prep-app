@@ -22,13 +22,17 @@ import logging
 import os
 
 from prep.agent.port import (
-    DEFAULT_MODEL,
-    DEFAULT_REASONING,
     AgentBudgetExhausted,
     AgentPort,
     AgentResult,
     AgentUnavailable,
 )
+
+# Adapter-owned defaults. The port deliberately names no model; each
+# adapter picks its own baseline. Sonnet at medium reasoning is the
+# user-chosen baseline for the subscription path.
+DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_REASONING = "medium"
 
 # Substrings the SDK / Anthropic API surface in their error messages
 # when the user has burned through their monthly agent-SDK credit

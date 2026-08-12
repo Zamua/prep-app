@@ -304,3 +304,107 @@ def test_byok_disconnect_clears_active_when_it_was_chosen(
 
     client.post("/settings/agent/byok/openrouter-api/disconnect")
     assert UserRepo().get_active_byok_provider("testuser@example.com") is None
+
+
+# ---- settings page states (free tier x BYOK) -----------------------------
+#
+# /settings/agent renders one of four states, driven by
+# free_tier_configured() x "user has any BYOK row". The callout +
+# disclosure appear iff the deploy configures the free tier; the copy
+# splits on whether the user's own key outranks it.
+
+_FREE_TIER_VARS = (
+    "PREP_FREE_INFERENCE_BASE_URL",
+    "PREP_FREE_INFERENCE_API_KEY",
+    "PREP_FREE_INFERENCE_MODEL",
+    "PREP_FREE_INFERENCE_EXTRA_BODY",
+)
+
+# Stable copy anchors, one per surface the states pin.
+_CALLOUT = "Free AI included"
+_DISCLOSURE = "third-party inference service"
+_BYOK_PRIORITY = "takes priority"
+
+
+@pytest.fixture(autouse=True)
+def _scrub_free_tier_env(monkeypatch: pytest.MonkeyPatch):
+    """Deploy-level free-tier env must not leak into route tests. Set
+    per-test via _free_tier_env when a test wants it."""
+    for var in _FREE_TIER_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture
+def _free_tier_env(monkeypatch: pytest.MonkeyPatch):
+    """Configure a complete free tier via env (no network is hit;
+    the settings page only constructs the adapter)."""
+    monkeypatch.setenv("PREP_FREE_INFERENCE_BASE_URL", "https://inference.example/v1")
+    monkeypatch.setenv("PREP_FREE_INFERENCE_API_KEY", "free-tier-key")
+    monkeypatch.setenv("PREP_FREE_INFERENCE_MODEL", "test-free-model")
+
+
+def test_settings_state_free_only(
+    client: TestClient, initialized_db: str, token_dir: Path, _free_tier_env
+):
+    """Free configured, no BYOK: callout says AI works with no setup,
+    frames BYOK as the upgrade, and carries the disclosure."""
+    r = client.get("/settings/agent")
+    assert r.status_code == 200
+    assert _CALLOUT in r.text
+    assert "no setup needed" in r.text
+    assert _DISCLOSURE in r.text
+    assert _BYOK_PRIORITY not in r.text
+
+
+def test_settings_state_free_plus_byok(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master, _free_tier_env
+):
+    """Free configured + a BYOK row: the callout flips to the quiet
+    'your key takes priority' line; disclosure still present."""
+    r = client.post(
+        "/settings/agent/byok/anthropic-api/connect",
+        data={"api_key": "sk-ant-api03-abcdefghijklmnop"},
+    )
+    assert r.status_code == 200
+    r = client.get("/settings/agent")
+    assert _CALLOUT in r.text
+    assert _BYOK_PRIORITY in r.text
+    assert _DISCLOSURE in r.text
+    assert "no setup needed" not in r.text
+
+
+def test_settings_state_byok_only_no_callout(
+    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
+):
+    """Free NOT configured: no callout, no disclosure; the page is
+    today's BYOK-only render even with a key saved."""
+    client.post(
+        "/settings/agent/byok/anthropic-api/connect",
+        data={"api_key": "sk-ant-api03-abcdefghijklmnop"},
+    )
+    r = client.get("/settings/agent")
+    assert r.status_code == 200
+    assert _CALLOUT not in r.text
+    assert _DISCLOSURE not in r.text
+
+
+def test_settings_state_none_no_callout(client: TestClient, initialized_db: str, token_dir: Path):
+    """Nothing configured: no callout, and the page still explains the
+    options (BYOK rows render as not configured)."""
+    r = client.get("/settings/agent")
+    assert r.status_code == 200
+    assert _CALLOUT not in r.text
+    assert _DISCLOSURE not in r.text
+    assert "not configured" in r.text
+
+
+def test_settings_half_configured_free_tier_shows_no_callout(
+    client: TestClient, initialized_db: str, token_dir: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A partially-set free tier would not serve, so the page must not
+    advertise it (free_tier_configured() is factory-truth, not
+    env-presence)."""
+    monkeypatch.setenv("PREP_FREE_INFERENCE_BASE_URL", "https://inference.example/v1")
+    r = client.get("/settings/agent")
+    assert r.status_code == 200
+    assert _CALLOUT not in r.text

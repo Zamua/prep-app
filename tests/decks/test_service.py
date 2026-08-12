@@ -210,7 +210,7 @@ async def test_start_deck_transform_threads_deck_context_prompt(
 ):
     """When the deck has a context_prompt, the service looks it up
     and passes it through to the temporal client as
-    `deck_context_prompt` — the worker injects it into claude's
+    `deck_context_prompt` - the worker injects it into the model's
     prompt so a deck-wide rewrite reads the deck's overall theme."""
     deck_repo, _q_repo = repos
     user = initialized_db
@@ -393,7 +393,7 @@ def test_build_transform_view_ctx_card_scope_walks_question_to_deck(
 def test_build_transform_view_ctx_modifications_diff_old_vs_new(
     repos: tuple[DeckRepo, QuestionRepo], initialized_db: str
 ):
-    """Modification diff carries the old DB shape and claude's
+    """Modification diff carries the old DB shape and the model's
     proposed new shape side-by-side. Fields not present on the
     modification fall through to the old value."""
     deck_repo, q_repo = repos

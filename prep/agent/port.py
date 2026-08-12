@@ -2,12 +2,10 @@
 
 This is the **domain port** for the agent bounded context: a thin
 protocol + value objects, pure (no I/O), depended on by every caller
-that wants to invoke an agent. Concrete implementations
-(`sdk_adapter.ClaudeAgentSdkAdapter`, `fake.FakeAgent`) plug in via
-adapter pattern.
-
-The point of the indirection: if/when we swap Claude for another
-provider, callers don't change — only the adapter does.
+that wants to invoke an agent. Concrete adapters plug in behind it;
+swapping providers changes only the adapter, never the callers. The
+port names no vendor and no model - each adapter owns its own
+defaults.
 
 Cost data is part of the result so callers (or middleware) can persist
 it to `agent_usage` for the per-token budget UI. Cost is the
@@ -19,13 +17,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
-
-# Default model + reasoning settings for the agent layer. Set here
-# (one place) so per-callsite overrides are explicit. Sonnet at
-# medium reasoning is the user-chosen baseline; Slice F may benchmark
-# alternatives.
-DEFAULT_MODEL = "claude-sonnet-4-6"
-DEFAULT_REASONING = "medium"
 
 
 @dataclass(frozen=True)
@@ -59,13 +50,22 @@ class AgentUnavailable(RuntimeError):
 
 
 class AgentBudgetExhausted(AgentUnavailable):
-    """Subclass surfaced when the SDK reports that the user has hit
-    their monthly Anthropic agent-SDK credit allocation (the per-
-    plan $X/mo pool — $200 on Max 20x, $20 on Pro). Catch this
-    specifically to render a "your Claude plan's monthly allocation
-    is exhausted — resumes [next reset]" message instead of the
-    generic "AI unavailable." Bare AgentUnavailable still works
-    as a catch-all for legacy callers."""
+    """Subclass surfaced when the configured credential's quota or
+    credit pool is exhausted (a monthly plan allocation, prepaid API
+    credit, or a hard rate/quota cap, whatever the provider meters).
+    Catch this specifically to render a "your AI budget is
+    exhausted" message instead of the generic "AI unavailable."
+    Bare AgentUnavailable still works as a catch-all for legacy
+    callers."""
+
+
+class AgentBusy(AgentUnavailable):
+    """Subclass surfaced when shared, deploy-provided AI capacity is
+    saturated (rate limiting or quota on a credential shared by every
+    user of the deploy). Not the caller's fault and not their budget:
+    the remedy is "retry later, or add your own key." Subclassing
+    AgentUnavailable keeps every existing catch-site degrading the
+    same way; catch this first for the distinct busy UX."""
 
 
 class AgentPort(Protocol):
@@ -76,8 +76,8 @@ class AgentPort(Protocol):
     don't ship a sync variant on the protocol because the SDK is
     async-native and a sync facade would just wrap `asyncio.run`.
 
-    `model` is provider-namespaced (e.g. "claude-sonnet-4-6"). Pass
-    None to accept the adapter's default.
+    `model` is provider-namespaced; pass None to accept the
+    adapter's default.
     """
 
     async def run(

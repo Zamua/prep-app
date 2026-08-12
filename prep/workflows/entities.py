@@ -78,7 +78,7 @@ IN_PROGRESS_STATUSES = frozenset(
         "applying",
         "rejecting",
         "accepting",
-        "asking_claude",  # trivia gen
+        "asking_ai",  # trivia gen
         "inserting",  # trivia gen
     }
 )
@@ -162,8 +162,8 @@ class ActiveWorkflow(BaseModel):
             return "failed"
         if s in ("rejected", "CANCELED", "TERMINATED", "gone"):
             return "cancelled"
-        if s == "asking_claude":
-            return "asking claude"
+        if s == "asking_ai":
+            return "asking AI"
         # Default: surface the raw status (computing, applying, etc.)
         return s or "starting"
 

@@ -75,6 +75,8 @@ func GradeAnswer(ctx workflow.Context, in shared.GradeAnswerInput) (shared.Grade
 		UserID:     in.UserID,
 	}).Get(ctx, &verdict); err != nil {
 		progress.Status = "failed"
+		progress.Error = err.Error()
+		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
 		return shared.GradeAnswerResult{}, fmt.Errorf("grade: %w", err)
 	}
 
@@ -102,6 +104,8 @@ func GradeAnswer(ctx workflow.Context, in shared.GradeAnswerInput) (shared.Grade
 		IdempotencyKey: wfInfo.WorkflowExecution.ID,
 	}).Get(ctx, &state); err != nil {
 		progress.Status = "failed"
+		progress.Error = err.Error()
+		progress.FinishedAt = workflow.Now(ctx).UTC().Format(time.RFC3339)
 		return shared.GradeAnswerResult{}, fmt.Errorf("record: %w", err)
 	}
 

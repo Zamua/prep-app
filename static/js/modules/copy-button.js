@@ -18,8 +18,8 @@ export function attachDeclarative(root = document) {
     // in a sibling confirmation field. Without this, pointerdown
     // steals focus from the input, the keyboard dismisses, the
     // layout reflows, and the user has to re-tap the input.
-    // Matches the "button-near-input two-tap" iOS pattern in
-    // ~/.claude/CLAUDE.md.
+    // Matches the standard "button-near-input two-tap" iOS
+    // mitigation.
     btn.addEventListener("mousedown", preventFocusSteal);
     btn.addEventListener("pointerdown", preventFocusSteal);
   }

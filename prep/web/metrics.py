@@ -10,9 +10,9 @@ Why the four below:
   known prod-down failure mode). Sampled lazily on every /metrics
   scrape, so we get a real-time picture without an always-on
   background task.
-- `prep_claude_grade_duration_seconds`: histogram of every claude_grade
+- `prep_ai_grade_duration_seconds`: histogram of every ai_grade
   call's wall time, tagged with verdict (right/wrong/fallback). Lets
-  us see latency tail + correlate with claude-side slowdowns.
+  us see latency tail + correlate with provider-side slowdowns.
 - `prep_http_request_duration_seconds`: per-route latency histogram +
   request count. Standard golden-signals view for the FastAPI surface.
 
@@ -67,11 +67,11 @@ def _sample_threadpool() -> None:
         pass
 
 
-# ---- claude_grade -----------------------------------------------------
+# ---- ai_grade ---------------------------------------------------------
 
-_CLAUDE_GRADE_DURATION = Histogram(
-    "prep_claude_grade_duration_seconds",
-    "Wall-clock duration of one claude_grade call from prompt-build to "
+_AI_GRADE_DURATION = Histogram(
+    "prep_ai_grade_duration_seconds",
+    "Wall-clock duration of one ai_grade call from prompt-build to "
     "response-parsed. Labeled by `verdict` (right/wrong/fallback) so we can "
     "see fallback rate separately from successful grading latency.",
     labelnames=("verdict",),
@@ -81,9 +81,9 @@ _CLAUDE_GRADE_DURATION = Histogram(
 )
 
 
-def observe_claude_grade(*, verdict: str, duration_s: float) -> None:
+def observe_ai_grade(*, verdict: str, duration_s: float) -> None:
     """Public hook for prep.trivia.service to report one grading call."""
-    _CLAUDE_GRADE_DURATION.labels(verdict=verdict).observe(duration_s)
+    _AI_GRADE_DURATION.labels(verdict=verdict).observe(duration_s)
 
 
 # ---- HTTP request duration --------------------------------------------
@@ -95,7 +95,7 @@ _HTTP_DURATION = Histogram(
     "raw URL — keeps cardinality bounded.",
     labelnames=("method", "route", "status"),
     # Default buckets are fine for the bulk of routes; still extend to
-    # 12s to cover the claude-graded outliers.
+    # 12s to cover the AI-graded outliers.
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 7.5, 12.0),
 )
 

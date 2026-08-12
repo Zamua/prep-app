@@ -141,7 +141,7 @@ def tick(now_utc: datetime) -> None:
                 continue
 
             # Refill gate: when the never-shown pool drops below the
-            # deck's session size, ask claude for a fresh batch. Tied
+            # deck's session size, ask the AI for a fresh batch. Tied
             # to session_size so a deck always has at least one full
             # session's worth of fresh content queued. The prior gate
             # ("zero pending review including wrong cards") was too

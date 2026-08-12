@@ -30,7 +30,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from prep.auth import current_user
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.trivia import service as trivia_service
-from prep.trivia.agent_client import AgentUnavailable
+from prep.trivia.agent_client import AgentBusy, AgentUnavailable
 from prep.trivia.repo import TriviaQueueRepo, TriviaSessionsRepo
 from prep.trivia.service import build_explore_ctx, grade_with_fallback
 from prep.trivia.session_state import (
@@ -93,7 +93,7 @@ async def _trivia_gen_progress(wid: str, user_login: str) -> tuple[str, dict]:
 @router.get("/trivia/gen/{wid}", response_class=HTMLResponse)
 async def trivia_generating(wid: str, request: Request, user: dict = Depends(current_user)):
     """Polling page that watches the TriviaGenerateWorkflow. Shows
-    progress (asking_claude → inserting → done). htmx polls the
+    progress (generating → applying → done). htmx polls the
     fragment route below every 1.5s; on terminal status the trigger
     is omitted and the user clicks "Open deck" to finish. The deck
     row was already created sync in /decks/new/trivia."""
@@ -558,7 +558,7 @@ async def trivia_regrade(
     answer: str = Form(""),
     user: dict = Depends(current_user),
 ):
-    """Force the claude grader to re-evaluate the user's answer for a
+    """Force the AI grader to re-evaluate the user's answer for a
     standalone (non-session) trivia card. Updates the recorded verdict
     if it flips and re-renders the result panel. The card isn't
     re-rotated — `set_last_correctness` only touches the verdict
@@ -571,7 +571,7 @@ async def trivia_regrade(
     if q is None:
         raise HTTPException(404, "question not found")
 
-    verdict = await trivia_service.claude_regrade(
+    verdict = await trivia_service.ai_regrade(
         prompt=q.prompt,
         expected=q.answer,
         given=answer,
@@ -619,10 +619,10 @@ def trivia_override(
     user: dict = Depends(current_user),
 ):
     """Manual verdict override — flip the queue's last verdict to RIGHT
-    without consulting claude. For when the grader was too harsh and
+    without consulting the AI. For when the grader was too harsh and
     the user is sure their answer was correct.
 
-    Distinct from regrade (which asks claude to re-evaluate). Override
+    Distinct from regrade (which asks the AI to re-evaluate). Override
     just sets correct=True. We don't auto-extend the answer_regex —
     a one-off "I was right" tap shouldn't permanently relax grading
     for that card. Users who want a permanent rule can edit the
@@ -747,7 +747,7 @@ async def trivia_session_regrade(
     if q is None or q.deck_id != deck_id:
         raise HTTPException(404, "question not found in this deck")
 
-    verdict = await trivia_service.claude_regrade(
+    verdict = await trivia_service.ai_regrade(
         prompt=q.prompt,
         expected=q.answer,
         given=answer,
@@ -921,6 +921,15 @@ def trivia_generate(
             questions_repo=questions,
             trivia_repo=trivia,
         )
+    except AgentBusy as e:
+        # Shared free-tier contention, not a broken agent. 429 + the
+        # busy copy; the error page adds an AI-settings link on 429.
+        raise HTTPException(
+            429,
+            "Free AI is busy right now (it's shared by everyone on this "
+            "deploy). Try again later, or add your own key in Settings "
+            "for dedicated capacity.",
+        ) from e
     except AgentUnavailable as e:
         raise HTTPException(502, f"trivia generation failed: {e}") from e
 

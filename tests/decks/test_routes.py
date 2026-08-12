@@ -212,8 +212,24 @@ def test_deck_view_renders_overflow_menu_actions(client: TestClient, initialized
     assert "/deck/go-systems/question/new" in r.text
 
 
+def test_edit_with_ai_page_renders(client: TestClient, initialized_db: str):
+    """The deck-wide AI edit prompt lives at /deck/<name>/edit-with-ai."""
+    _seed_deck(initialized_db, name="go-systems")
+    r = client.get("/deck/go-systems/edit-with-ai")
+    assert r.status_code == 200
+
+
+def test_edit_with_claude_legacy_path_redirects(client: TestClient, initialized_db: str):
+    """The old /edit-with-claude path stays alive as a redirect so
+    bookmarks and PWA history keep working."""
+    _seed_deck(initialized_db, name="go-systems")
+    r = client.get("/deck/go-systems/edit-with-claude", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].endswith("/deck/go-systems/edit-with-ai")
+
+
 def test_trivia_deck_edit_panel_shows_topic_editor(client: TestClient, initialized_db: str):
-    """Trivia decks: when an agent is configured, the claude-edit panel
+    """Trivia decks: when an agent is configured, the AI-edit panel
     carries the topic-prompt editor (drives future batch generation) in
     addition to the per-card transform. The "add" pill (manual card add)
     is its own separate action, not in the panel."""

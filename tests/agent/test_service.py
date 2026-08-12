@@ -107,3 +107,66 @@ def test_init_availability_loads_token_from_file(isolated_status):
     st.init_availability()
     assert os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") == "sk-ant-oat01-boot-test"
     assert st.is_available is True
+
+
+# ---- is_available_for delegates to the selector's gating -----------------
+
+
+@pytest.fixture
+def _availability_env(monkeypatch: pytest.MonkeyPatch):
+    """Clean slate for is_available_for tests: no leaked credentials,
+    no package-level shadow, master key set so the selector's BYOK
+    lookup completes as a clean "no row"."""
+    import prep.agent as agent_mod
+
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    for var in (
+        "PREP_FREE_INFERENCE_BASE_URL",
+        "PREP_FREE_INFERENCE_API_KEY",
+        "PREP_FREE_INFERENCE_MODEL",
+        "PREP_FREE_INFERENCE_EXTRA_BODY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delitem(agent_mod.__dict__, "is_available", raising=False)
+    monkeypatch.setenv("PREP_KEY_ENCRYPTION_SECRET", "ab" * 32)
+
+
+def test_is_available_for_false_on_clerk_despite_stray_flag_and_token(
+    _availability_env, initialized_db, monkeypatch: pytest.MonkeyPatch
+):
+    """The pre-M3 skew: a stray CLAUDE_CODE_OAUTH_TOKEN (and a True
+    cached probe) on a clerk deploy made is_available_for report True
+    while the selector handed back Noop. Availability now delegates
+    to the selector's own gating, so the two cannot disagree."""
+    import importlib
+
+    import prep.agent as agent_mod
+
+    st = importlib.import_module("prep.agent.status")
+    monkeypatch.setattr(st, "is_available", True)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-stray")
+    monkeypatch.setenv("PREP_AUTH_MODE", "clerk")
+
+    assert agent_mod.is_available_for("someone@example.com") is False
+
+
+def test_is_available_for_true_via_subscription_on_single_user_installs(
+    _availability_env, initialized_db, monkeypatch: pytest.MonkeyPatch
+):
+    """Tailscale install with the deploy token set → available, via
+    the selector's subscription path (not the raw probe)."""
+    import prep.agent as agent_mod
+
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-operator")
+    assert agent_mod.is_available_for("someone@example.com") is True
+
+
+def test_is_available_for_honors_package_shadow_test_seam(
+    _availability_env, monkeypatch: pytest.MonkeyPatch
+):
+    """Legacy tests toggle `prep.agent.is_available = True` directly;
+    that shadow still short-circuits without BYOK / env / DB setup."""
+    import prep.agent as agent_mod
+
+    monkeypatch.setattr(agent_mod, "is_available", True, raising=False)
+    assert agent_mod.is_available_for("anyone@example.com") is True

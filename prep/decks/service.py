@@ -311,7 +311,7 @@ async def start_deck_transform(
     review the proposed changes.
 
     The deck's `context_prompt` ("what this deck is about") is looked
-    up here and passed through to the workflow so claude sees the
+    up here and passed through to the workflow so the model sees the
     deck's overall theme alongside the per-card JSON — same role
     context_prompt plays in the plan-first generation flow.
 
@@ -352,9 +352,9 @@ async def start_card_transform(
     just the user nudging one prompt at a time).
 
     Looks up the question's owning deck so we can thread that deck's
-    `context_prompt` through to claude — a single-card edit benefits
-    from knowing the deck's overall theme too, not just the card
-    JSON in isolation."""
+    `context_prompt` through to the model - a single-card edit
+    benefits from knowing the deck's overall theme too, not just the
+    card JSON in isolation."""
     deck_context_prompt = ""
     q = question_repo.get(user_id, qid)
     if q is not None:
@@ -458,9 +458,9 @@ def _question_to_diff_dict(q: Question) -> dict[str, str]:
 
 
 def _modification_to_new_dict(m: dict, old: Question) -> dict[str, str]:
-    """New-side of a modification diff: claude's proposed value when
-    present, else fall through to the old value. Same keys as the old
-    side so the template can `for k in old` and align."""
+    """New-side of a modification diff: the model's proposed value
+    when present, else fall through to the old value. Same keys as the
+    old side so the template can `for k in old` and align."""
     return {
         "type": m.get("type") or old.type.value,
         "topic": (m.get("topic") or old.topic or "") or "",
@@ -492,7 +492,7 @@ def build_transform_view_ctx(
     - Resolve the deck name for the back link (by deck_id for deck
       scope; via the question's deck for card scope).
     - Build a per-modification diff (OLD live shape from the DB next
-      to claude's proposed NEW shape).
+      to the model's proposed NEW shape).
     - For reorganize plans, pre-resolve source-deck names for deletions
       + card_moves so the template can group changes by deck without
       doing per-row lookups in jinja.
