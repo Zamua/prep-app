@@ -183,6 +183,24 @@ Server is the source of truth, HTML is the API, JS is sprinkles. No
 SPA framework, no JS bundler, no Tailwind. Pages POST forms; JS adds
 polish. Most actions degrade to plain forms.
 
+**One deliberate exception: the study loop.** It has to run with no
+server (offline, and for anonymous guests whose deck lives only in
+IndexedDB), so a server-rendered version of it could not be the only
+one. Rather than keep two implementations of the same screens, the
+loop is a set of client components in `static/js/study/` behind a
+`CardSource` port with two adapters: `LocalSource` (IndexedDB +
+the JS grader/scheduler) and `ServerSource` (the JSON API in
+`prep/study/api.py`). Two hosts wire them up: `offline/offline-app.js`
+and `study/online-host.js`. The server renders only the shell
+(`templates/study_shell.html`, `templates/offline.html`).
+
+Consequences worth knowing: the signed-in study loop requires JS (the
+shell carries a noscript pointer back to the deck); copy that only one
+surface can truthfully say is a per-call option on the view, never a
+branch on the host; and anything the server alone can compose (chat
+handoff URLs) reaches a view through `extras`. Everything outside the
+loop stays server-rendered.
+
 ### UX rails (don't violate without a reason)
 
 - **No layout shift on interaction.** A control's bounding box should

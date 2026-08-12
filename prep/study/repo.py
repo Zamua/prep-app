@@ -432,10 +432,9 @@ class SessionRepo:
             return new_v
 
     def mark_completed(self, user_id: str, sid: str) -> None:
-        """Bump a session into status='completed'. Used by the session
-        view route when it lands on a session whose current question
-        was already answered (no due card left) — the route renders
-        result.html for the just-answered card after this stamp."""
+        """Bump a session into status='completed'. Set when the loop
+        reaches a session whose current question was already answered
+        and nothing else is due; the caught-up screen follows."""
         with cursor() as c:
             c.execute(
                 "UPDATE study_sessions SET status='completed', "

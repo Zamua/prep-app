@@ -137,25 +137,12 @@ def test_legacy_study_empty_when_no_due(client: TestClient, initialized_db: str)
     assert "2+2?" not in r.text
 
 
-# ---- /grading/{wid}/fragment ------------------------------------------
+# ---- /grading/{wid} ---------------------------------------------------
 #
-# The htmx polling fragment. Distinct from the plan/transform fragments
-# in two ways: (1) the partial polls every 1.5s, not 2s; (2) on terminal
-# completion the route returns an empty body + HX-Redirect to the
-# canonical /grading/{wid} URL so htmx triggers a full-page navigation
-# into result.html (which has the verdict logic). Tests stub
-# `prep.temporal_client.get_grade_progress` + describe_workflow so we
-# don't need a Temporal server in the loop.
-
-
-def _afake(value):
-    """Async fake — coroutine factory that ignores args and resolves to
-    `value`."""
-
-    async def fn(*_a, **_kw):
-        return value
-
-    return fn
+# Grading used to be its own htmx polling page. The study shell owns an
+# in-flight grade now, so this URL only has to keep old links working:
+# it redirects into the shell, and it must not honour a workflow id
+# naming someone else's deck or question.
 
 
 def _seed_grading_wid(initialized_db: str, deck_name: str = "go-systems") -> tuple[int, str]:
@@ -175,70 +162,35 @@ def _seed_grading_wid(initialized_db: str, deck_name: str = "go-systems") -> tup
     return qid, wid
 
 
-def test_grading_fragment_mid_flow_keeps_polling(
-    monkeypatch, client: TestClient, initialized_db: str
-):
-    """status=grading is non-terminal → hx-trigger present, the
-    'Reading your answer' headline + status text render."""
-    from prep import temporal_client
-
+def test_grading_url_redirects_into_the_study_shell(client: TestClient, initialized_db: str):
     _, wid = _seed_grading_wid(initialized_db)
-    monkeypatch.setattr(temporal_client, "get_grade_progress", _afake({"status": "grading"}))
-    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
-
-    r = client.get(f"/grading/{wid}/fragment")
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("text/html")
-    assert 'hx-trigger="every' in r.text
-    # Status text reflects the in-flight phase.
-    assert "grading" in r.text.lower()
+    r = client.get(f"/grading/{wid}", follow_redirects=False)
+    assert r.status_code in (302, 303, 307)
+    assert r.headers["location"].endswith("/study/go-systems")
 
 
-def test_grading_fragment_terminal_returns_hx_redirect(
-    monkeypatch, client: TestClient, initialized_db: str
+def test_grading_url_with_a_live_session_returns_to_that_session(
+    client: TestClient, initialized_db: str
 ):
-    """status=done → response is empty + HX-Redirect points at the
-    canonical /grading/{wid} URL so htmx does a full navigation into
-    result.html. No body needs to render."""
-    from prep import temporal_client
-
+    _seed_srs_deck(initialized_db)
+    begin = client.post("/study/study-rt/begin", follow_redirects=False)
+    sid = begin.headers["location"].rsplit("/", 1)[-1]
     _, wid = _seed_grading_wid(initialized_db)
-    monkeypatch.setattr(temporal_client, "get_grade_progress", _afake({"status": "done"}))
-    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "COMPLETED"}))
-
-    r = client.get(f"/grading/{wid}/fragment")
-    assert r.status_code == 200
-    assert "HX-Redirect" in r.headers or "hx-redirect" in r.headers
-    target = r.headers.get("HX-Redirect") or r.headers.get("hx-redirect")
-    assert target.endswith(f"/grading/{wid}")
-    # And no polling marker — the redirect takes over.
-    assert 'hx-trigger="every' not in r.text
+    r = client.get(f"/grading/{wid}?sid={sid}", follow_redirects=False)
+    assert r.status_code in (302, 303, 307)
+    assert r.headers["location"].endswith(f"/session/{sid}")
 
 
-def test_grading_fragment_terminal_with_sid_preserves_query_param(
-    monkeypatch, client: TestClient, initialized_db: str
-):
-    """When the fragment was invoked from inside a study session, the
-    sid query param must be carried into the HX-Redirect target so the
-    follow-up page reconciles the session row."""
-    from prep import temporal_client
-
-    _, wid = _seed_grading_wid(initialized_db)
-    monkeypatch.setattr(temporal_client, "get_grade_progress", _afake({"status": "done"}))
-    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "COMPLETED"}))
-
-    r = client.get(f"/grading/{wid}/fragment?sid=sess-xyz")
-    assert r.status_code == 200
-    target = r.headers.get("HX-Redirect") or r.headers.get("hx-redirect")
-    assert target is not None
-    assert f"/grading/{wid}?sid=sess-xyz" in target
+def test_grading_url_malformed_workflow_id_400(client: TestClient, initialized_db: str):
+    r = client.get("/grading/not-a-grade-id", follow_redirects=False)
+    assert r.status_code == 400
 
 
-def test_grading_fragment_idor_other_user_404(monkeypatch, client: TestClient, initialized_db: str):
-    """A grade wid for bob's question → 404 for alice (the test
-    client user). The route's `q_repo.get(uid, qid)` check fires
-    before any temporal call."""
-    from prep import temporal_client
+def test_grading_url_idor_other_user_404(client: TestClient, initialized_db: str):
+    """A wid naming bob's deck + question is refused for the test user.
+    Without the ownership check the redirect would land on
+    /study/bobs-deck, whose get-or-create would mint that deck in the
+    caller's account."""
     from prep.auth.repo import UserRepo
 
     UserRepo().upsert("bob@example.com")
@@ -249,50 +201,10 @@ def test_grading_fragment_idor_other_user_404(monkeypatch, client: TestClient, i
         NewQuestion(type=QuestionType.SHORT, prompt="?", answer="A"),
     )
     wid = f"grade-bobs-deck-q{bob_qid}-abc1234567"
-    monkeypatch.setattr(temporal_client, "get_grade_progress", _afake({"status": "grading"}))
 
-    r = client.get(f"/grading/{wid}/fragment")
+    r = client.get(f"/grading/{wid}", follow_redirects=False)
     assert r.status_code == 404
-
-
-def test_grading_fragment_is_html_not_json(monkeypatch, client: TestClient, initialized_db: str):
-    """Future-refactor guard: mid-flow body must stay HTML."""
-    from prep import temporal_client
-
-    _, wid = _seed_grading_wid(initialized_db)
-    monkeypatch.setattr(temporal_client, "get_grade_progress", _afake({"status": "grading"}))
-    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "RUNNING"}))
-
-    r = client.get(f"/grading/{wid}/fragment")
-    assert r.status_code == 200
-    assert not r.headers["content-type"].startswith("application/json")
-
-
-def test_grading_view_failed_renders_workflow_error(
-    monkeypatch, client: TestClient, initialized_db: str
-):
-    """A failed grade workflow's progress.error (e.g. the busy free
-    tier's add-your-own-key pointer) reaches the page instead of dying
-    inside the worker. Pins the GradeProgress.Error plumbing."""
-    from prep import temporal_client
-
-    _, wid = _seed_grading_wid(initialized_db)
-    busy = (
-        "grade: free AI is busy right now (it's shared by everyone on this "
-        "deploy): rate limited; try again later, or add your own key in "
-        "Settings for dedicated capacity"
-    )
-    monkeypatch.setattr(
-        temporal_client, "get_grade_progress", _afake({"status": "failed", "error": busy})
-    )
-    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "FAILED"}))
-    monkeypatch.setattr(temporal_client, "get_grade_result", _afake(None))
-
-    r = client.get(f"/grading/{wid}")
-    assert r.status_code == 200
-    assert "add your own key" in r.text
-    # The generic retrieval hint still renders alongside the message.
-    assert "Back to deck" in r.text
+    assert DeckRepo().find_id(initialized_db, "bobs-deck") is None
 
 
 # ---- /session/<sid>/snooze -----------------------------------------

@@ -115,9 +115,9 @@ def test_plan_fragment_updates_workflow_status(
 def test_grading_fragment_updates_workflow_status(
     client: TestClient, initialized_db: str, monkeypatch
 ):
-    """Grading fragment fires its status update before short-circuiting
-    on terminal status — so even the redirect path keeps the tracker
-    in sync."""
+    """The grading poll endpoint records terminal status on the tracker.
+    The study shell polls this instead of the retired htmx fragment, so
+    the tracker stays in sync from the surface that actually runs."""
     from prep.decks.entities import NewQuestion, QuestionType
     from prep.decks.repo import DeckRepo, QuestionRepo
 
@@ -140,9 +140,16 @@ def test_grading_fragment_updates_workflow_status(
     )
 
     _patch_temporal(monkeypatch, _FakeTemporal(progress_status="done"))
-    r = client.get(f"/grading/{wid}/fragment")
-    # Terminal grading → HX-Redirect (200 with no body) is the route's
-    # expected response.
+    # The poll endpoint also reads the workflow's result; the shared
+    # fake covers progress + describe only.
+    import prep.temporal_client as _tc
+
+    async def _no_result(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(_tc, "get_grade_result", _no_result)
+
+    r = client.get(f"/api/study/grading/{wid}")
     assert r.status_code == 200
     assert repo.get(wid).status == "done"
     assert repo.get(wid).terminal_at is not None
