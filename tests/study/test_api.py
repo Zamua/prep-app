@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
+from prep.study.entities import SessionState
 from prep.study.repo import SessionRepo
 
 OTHER_USER = "bob@example.com"
@@ -701,3 +702,68 @@ def test_every_endpoint_requires_an_identity(env: None, monkeypatch):
         kwargs = {"json": body} if body is not None else {}
         r = getattr(c, method)(path, follow_redirects=False, **kwargs)
         assert r.status_code == 401, f"{method.upper()} {path} → {r.status_code}"
+
+
+def test_failed_grading_releases_the_session_instead_of_wedging_it(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """A workflow that ends with no verdict must not leave the session
+    in 'grading'. While it did, every later read answered {pending} for
+    a dead workflow and the client polled it forever."""
+    from prep import temporal_client
+
+    deck_id, _ = _seed_deck(initialized_db)
+    qid = _seed_short(initialized_db, deck_id)
+    started = _begin(client)
+    sid = started["session"]["id"]
+    wid = f"grade-study-api-q{qid}-abc1234567"
+    SessionRepo().set_grading(initialized_db, sid, qid, wid, started["session"]["version"])
+
+    monkeypatch.setattr(
+        temporal_client, "get_grade_progress", _afake({"status": "failed", "error": "boom"})
+    )
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "FAILED"}))
+    monkeypatch.setattr(temporal_client, "get_grade_result", _afake(None))
+
+    r = client.get(f"/api/study/grading/{wid}?sid={sid}")
+    assert r.status_code == 200
+    assert r.json()["failed"]["code"] == "grading_failed"
+
+    s = SessionRepo().get(initialized_db, sid)
+    assert s is not None
+    assert s.state is not SessionState.GRADING
+    assert s.current_grading_workflow_id is None
+
+    # And the next read hands back a card, not another pending screen.
+    nxt = client.get(f"/api/study/sessions/{sid}/next")
+    assert nxt.status_code == 200
+    assert "pending" not in nxt.json()
+
+
+def test_failed_grading_poll_cannot_clear_a_newer_workflow(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """A late poll for an old workflow must not release a session that
+    has since started grading something else."""
+    from prep import temporal_client
+
+    deck_id, _ = _seed_deck(initialized_db)
+    qid = _seed_short(initialized_db, deck_id)
+    started = _begin(client)
+    sid = started["session"]["id"]
+    stale_wid = f"grade-study-api-q{qid}-stale111111"
+    current_wid = f"grade-study-api-q{qid}-current1111"
+    SessionRepo().set_grading(initialized_db, sid, qid, current_wid, started["session"]["version"])
+
+    monkeypatch.setattr(
+        temporal_client, "get_grade_progress", _afake({"status": "failed", "error": "boom"})
+    )
+    monkeypatch.setattr(temporal_client, "describe_workflow", _afake({"status": "FAILED"}))
+    monkeypatch.setattr(temporal_client, "get_grade_result", _afake(None))
+
+    client.get(f"/api/study/grading/{stale_wid}?sid={sid}")
+
+    s = SessionRepo().get(initialized_db, sid)
+    assert s is not None
+    assert s.state is SessionState.GRADING
+    assert s.current_grading_workflow_id == current_wid

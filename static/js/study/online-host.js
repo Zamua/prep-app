@@ -13,6 +13,7 @@ import {
   verdictView,
 } from "./components.js";
 import {ServerSource, StudySourceError} from "./source.js";
+import {el, icon} from "./dom.js";
 
 const ROOT_PATH = new URL(import.meta.url).pathname.replace(/\/static\/js\/.*$/, "");
 
@@ -47,6 +48,9 @@ function toast(message, kind = "info") {
 
 function render(node) {
   cancelPending();
+  // Reaching a real screen means the loop is healthy again, so the
+  // auto-recovery budget refills.
+  chainedRecoveries = 0;
   state.mount.replaceChildren(node);
   window.scrollTo({top: 0});
 }
@@ -70,6 +74,54 @@ function flushDraftTimer() {
 
 // ---- error policy ----------------------------------------------------
 
+// Errors whose honest recovery is "re-read the session" can chain: the
+// re-read hits the same condition, errors again, and recovers again.
+// Consecutive auto-recoveries are capped so a server stuck in one
+// state produces a dead end with an explanation instead of a spinning
+// loop. Any screen the user actually reaches resets the count.
+const MAX_CHAINED_RECOVERIES = 3;
+let chainedRecoveries = 0;
+
+function recover() {
+  if (chainedRecoveries >= MAX_CHAINED_RECOVERIES) {
+    chainedRecoveries = 0;
+    showDeadEnd();
+    return;
+  }
+  chainedRecoveries += 1;
+  showNext();
+}
+
+// Terminal screen for a loop that cannot continue. Deliberately not a
+// toast: the user needs a way out, and every automatic retry is spent.
+function showDeadEnd() {
+  cancelPending();
+  const section = el("section", "empty-state");
+  section.appendChild(el("h2", "empty-headline", "Studying is stuck."));
+  section.appendChild(
+    el(
+      "p",
+      "empty-sub",
+      "Something on the server keeps interrupting this session. " +
+        "Your progress so far is saved."
+    )
+  );
+  const actions = el("div", "study-actions caughtup-actions");
+  const retry = el("button", "btn btn-primary", "Try again");
+  retry.type = "button";
+  retry.addEventListener("click", () => {
+    chainedRecoveries = 0;
+    showNext();
+  });
+  const back = el("button", "btn btn-quiet", "Back to deck");
+  back.type = "button";
+  back.addEventListener("click", onPause);
+  actions.appendChild(retry);
+  actions.appendChild(back);
+  section.appendChild(actions);
+  state.mount.replaceChildren(section);
+}
+
 // Every failure that reaches a user lands here. Recoverable errors
 // toast and leave the screen usable; identity loss navigates, because
 // nothing on the page can work without a session.
@@ -90,19 +142,23 @@ function handleError(e) {
       // the source the current version; re-reading is the only honest
       // recovery, so never silently resubmit.
       toast("This session moved on another device. Catching up.", "info");
-      showNext();
+      recover();
       return;
     case "not_found":
       toast("That card is gone. Loading the next one.", "info");
-      showNext();
+      recover();
       return;
     case "grading_timeout":
-      toast("Grading is taking too long. Your answer was recorded.", "error");
-      showNext();
+      // The workflow may still land; the card stays in 'grading' until
+      // it does, so re-reading is the right move.
+      toast("Grading is taking too long. Try again in a moment.", "error");
+      recover();
       return;
     case "grading_failed":
-      toast("Grading failed. Your answer was recorded.", "error");
-      showNext();
+      // No verdict is coming. The answer was NOT recorded, so say so
+      // and put the card back rather than implying it counted.
+      toast("The grader failed. Your answer was not recorded.", "error");
+      recover();
       return;
     case "network":
       toast("Network trouble. Check your connection and try again.", "error");
@@ -136,8 +192,65 @@ function showCard(card, draft) {
   );
 }
 
+// The "Explore further" popover. The server composes the prefilled
+// provider URLs (the message embeds the whole card context and the URL
+// templates are server config), so the host only renders them. Same
+// markup and classes the result page used, so discuss.css still applies.
+function handoffNode(handoff) {
+  if (!handoff || !handoff.urls) return null;
+  const providers = handoff.providers || {};
+  const keys = ["claude", "chatgpt"].filter((k) => handoff.urls[k]);
+  if (!keys.length) return null;
+
+  const details = el("details", "discuss");
+  const summary = el("summary", "discuss-trigger");
+  summary.appendChild(el("span", "discuss-label", "Explore further"));
+  const caret = el("span", "discuss-caret");
+  caret.appendChild(icon("caret-down"));
+  summary.appendChild(caret);
+  details.appendChild(summary);
+
+  const menu = el("div", "discuss-menu");
+  menu.setAttribute("role", "menu");
+  for (const key of keys) {
+    const a = document.createElement("a");
+    a.className = "discuss-option";
+    a.setAttribute("role", "menuitem");
+    a.href = handoff.urls[key];
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.appendChild(el("span", "discuss-option-name", providers[key] || key));
+    const arrow = el("span", "discuss-option-arrow");
+    arrow.appendChild(icon("arrow-up-right"));
+    a.appendChild(arrow);
+    menu.appendChild(a);
+  }
+
+  // Not every chat app honours a prefilled universal link, so the
+  // message stays copyable as a fallback.
+  if (handoff.message) {
+    const copy = el("button", "discuss-option discuss-copy");
+    copy.type = "button";
+    copy.setAttribute("role", "menuitem");
+    const label = el("span", "discuss-option-name", "Copy prompt");
+    copy.appendChild(label);
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(handoff.message);
+        label.textContent = "Copied";
+      } catch (e) {
+        label.textContent = "Copy failed";
+      }
+    });
+    menu.appendChild(copy);
+  }
+  details.appendChild(menu);
+  return details;
+}
+
 function showVerdict(outcome) {
   const card = outcome.card || state.card;
+  const handoff = handoffNode(outcome.handoff);
   render(
     verdictView(
       card,
@@ -147,6 +260,7 @@ function showVerdict(outcome) {
         minutes: outcome.nextDueMinutes,
         idk: outcome.idk,
         feedback: outcome.feedback || null,
+        extras: handoff ? [handoff] : [],
       },
       {onNext: showNext, onPause}
     )
@@ -155,12 +269,17 @@ function showVerdict(outcome) {
 
 function showSelfGrade(outcome) {
   const card = outcome.card || state.card;
+  // `answer` is what the user wrote. Never fall back to card.answer:
+  // an empty submission would then show the model answer back as the
+  // user's own words. It also has to survive into the verdict submit,
+  // which is what lands in the review log.
+  const written = typeof outcome.answer === "string" ? outcome.answer : "";
   render(
-    revealView(card, outcome.answer || card.answer || "", {
+    revealView(card, written, {
       blurb:
         "No deterministic grader applies to this card, so you're the " +
         "judge. Mark it honestly. The scheduler works either way.",
-      onVerdict: (verdict) => submit(card, {verdict, answer: outcome.userAnswer || ""}),
+      onVerdict: (verdict) => submit(card, {verdict, answer: written}),
       onPause,
     })
   );

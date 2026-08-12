@@ -882,6 +882,12 @@ async def grading_poll(
         result = None
     if result is None:
         error = (progress or {}).get("error") or ""
+        # Release the session before answering. Left in 'grading' it
+        # would hand every later read another pending screen for a
+        # workflow that will never produce a verdict, and the client
+        # would poll it forever.
+        if sid:
+            session_repo.grading_abandoned(uid, sid, wid)
         return JSONResponse(
             {
                 "failed": {

@@ -148,6 +148,7 @@ e2e: tools
 E2E_LOCAL_FILES = \
 	tests/e2e/test_local_browser_smoke.py \
 	tests/e2e/test_online_study_e2e.py \
+	tests/e2e/test_online_host_e2e.py \
 	tests/e2e/test_study_components_e2e.py \
 	tests/e2e/test_offline_study_e2e.py \
 	tests/e2e/test_offline_author_e2e.py \

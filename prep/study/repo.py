@@ -387,6 +387,29 @@ class SessionRepo:
                 (question_id, json.dumps(verdict), json.dumps(state), ts, sid, user_id),
             )
 
+    def grading_abandoned(self, user_id: str, sid: str, workflow_id: str) -> None:
+        """Release a session whose grading workflow ended with no
+        verdict, putting the card back in front of the user.
+
+        Without this a failed workflow leaves state='grading' forever:
+        every read hands the client another pending screen, and the
+        client polls the same dead workflow again. Scoped by
+        workflow_id so a stale poll cannot clear a newer grade the
+        session has since started. Idempotent."""
+        ts = now()
+        with cursor() as c:
+            c.execute(
+                """UPDATE study_sessions SET
+                    state = 'awaiting-answer',
+                    current_grading_workflow_id = NULL,
+                    last_active = ?,
+                    version = version + 1
+                  WHERE id = ? AND user_id = ?
+                    AND state = 'grading'
+                    AND current_grading_workflow_id = ?""",
+                (ts, sid, user_id, workflow_id),
+            )
+
     def advance(self, user_id: str, sid: str, expected_version: int) -> int:
         """Move from showing-result to the next due card (or
         completed). Returns new version."""
