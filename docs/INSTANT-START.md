@@ -45,14 +45,14 @@ product.
 ### Target
 
 - **Time to first card under 60 seconds.** Type a topic, tap
-  Generate, study. Generation itself is the long pole: a 12-card
-  batch on the free tier is expected in the 10 to 30 second range.
-  That range is an extrapolation until M1: the in-repo latency
-  figures (AI-PROVIDERS.md) are grading-shaped calls, not
-  generation-shaped, so M1 measures one real generation and this
-  range plus the client's "Usually 10 to 30 seconds" copy are
-  aligned to that measurement (section 6). Everything around the
-  generation must be near-zero.
+  Generate, study. Generation itself is the long pole. Free-tier
+  generations are capped at 5 cards (product decision: a fast
+  first deck with bounded spend beats a slow full one): measured
+  generation-shaped calls against the configured free tier ran
+  11.5s and 15.5s for 5 cards (~260 output tokens), versus 33 to
+  44 seconds for 12-card probes, which is what drove the cap.
+  Client copy says "usually 10 to 20 seconds". Everything around
+  the generation must be near-zero.
 - **One decision.** The topic is the only thing the visitor chooses.
   No kind picker, no name field, no plan approval, no account.
 - **The account ask arrives after value, not before.** A quiet
@@ -117,7 +117,7 @@ States of the hero form, driven by
 2. **Generating.** On submit: button flips to `is-loading` (equal
    size spinner, no layout shift, per the UX rails in CLAUDE.md), a
    status line cycles honest copy ("Writing your cards. Usually 10
-   to 30 seconds."). One in-flight request max; the fetch carries
+   to 20 seconds."). One in-flight request max; the fetch carries
    `AbortSignal.timeout(75000)`, slightly above the server's cap.
 3. **Ready.** On 200: cards are written to IndexedDB (section 3.3),
    the form swaps to a ready panel: "Your deck: {display_name}, N
@@ -318,24 +318,32 @@ adversarial topic pull 16x the output this endpoint budgets for on
 every call. `free_tier_agent()` therefore gains an optional
 `max_output_tokens` parameter (default `None` preserves 32768 for
 every existing caller), and the instant service passes
-`PREP_INSTANT_MAX_OUTPUT_TOKENS` (default 2048, roughly double an
-honest 16-card response, so real decks never truncate). A response
+`PREP_INSTANT_MAX_OUTPUT_TOKENS` (default 1024, roughly 4x an
+honest 5-card response, ~260 output tokens measured, so real decks
+never truncate). A response
 cut off at the cap fails parsing or the 3-card floor and returns
 `generation_failed`; that outcome still counts as spend
 (section 3.2). The abuse arithmetic in 3.2 depends on this cap
 being ENFORCED per call, never assumed.
 
 **Synchronous single call, no plan step, no Temporal.** One prompt,
-one `await adapter.run(prompt, timeout_s=60.0)` in the async route
-handler (non-blocking; the free-tier adapter is httpx-async). This
-is deliberately simpler than the signed-in plan flow: no workflow,
-no polling UI, no worker involvement. The 60s cap turns a stalled
-upstream into `generation_failed` instead of a hung connection.
+one adapter call in the async route handler (non-blocking; the
+free-tier adapter is httpx-async). This is deliberately simpler
+than the signed-in plan flow: no workflow, no polling UI, no worker
+involvement. The SERVICE owns the 60s deadline (`asyncio.wait_for`)
+and hands the adapter a 75s transport backstop: the shared adapter
+maps its own transport timeout to `AgentBusy`, which section 3.2
+would misclassify as a free refusal, so the service deadline must
+fire first and classify the stall as spend
+(`generation_failed`). A timeout the adapter still surfaces
+arrives as `AgentTimeout` (an `AgentBusy` subclass meaning "the
+request WAS issued") and also counts as spend.
 
 **The prompt** reuses the trivia generation shape, which already
 produces exactly what the offline grader consumes. A new template in
 `prep/instant/service.py`, derived from `_GEN_PROMPT_TEMPLATE`
-(`prep/trivia/service.py:51-133`): "up to 12" q/a/r items, the same
+(`prep/trivia/service.py:51-133`): "exactly 5" q/a/r items (the
+free-tier card cap, section 1), the same
 answer-length constraints, the REGEX GUIDANCE block with its
 regex-semantics rules intact but its grader-fallback lines
 rewritten (the trivia block tells the model "the grader has a
@@ -486,8 +494,8 @@ limit, not three successes.
 
 The global daily breaker protects the free tier's shared daily
 token quota for the whole deploy (AI-PROVIDERS.md section 2): 200
-generations at the ENFORCED 2,048-token output cap (section 3.1)
-is at most ~410k output tokens/day, a bounded fraction of the
+generations at the ENFORCED 1,024-token output cap (section 3.1)
+is at most ~205k output tokens/day, a bounded fraction of the
 quota that leaves the signed-in flows their headroom. That
 arithmetic holds only because the cap is enforced per call and
 spend failures count toward the breaker. The global per-minute cap
@@ -495,7 +503,7 @@ rations the OTHER shared budget, the per-minute output-token rate:
 the semaphore bounds concurrency, not calls per minute, and short
 generations could otherwise stack enough calls in one minute to
 push signed-in grading into its string-match fallback for the
-duration of a burst. Four spends per minute at the 2,048 cap
+duration of a burst. Four spends per minute at the 1,024 cap
 bounds instant's worst-case share of the minute budget. Breaker or
 per-minute trips return `busy`, indistinguishable on the wire from
 upstream contention, which is honest: from the visitor's seat both
@@ -742,7 +750,7 @@ needs):
   with.
 
 Batch caps are untouched (`prep/offline/entities.py:28-29`); a
-12-card deck plus its reviews fits one chunk of each with two
+5-card deck plus its reviews fits one chunk of each with two
 orders of magnitude to spare.
 
 ### 3.5 Privacy disclosure
@@ -836,7 +844,7 @@ Layered as the rest of the suite (`make lint` / `make test` /
   unset; the subscription and BYOK paths are unreachable from this
   endpoint by construction.
 - Generation semantics with `FakeAgent` via the factory seam:
-  happy path (12 items -> 200 with validated regexes), the factory
+  happy path (5 items -> 200 with validated regexes), the factory
   receives the instant `max_output_tokens` and never the
   transform-sized default (pins the output cap), fenced / preamble
   output survives the shared parser, invalid regex dropped to
@@ -875,7 +883,7 @@ existing one.
 
 - **Full anonymous loop, mocked generation:** Playwright with NO
   auth header, `ctx.route` intercepting `POST /api/instant/generate`
-  with a canned 12-card response. Land -> type topic -> Generate ->
+  with a canned 5-card response. Land -> type topic -> Generate ->
   ready panel -> Start studying -> `/offline` guest overview (deck
   name, N due; no thrown owner-null errors in the console) ->
   auto-grade a regex short (typed answer, verdict without
@@ -929,11 +937,11 @@ stays invisible until M4 swaps the landing.
   `qa_extract` promotion + DDL. Nothing links to it, but it is
   internet-reachable from the moment it deploys, so the full abuse
   layer ships INSIDE this milestone, not after it. All unit/route
-  tests. Env knobs documented in `.env.example`. M1 also runs ONE
-  real generation-shaped call against the configured free tier and
-  records the latency (the in-repo figures are grading-shaped);
-  the section-1 range and the client's "Usually 10 to 30 seconds"
-  copy are corrected from that measurement before M4 ships them.
+  tests. Env knobs documented in `.env.example`. The real
+  generation-shaped latency measurements are DONE (section 1:
+  11.5s and 15.5s for 5 cards; 33 to 44s for the 12-card probes
+  that drove the 5-card cap); the section-1 range and the client
+  copy already carry them.
 - **M2: sync wire extensions.** `SyncNewCard.deck_name` +
   `answer_regex`, named-deck resolution, regex re-validation +
   storage. Pure server-side widening, exercised only by tests until
