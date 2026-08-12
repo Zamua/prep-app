@@ -23,6 +23,7 @@ from pydantic import ValidationError
 
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo
+from prep.domain import grading
 from prep.domain.srs import Verdict
 from prep.offline.entities import (
     SyncCardResult,
@@ -48,6 +49,10 @@ _GRADER_NOTES = {
 # Client ids are UUIDs (36 chars); anything wildly longer is a
 # protocol violation worth rejecting before it lands in a PK column.
 _MAX_CLIENT_ID_CHARS = 64
+
+# Longest deck label the named-deck resolution accepts; anything
+# beyond it files into the inbox instead.
+_MAX_DECK_NAME_CHARS = 80
 
 
 def sync_batch(
@@ -90,7 +95,11 @@ def _process_card(
         new = _validate_new_card(item)
         deck_id = item.deck_id
         if deck_id is None:
-            deck_id = repo.resolve_srs_inbox(user_id, deck_repo)
+            deck_name = _usable_deck_name(item.deck_name)
+            if deck_name is None:
+                deck_id = repo.resolve_srs_inbox(user_id, deck_repo)
+            else:
+                deck_id = repo.resolve_named_srs_deck(user_id, deck_name, deck_repo)
         elif type(deck_id) is not int or not (1 <= deck_id < 2**63):
             # Deck ids are integers within SQLite's INTEGER range; any
             # other type or magnitude cannot name a deck (and an
@@ -98,7 +107,14 @@ def _process_card(
             # escaping per-item isolation into a batch 500).
             raise SyncItemRejected("unknown deck_id")
         try:
-            qid = repo.create_card(user_id, client_id, deck_id, new.prompt, new.answer)
+            qid = repo.create_card(
+                user_id,
+                client_id,
+                deck_id,
+                new.prompt,
+                new.answer,
+                answer_regex=new.answer_regex,
+            )
         except sqlite3.IntegrityError:
             # Concurrent-flush convergence; see the review twin below.
             prior = repo.find_outcome(user_id, client_id)
@@ -116,17 +132,39 @@ def _validate_new_card(item: SyncNewCard) -> NewQuestion:
     """The existing validation shape: NewQuestion with type='short',
     prompt and answer required -- the same contract the online manual
     form enforces. A non-string prompt/answer (corrupt outbox row) is
-    treated as absent."""
+    treated as absent. The client's answer_regex is never trusted:
+    it must pass the same validator the grading paths use (compiles,
+    within the length cap, accepts the canonical answer) or it stores
+    as null -- a bad regex never rejects the card."""
     prompt = item.prompt.strip() if isinstance(item.prompt, str) else ""
     answer = item.answer.strip() if isinstance(item.answer, str) else ""
     if not prompt:
         raise SyncItemRejected("prompt required")
     if not answer:
         raise SyncItemRejected("answer required")
+    regex = grading.validate_regex_update(item.answer_regex, expected_literal=answer)
     try:
-        return NewQuestion(type=QuestionType.SHORT, prompt=prompt, answer=answer)
+        return NewQuestion(
+            type=QuestionType.SHORT, prompt=prompt, answer=answer, answer_regex=regex
+        )
     except ValidationError as e:
         raise SyncItemRejected("invalid card") from e
+
+
+def _usable_deck_name(raw: object) -> str | None:
+    """A deck label usable for named resolution: a non-empty string
+    after strip, within the cap, no newlines (the same display-name
+    contract the deck forms enforce). Anything else returns None and
+    the card files into the inbox -- the card matters more than its
+    label."""
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip()
+    if not name or len(name) > _MAX_DECK_NAME_CHARS:
+        return None
+    if "\n" in name or "\r" in name:
+        return None
+    return name
 
 
 # ---- reviews ------------------------------------------------------------

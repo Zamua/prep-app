@@ -11,11 +11,25 @@ same shape as the decks and study repos).
 from __future__ import annotations
 
 import json
+import re
+import sqlite3
 from datetime import datetime, timezone
 
 from prep.domain.srs import CardSRSState, Verdict, schedule_review, step_for_stability
 from prep.infrastructure.db import cursor, now
 from prep.offline.entities import INBOX_DECK_NAME, SnapshotCard, SnapshotDeck
+
+# Named-deck creation: the slug is the kebab form of the label;
+# labels with no sluggable characters share a generic base and
+# disambiguate by suffix. The attempt bound guards against a
+# pathological label owning every suffix.
+_DECK_SLUG_FALLBACK = "deck"
+_MAX_DECK_SLUG_ATTEMPTS = 100
+
+
+def _slug_for_deck_name(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or _DECK_SLUG_FALLBACK
 
 
 class SyncItemRejected(Exception):
@@ -167,12 +181,69 @@ class SyncRepo:
         name = f"{INBOX_DECK_NAME}-offline" if taken else INBOX_DECK_NAME
         return deck_repo.get_or_create(user_id, name)
 
+    def resolve_named_srs_deck(self, user_id: str, deck_name: str, deck_repo) -> int:
+        """The named deck for deck_id-less cards carrying a usable
+        deck_name, SRS-scoped.
+
+        Reuse matches the user-facing label (display_name, slug
+        fallback) against the user's SRS decks only, oldest first --
+        the same cross-type defense as resolve_srs_inbox: a trivia
+        deck holding the label or the derived slug never receives an
+        SRS card. Creation follows the decks convention (slug in
+        `name`, verbatim label in `display_name`), suffixing past
+        taken slugs so UNIQUE(user_id, name) holds. A slug space that
+        somehow exhausts falls back to the inbox: the card matters
+        more than its label."""
+        found = self._find_srs_deck_by_label(user_id, deck_name)
+        if found is not None:
+            return found
+        base = _slug_for_deck_name(deck_name)
+        for n in range(1, _MAX_DECK_SLUG_ATTEMPTS + 1):
+            slug = base if n == 1 else f"{base}-{n}"
+            if deck_repo.find_id(user_id, slug) is not None:
+                # A taken slug may be a concurrent flush that committed
+                # this label after the lookup above; converge on it
+                # rather than suffixing into a same-label sibling.
+                found = self._find_srs_deck_by_label(user_id, deck_name)
+                if found is not None:
+                    return found
+                continue
+            try:
+                return deck_repo.create(user_id, slug, display_name=deck_name)
+            except sqlite3.IntegrityError:
+                # Concurrent flush claimed the slug between the
+                # lookup and the insert; its deck carries this label,
+                # so converge on it.
+                found = self._find_srs_deck_by_label(user_id, deck_name)
+                if found is not None:
+                    return found
+        return self.resolve_srs_inbox(user_id, deck_repo)
+
+    def _find_srs_deck_by_label(self, user_id: str, label: str) -> int | None:
+        with cursor() as c:
+            row = c.execute(
+                "SELECT id FROM decks WHERE user_id = ? "
+                "  AND COALESCE(deck_type, 'srs') = 'srs' "
+                "  AND COALESCE(display_name, name) = ? "
+                " ORDER BY id LIMIT 1",
+                (user_id, label),
+            ).fetchone()
+        return row["id"] if row else None
+
     def create_card(
-        self, user_id: str, client_id: str, deck_id: int, prompt: str, answer: str
+        self,
+        user_id: str,
+        client_id: str,
+        deck_id: int,
+        prompt: str,
+        answer: str,
+        answer_regex: str | None = None,
     ) -> int:
         """Insert an offline-authored card: a type='short' question
         plus its cards row, due immediately (matching online manual
         authoring), plus the idempotency pin -- one transaction.
+        `answer_regex` arrives pre-validated by the service (null when
+        the client's pattern failed re-validation).
 
         Mirrors QuestionRepo.add for the offline subset (short cards
         have no choices/skeleton/language). The deck ownership + SRS
@@ -189,9 +260,10 @@ class SyncRepo:
             if not deck:
                 raise SyncItemRejected("unknown deck_id")
             cur = c.execute(
-                "INSERT INTO questions (user_id, deck_id, type, prompt, answer, created_at) "
-                "VALUES (?, ?, 'short', ?, ?, ?)",
-                (user_id, deck_id, prompt, answer, ts),
+                "INSERT INTO questions "
+                " (user_id, deck_id, type, prompt, answer, answer_regex, created_at) "
+                "VALUES (?, ?, 'short', ?, ?, ?, ?)",
+                (user_id, deck_id, prompt, answer, answer_regex, ts),
             )
             qid = cur.lastrowid
             c.execute(

@@ -69,8 +69,12 @@ class SnapshotCard(BaseModel):
 
 class SyncNewCard(BaseModel):
     """One offline-authored card queued for ingestion. `deck_id` None
-    files the card into the get-or-created `inbox` deck. `created_at`
-    is client bookkeeping; the server stamps its own creation time.
+    files the card into a get-or-created SRS deck named by
+    `deck_name` when that label is usable, else into the
+    get-or-created `inbox` deck. `answer_regex` is re-validated
+    server-side; an unusable pattern stores null, never rejects the
+    card. `created_at` is client bookkeeping; the server stamps its
+    own creation time.
 
     Fields are typed Any on purpose: a wrong-typed value (a corrupt
     outbox row) must reject THAT item in the service, not 422 the
@@ -79,8 +83,10 @@ class SyncNewCard(BaseModel):
 
     client_id: Any = None
     deck_id: Any = None
+    deck_name: Any = None
     prompt: Any = ""
     answer: Any = ""
+    answer_regex: Any = None
     created_at: Any = None
 
 

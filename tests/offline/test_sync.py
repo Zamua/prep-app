@@ -19,6 +19,7 @@ from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.domain.srs import CardSRSState, Verdict, schedule_review
 from prep.infrastructure.db import cursor
+from prep.offline.repo import SyncRepo
 
 SYNC_URL = "/api/offline/sync"
 
@@ -716,3 +717,284 @@ def test_review_of_a_rejected_card_in_the_same_batch_rejects(client: TestClient,
         "status": "rejected",
         "error": "unknown card_client_id",
     }
+
+
+# ---- deck_name + answer_regex wire extensions ----------------------------
+
+
+def _card(client_id: str, **fields) -> dict:
+    item = {"client_id": client_id, "prompt": "front", "answer": "back"}
+    item.update(fields)
+    return item
+
+
+def _decks_for(user: str) -> dict[str, dict]:
+    """The user's deck rows keyed by slug (`name`)."""
+    with cursor() as c:
+        rows = c.execute(
+            "SELECT id, name, display_name, COALESCE(deck_type, 'srs') AS deck_type "
+            "  FROM decks WHERE user_id = ? ORDER BY id",
+            (user,),
+        ).fetchall()
+    return {r["name"]: dict(r) for r in rows}
+
+
+def test_deck_name_creates_an_srs_deck_with_a_slugged_name(client: TestClient, sync_seed: dict):
+    """A null deck_id with a usable deck_name files the card into a
+    created SRS deck: kebab slug in `name`, the verbatim label in
+    `display_name`. The inbox is untouched."""
+    user = sync_seed["user"]
+    r = client.post(SYNC_URL, json={"new_cards": [_card("c1", deck_name="World Capitals")]})
+    assert r.status_code == 200
+    res = r.json()["cards"][0]
+    assert res["status"] == "created"
+
+    decks = _decks_for(user)
+    deck = decks["world-capitals"]
+    assert deck["display_name"] == "World Capitals"
+    assert deck["deck_type"] == "srs"
+    q = QuestionRepo().get(user, res["question_id"])
+    assert q is not None and q.deck_id == deck["id"]
+    assert "inbox" not in decks
+
+
+def test_deck_name_reuses_the_deck_across_batches(client: TestClient, sync_seed: dict):
+    """A second batch with the same deck_name lands in the same deck,
+    and a retried item replays its pin without touching decks."""
+    user = sync_seed["user"]
+    first = client.post(SYNC_URL, json={"new_cards": [_card("c1", deck_name="World Capitals")]})
+    second = client.post(SYNC_URL, json={"new_cards": [_card("c2", deck_name="World Capitals")]})
+    q1 = QuestionRepo().get(user, first.json()["cards"][0]["question_id"])
+    q2 = QuestionRepo().get(user, second.json()["cards"][0]["question_id"])
+    assert q1 is not None and q2 is not None and q1.deck_id == q2.deck_id
+    decks_before = _decks_for(user)
+    assert len([d for d in decks_before.values() if d["display_name"] == "World Capitals"]) == 1
+
+    retry = client.post(SYNC_URL, json={"new_cards": [_card("c1", deck_name="World Capitals")]})
+    assert retry.json() == first.json()
+    assert _decks_for(user) == decks_before
+
+
+def test_deck_name_matches_an_existing_srs_deck_by_display_name(
+    client: TestClient, sync_seed: dict
+):
+    """An SRS deck already carrying the label (opaque UI slug) is
+    reused; the wire never creates a same-label sibling."""
+    user = sync_seed["user"]
+    existing = DeckRepo().create(user, "abc23xyz", display_name="World Capitals")
+    r = client.post(SYNC_URL, json={"new_cards": [_card("c1", deck_name="World Capitals")]})
+    q = QuestionRepo().get(user, r.json()["cards"][0]["question_id"])
+    assert q is not None and q.deck_id == existing
+    assert "world-capitals" not in _decks_for(user)
+
+
+def test_slug_claimed_mid_resolution_converges_on_the_same_label_deck(sync_seed: dict):
+    """A slug committed by a concurrent flush between the label lookup
+    and the slug probe is re-checked by label: the resolution converges
+    on that deck instead of creating a same-label suffixed sibling."""
+    user = sync_seed["user"]
+    real = DeckRepo()
+
+    class RacingDeckRepo:
+        """find_id's first probe commits the competing deck, replaying
+        the interleaving where the sibling flush lands in between."""
+
+        def __init__(self):
+            self.raced = False
+
+        def find_id(self, user_id: str, slug: str):
+            if not self.raced:
+                self.raced = True
+                real.create(user_id, slug, display_name="World Capitals")
+            return real.find_id(user_id, slug)
+
+        def create(self, user_id: str, slug: str, display_name: str | None = None):
+            return real.create(user_id, slug, display_name=display_name)
+
+    deck_id = SyncRepo().resolve_named_srs_deck(user, "World Capitals", RacingDeckRepo())
+    assert deck_id == real.find_id(user, "world-capitals")
+    decks = _decks_for(user)
+    assert "world-capitals-2" not in decks
+    assert len([d for d in decks.values() if d["display_name"] == "World Capitals"]) == 1
+
+
+def test_trivia_deck_on_the_name_yields_a_suffixed_srs_sibling(client: TestClient, sync_seed: dict):
+    """A trivia deck squatting on both the label and the derived slug
+    gets a suffixed SRS sibling, never a cross-type insert -- the
+    same defense the inbox resolution pins."""
+    user = sync_seed["user"]
+    trivia_id = DeckRepo().create_trivia(
+        user,
+        "world-capitals",
+        topic="capitals",
+        interval_minutes=60,
+        display_name="World Capitals",
+    )
+    r = client.post(SYNC_URL, json={"new_cards": [_card("c1", deck_name="World Capitals")]})
+    res = r.json()["cards"][0]
+    assert res["status"] == "created"
+
+    sibling = _decks_for(user)["world-capitals-2"]
+    assert sibling["deck_type"] == "srs"
+    assert sibling["display_name"] == "World Capitals"
+    q = QuestionRepo().get(user, res["question_id"])
+    assert q is not None and q.deck_id == sibling["id"]
+    with cursor() as c:
+        n = c.execute(
+            "SELECT COUNT(*) AS n FROM questions WHERE deck_id = ?", (trivia_id,)
+        ).fetchone()["n"]
+    assert n == 0
+
+
+def test_unusable_deck_names_fall_back_to_inbox(client: TestClient, sync_seed: dict):
+    """Non-string, blank, over-cap, and newline-bearing labels never
+    reject the card: it files into the inbox exactly as a
+    deck_name-less item would."""
+    user = sync_seed["user"]
+    r = client.post(
+        SYNC_URL,
+        json={
+            "new_cards": [
+                _card("c1", deck_name=123),
+                _card("c2", deck_name="   "),
+                _card("c3", deck_name="x" * 81),
+                _card("c4", deck_name="line\nbreak"),
+            ]
+        },
+    )
+    assert r.status_code == 200
+    results = r.json()["cards"]
+    assert all(item["status"] == "created" for item in results)
+    inbox_id = DeckRepo().find_id(user, "inbox")
+    assert inbox_id is not None
+    for item in results:
+        q = QuestionRepo().get(user, item["question_id"])
+        assert q is not None and q.deck_id == inbox_id
+
+
+def test_deck_name_is_ignored_when_deck_id_is_present(client: TestClient, sync_seed: dict):
+    user = sync_seed["user"]
+    r = client.post(
+        SYNC_URL,
+        json={"new_cards": [_card("c1", deck_id=sync_seed["deck_id"], deck_name="Elsewhere")]},
+    )
+    q = QuestionRepo().get(user, r.json()["cards"][0]["question_id"])
+    assert q is not None and q.deck_id == sync_seed["deck_id"]
+    assert all(d["display_name"] != "Elsewhere" for d in _decks_for(user).values())
+
+
+def test_rejected_card_never_creates_its_named_deck(client: TestClient, sync_seed: dict):
+    """Validation runs before deck resolution: an invalid item leaves
+    no deck behind."""
+    user = sync_seed["user"]
+    r = client.post(
+        SYNC_URL, json={"new_cards": [_card("c1", answer="", deck_name="World Capitals")]}
+    )
+    assert r.json()["cards"][0]["status"] == "rejected"
+    assert "world-capitals" not in _decks_for(user)
+
+
+def test_unsluggable_labels_get_the_generic_slug_and_stay_distinct(
+    client: TestClient, sync_seed: dict
+):
+    """Labels with no sluggable characters share the generic slug
+    base but never merge: each distinct label gets its own deck."""
+    user = sync_seed["user"]
+    r1 = client.post(SYNC_URL, json={"new_cards": [_card("c1", deck_name="日本語")]})
+    r2 = client.post(SYNC_URL, json={"new_cards": [_card("c2", deck_name="中文")]})
+    decks = _decks_for(user)
+    assert decks["deck"]["display_name"] == "日本語"
+    assert decks["deck-2"]["display_name"] == "中文"
+    q1 = QuestionRepo().get(user, r1.json()["cards"][0]["question_id"])
+    q2 = QuestionRepo().get(user, r2.json()["cards"][0]["question_id"])
+    assert q1 is not None and q1.deck_id == decks["deck"]["id"]
+    assert q2 is not None and q2.deck_id == decks["deck-2"]["id"]
+
+
+def test_valid_answer_regex_is_stored_and_snapshotted(client: TestClient, sync_seed: dict):
+    user = sync_seed["user"]
+    r = client.post(
+        SYNC_URL,
+        json={
+            "new_cards": [
+                _card(
+                    "c1",
+                    deck_id=sync_seed["deck_id"],
+                    answer="Lima",
+                    answer_regex="lima|the city of lima",
+                )
+            ]
+        },
+    )
+    qid = r.json()["cards"][0]["question_id"]
+    q = QuestionRepo().get(user, qid)
+    assert q is not None and q.answer_regex == "lima|the city of lima"
+
+    snap = client.get("/api/offline/snapshot")
+    assert snap.status_code == 200
+    card = next(c for c in snap.json()["cards"] if c["question_id"] == qid)
+    assert card["answer_regex"] == "lima|the city of lima"
+
+
+def test_unusable_answer_regex_stores_null_never_rejects(client: TestClient, sync_seed: dict):
+    """Every unusable shape -- non-compiling, rejecting the canonical
+    answer, over the length cap, non-string garbage -- stores null
+    while the card still lands."""
+    user = sync_seed["user"]
+    deck_id = sync_seed["deck_id"]
+    over_cap = "lima|" * 120 + "lima"  # matches the answer, fails only the length cap
+    r = client.post(
+        SYNC_URL,
+        json={
+            "new_cards": [
+                _card("c1", deck_id=deck_id, answer="Lima", answer_regex="[unclosed"),
+                _card("c2", deck_id=deck_id, answer="Lima", answer_regex="^quito$"),
+                _card("c3", deck_id=deck_id, answer="Lima", answer_regex=over_cap),
+                _card("c4", deck_id=deck_id, answer="Lima", answer_regex={"x": 1}),
+                _card("c5", deck_id=deck_id, answer="Lima", answer_regex=42),
+            ]
+        },
+    )
+    assert r.status_code == 200
+    for item in r.json()["cards"]:
+        assert item["status"] == "created"
+        q = QuestionRepo().get(user, item["question_id"])
+        assert q is not None and q.answer_regex is None
+
+
+def test_named_deck_regex_and_replay_in_one_batch(client: TestClient, sync_seed: dict):
+    """The adoption wire shape end to end: a named deck, a validated
+    regex, and a review replayed through the real scheduler at the
+    client timestamp -- all in one batch."""
+    user = sync_seed["user"]
+    t = _now() - timedelta(days=1)
+    r = client.post(
+        SYNC_URL,
+        json={
+            "new_cards": [
+                _card("c1", deck_name="Postgres MVCC", answer="Lima", answer_regex="lima")
+            ],
+            "reviews": [
+                {
+                    "client_id": "r1",
+                    "card_client_id": "c1",
+                    "verdict": "right",
+                    "user_answer": "lima",
+                    "graded_by": "auto",
+                    "reviewed_at": t.isoformat(),
+                }
+            ],
+        },
+    )
+    assert r.status_code == 200
+    payload = r.json()
+    qid = payload["cards"][0]["question_id"]
+    assert payload["reviews"] == [{"client_id": "r1", "status": "applied"}]
+
+    direct = schedule_review(CardSRSState.fresh(), Verdict.RIGHT, now=t)
+    card = _card_row(qid)
+    assert card["stability"] == pytest.approx(direct.state.stability)
+    assert card["last_review"] == t.isoformat()
+    q = QuestionRepo().get(user, qid)
+    assert q is not None and q.answer_regex == "lima"
+    assert _decks_for(user)["postgres-mvcc"]["id"] == q.deck_id
