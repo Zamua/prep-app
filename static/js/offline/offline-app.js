@@ -1144,6 +1144,10 @@ async function syncOnReconnect() {
   if (syncing) return;
   syncing = true;
   try {
+    // Guest mode (no snapshot owner): there is no account to sync
+    // with until the online app's adoption confirm decides, so
+    // reconnect is a no-op. No flush, no banner nag.
+    if (!(await metaGet("owner"))) return;
     const [queued, localCards] = await Promise.all([
       getAll("outbox_reviews"),
       getAll("local_cards"),

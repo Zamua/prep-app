@@ -384,6 +384,10 @@ _PARTIAL_FLUSH_JS = """
 async ({prefix, front, back}) => {
   const store = await import(prefix + "offline/store.js");
   const sync = await import(prefix + "offline/sync.js");
+  // Owner-device authoring: seed the owner stamp first, as a real
+  // device's online prime does. Owner-absent local rows are adoptable
+  // guest data and the flush refuses them.
+  await sync.refreshSnapshot({force: true});
   const cardClientId = store.uuid();
   const futureDue = new Date(Date.now() + 86400000).toISOString();
   // The exact rows the authoring form + a self-verdict would write.
