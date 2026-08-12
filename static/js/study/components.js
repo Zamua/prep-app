@@ -405,6 +405,21 @@ export function verdictView(card, verdict, userAnswer, opts, {onNext, onPause}) 
   });
   for (const section of sections) frag.appendChild(section);
 
+  // A grader that wrote prose gets its own section, markdown-rendered
+  // like the prompt. Deterministic grading writes none.
+  if (opts.feedback) {
+    const fb = el("section", "result-section");
+    fb.appendChild(sectionEyebrow("Feedback"));
+    const body = el("div", "feedback-body prose");
+    body.innerHTML = markdownHTML(opts.feedback);
+    fb.appendChild(body);
+    frag.appendChild(fb);
+  }
+
+  // Host-built nodes (the chat handoff, whose provider URLs only a
+  // server can compose) sit after the compare, before the actions.
+  for (const extra of opts.extras || []) frag.appendChild(extra);
+
   const actions = el("div", "study-actions next-actions");
   const nextBtn = el("button", "btn btn-primary", "Next card");
   nextBtn.type = "button";
@@ -420,10 +435,17 @@ export function verdictView(card, verdict, userAnswer, opts, {onNext, onPause}) 
 }
 
 // The caught-up screen. summary: {nextDueMinutes: number|null}.
-export function caughtUpView(summary, {onAdd, onBack}) {
+// `scope` is the italic beat in the headline and `nothingSchedule` the
+// line shown when nothing is queued: only the caller knows whether the
+// queue it just emptied was this device's or the account's.
+// `backLabel` names wherever the host's Back button goes.
+export function caughtUpView(
+  summary,
+  {onAdd, onBack, scope = "offline", nothingScheduled = null, backLabel = "Back to overview"}
+) {
   const section = el("section", "empty-state");
   const h = el("h2", "empty-headline", "All caught up ");
-  h.appendChild(el("em", null, "offline"));
+  h.appendChild(el("em", null, scope));
   h.appendChild(document.createTextNode("."));
   section.appendChild(h);
   const minutes = summary.nextDueMinutes;
@@ -432,7 +454,7 @@ export function caughtUpView(summary, {onAdd, onBack}) {
       "p",
       "empty-sub",
       minutes === null
-        ? "Nothing else is scheduled on this device."
+        ? nothingScheduled || "Nothing else is scheduled on this device."
         : "The next card comes due in " + humanMinutes(minutes) + "."
     )
   );
@@ -441,7 +463,7 @@ export function caughtUpView(summary, {onAdd, onBack}) {
   add.type = "button";
   add.addEventListener("click", () => onAdd());
   actions.appendChild(add);
-  const back = el("button", "btn btn-quiet", "Back to overview");
+  const back = el("button", "btn btn-quiet", backLabel);
   back.type = "button";
   back.addEventListener("click", () => onBack());
   actions.appendChild(back);
@@ -452,7 +474,12 @@ export function caughtUpView(summary, {onAdd, onBack}) {
 // The add-a-card form: front, back, deck picker (host-supplied decks
 // plus the inbox default). Validation lives here; the write is the
 // host's onSave({prompt, answer, deck_id}).
-export function authorView({decks}, {onSave, onBack}) {
+const DEFAULT_AUTHOR_BLURB =
+  "Saved to this device now, added to your account next time you " +
+  "sync. It studies as a reveal-and-self-grade card and is due " +
+  "immediately.";
+
+export function authorView({decks}, {onSave, onBack, blurb = null}) {
   const frag = document.createDocumentFragment();
 
   const nav = el("nav", "study-nav");
@@ -467,13 +494,7 @@ export function authorView({decks}, {onSave, onBack}) {
   const article = el("article", "study-card author-card");
   article.appendChild(sectionEyebrow("Add a card"));
   article.appendChild(
-    el(
-      "p",
-      "muted offline-author-blurb",
-      "Saved to this device now, added to your account next time you " +
-        "sync. It studies as a reveal-and-self-grade card and is due " +
-        "immediately."
-    )
+    el("p", "muted offline-author-blurb", blurb || DEFAULT_AUTHOR_BLURB)
   );
 
   const form = document.createElement("form");

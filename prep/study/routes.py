@@ -17,11 +17,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from prep import chat_handoff
 from prep.auth import current_user
+from prep.auth.providers import get_provider
 from prep.decks.entities import DeckType
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.domain import grading
 from prep.study import service
-from prep.study.entities import SessionState, SessionStatus
+from prep.study.entities import SessionStatus
 from prep.study.repo import ReviewRepo, SessionRepo, StaleVersionError
 from prep.web import responses
 from prep.web.templates import templates
@@ -139,87 +140,27 @@ def session_view(
     q_repo: QuestionRepo = Depends(_question_repo),
     review_repo: ReviewRepo = Depends(_review_repo),
 ):
-    """Render the session — branches by status + state."""
+    """Render the study shell for this session. The shell's host reads
+    the session's real state through the JSON study API, so every
+    branch this route used to render (awaiting-answer, showing-result,
+    grading, completed) is decided client-side from one source of
+    truth. An abandoned session still redirects server-side: there is
+    nothing for the loop to resume."""
     uid = user["tailscale_login"]
     s = service.get_session(session_repo, uid, sid)
     if s is None:
         raise HTTPException(404, "session not found")
     deck_name = deck_repo.find_name(uid, s.deck_id) or ""
-
-    # Terminal status branches.
-    if s.status is SessionStatus.COMPLETED:
-        return templates.TemplateResponse(
-            "session_completed.html",
-            {"request": request, "session": s.model_dump(), "deck_name": deck_name},
-        )
     if s.status is SessionStatus.ABANDONED:
         return responses.redirect(request, f"/deck/{deck_name}")
-
-    # showing-result: render the post-answer view from the cached
-    # verdict + state on the session row.
-    if s.state is SessionState.SHOWING_RESULT:
-        qid = s.last_answered_qid
-        q_entity = q_repo.get(uid, qid) if qid else None
-        q = q_entity.model_dump() if q_entity is not None else None
-        if q is not None and q_entity is not None:
-            # Templates expect choices_list (a list, not a JSON string).
-            q["choices_list"] = q_entity.choices or []
-        verdict = s.last_answered_verdict or {}
-        st = s.last_answered_state or {}
-        # Pull the most recent user_answer from reviews — single source
-        # of truth, no extra column needed.
-        user_answer = review_repo.get_last_user_answer(qid) if qid else None
-        user_answer = user_answer or ""
-        idk = user_answer == ""
-        picked_set, correct_set = _picked_correct_sets(q, user_answer)
-        return templates.TemplateResponse(
-            "result.html",
-            {
-                "request": request,
-                "deck_name": deck_name,
-                "q": q,
-                "user_answer": user_answer,
-                "idk": idk,
-                "verdict": verdict,
-                "state": st,
-                "picked_set": picked_set,
-                "correct_set": correct_set,
-                "session_id": sid,
-                "session_version": s.version,
-                **_handoff_ctx(
-                    deck_name=deck_name,
-                    q=q,
-                    user_answer=user_answer,
-                    verdict=verdict,
-                    idk=idk,
-                    picked_set=picked_set,
-                    correct_set=correct_set,
-                ),
-            },
-        )
-
-    # grading: bounce to the polling page; on completion the
-    # /grading/{wid} handler reconciles back into the session.
-    if s.state is SessionState.GRADING:
-        return responses.redirect(request, f"/grading/{s.current_grading_workflow_id}")
-
-    # awaiting-answer: render the session-aware study card. If no due
-    # card is left, transition to completed via a synchronous bump.
-    q_entity = q_repo.get(uid, s.current_question_id) if s.current_question_id else None
-    if q_entity is None:
-        session_repo.mark_completed(uid, sid)
-        return responses.redirect(request, f"/session/{sid}")
-    q = q_entity.model_dump()
-    q["choices_list"] = q_entity.choices or []
     return templates.TemplateResponse(
-        "session.html",
+        "study_shell.html",
         {
             "request": request,
             "user": user,
-            "session": s.model_dump(),
             "deck_name": deck_name,
-            "q": q,
-            "draft": s.current_draft or (q_entity.skeleton or ""),
+            "session_id": sid,
+            "sign_in_url": get_provider().urls().sign_in,
         },
     )
 
@@ -460,22 +401,21 @@ def study(
     deck_repo: DeckRepo = Depends(_deck_repo),
     review_repo: ReviewRepo = Depends(_review_repo),
 ):
-    """Older single-card study path (no session). Picks one due card
-    from the deck and renders it; submission goes to the matching
-    POST. Most users land on /study/{name}/begin which spins up a
-    session instead, but this path stays in the surface for direct
-    use + dev-tooling."""
+    """Sessionless single-card study path. Renders the same shell the
+    session path does, minus a session id: the host studies the deck
+    directly through the JSON API. Most users land on
+    /study/{name}/begin, which spins up a session and redirects."""
     uid = user["tailscale_login"]
-    deck_id = deck_repo.get_or_create(uid, name)
-    due = review_repo.due_questions(uid, deck_id, limit=1)
-    if not due:
-        return templates.TemplateResponse(
-            "study_empty.html",
-            {"request": request, "deck_name": name},
-        )
+    deck_repo.get_or_create(uid, name)
     return templates.TemplateResponse(
-        "study.html",
-        {"request": request, "user": user, "deck_name": name, "q": due[0]},
+        "study_shell.html",
+        {
+            "request": request,
+            "user": user,
+            "deck_name": name,
+            "session_id": None,
+            "sign_in_url": get_provider().urls().sign_in,
+        },
     )
 
 

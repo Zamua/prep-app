@@ -85,14 +85,18 @@ def test_begin_refuses_trivia_deck(client: TestClient, initialized_db: str):
     assert r.status_code == 400
 
 
-def test_session_view_renders_active_session(client: TestClient, initialized_db: str):
+def test_session_view_renders_the_study_shell(client: TestClient, initialized_db: str):
+    """The session URL serves the shell bound to that session; the card
+    itself arrives from the JSON API, so no prompt is in this HTML."""
     _seed_srs_deck(initialized_db)
     r = client.post("/study/study-rt/begin", follow_redirects=False)
     sid = r.headers["location"].rsplit("/", 1)[-1]
     rv = client.get(f"/session/{sid}")
     assert rv.status_code == 200
-    # Prompt should appear in the rendered card.
-    assert "2+2?" in rv.text
+    assert "data-study-root" in rv.text
+    assert f'data-session-id="{sid}"' in rv.text
+    assert 'data-deck="study-rt"' in rv.text
+    assert "2+2?" not in rv.text
 
 
 def test_session_view_404_for_unknown_session(client: TestClient, initialized_db: str):
@@ -112,13 +116,15 @@ def test_session_abandon_redirects_to_deck(client: TestClient, initialized_db: s
     assert s.status is SessionStatus.ABANDONED
 
 
-def test_legacy_study_renders_due_card(client: TestClient, initialized_db: str):
-    """GET /study/{name} (no /begin) → renders the no-session study
-    template with one due card pre-loaded."""
+def test_sessionless_study_renders_the_study_shell(client: TestClient, initialized_db: str):
+    """GET /study/{name} (no /begin) serves the shell bound to the deck
+    with no session id; the host studies the deck through the API."""
     _seed_srs_deck(initialized_db)
     r = client.get("/study/study-rt")
     assert r.status_code == 200
-    assert "2+2?" in r.text
+    assert "data-study-root" in r.text
+    assert 'data-deck="study-rt"' in r.text
+    assert 'data-session-id=""' in r.text
 
 
 def test_legacy_study_empty_when_no_due(client: TestClient, initialized_db: str):
