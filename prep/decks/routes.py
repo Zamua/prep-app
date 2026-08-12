@@ -479,12 +479,20 @@ async def deck_new_trivia_create(
 
     # Kick off the workflow that does the actual AI call + per-card
     # inserts. Returns immediately — UI redirects to a polling page.
+    # Free-tier funded generations are size-capped per call; other
+    # tiers keep the worker's default batch size.
+    from prep.agent import selector as _selector
+
+    start_kwargs: dict = {}
+    if _selector.funding_tier_for_user(uid) == "free":
+        start_kwargs["batch_size"] = _selector.FREE_TIER_MAX_CARDS_PER_CALL
     try:
         res = await temporal_client.start_trivia_generate(
             user_id=uid,
             deck_id=deck_id,
             deck_name=slug,
             topic=topic,
+            **start_kwargs,
         )
     except Exception as e:
         # Deck row was created but the workflow couldn't start. Surface

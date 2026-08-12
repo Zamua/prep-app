@@ -327,6 +327,23 @@ deploy values live in the private infra repo, never in this repo:
   top-level field. This is exactly the class of knob
   `PREP_FREE_INFERENCE_EXTRA_BODY` exists for.
 
+### Free-tier per-generation card cap
+
+Every generation funded by the deploy's shared free tier makes at
+most 5 cards per call (`FREE_TIER_MAX_CARDS_PER_CALL`);
+BYOK and subscription generations are uncapped. There is no
+lifetime accounting, only per-call size. `funding_tier_for_user`
+in `prep/agent/selector.py` answers which tier would fund a
+user's call (decrypt-free, mirroring `agent_for_user`
+precedence); when it returns "free", the prep-side starters pass
+the cap into the workflow inputs (`batch_size` on
+`TriviaGenerateInput`, `max_cards` on `PlanGenerateInput`) and
+`generate_batch` caps the sync trivia refill path. The Go worker
+enforces the cap in code on both workflow paths, truncating an
+oversized parsed plan (`max_cards`) and an oversized parsed
+trivia batch (`batch_size`), in addition to stating the ceiling
+in the prompts.
+
 ### Selection precedence
 
 `agent_for_user(user_id)` becomes:

@@ -21,6 +21,7 @@ import time
 from dataclasses import dataclass
 
 from prep import chat_handoff
+from prep.agent.selector import FREE_TIER_MAX_CARDS_PER_CALL, funding_tier_for_user
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import QuestionRepo
 from prep.domain import grading
@@ -155,6 +156,10 @@ def generate_batch(
     Raises `AgentUnavailable` so the scheduler can decide whether to
     retry on the next tick or surface the error.
     """
+    # Free-tier funded calls are size-capped per generation; BYOK and
+    # subscription callers keep the requested size.
+    if funding_tier_for_user(user_id) == "free":
+        batch_size = min(batch_size, FREE_TIER_MAX_CARDS_PER_CALL)
     existing = trivia_repo.existing_prompts(deck_id)
     prompt = _build_prompt(topic, batch_size, existing)
     stdout = run_prompt(prompt, user_id=user_id)

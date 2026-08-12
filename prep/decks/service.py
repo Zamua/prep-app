@@ -29,6 +29,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from prep.agent.selector import FREE_TIER_MAX_CARDS_PER_CALL, funding_tier_for_user
 from prep.decks.entities import (
     DeckCard,
     DeckSummary,
@@ -253,11 +254,17 @@ async def start_plan_generation(
     """Kick off a PlanGenerate Temporal workflow. Returns the workflow
     handle / metadata object the temporal client gives back — caller
     extracts `.workflow_id` to redirect the user to the plan page."""
+    # Free-tier funded plans are size-capped per call; BYOK and
+    # subscription plans let the model pick the count.
+    extra: dict[str, Any] = {}
+    if funding_tier_for_user(user_id) == "free":
+        extra["max_cards"] = FREE_TIER_MAX_CARDS_PER_CALL
     result = await client.start_plan_generate(
         user_id=user_id,
         deck_id=deck_id,
         deck_name=deck_name,
         prompt=prompt,
+        **extra,
     )
     # Register with the active-workflows tracker so the masthead badge
     # picks it up immediately. Registration never raises — a tracking

@@ -130,6 +130,36 @@ def test_generate_batch_raises_on_unparseable(monkeypatch, fixtures):
         )
 
 
+def test_generate_batch_caps_free_tier_to_five(monkeypatch, fixtures):
+    """Free-tier funded refills ask for at most 5 cards and truncate
+    an overshooting response to 5. Covers the scheduler tick and
+    session-refill paths, which call with the default batch size."""
+    monkeypatch.setenv("PREP_FREE_INFERENCE_BASE_URL", "https://inference.example/v1")
+    monkeypatch.setenv("PREP_FREE_INFERENCE_API_KEY", "free-tier-key")
+    monkeypatch.setenv("PREP_FREE_INFERENCE_MODEL", "test-free-model")
+    monkeypatch.delenv("PREP_FREE_INFERENCE_EXTRA_BODY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.delenv("PREP_AUTH_MODE", raising=False)
+
+    prompts: list[str] = []
+    fixed = "[" + ",".join(f'{{"q": "q{i}?", "a": "a{i}"}}' for i in range(8)) + "]"
+
+    def fake_run(prompt, **_kw):
+        prompts.append(prompt)
+        return fixed
+
+    monkeypatch.setattr(svc, "run_prompt", fake_run)
+    out = svc.generate_batch(
+        user_id=fixtures["user"],
+        deck_id=fixtures["deck_id"],
+        topic="t",
+        questions_repo=fixtures["questions"],
+        trivia_repo=fixtures["trivia"],
+    )
+    assert "**up to 5**" in prompts[0]
+    assert out.inserted == 5
+
+
 # ---- grade_answer ------------------------------------------------------
 
 

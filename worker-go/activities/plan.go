@@ -68,6 +68,10 @@ func (a *Activities) PlanCards(ctx context.Context, in shared.PlanCardsInput) ([
 			"plan JSON parse failed", "BadPlanJSON",
 			fmt.Errorf("%w: %s", err, truncate(out.Stdout, 800)))
 	}
+	// The prompt's "at most N" is advisory; the cap is enforced here.
+	if in.MaxCards > 0 && len(plan) > in.MaxCards {
+		plan = plan[:in.MaxCards]
+	}
 	return plan, nil
 }
 
@@ -75,6 +79,14 @@ func buildPlanPrompt(in shared.PlanCardsInput) string {
 	var b strings.Builder
 
 	if len(in.PriorPlan) == 0 {
+		sizing := `Decide how many cards to create: let the description guide you. Most
+decks want 5-15 cards covering the main concepts; a tightly-scoped
+description might warrant only 3, a broad survey might warrant 20+.
+Don't pad. Don't skimp.`
+		if in.MaxCards > 0 {
+			sizing = fmt.Sprintf(`Create at most %d cards. Cover the most important concepts the
+description supports within that limit. Don't pad.`, in.MaxCards)
+		}
 		// First-round prompt.
 		b.WriteString(fmt.Sprintf(
 			`You are planning a set of spaced-repetition flashcards for the deck "%s".
@@ -83,10 +95,7 @@ The user provided this description / topic:
 
 %s
 
-Decide how many cards to create — let the description guide you. Most
-decks want 5-15 cards covering the main concepts; a tightly-scoped
-description might warrant only 3, a broad survey might warrant 20+.
-Don't pad. Don't skimp.
+%s
 
 Return a JSON array of cards. Each entry is an OBJECT with these fields:
 
@@ -101,7 +110,7 @@ Return a JSON array of cards. Each entry is an OBJECT with these fields:
                 go|java|python|javascript|typescript|rust|cpp.
 
 Output ONLY the JSON array, no prose, no fences.`,
-			in.DeckName, in.Prompt))
+			in.DeckName, in.Prompt, sizing))
 	} else {
 		// Replan with the user's feedback. Show the prior plan so claude
 		// can amend rather than start over.
@@ -122,6 +131,9 @@ language?). Apply the user's feedback. You may add, remove, replace,
 or reorder items. Output ONLY the JSON array.`,
 			in.DeckName, in.Prompt, len(in.PriorPlan),
 			renderPriorPlan(in.PriorPlan), in.Feedback))
+		if in.MaxCards > 0 {
+			fmt.Fprintf(&b, "\n\nKeep the plan to at most %d cards.", in.MaxCards)
+		}
 	}
 
 	return b.String()

@@ -306,6 +306,74 @@ def test_decks_new_trivia_redirects_to_deck_page_when_no_agent(
     assert any(d.display_name == "manual-only" for d in DeckRepo().list_trivia_decks())
 
 
+def test_decks_new_trivia_free_tier_caps_batch_size(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """A free-tier funded user's initial trivia batch is capped at 5
+    cards per call; the cap rides the workflow input's batch_size."""
+    import prep.agent
+    from prep import temporal_client as _tc
+
+    prep.agent.is_available = True
+    monkeypatch.setenv("PREP_FREE_INFERENCE_BASE_URL", "https://inference.example/v1")
+    monkeypatch.setenv("PREP_FREE_INFERENCE_API_KEY", "free-tier-key")
+    monkeypatch.setenv("PREP_FREE_INFERENCE_MODEL", "test-free-model")
+    monkeypatch.delenv("PREP_FREE_INFERENCE_EXTRA_BODY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.delenv("PREP_AUTH_MODE", raising=False)
+
+    seen: dict = {}
+
+    async def fake_start(**kwargs):
+        seen.update(kwargs)
+        return _tc.StartResult(workflow_id="trivia-x-deadbeef01", run_id="r")
+
+    monkeypatch.setattr(_tc, "start_trivia_generate", fake_start)
+    r = client.post(
+        "/decks/new/trivia",
+        data={"name": "capped", "topic": "anything", "notification_interval_minutes": "30"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert seen["batch_size"] == 5
+
+
+def test_decks_new_trivia_byok_user_gets_no_batch_cap(
+    monkeypatch, client: TestClient, initialized_db: str
+):
+    """A BYOK user's generation passes no batch_size; the worker's
+    default batch applies."""
+    import prep.agent
+    from prep import temporal_client as _tc
+    from prep.infrastructure.db import cursor
+
+    prep.agent.is_available = True
+    # Row existence is what routes the tier to "byok"; the ciphertext
+    # never decrypts on this path.
+    with cursor() as c:
+        c.execute(
+            "INSERT INTO byok_credentials"
+            " (user_id, provider, ciphertext, key_prefix, created_at)"
+            " VALUES (?, 'anthropic-api', 'not-real-ciphertext', 'sk-ant-', '2020-01-01T00:00:00Z')",
+            (initialized_db,),
+        )
+
+    seen: dict = {}
+
+    async def fake_start(**kwargs):
+        seen.update(kwargs)
+        return _tc.StartResult(workflow_id="trivia-x-deadbeef01", run_id="r")
+
+    monkeypatch.setattr(_tc, "start_trivia_generate", fake_start)
+    r = client.post(
+        "/decks/new/trivia",
+        data={"name": "byok-deck", "topic": "anything", "notification_interval_minutes": "30"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert seen.get("batch_size") is None
+
+
 # ---- /trivia/session/<deck_name> --------------------------------------
 
 

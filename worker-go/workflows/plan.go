@@ -92,6 +92,7 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 		UserID:   in.UserID,
 		DeckName: in.DeckName,
 		Prompt:   in.Prompt,
+		MaxCards: in.MaxCards,
 	}).Get(ctx, &plan); err != nil {
 		progress.Status = "failed"
 		progress.Error = err.Error()
@@ -130,6 +131,7 @@ func PlanGenerate(ctx workflow.Context, in shared.PlanGenerateInput) (shared.Pla
 				Prompt:    in.Prompt,
 				PriorPlan: plan,
 				Feedback:  fb,
+				MaxCards:  in.MaxCards,
 			}).Get(ctx, &newPlan)
 			if err != nil {
 				// Replan failure is recoverable: keep prior plan, surface

@@ -374,7 +374,8 @@ type PlanGenerateInput struct {
 	UserID   string `json:"user_id"`
 	DeckID   int    `json:"deck_id"`
 	DeckName string `json:"deck_name"`
-	Prompt   string `json:"prompt"` // initial user prompt (== deck context_prompt)
+	Prompt   string `json:"prompt"`    // initial user prompt (== deck context_prompt)
+	MaxCards int    `json:"max_cards"` // >0 caps the plan size (free-tier funded calls); 0 = uncapped
 }
 
 type PlanGenerateResult struct {
@@ -403,6 +404,7 @@ type PlanCardsInput struct {
 	Prompt    string     `json:"prompt"`               // deck description / topic
 	PriorPlan []PlanItem `json:"prior_plan,omitempty"` // for replan rounds
 	Feedback  string     `json:"feedback,omitempty"`   // for replan rounds
+	MaxCards  int        `json:"max_cards,omitempty"`  // >0 caps the plan size; 0 = uncapped
 }
 
 type GenerateCardFromBriefInput struct {

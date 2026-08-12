@@ -121,6 +121,10 @@ func (a *Activities) GenerateTriviaBatch(ctx context.Context, in shared.Generate
 			fmt.Sprintf("agent returned unparseable JSON: %v; head=%q", err, truncate(out.Stdout, 300)),
 			"BadTriviaJSON", err)
 	}
+	// The prompt's "exactly N" is advisory; the cap is enforced here.
+	if in.BatchSize > 0 && len(pairs) > batch {
+		pairs = pairs[:batch]
+	}
 	return pairs, nil
 }
 

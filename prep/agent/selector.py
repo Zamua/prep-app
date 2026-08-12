@@ -161,6 +161,12 @@ _FREE_ENV_EXTRA_BODY = "PREP_FREE_INFERENCE_EXTRA_BODY"
 # endpoint models carry 262K+ context, so the cap is ours to choose.
 _FREE_TIER_MAX_TOKENS = 32768
 
+# Per-generation card ceiling for calls funded by the shared free
+# tier. Generation entry points pass this as the batch / max-cards
+# workflow input when `funding_tier_for_user` returns "free"; BYOK
+# and subscription calls are uncapped.
+FREE_TIER_MAX_CARDS_PER_CALL = 5
+
 
 def free_tier_agent(max_output_tokens: int | None = None) -> AgentPort | None:
     """Build the deploy-configured free-tier adapter, or None.
@@ -351,6 +357,21 @@ def agent_for_user(user_id: str | None) -> AgentPort:
                 if secret:
                     logger.debug("agent: using BYOK %s for user %s", provider.value, user_id)
                     return _build_byok_adapter(provider, secret)
+            # Rows exist but no provider yielded a secret: the same
+            # fail-closed answer as an exception. Falling through
+            # would serve a shared credential to a user who configured
+            # their own, and contradict funding_tier_for_user's
+            # "byok" for the same user.
+            logger.error(
+                "agent: BYOK rows for user %s yielded no usable secret; "
+                "AI unavailable for this request",
+                user_id,
+            )
+            return _NoopAgent(
+                "AI is unavailable: your saved API key could not be used. "
+                "Re-add it on /settings/agent, or ask the deploy admin to "
+                "check the server logs."
+            )
         except Exception:  # noqa: BLE001
             # Fail loud, fail closed. A row-lookup / decrypt /
             # adapter-construction failure means this user HAS (or may
@@ -386,3 +407,32 @@ def agent_for_user(user_id: str | None) -> AgentPort:
         "no AI agent configured — add a personal API key on /settings/agent, "
         "or the deploy admin can paste a subscription OAuth token."
     )
+
+
+def funding_tier_for_user(user_id: str | None) -> str:
+    """Answers "which tier WOULD fund a call for this user":
+    "byok" | "subscription" | "free" | "none".
+
+    Mirrors `agent_for_user`'s precedence without decrypting anything
+    (row existence only, like `_user_has_byok_rows`). A user with
+    BYOK rows reports "byok" even when the key would fail at call
+    time, and a failed row check also reports "byok" (fail closed,
+    same as the selector): in both cases the call is never served by
+    a shared credential, so shared-tier policy must not attach to it.
+
+    The `set_user_agent_factory` test seam is deliberately not
+    mirrored: an injected factory changes `agent_for_user` only,
+    and the reported tier keeps answering from env/DB.
+    """
+    if user_id:
+        try:
+            has_rows = _user_has_byok_rows(user_id)
+        except Exception:  # noqa: BLE001
+            has_rows = True
+        if has_rows:
+            return "byok"
+    if _subscription_path_allowed() and (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip():
+        return "subscription"
+    if free_tier_agent() is not None:
+        return "free"
+    return "none"

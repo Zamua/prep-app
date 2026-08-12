@@ -186,11 +186,13 @@ async def signal_reject_transform(workflow_id: str) -> None:
 
 
 async def start_plan_generate(
-    *, user_id: str, deck_id: int, deck_name: str, prompt: str
+    *, user_id: str, deck_id: int, deck_name: str, prompt: str, max_cards: int = 0
 ) -> StartResult:
     """Start a PlanGenerateWorkflow. Workflow plans cards (the model
     returns a brief outline), waits for accept/reject/feedback signals,
-    then expands + inserts cards in parallel on accept."""
+    then expands + inserts cards in parallel on accept. `max_cards` > 0
+    caps the plan size (free-tier funded calls); 0 lets the model pick
+    the count."""
     client = await _get_client()
     wid = f"plan-{deck_name}-{uuid.uuid4().hex[:10]}"
     handle = await client.start_workflow(
@@ -200,6 +202,7 @@ async def start_plan_generate(
             "deck_id": deck_id,
             "deck_name": deck_name,
             "prompt": prompt,
+            "max_cards": max_cards,
         },
         id=wid,
         task_queue=TASK_QUEUE,
