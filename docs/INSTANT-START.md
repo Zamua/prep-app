@@ -558,11 +558,15 @@ multi-store write):
   absence is the adoption signal (section 3.4). The owner-absent
   condition on the write is equally deliberate: on an owner-present
   device the generated cards are ordinary authored `local_cards`
-  rows and nothing else. Writing `meta.guest` there would strand it
-  forever, because the state-3 silent flush never deletes it (only
-  adoption Accept does), leaving a permanently stale
-  Continue-studying strip and replace-confirm target after the
-  cards have synced and their local rows are gone.
+  rows and nothing else. Writing `meta.guest` there would be junk
+  from the moment it lands: only adoption Accept deletes it as part
+  of the state machine, and the state-3 silent flush never does.
+  An owner-present `meta.guest` (an Accept interrupted between the
+  owner stamp and the deletion is the one path that produces one)
+  is inert debris, since every guest surface is owner-absent-gated;
+  the successful-refresh path sweeps it opportunistically so it
+  cannot linger as a stale Continue-studying strip or
+  replace-confirm target.
 - One `local_cards` row per card:
 
 ```
