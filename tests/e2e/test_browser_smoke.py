@@ -26,7 +26,6 @@ Run subsets:
 
 from __future__ import annotations
 
-import re
 import time
 
 import httpx
@@ -356,87 +355,52 @@ def test_transform_reject_button_swaps_fragment_in_place(
     ), "apply form still in DOM after reject swap — wrong element was replaced"
 
 
-# ---- bug-class 4: HX-Redirect on grading terminal -------------------
+# ---- bug-class 4: the study loop advances in the browser -------------
 
 
-def test_grading_redirect_via_hx_redirect_works(
+def test_study_loop_reaches_a_verdict_in_the_browser(
     page, http: httpx.Client, base_url: str, test_deck: dict
 ):
-    """Drive a card answer through claude-grading; the polling endpoint
-    sets `HX-Redirect` on terminal so htmx does a full navigation. The
-    browser must follow it.
+    """Answer a card in the study shell and watch it reach a verdict.
 
-    If a future change breaks the HX-Redirect contract (wrong header
-    name, htmx out of date, response shape mismatch), the polling page
-    sits spinning forever instead of advancing to the result view.
-
-    Path: POST /study/{deck} (single-card path, no session) on the
-    claude-routed long-answer question kicks off a GradeAnswer
-    workflow and returns a 303 to /grading/{wid}. We follow that in
-    the browser, then watch for the page to advance off the
-    .grading-panel polling element — which only happens via the
-    HX-Redirect that the fragment endpoint sets on terminal status.
+    The server sends only a mount point now, so everything here is
+    client work: the host boots, fetches the card from the JSON API,
+    posts the answer, renders the pending view while an async grade
+    runs, polls it, and swaps in the verdict. If the host fails to
+    boot, the API contract drifts, or the polling loop stalls, the
+    page sits on a spinner (or an empty shell) and this fails, which
+    is the same class the old HX-Redirect test guarded.
     """
     deck = test_deck["name"]
-    qid = test_deck["qids"][3]  # the claude-routed long-answer question
 
-    # Drive the async grading path. Single-card POST /study/{name}
-    # kicks off a workflow when agent.is_available; otherwise the
-    # route returns a self-grade form (200) and we skip cleanly.
-    r = http.post(
-        f"/study/{deck}",
-        data={
-            "question_id": str(qid),
-            "type": "short",
-            "answer": (
-                "It's a mutex that prevents multiple threads from "
-                "executing Python bytecode in parallel."
-            ),
-        },
-        timeout=30.0,
-        follow_redirects=False,
-    )
-    if r.status_code != 303:
-        pytest.skip(
-            f"async grading didn't kick off — /study/{deck} returned "
-            f"{r.status_code} (agent likely unavailable on this env; "
-            f"route fell through to self-grade). Skipping grading-"
-            f"redirect test."
-        )
-    loc = r.headers.get("location", "")
-    m = re.search(r"/grading/([^/?#]+)", loc)
-    assert m, f"no /grading/<wid> in redirect: {loc!r}"
-    wid = m.group(1)
+    page.goto(f"{base_url}/study/{deck}", wait_until="domcontentloaded")
 
-    grading_url = f"{base_url}/grading/{wid}"
-    page.goto(grading_url, wait_until="domcontentloaded")
+    # The host filled the shell: a card is on screen, not the noscript
+    # fallback or an empty mount.
+    page.wait_for_selector(".study-card", timeout=30_000)
 
-    # The polling fragment carries .grading-panel — confirm we actually
-    # landed on the polling page. (If the workflow already terminated
-    # by the time we got here — possible if claude was very fast —
-    # /grading/{wid} renders result.html instead, no .grading-panel,
-    # which is a legitimate pass.)
-    grading_panel = page.locator(".grading-panel")
-    if grading_panel.count() == 0:
-        # Already terminal on first hit — htmx never had to redirect.
-        # The browser-side path we want to test wasn't exercised, so
-        # skip rather than declare success.
-        pytest.skip("grading workflow terminated before browser opened the polling page")
+    answer_box = page.locator("[data-study-root] textarea").first
+    if answer_box.count() == 0:
+        # The first due card is a choice card; pick one and submit.
+        page.locator("[data-study-root] label.choice").first.click()
+    else:
+        answer_box.fill("It is a mutex that stops threads running Python bytecode " "in parallel.")
+    page.get_by_role("button", name="Submit").click()
 
-    # Wait up to 90s for the page to advance off the polling fragment.
-    # The HX-Redirect either bounces to /grading/{wid} (rendered as
-    # result.html — same URL, different content) or to /session/{sid}.
-    # The cleanest signal is .grading-panel disappearing.
+    # Deterministic grading answers immediately; an AI grade shows the
+    # pending panel first. Either way the verdict must arrive.
     deadline = time.monotonic() + 90.0
-    redirected = False
     while time.monotonic() < deadline:
-        if page.locator(".grading-panel").count() == 0:
-            redirected = True
+        if page.locator("h1.verdict-headline").count() > 0:
+            break
+        if page.locator(".study-selfgrade, .reveal-actions").count() > 0:
+            # No deterministic grader and no AI: the reveal + self-grade
+            # screen is the honest outcome, not a stall.
             break
         page.wait_for_timeout(500)
-
-    assert redirected, (
-        f"grading polling page never advanced — .grading-panel still "
-        f"present after 90s on {page.url}. HX-Redirect may have failed "
-        f"to fire or the browser didn't follow it."
-    )
+    else:
+        raise AssertionError(
+            f"study loop never reached a verdict or a self-grade screen "
+            f"within 90s on {page.url}; mount shows: "
+            f"{page.locator('[data-study-root]').inner_text()[:300]!r}"
+        )
