@@ -219,9 +219,12 @@ Two surfaces, both quiet, both guest-mode only:
    on this device so far. Create a free account to keep it and
    study anywhere." Primary CTA links the sign-in URL; a "Not now"
    dismiss stamps `meta.guest.nudge_dismissed_at` and suppresses the
-   banner (the footer line stays). The banner never interrupts a
-   card, never repeats within a page load, and never renders as a
-   modal.
+   banner (the footer line stays). A guest whose data is owner-absent
+   `local_cards` only (offline authoring, no generated deck) has no
+   `meta.guest` record to stamp; the dismiss persists as
+   `meta.guest_nudge {dismissed_at}` instead, same suppression. The
+   banner never interrupts a card, never repeats within a page load,
+   and never renders as a modal.
 
 The sign-in URL reaches the shell via the `/offline` route context
 (`prep/web/pwa.py:152-172` gains `sign_in_url` from
@@ -567,6 +570,10 @@ multi-store write):
   the successful-refresh path sweeps it opportunistically so it
   cannot linger as a stale Continue-studying strip or
   replace-confirm target.
+- `meta.guest_nudge` (new meta record) `{dismissed_at}`: the
+  post-session nudge dismissal for a guest with no `meta.guest`
+  record (owner-absent `local_cards` only). Written by the banner's
+  "Not now" in that state; generation never writes it.
 - One `local_cards` row per card:
 
 ```
