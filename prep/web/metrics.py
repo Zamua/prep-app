@@ -1,9 +1,9 @@
 """Prometheus metrics emission.
 
-Wires four prep-specific signals into a process-local prometheus
+Wires the prep-specific signals into a process-local prometheus
 registry. Scraped by a Prometheus running on the same docker daemon.
 
-Why the four below:
+Why the signals below:
 
 - `anyio_threadpool_borrowed` / `anyio_threadpool_capacity`: directly
   answer "are we exhausting the threadpool / leaking threads?" (a
@@ -15,6 +15,10 @@ Why the four below:
   us see latency tail + correlate with provider-side slowdowns.
 - `prep_http_request_duration_seconds`: per-route latency histogram +
   request count. Standard golden-signals view for the FastAPI surface.
+- `prep_instant_generate_duration_seconds`: the anonymous instant
+  endpoint's abuse and saturation dial - the outcome label splits
+  spend failures from free refusals so a forced-failure campaign
+  shows up as a `failed_spent` spike.
 
 The `/metrics` route in prep.app exposes the registry. Prometheus
 scrapes it via Tailscale-Serve at /prep-staging/metrics (staging) or
@@ -84,6 +88,27 @@ _AI_GRADE_DURATION = Histogram(
 def observe_ai_grade(*, verdict: str, duration_s: float) -> None:
     """Public hook for prep.trivia.service to report one grading call."""
     _AI_GRADE_DURATION.labels(verdict=verdict).observe(duration_s)
+
+
+# ---- instant generate ---------------------------------------------------
+
+_INSTANT_GENERATE_DURATION = Histogram(
+    "prep_instant_generate_duration_seconds",
+    "Wall-clock duration of one anonymous instant-generate request, "
+    "admission to response. Labeled by `outcome` (ok / rate_limited / "
+    "busy / failed_spent / failed_free / invalid): the spend vs "
+    "no-spend split is what makes abuse visible separately from "
+    "upstream trouble.",
+    labelnames=("outcome",),
+    # Refusals resolve in milliseconds; real generations run tens of
+    # seconds up to the 60s service cap.
+    buckets=(0.01, 0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 75.0),
+)
+
+
+def observe_instant_generate(*, outcome: str, duration_s: float) -> None:
+    """Public hook for the instant route to report one request."""
+    _INSTANT_GENERATE_DURATION.labels(outcome=outcome).observe(duration_s)
 
 
 # ---- HTTP request duration --------------------------------------------

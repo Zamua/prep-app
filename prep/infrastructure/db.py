@@ -677,3 +677,24 @@ def init() -> None:
                 PRIMARY KEY (user_id, client_id)
             );
         """)
+
+        # 24. Anonymous instant-generation ledger: one row per attempt,
+        #     doubling as the rate-limiter window source. Outcomes that
+        #     spent upstream tokens (ok, failed_spent) count toward the
+        #     quota windows; failed_free rows count toward the burst
+        #     window only.
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS instant_generations (
+                id          INTEGER PRIMARY KEY,
+                ip          TEXT NOT NULL,   -- limiter bucket: exact IPv4, or IPv6 /64 prefix
+                created_at  TEXT NOT NULL,
+                outcome     TEXT NOT NULL DEFAULT 'pending',
+                            -- pending|ok|failed_spent|failed_free
+                cards       INTEGER,
+                topic_chars INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_instant_generations_ip_created
+                ON instant_generations (ip, created_at);
+            CREATE INDEX IF NOT EXISTS idx_instant_generations_created
+                ON instant_generations (created_at);
+        """)

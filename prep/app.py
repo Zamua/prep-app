@@ -42,6 +42,7 @@ from prep.api.routes import router as api_router
 from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
 from prep.dev import preview as dev_preview
+from prep.instant.routes import router as instant_router
 from prep.notify.routes import router as notify_router
 from prep.offline.routes import router as offline_router
 from prep.study.routes import router as study_router
@@ -244,7 +245,7 @@ app = FastAPI(
 # Prometheus metrics. Middleware records per-request latency; the
 # /metrics route exposes the registry to the obs-stack scraper.
 # Registered BEFORE the routers so every routed request flows through
-# the timing middleware. See prep/web/metrics.py for the four signals.
+# the timing middleware. See prep/web/metrics.py for the signals.
 from prep.web import metrics as _metrics  # noqa: E402
 
 app.middleware("http")(_metrics.http_metrics_middleware)
@@ -422,6 +423,7 @@ app.include_router(agent_router)
 app.include_router(api_router)
 app.include_router(auth_router)
 app.include_router(index_router)
+app.include_router(instant_router)
 app.include_router(legal_router)
 app.include_router(offline_router)
 app.include_router(pwa_router)
