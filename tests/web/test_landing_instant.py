@@ -111,3 +111,28 @@ def test_offline_shell_sign_in_url_empty_without_provider_url(client, visitor_pr
     r = client.get("/offline")
     assert r.status_code == 200
     assert 'data-sign-in-url=""' in r.text
+
+
+def test_topic_placeholder_rotates_from_the_pool(
+    client, initialized_db, visitor_provider, free_tier, monkeypatch
+):
+    """The hero textarea's ghost text is one of TOPIC_PLACEHOLDERS,
+    chosen per render: two renders with pinned choices produce the
+    pinned placeholder, and an unpinned render always draws from the
+    pool (never an empty or foreign string)."""
+    import random as _random
+
+    from prep.web import index as index_mod
+
+    real_choice = _random.choice
+    seen = set()
+    for pick in (index_mod.TOPIC_PLACEHOLDERS[0], index_mod.TOPIC_PLACEHOLDERS[1]):
+        monkeypatch.setattr(_random, "choice", lambda seq, _p=pick: _p)
+        body = client.get("/").text
+        assert f'placeholder="{pick}"' in body
+        seen.add(pick)
+    assert len(seen) == 2
+
+    monkeypatch.setattr(_random, "choice", real_choice)
+    body = client.get("/").text
+    assert any(f'placeholder="{p}"' in body for p in index_mod.TOPIC_PLACEHOLDERS)

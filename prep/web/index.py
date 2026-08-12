@@ -14,6 +14,8 @@ alongside.
 
 from __future__ import annotations
 
+import random
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -27,6 +29,27 @@ from prep.trivia.session_state import format_done
 from prep.web.templates import templates
 
 router = APIRouter()
+
+# Ghost text for the instant hero's topic box: one is picked at random
+# per landing render, as inspiration for what a topic can look like.
+# Deliberately varied in subject and register so any visitor sees at
+# least one that reads like something THEY would type.
+TOPIC_PLACEHOLDERS = (
+    "Phases of the moon",
+    "Basic Spanish for a trip to Mexico City",
+    "The French Revolution: causes, key figures, timeline",
+    "SQL joins: inner, left, right, full, with examples",
+    "Music theory basics: intervals, scales, chord families",
+    "Bones of the hand and wrist",
+    "Postgres MVCC: what vacuum does, how visibility maps work",
+    "Knife cuts and the five mother sauces",
+    "Japanese hiragana with common example words",
+    "How TCP works: handshake, windows, congestion control",
+    "US citizenship test: the 100 civics questions",
+    "Chess openings: the Italian Game and common traps",
+    "Cloud types and what weather they signal",
+    "Big-O notation with examples from sorting algorithms",
+)
 
 
 def build_deck_lists_context(request: Request, uid: str) -> dict:
@@ -212,6 +235,7 @@ def index(
                 "user": None,
                 "sign_in_url": urls.sign_in,
                 "instant_enabled": free_tier_configured(),
+                "topic_placeholder": random.choice(TOPIC_PLACEHOLDERS),
             },
         )
     uid = user["tailscale_login"]
