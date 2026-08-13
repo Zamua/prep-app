@@ -94,6 +94,35 @@ _install_redaction(logging.getLogger("uvicorn.error"))
 # route guards share one source of truth.
 _agent_mod.init_availability()
 
+
+def _warn_on_unusable_master_key() -> None:
+    """Say at boot when PREP_KEY_ENCRYPTION_SECRET is set but unusable.
+
+    Without this the deploy looks healthy and BYOK simply never works:
+    the failure surfaces only when a user tries to save a key, and the
+    anonymous-cookie secret derived from it silently stays off. A
+    misconfigured value is worth one loud line at startup. Unset is a
+    valid deploy shape (no BYOK) and stays quiet."""
+    import os as _os
+
+    raw = (_os.environ.get("PREP_KEY_ENCRYPTION_SECRET") or "").strip()
+    if not raw:
+        return
+    from prep.byok.crypto import MasterKeyError, load_master_from_env
+
+    try:
+        load_master_from_env("PREP_KEY_ENCRYPTION_SECRET")
+    except MasterKeyError as e:
+        _log.error(
+            "PREP_KEY_ENCRYPTION_SECRET is set but unusable, so saving a BYOK "
+            "key will fail on this deploy: %s. It must be hex, as from "
+            "`openssl rand -hex 32`; a base64 value is the usual mistake.",
+            e,
+        )
+
+
+_warn_on_unusable_master_key()
+
 # Markdown rendering for prompts + free-form fields. mistune escapes
 # raw HTML by default; input is already trusted (we generated it
 # ourselves) but we still want **bold** / `code` / fenced blocks /
