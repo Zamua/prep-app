@@ -254,12 +254,18 @@
                   </form>
                 </li>
               </ul>
-            {% elif auth_provider == 'clerk' %}
-              {# Sign-out: clerk-only, behind the same identity-revocation gate
-                 as the Account row. Tailscale-mode has nothing to revoke
-                 client-side (identity comes from the proxy header). #}
+            {% elif sign_out_url %}
+              {# Sign-out renders where the provider has one. Tailscale-mode
+                 has nothing to revoke client-side (identity comes from the
+                 proxy header) and exposes no URL, so the row is absent
+                 there rather than linking at a route that 404s.
+
+                 The hook opens the sign-out choice when this device holds
+                 a snapshot: signing out leaves the cards here, so the next
+                 person on a shared browser can open them (app.js). A
+                 device holding nothing signs out with no dialog. #}
               <ul class="user-links user-links-signout">
-                <li><a href="{{ root }}/sign-out" class="user-link-signout" data-turbo="false">Sign out {{ icon('sign-out', class_='icon icon-inline') }}</a></li>
+                <li><a href="{{ root }}/sign-out" class="user-link-signout" data-turbo="false" data-signout-guard>Sign out {{ icon('sign-out', class_='icon icon-inline') }}</a></li>
               </ul>
             {% endif %}
           </div>

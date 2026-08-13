@@ -166,6 +166,79 @@
 }
 .offline-owner-actions button.danger:hover { filter: brightness(0.92); }
 
+/* Destroy-this-device's-data dialogs, built by offline/wipe.js: the
+ * sign-out choice, the landing removal, and the unsynced-work second
+ * confirmation. Same paper card as the owner dialog above, anchored
+ * to the bottom edge as a drawer with full-width choices: the labels
+ * name their consequence and are too long to sit side by side on a
+ * phone, and a destructive choice must not be the easy mis-tap. */
+.offline-choice-dialog {
+  margin: auto auto 0;
+  width: min(28rem, 100%);
+  max-width: 100%;
+  border: 1px solid var(--rule);
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 1.15rem 1.1rem calc(1rem + env(safe-area-inset-bottom));
+  box-shadow: 0 -18px 36px -18px rgba(0, 0, 0, 0.5);
+}
+.offline-choice-dialog::backdrop {
+  background: rgba(20, 14, 8, 0.4);
+  backdrop-filter: blur(1px);
+}
+.offline-choice-dialog h3 {
+  margin: 0 0 0.45rem;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 480;
+}
+.offline-choice-dialog p {
+  margin: 0 0 0.6rem;
+  font-size: 0.86rem;
+  color: var(--ink-mute);
+  line-height: 1.45;
+}
+.offline-choice-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.offline-choice-actions button {
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 0.7rem 1.15rem;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+/* The destructive choice reads as danger, not as the default tap
+ * target: a filled button is the heaviest thing in the drawer, and
+ * here the heaviest thing must be the choice that keeps the data. */
+.offline-choice-actions button.danger {
+  background: var(--paper);
+  color: var(--wrong);
+  border-color: var(--wrong);
+}
+.offline-choice-actions button.danger:hover { background: color-mix(in srgb, var(--wrong) 8%, var(--paper)); }
+.offline-choice-actions button.keep {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.offline-choice-actions button.keep:hover { filter: brightness(1.15); }
+/* Same box while the flush runs: the label stays, so the row cannot
+ * reflow under the finger that is waiting on it. */
+.offline-choice-actions button.is-loading {
+  opacity: 0.62;
+  pointer-events: none;
+}
+
 /* M5: needs-attention list (server-rejected sync items). */
 .offline-rejects-details {
   margin-top: 0.6rem;

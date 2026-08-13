@@ -16,6 +16,20 @@
   max-width: var(--measure-tight);
 }
 
+/* The action belonging to that line (the landing's removal): inline
+ * in the sentence, sized like the text around it, so a status the
+ * reader can act on stays a status and not a banner. */
+.dashboard-status-action {
+  font: inherit;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .due-strip-actions {
   margin: 0.2rem 0 0;
 }

@@ -459,6 +459,67 @@ authentication happens only at sync time:
 - The offline surface never shows another user's data because the
   database only ever holds one owner's data.
 
+### Removing this device's data
+
+Signing out leaves the snapshot in place: a session can expire and
+the cards stay reachable. The cost is that on a shared browser the
+next person lands on the previous account's deck names, so the app
+says so and offers removal at the two moments the user is leaving:
+the sign-out control, and the landing page's status line when it is
+rendering a signed-out device's own decks. The sign-out dialog has
+three ways out (cancel, sign out and keep the cards, sign out and
+remove them) and appears only when the device holds a snapshot; two
+buttons rather than a checkbox, because the consequence differs and a
+mis-read checkbox destroys data.
+
+Every destructive path (the forget-device form, the sign-out removal,
+the landing removal) goes through `static/js/offline/wipe.js`, which
+holds the two rules a wipe has to obey:
+
+- **Flush first, and verify.** `wipeAll` clears `outbox_reviews` and
+  `local_cards` with everything else, so the flush runs first and the
+  two queues are read back afterwards. The queues are the verdict,
+  never `flushOutbox`'s return value: a transient failure inside the
+  review loop leaves rows queued and still reports the acked count,
+  and a store that cannot be read answers "unknown", which is not
+  "empty". `rejects` is read with them and cannot be flushed at all
+  (the server refused those rows for good, and the device is their
+  only copy), so the second dialog is the only place they can ever be
+  named. Anything but empty stops the wipe and puts the named work in
+  front of the user, who chooses between cancelling and destroying it
+  anyway. Unsynced work is never destroyed on a path the user
+  believes is routine.
+- **Order.** A flush needs the session, so a path that also drops
+  credentials finishes the flush BEFORE it navigates. The Clerk
+  sign-out interstitial still carries a live session, so it opts out
+  of `sync.init()` (`__prepSuppressOfflineSync`): a refresh there
+  would re-seed the device the removal just cleared.
+- **Report, never assume.** A wipe that did not commit says so
+  instead of reporting success, and the flush's failure names its
+  actual cause. "Could not reach the server" is wrong on the landing
+  removal, which by definition runs with no session the server will
+  accept.
+- **A wiped device is un-adoptable until a real owner is stamped.**
+  `wipeAll` clears `meta.owner`, and `ownerAllows` reads an absent
+  owner as a pass, so a row a second tab writes after the wipe would
+  be flushed into whichever account signs in next. `wipeAll` leaves a
+  `meta.wiped` marker; `sync.js` drops those rows and clears the
+  marker when the next snapshot refresh stamps an owner.
+
+Answering a question about data must not answer a question about the
+session. The unsynced-work dialog reached from sign-out therefore
+carries its own sign-out exit, and its cancel keeps the user signed
+in and says so.
+
+Nothing on these paths may claim the cards are gone from the account:
+a wipe clears this device, and the server keeps what it already has.
+
+Known gap: `wipe.js` is fetched on the click and is in no service
+worker cache, so with the network fully down the import rejects and
+the sign-out navigates with no dialog and no removal offered. That
+fails in the right direction (the navigation fails too), but it
+removes the exit in the state where unsynced work is most likely.
+
 ---
 
 ## 4. Sync protocol

@@ -152,3 +152,10 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+/* The submit waits on a flush of anything this device has not synced,
+ * which is a network round trip. Same label, same box: only the row
+ * dims, so nothing beside it moves. */
+.user-forget-btn.is-loading {
+  opacity: 0.55;
+  pointer-events: none;
+}

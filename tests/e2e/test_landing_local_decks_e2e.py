@@ -293,7 +293,7 @@ def test_a_device_with_a_snapshot_lands_on_its_decks_with_no_splash(landing_serv
     row.wait_for()
     assert DECK_LABEL.lower() in row.inner_text().lower()
     assert "3" in row.locator(".stat-due .stat-value").inner_text()
-    assert "on this device" in page.locator(".dashboard-status").inner_text()
+    assert "on this browser" in page.locator(".dashboard-status").inner_text()
 
     # The route into the study loop, on every render of this surface:
     # the due-strip button and the empty-state CTA each render under a

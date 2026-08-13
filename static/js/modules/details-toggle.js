@@ -77,10 +77,15 @@ export function init() {
     });
   });
 
-  // Esc closes open details + open dialogs.
+  // Esc closes open details + open dialogs. A dialog marked busy is
+  // skipped: a direct .close() fires no cancel event, so the dialog's
+  // own mid-flight guard cannot see this one, and closing it resolves
+  // a destructive choice as cancelled while the work runs on.
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     document.querySelectorAll("details[open]").forEach((d) => d.removeAttribute("open"));
-    document.querySelectorAll("dialog[open]").forEach((d) => d.close && d.close());
+    document
+      .querySelectorAll("dialog[open]:not([data-busy])")
+      .forEach((d) => d.close && d.close());
   });
 }

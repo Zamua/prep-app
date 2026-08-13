@@ -27,6 +27,10 @@
   // session still exists, which is exactly the state the bootstrap
   // would "fix" with a reload -- restarting /sign-out mid-sign-out.
   window.__prepSuppressReauth = true;
+  // Same live session, same reason: the snapshot refresh app.js runs on
+  // every page would re-seed the decks a "sign out and remove them"
+  // just cleared, on the one page that cannot afford it.
+  window.__prepSuppressOfflineSync = true;
 </script>
 <script>
   (async function () {

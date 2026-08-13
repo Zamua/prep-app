@@ -98,6 +98,20 @@ async function ownerAllows(serverUser) {
   return true;
 }
 
+// Rows written after a wipe belong to no account. The wipe cleared
+// meta.owner, so ownerAllows would wave them through to whoever signs
+// in next, and an offline-authored card carries only prompt + answer:
+// the server would create it outright under the new user. The device
+// was cleared with the user's consent, so drop them rather than let
+// them cross accounts.
+async function dropPostWipeRows() {
+  await withLock(async () => {
+    for (const r of await getAll("outbox_reviews")) await remove("outbox_reviews", r.client_id);
+    for (const c of await getAll("local_cards")) await remove("local_cards", c.client_id);
+    for (const r of await getAll("rejects")) await remove("rejects", r.client_id);
+  });
+}
+
 // A flush needs a stamped owner. An unstamped device cannot say
 // whose outbox this is, so it refreshes first (which stamps) and
 // flushes on the next pass.
@@ -144,6 +158,14 @@ export async function refreshSnapshot({force = false} = {}) {
   if (!fetched.ok) return fetched;
   const snapshot = fetched.snapshot;
   if (!(await ownerAllows(snapshot.user))) return {ok: false, disabled: true};
+
+  // The marker dies with the first owner this device gets after a
+  // wipe. From the stamp below, whatever the queues hold belongs to
+  // that account; anything written before it does not.
+  if (await metaGet("wiped")) {
+    await dropPostWipeRows();
+    await remove("meta", "wiped");
+  }
 
   // Full replace sidesteps tombstone bookkeeping for deletions. Local
   // ladder overlays are seeded null EXCEPT for cards that still have
@@ -342,6 +364,12 @@ async function postSyncChunk(deviceId, newCards, reviews) {
 // ordering and bounce card_client_id reviews as unknown.
 export async function flushOutbox() {
   if (syncDisabled) return {flushed: 0, created: 0, disabled: true};
+  // Ahead of the owner checks below, which cannot tell a wiped device
+  // from a fresh one.
+  if (await metaGet("wiped")) {
+    await dropPostWipeRows();
+    return {flushed: 0, created: 0, wiped: true};
+  }
   if (await ownerUnstamped()) {
     // Force the stamping refresh instead of simply refusing: refusing
     // alone strands the cards until something else happens to stamp.
@@ -587,9 +615,18 @@ function showOwnerConflictDialog({owner, serverUser, outboxCount, localCardCount
   });
   dialog.addEventListener("close", () => dialog.remove());
 
+  // The marker, not the cancel event, is what holds a mid-flight
+  // choice open: a direct .close() fires no cancel at all, and
+  // modules/details-toggle.js closes open dialogs on Esc that way.
+  const setBusy = (value) => {
+    busy = value;
+    if (value) dialog.setAttribute("data-busy", "");
+    else dialog.removeAttribute("data-busy");
+  };
+
   keepBtn.addEventListener("click", async () => {
     if (busy) return;
-    busy = true;
+    setBusy(true);
     try {
       // The recorded choice suppresses re-prompts for THIS mismatched
       // account only; a different account signing in later prompts
@@ -601,14 +638,14 @@ function showOwnerConflictDialog({owner, serverUser, outboxCount, localCardCount
     } catch (e) {
       console.warn("offline owner-conflict keep failed:", e);
     } finally {
-      busy = false;
+      setBusy(false);
       dialog.close();
     }
   });
 
   wipeBtn.addEventListener("click", async () => {
     if (busy) return;
-    busy = true;
+    setBusy(true);
     wipeBtn.classList.add("is-loading");
     try {
       const result = await wipeAndReseed();
@@ -624,7 +661,7 @@ function showOwnerConflictDialog({owner, serverUser, outboxCount, localCardCount
       dialog.close();
       showToast("Could not reset offline data. Try again.");
     } finally {
-      busy = false;
+      setBusy(false);
       wipeBtn.classList.remove("is-loading");
     }
   });

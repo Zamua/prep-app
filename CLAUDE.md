@@ -252,12 +252,18 @@ Consequences worth knowing, all of them accepted:
     the host. Adding an import anywhere under `dashboard/local-host.js`
     means adding it to `CHAIN`.
   - **Signing out leaves the snapshot in place, by design.** The
-    device keeps rendering its decks on `/` until someone wipes it
-    (`/forget-device`, or the owner-mismatch dialog on the next
-    sign-in). That is the feature: a session can expire and the cards
-    stay reachable. The cost is that on a shared machine the previous
-    user's deck names sit on the front page, so the wipe is the
-    documented exit, not sign-out.
+    device keeps rendering its decks on `/` until someone wipes it.
+    That is the feature: a session can expire and the cards stay
+    reachable. The cost is that on a shared machine the previous
+    user's deck names sit on the front page, so the wipe is the exit,
+    not sign-out. Both moments the user is leaving say so and offer
+    it: the sign-out control opens a three-way choice (cancel, keep
+    the cards, remove them) when this device holds a snapshot, and
+    the landing's status line carries the same removal inline. Every
+    destructive path goes through `static/js/offline/wipe.js`, which
+    flushes the outbox first and wipes only when the queues (and
+    `rejects`, which no flush can save) came back empty; see
+    docs/OFFLINE.md section 3, "Removing this device's data".
 
 Everything else stays server-rendered.
 
@@ -373,7 +379,8 @@ in a `<script type="module">` block.
 | `<form data-submit-pending>` | `submit-pending.js` | disable + label-swap on submit |
 | `[data-poll-url]`      | `poller.js`          | poll URL on interval, dispatch handler|
 | `[data-details-body]`  | `details-toggle.js`  | mark a sibling popover body so the outside-click handler doesn't close the related details when the body is tapped (use when a `<details>` body must live OUTSIDE the `<details>` element for layout reasons — e.g. trivia card explore body) |
-| `[data-forget-device]` | `app.js` (inline)    | wipe this device's offline snapshot before the forget-device POST, so the browser keeps no copy of decks it can no longer reach |
+| `[data-forget-device]` | `app.js` (inline)    | flush then wipe this device's offline snapshot before the forget-device POST, so the browser keeps no copy of decks it can no longer reach (`offline/wipe.js`) |
+| `[data-signout-guard]` | `app.js` (inline, delegated) | on a device holding a snapshot, open the sign-out choice (cancel / keep the cards / remove them) instead of navigating; a device holding nothing signs out with no dialog |
 | `[data-landing-decks]` | `dashboard/local-host.js` | landing-only: the region the device's own decks mount into. app.js probes IndexedDB for a snapshot older than the `prep:offline_snapshot` flag and mounts the host; the flagged case is started by the landing's pre-paint head script instead |
 
 **Per-page inline `<script>` blocks**: still allowed when the page

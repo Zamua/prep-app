@@ -76,26 +76,72 @@ if (landingDecks && !document.documentElement.hasAttribute("data-local-decks")) 
 // The account and its decks survive on the server; the browser the
 // user asked to forget must not keep a copy it can still render. The
 // snapshot is client-side, so the wipe happens here, before the POST
-// that drops the cookie. A cancelled confirm has already prevented
-// the event, and the resubmit skips this listener's own guard.
+// that drops the cookie -- which is also the last moment the flush
+// inside it can still reach the server. A cancelled confirm has
+// already prevented the event, and the resubmit skips this listener's
+// own guard.
 const forgetForm = document.querySelector("[data-forget-device]");
 if (forgetForm) {
-  let wiping = false;
+  let deciding = false;
   forgetForm.addEventListener("submit", (e) => {
-    if (wiping || e.defaultPrevented) return;
+    if (deciding || e.defaultPrevented) return;
     e.preventDefault();
-    wiping = true;
-    const wiped = import("@/offline/store.js")
-      .then((store) => store.wipeAll())
-      .catch((err) => console.warn("offline wipe before forget failed:", err));
-    // A blocked IndexedDB open settles neither handler, so awaiting the
-    // wipe alone can leave the POST unsent and the button dead. The
-    // cookie has to go regardless; a snapshot the wipe could not reach
-    // is caught by the owner guard on the next sign-in.
-    const deadline = new Promise((resolve) => setTimeout(resolve, 2000));
-    Promise.race([wiped, deadline]).then(() => forgetForm.submit());
+    deciding = true;
+    const button = forgetForm.querySelector("button");
+    if (button) button.classList.add("is-loading");
+    import("@/offline/wipe.js")
+      .then((wipe) => wipe.wipeWithConsent())
+      // A wipe that could not run AT ALL must not leave the button
+      // dead: drop the cookie anyway. A snapshot the wipe could not
+      // reach is caught by the owner guard on the next sign-in. A
+      // user who cancelled at the unsynced-work dialog is a different
+      // case and keeps both the cookie and the data.
+      .catch((err) => {
+        console.warn("offline wipe before forget failed:", err);
+        return true;
+      })
+      .then((proceed) => {
+        deciding = false;
+        if (button) button.classList.remove("is-loading");
+        if (proceed) forgetForm.submit();
+      });
   });
 }
+
+// ---- Sign out: what happens to the cards on this device --------------
+// Signing out leaves this device's snapshot in place by design, so on
+// a shared browser the next person lands on the previous account's
+// deck names. Say so, and offer removal, at the moment the user is
+// leaving. A device holding nothing gets no dialog: the warning is
+// data-driven, never unconditional friction.
+//
+// Delegated rather than bound to the element, so the panel can be
+// re-rendered without losing the guard. The remove path flushes
+// before it navigates, because after the navigation the session the
+// flush needs is gone.
+let signOutDeciding = false;
+document.addEventListener("click", (e) => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  const link = e.target.closest ? e.target.closest("[data-signout-guard]") : null;
+  if (!link) return;
+  e.preventDefault();
+  // A second tap while the first choice is open would build a second
+  // dialog over the first, same as the forget-device hook above.
+  if (signOutDeciding) return;
+  signOutDeciding = true;
+  const href = link.href;
+  import("@/offline/wipe.js")
+    .then(async (wipe) => ((await wipe.deviceHoldsCards()) ? wipe.confirmSignOut() : true))
+    // Nothing this module could say is worth blocking a sign-out for.
+    .catch((err) => {
+      console.warn("sign-out guard unavailable:", err);
+      return true;
+    })
+    .then((proceed) => {
+      signOutDeciding = false;
+      if (proceed) window.location.assign(href);
+    });
+});
 
 // ---- Instant-start landing hero (hook-gated) --------------------------
 // The anonymous generation form. Hook-gated like the block above so
@@ -111,9 +157,15 @@ if (instantStartHook) {
 // Keeps the IndexedDB snapshot warm on online pages so an offline cold
 // launch has decks + cards to show. Lazy dynamic import so a failure
 // here can never take the page's other behaviors down with it.
-import("@/offline/sync.js")
-  .then((m) => m.init())
-  .catch((e) => console.warn("offline sync unavailable:", e));
+//
+// A page that is revoking the session opts out: it still carries a
+// live one, so a refresh there would re-seed a device the user just
+// asked to clear (templates/sign_out_interstitial.html).
+if (!window.__prepSuppressOfflineSync) {
+  import("@/offline/sync.js")
+    .then((m) => m.init())
+    .catch((e) => console.warn("offline sync unavailable:", e));
+}
 
 // Workflow polling pages (transform, plan, grading, trivia gen) now
 // drive their polling via htmx's `hx-trigger="every Ns"` on a fragment

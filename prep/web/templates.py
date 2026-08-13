@@ -167,6 +167,23 @@ def _sign_in_url_context(request: Request) -> dict:
         return {"sign_in_url": ""}
 
 
+def _sign_out_url_context(request: Request) -> dict:
+    """The chip panel's sign-out row. Empty string on deploys whose
+    provider has no sign-out flow (Tailscale: identity comes from the
+    proxy), where the row must not render at all.
+
+    A capability probe, not a destination: the row always links at
+    prep's own `/sign-out`, which drops the anonymous cookie and then
+    hands off to the provider. Do not link this value directly.
+    """
+    try:
+        from prep.auth.providers import get_provider
+
+        return {"sign_out_url": get_provider().urls().sign_out or ""}
+    except Exception:  # noqa: BLE001
+        return {"sign_out_url": ""}
+
+
 def _clerk_bootstrap_context(request: Request) -> dict:
     """Expose Clerk publishable key + frontend API host to base.html
     so it can load ClerkJS on every page (not just the landing). The
@@ -263,6 +280,7 @@ templates = Jinja2Templates(
         _assets_context,
         _auth_provider_context,
         _sign_in_url_context,
+        _sign_out_url_context,
         _clerk_bootstrap_context,
         _notif_unseen_context,
         _deck_display_context,

@@ -11,6 +11,9 @@
 //                     "owner"  {user_id, display_name, snapshot_at, build}
 //                     "device" {device_id}  (UUID minted on first open)
 //                     "sync"   {last_refresh_at}  (throttle bookkeeping)
+//                     "wiped"  {at}  (set by wipeAll, cleared by
+//                              sync.js when a real owner is stamped;
+//                              marks the device un-adoptable meanwhile)
 //                     "owner_conflict" {dismissed_user_id, dismissed_at}
 //                              (the "keep" choice from the owner-
 //                              mismatch dialog; suppresses re-prompts
@@ -195,6 +198,12 @@ export async function wipeAll() {
   await txDone(tx);
   clearSnapshotFlag();
   await put("meta", {device_id: uuid()}, "device");
+  // The wipe clears meta.owner, and sync.js reads an absent owner as
+  // a pass (a fresh install has none). Without this marker, a row a
+  // second tab writes after the wipe belongs to nobody and the next
+  // account to sign in here adopts it. sync.js drops such rows and
+  // clears the marker when a real owner is next stamped.
+  await put("meta", {at: new Date().toISOString()}, "wiped");
 }
 
 // ---- snapshot flag ---------------------------------------------------
@@ -214,6 +223,17 @@ export function clearSnapshotFlag() {
     localStorage.removeItem(SNAPSHOT_FLAG);
   } catch (e) {
     // a flag with nothing behind it is corrected on the next read
+  }
+}
+
+// The synchronous half of "does this device hold cards". False here
+// is not proof of an empty device (a snapshot older than the flag has
+// none); callers that need certainty read the stores.
+export function snapshotFlagSet() {
+  try {
+    return localStorage.getItem(SNAPSHOT_FLAG) === "1";
+  } catch (e) {
+    return false;
   }
 }
 

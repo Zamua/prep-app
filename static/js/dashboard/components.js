@@ -50,6 +50,9 @@ const RETURNING_LEDE_AGENT =
 // passes its own answer. `status` is the one line a surface adds
 // about itself (the offline shell says it is reading a snapshot):
 // muted, under the lede, in place of separate branding.
+// `statusAction` {label, onClick} is the action that belongs to that
+// line, inline in the sentence: a status the reader may want to act
+// on, not a banner.
 export function preludeView(
   overview,
   {
@@ -60,6 +63,7 @@ export function preludeView(
     headEm = "of questions",
     lede = null,
     status = null,
+    statusAction = null,
   } = {}
 ) {
   const isNew = isNewUser === null ? overview.decks.length === 0 : Boolean(isNewUser);
@@ -77,7 +81,17 @@ export function preludeView(
     lede || defaultLede,
     {lineBreak: true}
   );
-  if (status) section.appendChild(el("p", "muted dashboard-status", status));
+  if (status) {
+    const line = el("p", "muted dashboard-status", status);
+    if (statusAction) {
+      line.appendChild(document.createTextNode(" "));
+      const button = el("button", "dashboard-status-action", statusAction.label);
+      button.type = "button";
+      button.addEventListener("click", statusAction.onClick);
+      line.appendChild(button);
+    }
+    section.appendChild(line);
+  }
   return section;
 }
 
