@@ -23,7 +23,19 @@
 // absent is transient and self-closing (the refresh stamps it),
 // mismatch is a hard refusal.
 
-import {get, getAll, bulkReplace, metaGet, metaPut, put, remove, wipeAll, withLock} from "./store.js";
+import {
+  bulkReplace,
+  clearSnapshotFlag,
+  get,
+  getAll,
+  markSnapshotHeld,
+  metaGet,
+  metaPut,
+  put,
+  remove,
+  wipeAll,
+  withLock,
+} from "./store.js";
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -185,6 +197,18 @@ export async function refreshSnapshot({force = false} = {}) {
     snapshot_at: snapshot.generated_at || new Date().toISOString(),
     build: buildToken(),
   });
+  // What the landing page reads before it paints, so it has to state
+  // what the stores now hold and not merely that a refresh happened:
+  // an account with no decks would otherwise suppress the splash on a
+  // page that has nothing to put in its place. Same predicate the
+  // host uses to pick the surface (dashboard/local-host.js). The
+  // local_cards read only runs when the snapshot itself is empty.
+  const held =
+    (snapshot.decks || []).length ||
+    (snapshot.cards || []).length ||
+    (await getAll("local_cards")).length;
+  if (held) markSnapshotHeld();
+  else clearSnapshotFlag();
   await metaPut("sync", {last_refresh_at: new Date().toISOString()});
   // Ask the platform to shield this origin's storage from eviction
   // (docs/OFFLINE.md section 3, "Storage persistence and eviction

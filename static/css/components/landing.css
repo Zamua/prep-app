@@ -106,23 +106,19 @@
   font-size: 0.92rem;
 }
 
-/* M5: the hidden "study offline" escape hatch at the foot of the
- * landing content. Revealed by modules/offline-link.js only when
- * this device holds an offline snapshot; hidden it costs nothing. */
-.landing-offline-link {
-  margin: 1.6rem 0 0.4rem;
-  text-align: center;
-  font-size: 0.9rem;
-  color: var(--ink-mute);
-}
-.landing-offline-link[hidden] { display: none; }
-.landing-offline-link a {
-  color: var(--ink);
-  text-underline-offset: 3px;
-}
-.landing-offline-aside {
-  display: block;
-  margin-top: 0.15rem;
+/* --- the device's own decks ---
+ *
+ * A visitor the server cannot identify, on a device that still holds
+ * their snapshot, gets the dashboard here instead of the splash
+ * above (dashboard/local-host.js). The root attribute is stamped
+ * before the first paint by the head script in templates/landing.html,
+ * so neither region is ever painted and then swapped. Splash is the
+ * default state: a visitor with no cards matches none of these. */
+.landing-local { display: none; }
+:root[data-local-decks] .landing-local { display: block; }
+:root[data-local-decks] [data-landing-splash] { display: none; }
+.landing-local-note {
+  margin: 2rem 0;
   font-style: italic;
-  font-size: 0.82rem;
+  color: var(--ink-mute);
 }

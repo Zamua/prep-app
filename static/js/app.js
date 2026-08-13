@@ -45,20 +45,60 @@ if ("serviceWorker" in navigator) {
     .catch((e) => console.warn("SW register failed:", e));
 }
 
-// ---- Landing "study offline" link (hook-gated) -----------------------
-// The landing template ships the link hidden; the module reveals it
-// only when this device already holds an offline snapshot. Lazy
-// import gated on the hook so every other page (and every visitor
-// without the hook) pays one querySelector and nothing else.
-const offlineLinkHook = document.querySelector("[data-offline-link]");
-if (offlineLinkHook) {
-  import("@/modules/offline-link.js")
-    .then((m) => m.init(offlineLinkHook))
-    .catch((e) => console.warn("offline link module unavailable:", e));
+// ---- Landing: the decks this device holds (hook-gated) ---------------
+// The landing page's pre-paint script mounts the local dashboard when
+// the snapshot flag says this device holds cards. A snapshot written
+// before that flag existed has none, so ask IndexedDB once, after
+// paint: the host stamps the flag as it mounts, and the next load of
+// this page is decided before paint like everyone else's. Those
+// devices see the splash for that one load; no other visitor does.
+//
+// store.js is already on this page's module graph (sync.js imports
+// it below), so the probe costs a read, not a download.
+const landingDecks = document.querySelector("[data-landing-decks]");
+if (landingDecks && !document.documentElement.hasAttribute("data-local-decks")) {
+  import("@/offline/store.js")
+    .then((store) => store.metaGet("owner"))
+    .then((owner) => {
+      if (!owner || !owner.user_id) return null;
+      // The host's chain is four import levels deep and this path has
+      // the splash on screen while it loads. The landing's head script
+      // knows the file list; inject it so the levels fetch as one.
+      if (window.__prepPreloadLocalDecks) window.__prepPreloadLocalDecks();
+      return import("@/dashboard/local-host.js");
+    })
+    .then((host) => host && host.mount())
+    // The splash is the safe answer when storage cannot be read.
+    .catch((e) => console.warn("local deck probe failed:", e));
+}
+
+// ---- Forget this device (hook-gated) ---------------------------------
+// The account and its decks survive on the server; the browser the
+// user asked to forget must not keep a copy it can still render. The
+// snapshot is client-side, so the wipe happens here, before the POST
+// that drops the cookie. A cancelled confirm has already prevented
+// the event, and the resubmit skips this listener's own guard.
+const forgetForm = document.querySelector("[data-forget-device]");
+if (forgetForm) {
+  let wiping = false;
+  forgetForm.addEventListener("submit", (e) => {
+    if (wiping || e.defaultPrevented) return;
+    e.preventDefault();
+    wiping = true;
+    const wiped = import("@/offline/store.js")
+      .then((store) => store.wipeAll())
+      .catch((err) => console.warn("offline wipe before forget failed:", err));
+    // A blocked IndexedDB open settles neither handler, so awaiting the
+    // wipe alone can leave the POST unsent and the button dead. The
+    // cookie has to go regardless; a snapshot the wipe could not reach
+    // is caught by the owner guard on the next sign-in.
+    const deadline = new Promise((resolve) => setTimeout(resolve, 2000));
+    Promise.race([wiped, deadline]).then(() => forgetForm.submit());
+  });
 }
 
 // ---- Instant-start landing hero (hook-gated) --------------------------
-// The anonymous generation form. Hook-gated like offline-link so
+// The anonymous generation form. Hook-gated like the block above so
 // only the instant landing loads the module.
 const instantStartHook = document.querySelector("[data-instant-start]");
 if (instantStartHook) {

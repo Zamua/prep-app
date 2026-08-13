@@ -1,6 +1,59 @@
 {% extends "base.html" %}
 {% block title %}prep · flashcards that remember for you{% endblock %}
 {% block page_class %}landing{% endblock %}
+{% block head_preload %}
+{%- set _js = request.scope.get('root_path','') ~ '/static/js/v' ~ (static_css_mtime|default(0)) -%}
+{# Which of the two regions below this visitor gets, decided BEFORE
+   the first paint. A device holding cards must never see the splash,
+   and IndexedDB is async: any probe of it answers after the page has
+   already painted. So the offline store mirrors "this device holds a
+   snapshot" into localStorage (static/js/offline/store.js) and this
+   reads it synchronously, stamps the root, and the stylesheet does
+   the rest. Classic, not a module: a module script is deferred by
+   definition and paint has happened by then.
+
+   A visitor with no cards -- almost everyone who reaches this page --
+   runs one getItem and stops. #}
+<script>
+(function () {
+  // Everything dashboard/local-host.js imports, declared here rather
+  // than as <link rel=modulepreload> markup: a link in the head would
+  // charge every visitor for a page almost none of them get. The two
+  // paths that are about to fetch the chain inject it themselves, so
+  // its four request levels start as one. local-host.js is left out;
+  // both of those paths import it in the same tick.
+  var CHAIN = [
+    "dashboard/components.js",
+    "dashboard/local-source.js",
+    "dashboard/source.js",
+    "offline/grader.js",
+    "offline/scheduler.js",
+    "offline/store.js",
+    "study/dom.js",
+    "study/source.js"
+  ];
+  window.__prepPreloadLocalDecks = function () {
+    for (var i = 0; i < CHAIN.length; i++) {
+      var link = document.createElement("link");
+      link.rel = "modulepreload";
+      link.href = "{{ _js }}/" + CHAIN[i];
+      document.head.appendChild(link);
+    }
+  };
+  try {
+    if (localStorage.getItem("prep:offline_snapshot") !== "1") return;
+  } catch (e) {
+    return;
+  }
+  document.documentElement.setAttribute("data-local-decks", "");
+  window.__prepPreloadLocalDecks();
+  import("{{ _js }}/dashboard/local-host.js").then(
+    function (m) { m.mount(); },
+    function () {}
+  );
+})();
+</script>
+{% endblock %}
 {% block header_extra %}
   {# Sign-in chip in the masthead — mirrors the user-indicator slot on
      the authed dashboard so the layout doesn't shift when someone
@@ -21,6 +74,7 @@
    below. Driven by modules/instant-start.js (lazy-imported by app.js
    on the data-instant-start hook). #}
 <section class="prelude landing-hero landing-hero-instant"
+         data-landing-splash
          data-instant-start
          data-sign-in-url="{{ sign_in_url }}">
   <p class="eyebrow">prep</p>
@@ -51,7 +105,7 @@
   </noscript>
 </section>
 {% else %}
-<section class="prelude landing-hero">
+<section class="prelude landing-hero" data-landing-splash>
   <p class="eyebrow">prep</p>
   <h1 class="display"><em>Remember</em> anything.</h1>
   <p class="lede">
@@ -68,19 +122,19 @@
 </section>
 {% endif %}
 
-{# "Study offline" escape hatch (docs/OFFLINE.md section 3): the
-   landing page is what a returning user sees when the server is
-   reachable but their session (or the identity provider's CDN) is
-   not, so it links to the offline shell -- but ONLY when this device
-   already holds an offline snapshot. The check is client-side
-   (IndexedDB), so the link ships hidden and modules/offline-link.js
-   (lazy-imported by app.js when this hook is present) reveals it.
-   First-time visitors never see it and pay nothing beyond one
-   querySelector. #}
-<p class="landing-offline-link" data-offline-link hidden>
-  <a href="{{ request.scope.get('root_path','') }}/offline">Study offline</a>
-  <span class="landing-offline-aside">your saved cards work without a connection</span>
-</p>
+{# The decks this DEVICE holds, for a visitor the server cannot
+   identify while their snapshot is still here. Rendered in place of
+   the splash above by dashboard/local-host.js; the head script
+   decides which of the two is visible before paint, and the
+   stylesheet hides this one for everybody else.
+
+   The note is real markup, not a <noscript>: a module that never
+   loads fires nothing this region can see, and scripting is on. The
+   host clears it by replacing these children. #}
+<div class="landing-local" data-landing-decks>
+  <p class="landing-local-note">Your saved decks are loading. If they
+    do not appear, reload the page.</p>
+</div>
 
 {# The post-signup / session-recovery reload now lives centrally in
    base.html's Clerk bootstrap (it runs on every page and, crucially,

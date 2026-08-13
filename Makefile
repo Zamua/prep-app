@@ -159,7 +159,8 @@ E2E_LOCAL_FILES = \
 	tests/e2e/test_merge_offline_e2e.py \
 	tests/e2e/test_offline_parity.py \
 	tests/e2e/test_markdown_parity.py \
-	tests/e2e/test_instant_start_e2e.py
+	tests/e2e/test_instant_start_e2e.py \
+	tests/e2e/test_landing_local_decks_e2e.py
 
 e2e-local: tools
 	@for f in $(E2E_LOCAL_FILES); do \

@@ -242,33 +242,34 @@ def test_precache_covers_every_module_reachable_from_offline_app(client: TestCli
         assert versioned in urls, f"reachable module missing from precache: {rel}"
 
 
-# ---- landing-page "study offline" link ------------------------------------
+# ---- landing-page local dashboard -----------------------------------------
 
 
-def test_landing_ships_hidden_offline_link(unauthed_client: TestClient):
-    """The landing page carries the "study offline" escape hatch
-    (docs/OFFLINE.md section 3): it is the page a returning user sees
-    when the server is reachable but their session is not, so it must
-    link the offline shell. The server always ships the link HIDDEN
-    with the data-offline-link hook; modules/offline-link.js reveals
-    it client-side only when this device holds a snapshot. Pin the
-    markup contract the reveal module depends on: the hook, the
-    hidden attribute, and the /offline href inside the hook."""
+def test_landing_decides_which_region_before_paint(unauthed_client: TestClient):
+    """A device holding a snapshot gets its decks where a first-time
+    visitor gets the splash, and the choice is made before the first
+    paint. Pin the markup contract that makes that possible: both
+    regions ship on every landing render, the splash carries the hook
+    the stylesheet keys on, and the script that reads the flag is
+    CLASSIC and inline in <head> (a module script is deferred, so it
+    would run after the splash had painted)."""
     r = unauthed_client.get("/")
     assert r.status_code == 200
     body = r.text
     # This really is the anonymous landing render, not the dashboard.
     assert "landing-hero" in body
+    assert "data-landing-splash" in body, "landing page lost the splash hook"
+    assert "data-landing-decks" in body, "landing page lost the local-decks region"
 
-    m = re.search(r"<p\b[^>]*data-offline-link[^>]*>", body)
-    assert m, "landing page lost the data-offline-link hook"
-    hook_tag = m.group(0)
-    assert re.search(r"\bhidden\b", hook_tag), (
-        "the offline link must ship hidden; only the client-side " "snapshot check may reveal it"
-    )
-    end = body.index("</p>", m.start())
-    hook_block = body[m.start() : end]
-    assert 'href="/offline"' in hook_block, "the hook must wrap a link to the offline shell"
+    head = body[: body.index("</head>")]
+    inline = [s for s in re.findall(r"<script>(.*?)</script>", head, re.S)]
+    flagged = [s for s in inline if '"prep:offline_snapshot"' in s]
+    assert flagged, "the classic pre-paint script that reads the snapshot flag left <head>"
+    assert "data-local-decks" in flagged[0], "the script no longer stamps the root before paint"
+
+    # The link the deleted escape hatch used to be: the region replaces
+    # it, so the landing must not ship both.
+    assert "data-offline-link" not in body
 
 
 # ---- versioned asset routes ----------------------------------------------

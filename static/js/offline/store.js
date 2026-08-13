@@ -28,6 +28,14 @@
 const DB_NAME = "prep-offline";
 const DB_VERSION = 1;
 
+// A synchronous mirror of "this device holds a snapshot". IndexedDB
+// cannot be read before first paint, and the landing page has to
+// decide which surface to render without painting the other one
+// first (templates/landing.html reads this in <head>). It carries no
+// data: the stores stay the only source of truth, and a flag that
+// disagrees with them is corrected by whoever read it.
+const SNAPSHOT_FLAG = "prep:offline_snapshot";
+
 let dbPromise = null;
 
 // Exported for outbox client_id minting (offline-app.js); also used
@@ -185,7 +193,28 @@ export async function wipeAll() {
   const tx = db.transaction(names, "readwrite");
   for (const name of names) tx.objectStore(name).clear();
   await txDone(tx);
+  clearSnapshotFlag();
   await put("meta", {device_id: uuid()}, "device");
+}
+
+// ---- snapshot flag ---------------------------------------------------
+
+// Both writes are swallowed: storage can be disabled or full, and a
+// missing flag only costs the landing page one IndexedDB read.
+export function markSnapshotHeld() {
+  try {
+    localStorage.setItem(SNAPSHOT_FLAG, "1");
+  } catch (e) {
+    // no flag; the landing page's probe still finds the snapshot
+  }
+}
+
+export function clearSnapshotFlag() {
+  try {
+    localStorage.removeItem(SNAPSHOT_FLAG);
+  } catch (e) {
+    // a flag with nothing behind it is corrected on the next read
+  }
 }
 
 // ---- meta convenience ------------------------------------------------

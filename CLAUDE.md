@@ -187,12 +187,12 @@ polish. Most actions degrade to plain forms.
 to render with no server (from the IndexedDB snapshot), so a
 server-rendered version of it could not be the only one. Rather than
 keep two implementations of the same screens, each is a set of client
-components behind a port with two adapters, driven by two hosts:
+components behind a port with two adapters, driven by their hosts:
 
 | surface | components | port | hosts | server renders |
 | --- | --- | --- | --- | --- |
 | study loop | `static/js/study/` | `CardSource` (`LocalSource` over IndexedDB + the JS grader/scheduler, `ServerSource` over `prep/study/api.py`) | `study/online-host.js`, `offline/offline-app.js` | `templates/study_shell.html`, `templates/offline.html` |
-| dashboard | `static/js/dashboard/` | `DeckSource` (`LocalSource` in `dashboard/local-source.js` over IndexedDB, `ServerSource` in `dashboard/source.js` over `prep/web/dashboard.py`) | `dashboard/online-host.js`, `offline/offline-app.js` | `templates/index.html` (session strips + the embedded payload + the row menus), `templates/offline.html` |
+| dashboard | `static/js/dashboard/` | `DeckSource` (`LocalSource` in `dashboard/local-source.js` over IndexedDB, `ServerSource` in `dashboard/source.js` over `prep/web/dashboard.py`) | `dashboard/online-host.js`, `offline/offline-app.js`, `dashboard/local-host.js` | `templates/index.html` (session strips + the embedded payload + the row menus), `templates/offline.html`, `templates/landing.html` |
 
 Consequences worth knowing, all of them accepted:
 
@@ -227,6 +227,37 @@ Consequences worth knowing, all of them accepted:
   service-worker navigation fallback, so the user asked for the live
   page and got a degraded one; the line leads with "Offline." for that
   reason. Everything else on it is the shared dashboard.
+- **The landing page decides before it paints.** A visitor the server
+  cannot identify on a device that still holds their snapshot gets
+  the same dashboard, from `dashboard/local-host.js`, in place of the
+  splash. IndexedDB answers too late for that call, so `store.js`
+  mirrors "a snapshot is here" into `localStorage`
+  (`prep:offline_snapshot`), a classic inline script in the landing's
+  `<head>` reads it and stamps `data-local-decks` on the root, and
+  `landing.css` picks the region. Everything about that path is
+  keyed on the attribute, so a first-time visitor (the overwhelming
+  majority) runs one `getItem` and gets today's page unchanged.
+  Three rules keep this working:
+  - **The flag states what the stores HOLD, not that a sync ran.**
+    `sync.js` writes it only when the snapshot (or `local_cards`)
+    is non-empty and clears it otherwise; `wipeAll` clears it; the
+    host clears it and shows the splash when the stores turn out to
+    hold nothing. A flag written for an empty store paints the
+    fallback note where the splash belongs.
+  - **The host's module chain is preloaded from the head script, not
+    from markup.** A `<link rel=modulepreload>` in `landing.html`
+    would charge every visitor for a page almost none of them get, so
+    the file list lives in the head script's `CHAIN` and both callers
+    (the head script, `app.js`'s probe) inject it before importing
+    the host. Adding an import anywhere under `dashboard/local-host.js`
+    means adding it to `CHAIN`.
+  - **Signing out leaves the snapshot in place, by design.** The
+    device keeps rendering its decks on `/` until someone wipes it
+    (`/forget-device`, or the owner-mismatch dialog on the next
+    sign-in). That is the feature: a session can expire and the cards
+    stay reachable. The cost is that on a shared machine the previous
+    user's deck names sit on the front page, so the wipe is the
+    documented exit, not sign-out.
 
 Everything else stays server-rendered.
 
@@ -342,7 +373,8 @@ in a `<script type="module">` block.
 | `<form data-submit-pending>` | `submit-pending.js` | disable + label-swap on submit |
 | `[data-poll-url]`      | `poller.js`          | poll URL on interval, dispatch handler|
 | `[data-details-body]`  | `details-toggle.js`  | mark a sibling popover body so the outside-click handler doesn't close the related details when the body is tapped (use when a `<details>` body must live OUTSIDE the `<details>` element for layout reasons — e.g. trivia card explore body) |
-| `[data-offline-link]`  | `offline-link.js`    | landing-only: reveal the hidden "study offline" link when this device holds an offline snapshot (lazy-imported by app.js when the hook is present) |
+| `[data-forget-device]` | `app.js` (inline)    | wipe this device's offline snapshot before the forget-device POST, so the browser keeps no copy of decks it can no longer reach |
+| `[data-landing-decks]` | `dashboard/local-host.js` | landing-only: the region the device's own decks mount into. app.js probes IndexedDB for a snapshot older than the `prep:offline_snapshot` flag and mounts the host; the flagged case is started by the landing's pre-paint head script instead |
 
 **Per-page inline `<script>` blocks**: still allowed when the page
 has unique logic that doesn't generalize (e.g. card-preview filling,

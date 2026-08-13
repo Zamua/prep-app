@@ -60,7 +60,9 @@ There are three ways into the offline surface:
    screen, no spinner: the user lands directly on their due-card
    queue.
 2. **"Study offline" while online.** The offline app lives at a real
-   route (`/offline`), linked from the user panel in the masthead.
+   route (`/offline`). A device holding a snapshot reaches it from the
+   landing page, whose local dashboard carries the study action; a
+   signed-in user reaches it by URL.
    Visiting it online renders the same client-side app against the
    same local snapshot. This is also how a user "preflights" before a
    trip: open it once, confirm the card bank is present.
@@ -361,9 +363,10 @@ SW never substitutes the offline app, so the reauth shell's recovery
 dance and its fallback-to-landing escape hatch work exactly as they
 do today. The degraded middle case (server reachable but the
 identity provider's CDN is not) stays on the existing reauth
-fallback path; the user can still reach `/offline` by hand from the
-landing page, which gets a small "study offline" footer link when a
-snapshot exists.
+fallback path; the user still reaches their cards from the landing
+page, which renders the dashboard from the local snapshot (and its
+study action from there) instead of the splash whenever this device
+holds one.
 
 ### IndexedDB schema
 
@@ -847,5 +850,5 @@ dialog and the wipe-and-reseed so a legitimate second user gets a
 working device instead of a silently disabled sync);
 `navigator.storage.persist()` + estimate readout; needs-attention
 list for rejects; Safari-tab nudge; snapshot throttling tuning; the
-landing-page "study offline" link. Shippable: the edges are as
+landing page's route into the snapshot. Shippable: the edges are as
 designed rather than accidental.

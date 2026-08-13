@@ -244,7 +244,11 @@
                  schedule. #}
               <ul class="user-links user-links-signout">
                 <li>
+                  {# The hook wipes this device's offline snapshot before the
+                     POST: the decks stay on the server, this browser keeps
+                     no copy of them (app.js). #}
                   <form method="post" action="{{ root }}/forget-device" class="user-forget-form"
+                        data-forget-device
                         onsubmit="return confirm('Forget this device? Your decks stay on our server, but this browser will not be able to reach them. Create an account first to keep them.')">
                     <button type="submit" class="user-link-signout user-forget-btn">Forget this device {{ icon('sign-out', class_='icon icon-inline') }}</button>
                   </form>
