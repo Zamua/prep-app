@@ -177,20 +177,15 @@ def test_metrics_exposes_threadpool_gauges(http: httpx.Client):
 
 
 def test_pin_toggle_floats_deck_to_top(http: httpx.Client, test_deck: dict):
-    """Toggle pin via POST + assert the index renders the deck under
-    the "Pinned" section."""
+    """Toggle pin via POST + assert the dashboard payload floats the
+    deck to the top marked pinned. The rows are rendered client-side
+    from this payload, so it is what an httpx client can assert on."""
     r = http.post(f"/deck/{test_deck['name']}/pin", data={"pinned": "on"}, follow_redirects=False)
     assert r.status_code in (200, 303), r.status_code
-    idx = http.get("/").text
-    # Pinned section appears at all (it's omitted when nothing's pinned).
-    assert ">Pinned<" in idx, "Pinned section header not found"
-    # And our test deck's name appears within or after it. Cheap proxy:
-    # the section header position should be earlier than the deck name.
-    pinned_at = idx.find(">Pinned<")
-    # The index renders the display label; the slug is opaque and
-    # would not appear in body text.
-    deck_at = idx.find(test_deck["display_name"])
-    assert pinned_at < deck_at, "test deck appears before the Pinned section header"
+    decks = http.get("/api/dashboard/overview").json()["decks"]
+    assert decks, "dashboard overview listed no decks"
+    assert decks[0]["slug"] == test_deck["name"], "pinned deck is not first"
+    assert decks[0]["pinned"] is True
     # Cleanup: unpin so the next test (and the next run) doesn't see
     # this state. The deck is deleted in teardown anyway, but we keep
     # tests independent.

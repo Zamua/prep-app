@@ -158,8 +158,11 @@ mini-app**: one page, its own JS modules, the shared stylesheet.
     prefix,
   - loads a single `offline-app.js` bootstrap module.
 - **JS modules**, under `static/js/offline/`:
-  - `offline-app.js`: bootstrap, view switching (queue / card /
-    verdict / author / empty), reconnect banner.
+  - `offline-app.js`: bootstrap, view switching (dashboard / card /
+    verdict / author / empty), the status line, the needs-attention
+    list, the reconnect banner. The dashboard and the study screens
+    themselves are the shared components under `static/js/dashboard/`
+    and `static/js/study/`, which the signed-in app runs too.
   - `store.js`: the IndexedDB layer (schema below), the only module
     that touches IDB.
   - `scheduler.js`: the local ladder (section 5). Pure functions,
@@ -373,7 +376,7 @@ and safer than per-store composite keys.
 | Store | Key | Contents |
 | --- | --- | --- |
 | `meta` | name (string) | `owner` = `{user_id, display_name, snapshot_at, build}`; `device` = `{device_id}` (UUID minted on first open). |
-| `decks` | `id` | Snapshot of the user's SRS decks: `{id, name, display_name}`. |
+| `decks` | `id` | Snapshot of the user's SRS decks: `{id, name, display_name, pinned_at, total}`. `pinned_at` and `total` are what the shared dashboard row states and the device cannot derive: it holds no card for a suspended question, and no card row says whether a deck is pinned. |
 | `cards` | `question_id` | Snapshot of every non-suspended question in an SRS deck: `{question_id, deck_id, type, prompt, choices, answer, answer_regex, rubric, skeleton, step, next_due}` plus local overlay fields `{local_step, local_next_due}` (null until studied offline). |
 | `local_cards` | `client_id` (UUIDv4) | Cards authored offline: `{client_id, deck_id (nullable), prompt, answer, created_at, local_step, local_next_due}`. |
 | `outbox_reviews` | `client_id` (UUIDv4) | Queued reviews: `{client_id, question_id OR card_client_id, verdict, user_answer, graded_by ("auto" or "self"), reviewed_at}`. A row's presence IS its status (queued); acked rows are deleted and rejected ones move to `rejects`. Index on `reviewed_at`. |
@@ -473,7 +476,10 @@ Response:
   "user": {"id": "user_abc", "display_name": "Ada"},
   "generated_at": "2030-01-01T12:00:00+00:00",
   "decks": [
-    {"id": 3, "name": "capitals", "display_name": "Capitals"}
+    {
+      "id": 3, "name": "capitals", "display_name": "Capitals",
+      "pinned_at": null, "total": 12
+    }
   ],
   "cards": [
     {
@@ -489,6 +495,11 @@ Response:
 Scope: SRS decks only, non-suspended questions only, every card (not
 just currently-due ones: multi-day offline needs the cards that
 become due later in the window, and the whole payload is small text).
+A deck's `total` counts every question, suspended ones included, and
+the deck order is the server's (pinned first, most recently pinned
+leading, then by label): both surfaces render one deck row from one
+rule, so the offline list cannot state a different count or order
+under the same labels.
 `step` is the existing 0 to 5 maturity bucket
 (`step_for_stability`), which doubles as the seed for the local
 ladder. All reads filter by the authenticated user id, same IDOR

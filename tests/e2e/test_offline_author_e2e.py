@@ -44,15 +44,19 @@ AUTHOR_FRONT = "Capital of Iceland?"
 AUTHOR_BACK = "Reykjavik"
 AUTHOR_ANSWER_TYPED = "Reykjavik, the northernmost capital."
 
-_DUE_RE = re.compile(r"(\d+) cards? (?:is|are) due right now")
+_DUE_RE = re.compile(r"(\d+) due")
 
 
 def _due_count(page) -> int:
-    lede = page.locator(".lede").inner_text()
-    if "Nothing is due right now" in lede:
+    """What the shared due strip says is due across every deck. An
+    authored card files under no deck, so this aggregate is the only
+    place it shows up."""
+    aside = page.locator(".due-strip .eyebrow-aside")
+    if aside.count() == 0:
         return 0
-    m = _DUE_RE.search(lede)
-    assert m, f"could not parse due count from lede: {lede!r}"
+    text = aside.inner_text()
+    m = _DUE_RE.search(text)
+    assert m, f"could not parse due count from the due strip: {text!r}"
     return int(m.group(1))
 
 
@@ -169,7 +173,7 @@ def test_offline_author_study_and_reconnect_sync(
     page.get_by_role("button", name="Save card").click()
     page.wait_for_selector(".offline-toast")
     assert page.locator(".offline-toast").inner_text() == "Card added"
-    page.wait_for_selector(".offline-due")
+    page.wait_for_selector(".due-strip")
 
     local_cards = _idb_all(page, "local_cards")
     assert len(local_cards) == 1
@@ -185,7 +189,6 @@ def test_offline_author_study_and_reconnect_sync(
     # -- surfacing: unsynced count + due queue membership --------------
     assert "1 new card waiting to sync." in _study_root_text(page)
     assert _due_count(page) == due_before + 1
-    assert AUTHOR_FRONT in page.locator(".offline-due-list").inner_text()
 
     # -- study it: null due sorts first, short reveal + self-verdict ---
     page.get_by_role("button", name="Study").click()
@@ -227,11 +230,9 @@ def test_offline_author_study_and_reconnect_sync(
 
     # -- overview: card left the due queue, both sync notes show -------
     page.locator("button.back").click()
-    page.wait_for_selector(".offline-due")
+    page.wait_for_selector(".due-strip")
     assert _due_count(page) == due_before
-    root_text = _study_root_text(page)
-    assert "1 review waiting to sync." in root_text
-    assert "1 new card waiting to sync." in root_text
+    assert "1 review and 1 new card waiting to sync." in _study_root_text(page)
 
     # -- reconnect: server back, then the online event -----------------
     offline_server.start()
@@ -522,7 +523,7 @@ def test_caught_up_view_offers_authoring(offline_server, offline_ctx, offline_pa
         add.click()
         page.wait_for_selector(".author-form")
         page.locator("button.back").click()
-        page.wait_for_selector(".offline-due")
+        page.wait_for_selector(".due-strip")
         assert _idb_all(page, "local_cards") == []
         assert len(_idb_all(page, "outbox_reviews")) == 3  # never synced
     finally:

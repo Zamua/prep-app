@@ -136,21 +136,13 @@ def e2e_trivia_deck(http: httpx.Client) -> Iterator[dict]:
     delete route — the deck-delete cascades through cards and review
     state."""
     display_name = "e2e-trivia-deck"
-    # Pre-clean: scrape index for any prior leftover with this display
-    # name (slug is opaque-random so we can't guess it). Reuses the SRS
-    # fixture's helper.
-    from tests.e2e.conftest import E2E_DECK_NAME as _SRS_LABEL  # noqa: F401
-    from tests.e2e.conftest import _delete_one_deck
+    # Pre-clean any prior leftover with this display name (the slug is
+    # opaque-random so we can't guess it). The dashboard's deck rows
+    # are client-rendered, so this reads the overview payload via the
+    # shared helper rather than the page markup.
+    from tests.e2e.conftest import _delete_one_deck, _delete_test_decks_by_display
 
-    r = http.get("/")
-    if r.status_code == 200:
-        pattern = re.compile(
-            r'<a\s+href="[^"]*?/deck/([^"/]+)"[^>]*class="deck-link"[\s\S]*?'
-            r'<span\s+class="deck-name">\s*([^<\n]+)',
-        )
-        for m in pattern.finditer(r.text):
-            if m.group(2).strip() == display_name:
-                _delete_one_deck(http, m.group(1))
+    _delete_test_decks_by_display(http, display_name)
 
     r = http.post(
         "/decks/new/trivia",

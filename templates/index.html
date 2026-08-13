@@ -1,24 +1,29 @@
 {% extends "base.html" %}
 {% block title %}decks · prep{% endblock %}
 {% block page_class %}index{% endblock %}
-{% import "macros/deck_card.html" as deck_card_macro with context %}
+{# The deck list is the page, and it is client-rendered: without these
+   the chain is only discovered at the bottom of the body and then
+   fetched a level at a time. Same versioned prefix the importmap
+   resolves "@/" to, so these are the URLs the imports ask for. #}
+{% block head_preload %}
+{%- set _js = request.scope.get('root_path','') ~ '/static/js/v' ~ (static_css_mtime|default(0)) -%}
+<link rel="modulepreload" href="{{ _js }}/dashboard/online-host.js">
+<link rel="modulepreload" href="{{ _js }}/dashboard/components.js">
+<link rel="modulepreload" href="{{ _js }}/dashboard/source.js">
+<link rel="modulepreload" href="{{ _js }}/study/dom.js">
+{% endblock %}
 {% block main %}
 {# Detect a brand-new user (no decks AND no in-flight sessions) so
    the prelude lede + the deck-list area can switch to onboarding
    copy. Once a user has any content, they're past first-impression
    and the dashboard reads normally. #}
-{% set is_new_user = not (decks or pinned_decks or recent_sessions or active_trivia_sessions or snoozed_sessions) %}
-<section class="prelude">
-  <p class="eyebrow">{% if is_new_user %}Welcome{% else %}The decks{% endif %}</p>
-  <h1 class="display">A standing library<br><em>of questions</em>.</h1>
-  <p class="lede">
-    {% if is_new_user -%}
-      Type a topic and prep turns it into a deck of flashcards{% if not agent_available %} — or write the cards yourself{% endif %}. Each card re-surfaces on a forgetting curve: the ones you remember fade, the ones you don't quietly come back around.
-    {%- else -%}
-      Pick a deck to study what's due{% if agent_available %}, or generate a fresh batch{% endif %}. Cards re-surface on a forgetting curve — the more you remember, the longer they sleep.
-    {%- endif %}
-  </p>
-</section>
+{% set is_new_user = not (dashboard_overview.decks or recent_sessions or active_trivia_sessions or snoozed_sessions) %}
+{# The prelude and the deck list are rendered by the shared dashboard
+   components (static/js/dashboard/), the same views the offline shell
+   runs, so the two surfaces cannot drift apart. The shell embeds the
+   overview the route already read: the host paints from it directly
+   instead of opening the page with a fetch. #}
+<div data-dashboard-prelude></div>
 
 {# Reusable overflow menu for a session card. View deck, Snooze
    (both card types), Mute push (trivia only — SRS has no per-deck
@@ -254,8 +259,41 @@
 </script>
 {% endif %}
 
-{# Deck-list sections — pulled into a partial so the pin-toggle route
-   can re-render just this slice via htmx without a full page nav
-   (preserves scroll position; same view-transition animation). #}
-{% include "partials/deck_lists.html" %}
+{# The dashboard's client-rendered region. `dashboard-overview` is the
+   DeckSource payload (prep/web/dashboard.py), embedded so the first
+   paint needs no request; the same JSON is re-readable from
+   /api/dashboard/overview. The menus live in an inert <template>:
+   every row of them is a server route, so the host clones them into
+   the shared deck rows instead of re-composing them in JS. #}
+<script type="application/json" id="dashboard-overview">{{ dashboard_overview|tojson }}</script>
+<template data-deck-menus>{% include "partials/deck_menus.html" %}</template>
+<div data-dashboard-decks
+     data-new-user="{{ 1 if is_new_user else 0 }}"
+     data-has-sessions="{{ 1 if (recent_sessions or active_trivia_sessions) else 0 }}"
+     data-agent-available="{{ 1 if agent_available else 0 }}">
+  {# The region is empty until the host mounts, and a module that
+     never loads reports nothing: no <noscript>, no error event the
+     region can see. So the fallback is real markup, not a <noscript>,
+     and the host clears it by replacing these children. The static
+     copy is the no-JS answer; the script below tracks the mount. #}
+  <section class="empty-state index-empty-state">
+    <p class="empty-sub" data-dashboard-fallback>Your decks need JavaScript
+      enabled. Turn it on and reload to see them.</p>
+  </section>
+</div>
+<script>
+(function () {
+  var note = document.querySelector("[data-dashboard-fallback]");
+  if (!note) return;
+  note.textContent = "Loading your decks…";
+  // isConnected is false once the host has replaced the region, so a
+  // mounted list never sees this. Generous, because the deck list is
+  // one module chain behind a slow connection, not a fast one.
+  setTimeout(function () {
+    if (!note.isConnected) return;
+    note.textContent = "Your decks did not load. Reload the page to try again.";
+  }, 8000);
+})();
+</script>
+<script type="module">import "@/dashboard/online-host.js";</script>
 {% endblock %}

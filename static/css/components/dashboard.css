@@ -1,0 +1,27 @@
+/* Dashboard chrome the shared components render on both surfaces
+ * (static/js/dashboard/components.js). The deck rows themselves are
+ * deck-list.css; only the pieces with no server-rendered ancestor
+ * live here.
+ *
+ * The status line is the one thing a surface says about ITSELF (the
+ * offline shell: whose snapshot this is, how old, what has not
+ * synced). It sits under the lede, quiet, in place of separate
+ * branding. */
+
+.dashboard-status {
+  margin: -1.8rem 0 2.4rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ink-mute);
+  max-width: var(--measure-tight);
+}
+
+.due-strip-actions {
+  margin: 0.2rem 0 0;
+}
+
+.due-strip-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+  color: var(--ink-mute);
+}

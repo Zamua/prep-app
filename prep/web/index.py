@@ -24,8 +24,9 @@ from prep.auth.identity import optional_current_user
 from prep.auth.providers import get_provider
 from prep.decks.repo import DeckRepo
 from prep.study.repo import SessionRepo
-from prep.trivia.repo import TriviaQueueRepo, TriviaSessionsRepo
+from prep.trivia.repo import TriviaSessionsRepo
 from prep.trivia.session_state import format_done
+from prep.web.dashboard import menu_context, overview_payload
 from prep.web.templates import templates
 
 router = APIRouter()
@@ -50,42 +51,6 @@ TOPIC_PLACEHOLDERS = (
     "Cloud types and what weather they signal",
     "Big-O notation with examples from sorting algorithms",
 )
-
-
-def build_deck_lists_context(request: Request, uid: str) -> dict:
-    """Build the subset of index-template context needed by
-    partials/deck_lists.html. Reused by the pin route's htmx
-    response so the in-place swap reflects fresh state without
-    re-doing the full index render. Same data shape as the index
-    handler builds — kept in lockstep here.
-    """
-    deck_repo = DeckRepo()
-    session_repo = SessionRepo()
-    trivia_repo = TriviaQueueRepo()
-    summaries = deck_repo.list_summaries(uid)
-    pinned: list[dict] = []
-    others: list[dict] = []
-    for d in summaries:
-        item = d.model_dump()
-        if d.deck_type == d.deck_type.TRIVIA:
-            item["trivia_stats"] = trivia_repo.deck_stats(d.id)
-        (pinned if d.pinned else others).append(item)
-    recents = session_repo.list_recent(uid, limit=5)
-    trivia_sessions = TriviaSessionsRepo()
-    active_trivia = trivia_sessions.list_active(uid)
-    snoozed_srs = session_repo.list_snoozed(uid)
-    snoozed_trivia = trivia_sessions.list_snoozed(uid)
-    is_new_user = not (
-        pinned or others or recents or active_trivia or snoozed_srs or snoozed_trivia
-    )
-    return {
-        "request": request,
-        "pinned_decks": pinned,
-        "decks": others,
-        "is_new_user": is_new_user,
-        "recent_sessions": [r.model_dump() for r in recents],
-        "active_trivia_sessions": active_trivia,
-    }
 
 
 @router.get("/healthz", include_in_schema=False)
@@ -241,18 +206,11 @@ def index(
     uid = user["tailscale_login"]
     summaries = deck_repo.list_summaries(uid)
     recents = session_repo.list_recent(uid, limit=5)
-    # Trivia decks need extra stats for the mini mastery bar — total /
-    # mastered / wrong / unanswered. SRS decks use the existing due/total
-    # rendering and don't need this. One query per trivia deck is fine
-    # at this scale (a single user has tens of decks at most).
-    trivia_repo = TriviaQueueRepo()
-    pinned: list[dict] = []
-    others: list[dict] = []
-    for d in summaries:
-        item = d.model_dump()
-        if d.deck_type == d.deck_type.TRIVIA:
-            item["trivia_stats"] = trivia_repo.deck_stats(d.id)
-        (pinned if d.pinned else others).append(item)
+    # The deck list and the prelude are rendered by the shared
+    # dashboard components; the shell carries the payload they render
+    # plus the server-composed overflow menus. One read of the deck
+    # summaries feeds both.
+    overview = overview_payload(user, summaries)
     # Active trivia sessions across all decks — powers the "Continue"
     # strip at the top of the home page so the user can resume any
     # in-progress session without going to the deck page first.
@@ -303,8 +261,8 @@ def index(
         {
             "request": request,
             "user": user,
-            "pinned_decks": pinned,
-            "decks": others,
+            "dashboard_overview": overview,
+            **menu_context(request, summaries),
             "recent_sessions": [r.model_dump() for r in recents],
             "active_trivia_sessions": active_trivia_views,
             "snoozed_sessions": snoozed_views,

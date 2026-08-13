@@ -1,67 +1,18 @@
 /* Offline study surface (templates/offline.html + static/js/offline/).
- * The overview mirrors deck-list's quiet rows; the M3 study flow
- * reuses the online study components wholesale (study-card, choices,
- * verdict-block, answer-grid, prose-answer, reproduction, buttons).
- * The rules below cover only what is offline-specific: the reconnect
- * banner, the sync toast, and small layout glue. The toast is also
- * used by sync.js on ONLINE pages (the post-flush "N reviews synced"
+ * The overview is the shared dashboard (deck-list.css, dashboard.css)
+ * and the study flow reuses the online study components wholesale
+ * (study-card, choices, verdict-block, answer-grid, prose-answer,
+ * reproduction, buttons). The rules below cover only what is
+ * offline-specific: the reconnect banner, the sync toast, the
+ * needs-attention list, and small layout glue. The toast is also used
+ * by sync.js on ONLINE pages (the post-flush "N reviews synced"
  * note), so it must not depend on .page-offline scoping. */
-
-.offline-deck-list,
-.offline-due-list {
-  list-style: none;
-  margin: 0.6rem 0 0;
-  padding: 0;
-}
-
-.offline-deck {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.8rem;
-  padding: 0.55rem 0;
-  border-bottom: 1px solid var(--hairline, rgba(0, 0, 0, 0.08));
-}
-.offline-deck:last-child { border-bottom: none; }
-
-.offline-deck-name {
-  font-weight: 600;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.offline-deck-counts {
-  flex-shrink: 0;
-  font-size: 0.9rem;
-}
-
-.offline-due-card {
-  padding: 0.55rem 0;
-  border-bottom: 1px solid var(--hairline, rgba(0, 0, 0, 0.08));
-  overflow-wrap: anywhere;
-}
-.offline-due-card:last-child { border-bottom: none; }
-
-.offline-snapshot-stamp {
-  margin-top: 0.4rem;
-  font-size: 0.85rem;
-}
 
 /* The offline shell renders muted asides with a bare `muted` class;
  * scope the treatment to this page so the utility never leaks into
  * the online surfaces. */
 .page-offline .muted {
   color: var(--ink-mute);
-}
-
-.offline-outbox-note {
-  margin-top: 1.6rem;
-  font-size: 0.85rem;
-  font-style: italic;
-}
-
-.offline-study-cta {
-  margin: 1.2rem 0 0.4rem;
 }
 
 .offline-selfgrade-blurb {
@@ -90,12 +41,6 @@
   color: var(--wrong, #a03030);
 }
 .author-error[hidden] { display: none; }
-
-.offline-newcards-note {
-  margin-top: 0.3rem;
-  font-size: 0.85rem;
-  font-style: italic;
-}
 
 /* Buttons that read as links (the study nav's Pause affordance reuses
  * the .back link chrome on a <button>). */

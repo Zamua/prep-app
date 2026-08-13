@@ -78,9 +78,10 @@ def _precache_urls(token: str, root: str) -> list[str]:
       /offline route echoes the token back),
     - the whole CSS tree at its versioned URLs (index.css @imports
       every component file, so the entire tree must be cached),
-    - every module under static/js/offline/, static/js/study/, and
-      static/js/modules/, wholesale, so a new import inside a shared
-      module can never silently fall outside the manifest,
+    - every module under static/js/offline/, static/js/study/,
+      static/js/dashboard/, and static/js/modules/, wholesale, so a
+      new import inside a shared module can never silently fall
+      outside the manifest,
     - the PWA icons the manifest references.
 
     The server is the only party that knows the file list, so it is
@@ -94,7 +95,7 @@ def _precache_urls(token: str, root: str) -> list[str]:
             rel = f.relative_to(css_root).as_posix()
             urls.append(f"{root}/static/css/v{token}/{rel}")
     js_root = _REPO_ROOT / "static" / "js"
-    for sub in ("offline", "study", "modules"):
+    for sub in ("offline", "study", "dashboard", "modules"):
         subdir = js_root / sub
         if not subdir.is_dir():
             continue

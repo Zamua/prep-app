@@ -4,12 +4,13 @@
 // (docs/OFFLINE.md section 3).
 //
 // The study-loop views (card, reveal, verdict, caught-up, add-a-card)
-// live in static/js/study/components.js and are storage-agnostic;
-// this shell drives them against a LocalSource (static/js/study/
-// source.js) over the offline stores. What stays here: the overview
-// (owner line, per-deck counts, due list), the needs-attention list,
-// the storage readout, and the reconnect flow (banner, outbox flush
-// via sync.js, owner-conflict dialog).
+// live in static/js/study/components.js and the dashboard views
+// (prelude, due strip, deck list) in static/js/dashboard/components.js;
+// both are storage-agnostic, and this shell drives them against the
+// LocalSource of each port over the offline stores. What stays here:
+// the status line, the needs-attention list, the storage readout, and
+// the reconnect flow (banner, outbox flush via sync.js, owner-conflict
+// dialog).
 //
 // Plain DOM building, no framework, no innerHTML for data (card
 // prompts, choices, and answers are user content; textContent only,
@@ -34,7 +35,9 @@ import {
   studyCardView,
   verdictView,
 } from "../study/components.js";
-import {LocalSource, compareStudyOrder, isDueNow, nextDueInMinutes} from "../study/source.js";
+import {LocalSource, nextDueInMinutes} from "../study/source.js";
+import {deckListView, dueStripView, preludeView} from "../dashboard/components.js";
+import {LocalSource as DeckLocalSource} from "../dashboard/local-source.js";
 
 // The deploy's root path, derived from this module's own URL (same
 // trick as sync.js: the module is served under <root>/static/js/...).
@@ -52,12 +55,15 @@ const state = {
   decks: [],
   cards: [],
   localCards: [],
-  outboxCount: 0,
+  outbox: [],
   rejects: [],
   storage: null,
 };
 
 const source = new LocalSource(state);
+// The dashboard port over the rows this shell already holds: one read
+// of IndexedDB per reload, shared by the study loop and the overview.
+const deckSource = new DeckLocalSource({read: () => state});
 
 let root = null;
 let viewName = "loading";
@@ -99,7 +105,7 @@ async function reloadLocal() {
   state.decks = decks;
   state.cards = cards;
   state.localCards = localCards;
-  state.outboxCount = outbox.length;
+  state.outbox = outbox;
   state.rejects = rejects;
   state.storage = storage;
 }
@@ -149,119 +155,57 @@ function renderEmpty() {
   );
 }
 
-function renderOverview() {
-  const now = Date.now();
-  const dueCards = allStudyCards()
-    .filter((card) => isDueNow(card, now))
-    .sort(compareStudyOrder);
-
-  const frag = document.createDocumentFragment();
-
-  // ---- prelude + owner line -----------------------------------------
-  const dueLede = dueCards.length
-    ? dueCards.length + (dueCards.length === 1 ? " card is" : " cards are") +
-      " due right now."
-    : "Nothing is due right now.";
-  const who = state.owner.display_name || "you";
-  frag.appendChild(
-    prelude("Offline study", "Your cards,", "offline", "Studying as " + who + ". " + dueLede)
-  );
-
-  // ---- study CTA + authoring entry ----------------------------------
-  const actions = el("div", "study-actions offline-study-cta");
-  if (dueCards.length) {
-    const studyBtn = el("button", "btn btn-primary", "Study");
-    studyBtn.type = "button";
-    studyBtn.addEventListener("click", () => startStudy());
-    actions.appendChild(studyBtn);
-  }
-  const addBtn = el("button", "btn btn-quiet", "Add a card");
-  addBtn.type = "button";
-  addBtn.addEventListener("click", () => renderAuthor());
-  actions.appendChild(addBtn);
-  frag.appendChild(actions);
-
-  // ---- per-deck counts ----------------------------------------------
-  const deckSection = el("section", "offline-decks");
-  deckSection.appendChild(sectionEyebrow("Decks"));
-  if (state.decks.length === 0) {
-    deckSection.appendChild(el("p", "muted", "No decks in the snapshot."));
-  } else {
-    const byDeck = new Map();
-    for (const card of state.cards) {
-      const entry = byDeck.get(card.deck_id) || {total: 0, due: 0};
-      entry.total += 1;
-      if (isDueNow(card, now)) entry.due += 1;
-      byDeck.set(card.deck_id, entry);
-    }
-    const list = el("ul", "offline-deck-list");
-    for (const deck of state.decks) {
-      const counts = byDeck.get(deck.id) || {total: 0, due: 0};
-      const item = el("li", "offline-deck");
-      item.appendChild(el("span", "offline-deck-name", deck.display_name || deck.name));
-      item.appendChild(
-        el(
-          "span",
-          "offline-deck-counts muted",
-          counts.due + " due · " + counts.total +
-            (counts.total === 1 ? " card" : " cards")
-        )
-      );
-      list.appendChild(item);
-    }
-    deckSection.appendChild(list);
-  }
-  frag.appendChild(deckSection);
-
-  // ---- due-now list (glanceable prompts) ----------------------------
-  const dueSection = el("section", "offline-due");
-  dueSection.appendChild(sectionEyebrow("Due now"));
-  if (dueCards.length === 0) {
-    dueSection.appendChild(
-      el("p", "muted", "Nothing due. Check back later, or come back online to sync.")
-    );
-  } else {
-    const list = el("ul", "offline-due-list");
-    for (const card of dueCards) {
-      list.appendChild(el("li", "offline-due-card", card.prompt || ""));
-    }
-    dueSection.appendChild(list);
-  }
-  frag.appendChild(dueSection);
-
-  // ---- needs attention (server-rejected items) ----------------------
-  if (state.rejects.length) frag.appendChild(renderRejects());
-
-  // ---- footer lines -------------------------------------------------
-  if (state.outboxCount) {
-    frag.appendChild(
-      el(
-        "p",
-        "muted offline-outbox-note",
-        state.outboxCount +
-          (state.outboxCount === 1 ? " review" : " reviews") +
-          " waiting to sync."
-      )
-    );
-  }
-  if (state.localCards.length) {
-    frag.appendChild(
-      el(
-        "p",
-        "muted offline-newcards-note",
-        state.localCards.length +
-          (state.localCards.length === 1 ? " new card" : " new cards") +
-          " waiting to sync."
-      )
-    );
-  }
+// The one line this surface says about ITSELF: that it IS the offline
+// surface, whose snapshot this is, how old, and what has not reached
+// the server. Everything else on the screen is the shared dashboard,
+// rendered from the same views the signed-in page runs, so this line
+// is the only thing telling the user which of the two they are on.
+// The condition leads: the shell is a service-worker navigation
+// fallback, so the user asked for the live page and got this one.
+function statusLine(overview) {
+  const bits = ["Offline."];
+  bits.push("Studying as " + ((overview.user && overview.user.display_name) || "you") + ".");
   if (state.owner.snapshot_at) {
     const stamp = Date.parse(state.owner.snapshot_at);
     const label = Number.isFinite(stamp)
       ? new Date(stamp).toLocaleString()
       : state.owner.snapshot_at;
-    frag.appendChild(el("p", "muted offline-snapshot-stamp", "Snapshot from " + label + "."));
+    bits.push("Snapshot from " + label + ".");
   }
+  const unsynced = overview.unsynced || {reviews: 0, cards: 0};
+  const waiting = [];
+  if (unsynced.reviews) {
+    waiting.push(unsynced.reviews + (unsynced.reviews === 1 ? " review" : " reviews"));
+  }
+  if (unsynced.cards) {
+    waiting.push(unsynced.cards + (unsynced.cards === 1 ? " new card" : " new cards"));
+  }
+  if (waiting.length) bits.push(waiting.join(" and ") + " waiting to sync.");
+  return bits.join(" ");
+}
+
+async function renderOverview() {
+  const overview = await deckSource.overview();
+  const frag = document.createDocumentFragment();
+
+  frag.appendChild(preludeView(overview, {status: statusLine(overview)}));
+  // This surface's study session spans every deck, which is the one
+  // action the strip offers.
+  frag.appendChild(dueStripView(overview, {onStudy: () => startStudy()}));
+  frag.appendChild(
+    deckListView(overview, {
+      // No deck pages and no server routes offline, so no hrefs and no
+      // row menus: the same rows, rendered from what this device can
+      // actually answer.
+      actions: [{glyph: "+", label: "add a card", onClick: () => renderAuthor()}],
+      empty: {ctaLabel: "Add a card", ctaOnClick: () => renderAuthor()},
+    })
+  );
+
+  // ---- needs attention (server-rejected items) ----------------------
+  if (state.rejects.length) frag.appendChild(renderRejects());
+
+  // ---- device footer lines ------------------------------------------
   if (state.storage) {
     // Quiet debugging readout (docs/OFFLINE.md section 3), not a nag:
     // how much the origin is using, and whether the platform granted
@@ -600,7 +544,7 @@ async function boot() {
     renderEmpty();
     return;
   }
-  renderOverview();
+  await renderOverview();
   window.addEventListener("online", () => {
     syncOnReconnect();
   });

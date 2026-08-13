@@ -155,9 +155,9 @@ def test_offline_study_and_reconnect_sync(offline_server, offline_ctx, offline_p
     # change (the shell is a navigation FALLBACK, not a redirect).
     page.wait_for_selector("[data-offline-root] .prelude")
     assert page.url.rstrip("/") == base
-    lede = page.locator(".lede").inner_text()
-    assert "Studying as Offline Tester" in lede
-    assert "3 cards are due right now" in lede
+    # The shared dashboard, plus the one line only this surface says.
+    assert "Studying as Offline Tester" in page.locator(".dashboard-status").inner_text()
+    assert page.locator(".due-strip .eyebrow-aside").inner_text() == "3 due"
 
     # -- card 1: mcq, deterministic auto-grade -------------------------
     page.get_by_role("button", name="Study").click()
@@ -191,10 +191,9 @@ def test_offline_study_and_reconnect_sync(offline_server, offline_ctx, offline_p
 
     # -- overlay re-surfacing: the studied card left the due queue ----
     page.locator("button.back").click()  # Pause, back to overview
-    page.wait_for_selector(".offline-due-list")
-    lede = page.locator(".lede").inner_text()
-    assert "2 cards are due right now" in lede
-    assert "Capital of France?" not in page.locator(".offline-due-list").inner_text()
+    page.wait_for_selector(".due-strip")
+    assert page.locator(".due-strip .eyebrow-aside").inner_text() == "2 due"
+    assert page.locator(".deck-card .stat-due .stat-value").inner_text() == "2"
     assert "1 review waiting to sync." in _study_root_text(page)
 
     # -- card 2: short with usable answer_regex, auto-grade ------------
@@ -239,9 +238,13 @@ def test_offline_study_and_reconnect_sync(offline_server, offline_ctx, offline_p
     page.wait_for_selector(".empty-state")
     assert "All caught up" in _study_root_text(page)
     page.get_by_role("button", name="Back to overview").click()
-    page.wait_for_selector(".offline-due")
+    page.wait_for_selector(".due-strip")
     root_text = _study_root_text(page)
-    assert "Nothing is due right now" in root_text
+    # Nothing due: the strip drops its count and states the wait
+    # instead of offering a session with an empty queue.
+    assert page.locator(".due-strip .eyebrow-aside").count() == 0
+    assert page.locator(".due-strip .btn-primary").count() == 0
+    assert "The next card comes due in" in root_text
     assert "3 reviews waiting to sync." in root_text
 
     # -- reconnect: server back, then the online event -----------------
@@ -305,7 +308,8 @@ def test_offline_study_and_reconnect_sync(offline_server, offline_ctx, offline_p
         lambda: "waiting to sync" not in _study_root_text(page),
         message="outbox note gone from the overview",
     )
-    assert "Nothing is due right now" in _study_root_text(page)
+    assert "The next card comes due in" in _study_root_text(page)
+    assert page.locator(".due-strip .eyebrow-aside").count() == 0
 
 
 # ---- the M2-review trap, pinned at module level -----------------------

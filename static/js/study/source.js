@@ -177,16 +177,16 @@ async function recordVerdict(state, card, verdict, userAnswer, gradedBy) {
   // refresh in flight between our outbox write and overlay write
   // would wipe the overlay this tap creates (its pending-ids
   // snapshot predates us). The lock makes tap and merge take turns.
+  const review = {
+    client_id: uuid(),
+    verdict,
+    user_answer: userAnswer,
+    graded_by: gradedBy,
+    reviewed_at: reviewedAt,
+  };
+  if (isLocal) review.card_client_id = card.client_id;
+  else review.question_id = card.question_id;
   const updated = await withLock(async () => {
-    const review = {
-      client_id: uuid(),
-      verdict,
-      user_answer: userAnswer,
-      graded_by: gradedBy,
-      reviewed_at: reviewedAt,
-    };
-    if (isLocal) review.card_client_id = card.client_id;
-    else review.question_id = card.question_id;
     await put("outbox_reviews", review);
     const row = {
       ...card,
@@ -219,14 +219,14 @@ async function recordVerdict(state, card, verdict, userAnswer, gradedBy) {
     const i = state.cards.findIndex((c) => c.question_id === card.question_id);
     if (i !== -1) state.cards[i] = updated;
   }
-  state.outboxCount += 1;
+  state.outbox.push(review);
   return t;
 }
 
 // ---- the local source --------------------------------------------------
 
 // CardSource over the offline stores. Shares the host's mutable state
-// object ({cards, localCards, outboxCount}): the host owns loading it
+// object ({cards, localCards, outbox}): the host owns loading it
 // from IndexedDB and rendering from it; submits and authors mutate
 // both IndexedDB and the in-memory mirror, exactly like the pre-port
 // inline flow did.

@@ -1,0 +1,26 @@
+{# Per-deck overflow menus for the dashboard deck list.
+
+   Every row of the menu is a server route (pin, notifications, add
+   card, export, split, delete), so the server composes the markup and
+   the dashboard host mounts it into the shared deck row through the
+   components' `deckMenu` seam. Nothing here re-implements a row in JS.
+
+   Rendered twice from one template: inside an inert <template> in the
+   dashboard shell (first paint, no extra request), and bare from
+   /api/dashboard/deck-menus when the host re-reads after a pin toggle.
+
+   Inputs:
+     menu_decks: list[dict], DeckSummary.model_dump() for every deck
+#}
+{% for d in menu_decks %}
+<details class="row-overflow-menu" data-deck-menu="{{ d.id }}">
+  <summary class="row-overflow-trigger" title="More actions" aria-label="More actions for {{ d.display_name or d.name }}"><span aria-hidden="true">⋯</span></summary>
+  <div class="deck-overflow-body" data-details-body>
+    {% set deck_name = d.name %}
+    {% set deck_type = d.deck_type %}
+    {% set deck_meta = d %}
+    {% set has_cards = (d.total or 0) > 0 %}
+    {% include "partials/deck_overflow_menu.html" %}
+  </div>
+</details>
+{% endfor %}

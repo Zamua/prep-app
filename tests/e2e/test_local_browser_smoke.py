@@ -72,3 +72,39 @@ def test_study_shell_boots_its_host(offline_server, offline_page):
     page.goto(f"{offline_server.base_url}/study/offline-e2e", wait_until="domcontentloaded")
     page.wait_for_selector(".study-card", timeout=15_000)
     assert "Loading your cards" not in page.locator("[data-study-root]").inner_text()
+
+
+def test_dashboard_boots_its_host(offline_server, offline_page):
+    """Same pin for the dashboard: the deck list is client-rendered, so
+    the shell's fallback note has to be gone and real rows in its
+    place."""
+    offline_server.start()
+    page = offline_page
+    page.goto(f"{offline_server.base_url}/", wait_until="domcontentloaded")
+    page.wait_for_selector(".deck-list .deck-card", timeout=15_000)
+    assert page.locator("[data-dashboard-fallback]").count() == 0
+
+
+def test_dashboard_says_so_when_its_module_never_loads(offline_server, offline_page):
+    """The failure the client-rendered dashboard cannot otherwise
+    report. A module that 404s or times out fires no error the region
+    can see and <noscript> does not apply (scripting IS on), so a
+    silent shell reads as "you have no decks". The fallback note is
+    the only thing standing between the user and that."""
+    offline_server.start()
+    page = offline_page
+    page.route("**/dashboard/online-host.js", lambda route: route.abort())
+    page.goto(f"{offline_server.base_url}/", wait_until="domcontentloaded")
+
+    note = page.locator("[data-dashboard-fallback]")
+    assert note.count() == 1
+    assert page.locator(".deck-list .deck-card").count() == 0
+    # The wait state first, then the honest answer once it is clear the
+    # mount is not coming.
+    assert note.inner_text().strip() == "Loading your decks…"
+    page.wait_for_function(
+        "() => document.querySelector('[data-dashboard-fallback]')"
+        ".textContent.includes('did not load')",
+        timeout=15_000,
+    )
+    assert "Reload the page" in note.inner_text()

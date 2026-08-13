@@ -183,22 +183,52 @@ Server is the source of truth, HTML is the API, JS is sprinkles. No
 SPA framework, no JS bundler, no Tailwind. Pages POST forms; JS adds
 polish. Most actions degrade to plain forms.
 
-**One deliberate exception: the study loop.** It has to run with no
-server (offline, from the IndexedDB snapshot), so a server-rendered
-version of it could not be the only one. Rather than keep two implementations of the same screens, the
-loop is a set of client components in `static/js/study/` behind a
-`CardSource` port with two adapters: `LocalSource` (IndexedDB +
-the JS grader/scheduler) and `ServerSource` (the JSON API in
-`prep/study/api.py`). Two hosts wire them up: `offline/offline-app.js`
-and `study/online-host.js`. The server renders only the shell
-(`templates/study_shell.html`, `templates/offline.html`).
+**The exception: the two surfaces that also run offline.** Each has
+to render with no server (from the IndexedDB snapshot), so a
+server-rendered version of it could not be the only one. Rather than
+keep two implementations of the same screens, each is a set of client
+components behind a port with two adapters, driven by two hosts:
 
-Consequences worth knowing: the signed-in study loop requires JS (the
-shell carries a noscript pointer back to the deck); copy that only one
-surface can truthfully say is a per-call option on the view, never a
-branch on the host; and anything the server alone can compose (chat
-handoff URLs) reaches a view through `extras`. Everything outside the
-loop stays server-rendered.
+| surface | components | port | hosts | server renders |
+| --- | --- | --- | --- | --- |
+| study loop | `static/js/study/` | `CardSource` (`LocalSource` over IndexedDB + the JS grader/scheduler, `ServerSource` over `prep/study/api.py`) | `study/online-host.js`, `offline/offline-app.js` | `templates/study_shell.html`, `templates/offline.html` |
+| dashboard | `static/js/dashboard/` | `DeckSource` (`LocalSource` in `dashboard/local-source.js` over IndexedDB, `ServerSource` in `dashboard/source.js` over `prep/web/dashboard.py`) | `dashboard/online-host.js`, `offline/offline-app.js` | `templates/index.html` (session strips + the embedded payload + the row menus), `templates/offline.html` |
+
+Consequences worth knowing, all of them accepted:
+
+- **Both surfaces require JS when signed in.** This is the one place
+  the progressive-enhancement rule above is deliberately broken. With
+  JS off, `/` renders the masthead, the session strips, and a line
+  saying the deck list needs JavaScript; there is no server-rendered
+  deck list to fall back to, because a second implementation of it is
+  exactly what these components exist to prevent. Re-adding one is a
+  design change, not a fix.
+- **A failed mount has to be visible.** The client-rendered region
+  ships with a fallback note as real markup (NOT a `<noscript>`: a
+  module that never loads fires nothing and scripting is on), which
+  the host clears by replacing the region's children. Keep it. Without
+  it, a broken import chain reads as "you have no decks".
+- Copy that only one surface can truthfully say is a per-call option
+  on the view, never a branch on the host; and anything the server
+  alone can compose (chat handoff URLs, a deck's overflow menu)
+  reaches a view through a documented seam (`extras`, `deckMenu`)
+  rather than being re-built in JS.
+- **The DATA needs no round trip; the SCREEN still waits for the
+  module chain.** The dashboard shell EMBEDS its first payload as JSON
+  (`#dashboard-overview`), so there is no fetch before the first
+  paint, but the deck list cannot render until the chain loads. Two
+  rules keep that window small: `LocalSource` lives in
+  `dashboard/local-source.js` so the signed-in page never pulls in the
+  offline stack, and `templates/index.html` declares the whole chain
+  in `{% block head_preload %}`. Adding an import to
+  `dashboard/components.js`, `dashboard/source.js`, or
+  `dashboard/online-host.js` means adding a `modulepreload` for it.
+- **The offline shell says so, in the status line.** It is a
+  service-worker navigation fallback, so the user asked for the live
+  page and got a degraded one; the line leads with "Offline." for that
+  reason. Everything else on it is the shared dashboard.
+
+Everything else stays server-rendered.
 
 ### UX rails (don't violate without a reason)
 

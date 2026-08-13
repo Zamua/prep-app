@@ -7,10 +7,26 @@ share the per-test temp-path sqlite + initialized_db fixture.
 
 from __future__ import annotations
 
+import json
+import re
+
 from fastapi.testclient import TestClient
 
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
+
+_OVERVIEW_JSON = re.compile(
+    r'<script type="application/json" id="dashboard-overview">(.*?)</script>', re.S
+)
+
+
+def _overview(body: str) -> dict:
+    """The DeckSource payload the dashboard shell embeds. The deck rows
+    are rendered from it by the shared components, so what the route
+    owes the page is this payload, not the markup."""
+    m = _OVERVIEW_JSON.search(body)
+    assert m, "dashboard shell embedded no overview payload"
+    return json.loads(m.group(1))
 
 
 def _seed_deck(initialized_db: str, name: str = "go-systems", with_questions: int = 0) -> int:
@@ -474,15 +490,14 @@ def test_split_404s_for_unknown_source_deck(client: TestClient, initialized_db: 
 
 
 def test_index_decks_carry_decktype(client: TestClient, initialized_db: str):
-    """The index list shows the deck type as a small caps eyebrow above
-    the deck name — consistent with the deck-page header. Read-only
-    metadata, separated from the row of actionable pills."""
+    """The deck type reaches the page, which is what the row's small
+    caps eyebrow renders from."""
     DeckRepo().create(initialized_db, "an-srs-deck")
     DeckRepo().create_trivia(initialized_db, "a-trivia-deck", topic="x", interval_minutes=30)
     r = client.get("/")
     assert r.status_code == 200
-    assert "deck-type-eyebrow-srs" in r.text
-    assert "deck-type-eyebrow-trivia" in r.text
+    types = {d["slug"]: d["deck_type"] for d in _overview(r.text)["decks"]}
+    assert types == {"an-srs-deck": "srs", "a-trivia-deck": "trivia"}
 
 
 def test_index_trivia_deck_shows_mastery_mini_bar(client: TestClient, initialized_db: str):
@@ -513,20 +528,23 @@ def test_index_trivia_deck_shows_mastery_mini_bar(client: TestClient, initialize
 
     r = client.get("/")
     assert r.status_code == 200
-    # Mini bar renders for the trivia deck.
-    assert "deck-mastery-mini" in r.text
-    # Caption shows mastered / total — 1 right, 4 total.
-    assert ">1<" in r.text and "/4 mastered" in r.text
+    (deck,) = _overview(r.text)["decks"]
+    # The row renders the mini mastery bar from these counts: 1 right,
+    # 1 wrong, 4 total.
+    assert deck["trivia_stats"]["mastered"] == 1
+    assert deck["trivia_stats"]["wrong"] == 1
+    assert deck["trivia_stats"]["total"] == 4
 
 
 def test_index_srs_deck_keeps_due_total_line(client: TestClient, initialized_db: str):
-    """SRS decks keep the original 'n due now · m total' line — no
-    mastery bar, since SRS has no equivalent grouping."""
+    """An SRS deck carries due/total and no mastery stats, which is
+    what makes its row render the 'n due now · m in deck' line."""
     DeckRepo().create(initialized_db, "concurrency")
     r = client.get("/")
     assert r.status_code == 200
-    assert "due now" in r.text
-    assert "in deck" in r.text
+    (deck,) = _overview(r.text)["decks"]
+    assert deck["trivia_stats"] is None
+    assert (deck["due"], deck["total"]) == (0, 0)
 
 
 def test_index_renders_continue_strip_when_active_trivia_sessions(

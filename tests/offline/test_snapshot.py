@@ -68,6 +68,10 @@ def test_snapshot_shape(client: TestClient, snapshot_seed: dict):
     assert [d["id"] for d in decks] == [snapshot_seed["deck_id"]]
     assert decks[0]["name"] == "capitals"
     assert decks[0]["display_name"] == "Capitals"
+    # The shared dashboard row states the pin and the deck's size; the
+    # device holds no card that says either.
+    assert decks[0]["pinned_at"] is None
+    assert decks[0]["total"] == 2
 
     cards = {c["question_id"]: c for c in payload["cards"]}
     assert set(cards) == {snapshot_seed["mcq_id"], snapshot_seed["short_id"]}
@@ -101,6 +105,35 @@ def test_snapshot_excludes_suspended_cards(client: TestClient, snapshot_seed: di
     ids = [c["question_id"] for c in r.json()["cards"]]
     assert snapshot_seed["mcq_id"] not in ids
     assert snapshot_seed["short_id"] in ids
+
+
+def test_snapshot_deck_total_counts_suspended_questions(client: TestClient, snapshot_seed: dict):
+    """A suspended question ships no card and still counts in the
+    deck's size. Both dashboards render that number under one label,
+    so the offline row would otherwise state a smaller one."""
+    QuestionRepo().set_suspended(snapshot_seed["user"], snapshot_seed["mcq_id"], True)
+    payload = client.get("/api/offline/snapshot").json()
+    assert len(payload["cards"]) == 1
+    assert payload["decks"][0]["total"] == 2
+
+
+def test_snapshot_decks_are_ordered_pinned_first(client: TestClient, snapshot_seed: dict):
+    """The signed-in dashboard's order (DeckRepo.list_summaries):
+    pinned first, most recently pinned leading, then by label. The
+    offline list sorts by these fields, so the snapshot has to carry
+    them."""
+    user = snapshot_seed["user"]
+    deck_repo = DeckRepo()
+    alpha = deck_repo.create(user, "alpha", display_name="Alpha")
+    zed = deck_repo.create(user, "zed", display_name="Zed")
+    deck_repo.set_pinned(user, zed, True)
+
+    decks = client.get("/api/offline/snapshot").json()["decks"]
+    assert [d["id"] for d in decks] == [zed, alpha, snapshot_seed["deck_id"]]
+    assert decks[0]["pinned_at"]
+    assert decks[1]["pinned_at"] is None
+    # An empty deck reports zero, not a missing key.
+    assert decks[1]["total"] == 0
 
 
 def test_snapshot_excludes_trivia_decks(client: TestClient, snapshot_seed: dict):

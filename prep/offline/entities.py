@@ -31,12 +31,21 @@ MAX_SYNC_REVIEWS = 500
 
 class SnapshotDeck(BaseModel):
     """A deck as the offline app needs it: enough to render the deck
-    picker and group cards. SRS decks only; the offline surface does
-    not cover trivia (docs/OFFLINE.md non-goals)."""
+    picker, group cards, and render the shared dashboard row. SRS decks
+    only; the offline surface does not cover trivia (docs/OFFLINE.md
+    non-goals).
+
+    `pinned_at` and `total` are what the shared row states as fact and
+    the device cannot derive: it holds no card for a suspended
+    question, and nothing in the card rows says a deck is pinned or
+    when. Without them the offline list renders a pinned deck as
+    unpinned, in a different order, under a smaller count."""
 
     id: int
     name: str
     display_name: str | None = None
+    pinned_at: str | None = None
+    total: int = 0
 
 
 class SnapshotCard(BaseModel):

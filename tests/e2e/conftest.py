@@ -197,25 +197,29 @@ def _delete_one_deck(http: httpx.Client, slug: str) -> None:
         print(f"[e2e teardown] delete {slug!r} returned {r.status_code}: {r.text[:200]}")
 
 
-def _delete_test_decks_by_display(http: httpx.Client) -> None:
-    """Scrape the index page for any deck-card whose label matches
-    the e2e display name or whose slug equals it (legacy decks from
-    before the slug-vs-display split), and delete each. Necessary
+def _delete_test_decks_by_display(http: httpx.Client, label: str = E2E_DECK_NAME) -> None:
+    """Delete any deck whose label matches `label` or whose slug equals
+    it (legacy decks from before the slug-vs-display split). Necessary
     because the slug is random and we can't guess it from a prior
-    leftover run."""
-    import re
+    leftover run.
 
-    r = http.get("/")
+    Read from the dashboard's overview payload, not its markup: the
+    deck rows are rendered client-side by the shared components, so
+    the JSON endpoint is what an httpx client can see. Every e2e
+    pre-clean goes through here for that reason; a second copy scraping
+    `GET /` would match nothing and report nothing."""
+    import json as _js
+
+    r = http.get("/api/dashboard/overview")
     if r.status_code != 200:
         return
-    pattern = re.compile(
-        r'<a\s+href="[^"]*?/deck/([^"/]+)"[^>]*class="deck-link"[\s\S]*?'
-        r'<span\s+class="deck-name">\s*([^<\n]+)',
-    )
-    for m in pattern.finditer(r.text):
-        slug = m.group(1)
-        display = m.group(2).strip()
-        if display == E2E_DECK_NAME or slug == E2E_DECK_NAME:
+    try:
+        decks = _js.loads(r.text).get("decks") or []
+    except ValueError:
+        return
+    for deck in decks:
+        slug = deck.get("slug") or ""
+        if deck.get("display_name") == label or slug == label:
             _delete_one_deck(http, slug)
 
 
@@ -469,7 +473,11 @@ def _seed_offline_db(db_path: _Path) -> dict:
     monkeyed DB path), then insert one SRS deck with three cards all
     due in the past, oldest-first ordering pinned by distinct next_due
     values: an mcq, a short with a usable answer_regex, and a plain
-    short (the reveal + self-verdict path). Returns the seeded ids."""
+    short (the reveal + self-verdict path). Returns the seeded ids.
+
+    Plus one SUSPENDED question, due in the past: it is in the deck's
+    "in deck" count and in no snapshot, which is the one place the two
+    dashboards can state different numbers under the same label."""
     _subprocess.run(
         [_sys.executable, "-c", "from prep.infrastructure import db; db.init()"],
         cwd=_REPO_ROOT,
@@ -491,10 +499,18 @@ def _seed_offline_db(db_path: _Path) -> dict:
             (OFFLINE_E2E_LOGIN, "offline-e2e", "Offline E2E", "srs", ts),
         ).lastrowid
 
-        def add_question(qtype, prompt, answer, choices=None, answer_regex=None, due_hours_ago=1):
+        def add_question(
+            qtype,
+            prompt,
+            answer,
+            choices=None,
+            answer_regex=None,
+            due_hours_ago=1,
+            suspended=0,
+        ):
             qid = conn.execute(
                 "INSERT INTO questions (user_id, deck_id, type, prompt, choices, answer, "
-                " answer_regex, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                " answer_regex, suspended, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     OFFLINE_E2E_LOGIN,
                     deck_id,
@@ -503,6 +519,7 @@ def _seed_offline_db(db_path: _Path) -> dict:
                     _json.dumps(choices) if choices else None,
                     answer,
                     answer_regex,
+                    suspended,
                     ts,
                 ),
             ).lastrowid
@@ -532,10 +549,23 @@ def _seed_offline_db(db_path: _Path) -> dict:
             "Spaced repetition system.",
             due_hours_ago=1,
         )
+        suspended_id = add_question(
+            "short",
+            "Suspended: never studied, still in the deck.",
+            "yes",
+            due_hours_ago=4,
+            suspended=1,
+        )
         conn.commit()
     finally:
         conn.close()
-    return {"deck_id": deck_id, "mcq_id": mcq_id, "regex_id": regex_id, "short_id": short_id}
+    return {
+        "deck_id": deck_id,
+        "mcq_id": mcq_id,
+        "regex_id": regex_id,
+        "short_id": short_id,
+        "suspended_id": suspended_id,
+    }
 
 
 class LocalOfflineServer:

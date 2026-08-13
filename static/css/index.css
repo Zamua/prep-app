@@ -41,6 +41,7 @@
 @import "./components/sheet.css" layer(components);
 @import "./components/snoozed-group.css" layer(components);
 @import "./components/stale-session.css" layer(components);
+@import "./components/dashboard.css" layer(components);
 @import "./components/deck-list.css" layer(components);
 @import "./components/deck-page.css" layer(components);
 @import "./components/deck-hero.css" layer(components);

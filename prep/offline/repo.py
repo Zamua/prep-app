@@ -47,20 +47,37 @@ class SnapshotRepo:
 
     def decks(self, user_id: str) -> list[SnapshotDeck]:
         """The user's SRS decks. Trivia decks are excluded: offline
-        covers SRS study only."""
+        covers SRS study only.
+
+        `total` and the ordering match DeckRepo.list_summaries, because
+        the offline dashboard renders the same row from these fields as
+        the signed-in one does from that repo. `total` therefore counts
+        every question, suspended ones included, which is what "in
+        deck" means on both surfaces."""
         with cursor() as c:
             rows = c.execute(
                 """
-                SELECT id, name, display_name
-                  FROM decks
-                 WHERE user_id = ?
-                   AND COALESCE(deck_type, 'srs') = 'srs'
-                 ORDER BY COALESCE(display_name, name)
+                SELECT d.id, d.name, d.display_name, d.pinned_at,
+                       COUNT(q.id) AS total
+                  FROM decks d
+                  LEFT JOIN questions q ON q.deck_id = d.id AND q.user_id = d.user_id
+                 WHERE d.user_id = ?
+                   AND COALESCE(d.deck_type, 'srs') = 'srs'
+                 GROUP BY d.id
+                 ORDER BY (d.pinned_at IS NULL), d.pinned_at DESC,
+                          COALESCE(d.display_name, d.name)
                 """,
                 (user_id,),
             ).fetchall()
         return [
-            SnapshotDeck(id=r["id"], name=r["name"], display_name=r["display_name"]) for r in rows
+            SnapshotDeck(
+                id=r["id"],
+                name=r["name"],
+                display_name=r["display_name"],
+                pinned_at=r["pinned_at"],
+                total=r["total"] or 0,
+            )
+            for r in rows
         ]
 
     def cards(self, user_id: str) -> list[SnapshotCard]:

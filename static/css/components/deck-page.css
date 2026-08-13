@@ -693,9 +693,9 @@
   font-weight: 500;
   font-variation-settings: "opsz" 144, "SOFT" 50;
 }
-/* Bar markup + styling moved to components/mastery-bar.css. The
- * mastery.html macro renders both the lg variant (here, default) and
- * the mini variant (deck_card.html, with mini=True). */
+/* Bar markup + styling live in components/mastery-bar.css. The lg
+ * variant is the deck page's (macros/mastery.html); the mini variant
+ * is the dashboard row's, built in static/js/dashboard/components.js. */
 .deck-mastery-chips {
   display: flex;
   gap: 0.5rem;

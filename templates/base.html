@@ -64,6 +64,13 @@
   </script>
   <script type="module" src="{{ root }}/static/js/app.js?v={{ static_css_mtime|default(0) }}" defer></script>
 
+  {# Preload slot for a page whose main content is client-rendered. An
+     inline module script in {% block main %} is not discovered until
+     the parser reaches the end of the body, and its imports resolve
+     one level at a time; a page that cannot paint its content without
+     that chain declares it here so the fetches start with the head. #}
+  {% block head_preload %}{% endblock %}
+
   {# htmx — declarative AJAX via attributes (hx-post, hx-target, hx-swap).
      Routes that detect `HX-Request: true` return just the fragment to
      swap; otherwise they keep their existing POST→303 behavior so the

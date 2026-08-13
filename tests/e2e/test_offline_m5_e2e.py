@@ -166,7 +166,7 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     ctx.set_offline(True)
     page.goto(base + "/")
     page.wait_for_selector("[data-offline-root] .prelude")
-    assert "Studying as Offline Tester" in page.locator(".lede").inner_text()
+    assert "Studying as Offline Tester" in page.locator(".dashboard-status").inner_text()
 
     page.get_by_role("button", name="Study").click()
     page.wait_for_selector(".study-card")
@@ -174,7 +174,7 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     page.get_by_role("button", name="Submit").click()
     page.wait_for_selector("h1.verdict-headline")
     page.locator("button.back").click()
-    page.wait_for_selector(".offline-due")
+    page.wait_for_selector(".due-strip")
 
     page.get_by_role("button", name="Add a card").click()
     page.wait_for_selector(".author-form")
@@ -268,9 +268,10 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     # -- the device now boots as B's ----------------------------------
     page.goto(base + "/offline")
     page.wait_for_selector("[data-offline-root] .prelude")
-    lede = page.locator(".lede").inner_text()
-    assert "Studying as Second User" in lede
-    assert "Nothing is due right now" in lede
+    assert "Studying as Second User" in page.locator(".dashboard-status").inner_text()
+    # B's snapshot holds nothing due, so the strip offers no session.
+    assert page.locator(".due-strip .eyebrow-aside").count() == 0
+    assert page.locator(".due-strip .btn-primary").count() == 0
 
 
 # ---- the needs-attention list -----------------------------------------
