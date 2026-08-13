@@ -152,8 +152,9 @@ E2E_LOCAL_FILES = \
 	tests/e2e/test_study_components_e2e.py \
 	tests/e2e/test_offline_study_e2e.py \
 	tests/e2e/test_offline_author_e2e.py \
-	tests/e2e/test_offline_adoption_e2e.py \
 	tests/e2e/test_offline_m5_e2e.py \
+	tests/e2e/test_offline_wipe_e2e.py \
+	tests/e2e/test_merge_offline_e2e.py \
 	tests/e2e/test_offline_parity.py \
 	tests/e2e/test_markdown_parity.py \
 	tests/e2e/test_instant_start_e2e.py

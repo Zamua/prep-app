@@ -21,7 +21,6 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from prep.auth.providers import get_provider
 from prep.web.templates import get_build_token, is_accepted_version_token, templates
 
 router = APIRouter()
@@ -170,15 +169,10 @@ def offline_shell(request: Request, build: str | None = None):
     token = get_build_token()
     if build and is_accepted_version_token(build):
         token = build
-    # The guest-mode account nudges need somewhere to send the visitor;
-    # the shell is client-rendered, so the URL rides in as a data
-    # attribute. Deploy-stable, so the SW-cached copy carries it too.
-    # Empty when the provider has no hosted sign-in flow (tailscale).
     return templates.TemplateResponse(
         "offline.html",
         {
             "request": request,
             "build": token,
-            "sign_in_url": get_provider().urls().sign_in or "",
         },
     )

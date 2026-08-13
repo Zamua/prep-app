@@ -963,7 +963,7 @@ def test_unusable_answer_regex_stores_null_never_rejects(client: TestClient, syn
 
 
 def test_named_deck_regex_and_replay_in_one_batch(client: TestClient, sync_seed: dict):
-    """The adoption wire shape end to end: a named deck, a validated
+    """The full wire shape end to end: a named deck, a validated
     regex, and a review replayed through the real scheduler at the
     client timestamp -- all in one batch."""
     user = sync_seed["user"]

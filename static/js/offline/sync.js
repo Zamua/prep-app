@@ -19,13 +19,11 @@
 // new account, or keep the other account's data with sync off. Never
 // silent, never automatic.
 //
-// Owner-ABSENT guest data (an anonymous instant-start deck) is the
-// other identity edge: it must not flush into whichever account signs
-// in, and the snapshot must not stamp meta.owner over it. Both writes
-// stay behind guestAdoptionPending until the adoption dialog decides.
-// Absent is adoptable, mismatch refuses; they are different answers.
+// An owner-ABSENT device is a different answer from a mismatched one:
+// absent is transient and self-closing (the refresh stamps it),
+// mismatch is a hard refusal.
 
-import {clear, get, getAll, bulkReplace, metaGet, metaPut, put, remove, wipeAll, withLock} from "./store.js";
+import {get, getAll, bulkReplace, metaGet, metaPut, put, remove, wipeAll, withLock} from "./store.js";
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -44,13 +42,6 @@ let syncDisabled = false;
 // raw material for maybeConfirmOwnerConflict; null while no mismatch
 // has been observed this session.
 let ownerConflict = null;
-
-// Opened by the adoption dialog's Accept so its own flush and forced
-// refresh can pass guestAdoptionPending. Memory-only on purpose: an
-// adoption interrupted mid-flush loses the latch and re-prompts on
-// the next authenticated load, where the idempotent sync machinery
-// makes the retried flush a pure replay.
-let adoptionApproved = false;
 
 // The deploy's root path, derived from this module's own URL (it is
 // served under <root>/static/js/..., versioned prefix included).
@@ -95,17 +86,11 @@ async function ownerAllows(serverUser) {
   return true;
 }
 
-// The owner-absent counterpart of ownerAllows: guest data on a device
-// with no snapshot owner blocks BOTH the flush (it would silently
-// absorb the guest deck into whichever account signed in) and the
-// snapshot write (stamping meta.owner would destroy the owner-absent
-// signal and turn the NEXT flush into a silent adoption). Guest data
-// present = meta.guest exists, or local_cards is non-empty while the
-// owner is absent.
-export async function guestAdoptionPending() {
-  if (adoptionApproved) return false;
+// A flush needs a stamped owner. An unstamped device cannot say
+// whose outbox this is, so it refreshes first (which stamps) and
+// flushes on the next pass.
+async function ownerUnstamped() {
   if (await metaGet("owner")) return false;
-  if (await metaGet("guest")) return true;
   return (await getAll("local_cards")).length > 0;
 }
 
@@ -130,7 +115,6 @@ async function fetchSnapshotPayload() {
 // an hour, unless force is set (a post-flush refresh will force).
 export async function refreshSnapshot({force = false} = {}) {
   if (syncDisabled) return {ok: false, disabled: true};
-  if (await guestAdoptionPending()) return {ok: false, adoption_pending: true};
   if (!force) {
     const sync = await metaGet("sync");
     const ownerMeta = await metaGet("owner").catch(() => null);
@@ -202,12 +186,6 @@ export async function refreshSnapshot({force = false} = {}) {
     build: buildToken(),
   });
   await metaPut("sync", {last_refresh_at: new Date().toISOString()});
-  // An Accept interrupted between the owner stamp and its meta.guest
-  // deletion leaves debris no other path would ever clear: every
-  // guest surface is owner-absent-gated, so with the owner stamped
-  // the record is dead weight. Sweep it (delete is a no-op when
-  // absent).
-  await remove("meta", "guest");
   // Ask the platform to shield this origin's storage from eviction
   // (docs/OFFLINE.md section 3, "Storage persistence and eviction
   // margin"): fire-and-forget after a successful snapshot write, so
@@ -250,9 +228,9 @@ function toWireCard(item) {
     answer: item.answer,
     created_at: item.created_at,
   };
-  // Guest-generated rows carry a deck label and a regex; the server
-  // re-validates both. Rows without them (plain authored cards) keep
-  // today's wire shape exactly.
+  // A row carrying a deck label or a regex passes both through and
+  // the server re-validates them. Rows without them keep today's wire
+  // shape exactly.
   if (item.deck_name != null) wire.deck_name = item.deck_name;
   if (item.answer_regex != null) wire.answer_regex = item.answer_regex;
   return wire;
@@ -340,7 +318,14 @@ async function postSyncChunk(deviceId, newCards, reviews) {
 // ordering and bounce card_client_id reviews as unknown.
 export async function flushOutbox() {
   if (syncDisabled) return {flushed: 0, created: 0, disabled: true};
-  if (await guestAdoptionPending()) return {flushed: 0, created: 0, adoption_pending: true};
+  if (await ownerUnstamped()) {
+    // Force the stamping refresh instead of simply refusing: refusing
+    // alone strands the cards until something else happens to stamp.
+    // The refresh replaces decks + cards only, so the queued rows
+    // survive it and flush on the next pass.
+    const refresh = await refreshSnapshot({force: true});
+    return {flushed: 0, created: 0, owner_unstamped: true, refreshed: Boolean(refresh.ok)};
+  }
   let queued = await getAll("outbox_reviews");
   let localCards = await getAll("local_cards");
   queued = await parkCorruptRows("outbox_reviews", queued, "review");
@@ -660,176 +645,35 @@ export async function maybeConfirmOwnerConflict({onWiped} = {}) {
   }
 }
 
-// ---- guest adoption confirm ------------------------------------------
+// ---- one-time legacy wipe --------------------------------------------
 
-// Accept: open the gate for this flush and forced refresh, run the
-// untouched sync machinery (cards first, then reviews, then the
-// refresh that stamps meta.owner), and only then delete meta.guest.
-// The deletion waits for the refresh to land: a mid-adoption failure
-// keeps the guest record so the next load re-prompts with the same
-// deck, and the retried flush is an idempotent replay.
-async function adoptGuestData() {
-  adoptionApproved = true;
-  const flush = await flushOutbox();
-  // A partial or transiently-failed flush stops BEFORE the refresh:
-  // stamping meta.owner now would end state 2 with rows still queued,
-  // so the honest outcome is a kept guest record and a re-prompt
-  // whose retried flush is an idempotent replay.
-  if (flush && (flush.partial || flush.status || flush.disabled)) {
-    return {ok: false, flush, refresh: null};
-  }
-  const refresh = await refreshSnapshot({force: true});
-  if (!(refresh && refresh.ok)) return {ok: false, flush, refresh};
-  await withLock(() => remove("meta", "guest"));
-  return {ok: true, flush, refresh};
-}
-
-// Discard: wipe the guest rows under the lock, then proceed as a
-// fresh device (the seed refresh stamps the signed-in user as owner).
-async function discardGuestData() {
+// Clear the device-local deck a retired client-side flow left behind.
+// The meta.guest condition is the only safe gate: owner-absent
+// local_cards WITHOUT it belong to a signed-in user who authored
+// offline before their first snapshot refresh, and those rows must
+// survive to flush. Exported so both boot paths run this one
+// implementation.
+//
+// The rejects store goes too. A marked device is one whose hand-off
+// was interrupted, which is exactly the path that parks rows there;
+// left behind they render forever in the needs-attention list,
+// attributed to whoever signs in next, and nothing can retry them.
+export async function wipeLegacyGuestData() {
+  if (!(await metaGet("guest"))) return false;
   await withLock(async () => {
-    await clear("local_cards");
-    await clear("outbox_reviews");
-    await clear("rejects");
+    for (const c of await getAll("local_cards")) await remove("local_cards", c.client_id);
+    for (const r of await getAll("outbox_reviews")) await remove("outbox_reviews", r.client_id);
+    for (const r of await getAll("rejects")) await remove("rejects", r.client_id);
     await remove("meta", "guest");
+    await remove("meta", "guest_nudge");
   });
-  // The wipe above IS the discard. The reseed is best-effort (a
-  // fresh device seeds on its next load anyway), so a reseed failure
-  // must not surface as a failed discard.
-  try {
-    return await refreshSnapshot({force: true});
-  } catch (e) {
-    console.warn("post-discard reseed failed:", e);
-    return {ok: false};
-  }
+  return true;
 }
 
-function adoptionBodyText(guest, cardCount, reviewCount) {
-  const name = (guest && guest.display_name) || "Your deck";
-  return (
-    name + ": " +
-    cardCount + (cardCount === 1 ? " card" : " cards") + ", " +
-    reviewCount + (reviewCount === 1 ? " review" : " reviews") +
-    " from before you signed in."
-  );
-}
-
-function showAdoptionDialog({guest, cardCount, reviewCount}) {
-  const previous = document.querySelector("dialog.offline-adoption-dialog");
-  if (previous) previous.remove();
-
-  const dialog = document.createElement("dialog");
-  // Shares the owner-dialog chrome classes (components/offline.css);
-  // the second class is the adoption-specific handle.
-  dialog.className = "offline-owner-dialog offline-adoption-dialog";
-  dialog.setAttribute("data-dialog", "");
-  dialog.setAttribute("aria-labelledby", "offline-adoption-title");
-
-  const title = makeEl("h3", null, "Add your deck to this account?");
-  title.id = "offline-adoption-title";
-  dialog.appendChild(title);
-  dialog.appendChild(makeEl("p", null, adoptionBodyText(guest, cardCount, reviewCount)));
-  dialog.appendChild(
-    makeEl(
-      "p",
-      null,
-      "Add it to keep studying with this account. Discard removes it from this device."
-    )
-  );
-
-  const actions = makeEl("div", "offline-owner-actions");
-  const discardBtn = makeEl("button", "danger", "Discard it");
-  discardBtn.type = "button";
-  const acceptBtn = makeEl("button", null, "Add to my account");
-  acceptBtn.type = "button";
-  actions.appendChild(discardBtn);
-  actions.appendChild(acceptBtn);
-  dialog.appendChild(actions);
-
-  let busy = false;
-
-  // Backdrop click / Esc decides NOTHING: no flush, no owner stamp,
-  // no wipe. The gate keeps holding and the dialog re-prompts on the
-  // next authenticated load. Undecided is not consent (the same rule
-  // the owner-conflict dialog pins for "keep").
-  dialog.addEventListener("click", (e) => {
-    if (e.target === dialog && !busy) dialog.close();
-  });
-  dialog.addEventListener("cancel", (e) => {
-    if (busy) e.preventDefault();
-  });
-  dialog.addEventListener("close", () => dialog.remove());
-
-  acceptBtn.addEventListener("click", async () => {
-    if (busy) return;
-    busy = true;
-    acceptBtn.classList.add("is-loading");
-    try {
-      const result = await adoptGuestData();
-      dialog.close();
-      showToast(
-        result.ok
-          ? "Deck added to your account."
-          : "Couldn't finish adding the deck. It will retry next time prep loads."
-      );
-    } catch (e) {
-      console.warn("guest deck adoption failed:", e);
-      dialog.close();
-      showToast("Couldn't add the deck. Try again.");
-    } finally {
-      busy = false;
-      acceptBtn.classList.remove("is-loading");
-    }
-  });
-
-  discardBtn.addEventListener("click", async () => {
-    if (busy) return;
-    busy = true;
-    discardBtn.classList.add("is-loading");
-    try {
-      await discardGuestData();
-      dialog.close();
-      showToast("Deck discarded.");
-    } catch (e) {
-      console.warn("guest deck discard failed:", e);
-      dialog.close();
-      showToast("Could not discard the deck. Try again.");
-    } finally {
-      busy = false;
-      discardBtn.classList.remove("is-loading");
-    }
-  });
-
-  document.body.appendChild(dialog);
-  if (typeof dialog.showModal === "function") dialog.showModal();
-  else dialog.setAttribute("open", "");
-}
-
-// The adoption state table, evaluated once per page load. Owner-absent
-// guest data (state 2, ADOPTABLE) holds the whole flush/refresh chain
-// and shows the confirm when a signed-in user exists to adopt into;
-// every other state proceeds through the normal chain unchanged. The
-// snapshot fetch here is identity-only: nothing is written on this
-// path.
-async function initAdoption() {
-  if (!(await guestAdoptionPending())) return {pending: false};
-  const fetched = await fetchSnapshotPayload();
-  if (!fetched.ok) return {pending: true, shown: false};
-  if (!document.querySelector("dialog.offline-adoption-dialog")) {
-    const [guest, localCards, outbox] = await Promise.all([
-      metaGet("guest"),
-      getAll("local_cards"),
-      getAll("outbox_reviews"),
-    ]);
-    showAdoptionDialog({guest, cardCount: localCards.length, reviewCount: outbox.length});
-  }
-  return {pending: true, shown: true};
-}
-
-// Entry point for app.js on online pages. The adoption state table
-// runs first: an adoptable device (owner absent, guest data present)
-// holds the whole chain until the dialog decides. Otherwise flush
-// first (a no-op while the outbox is empty), then refresh the
+// Entry point for app.js on online pages. The legacy wipe goes FIRST,
+// ahead of the flush: a device still holding that data would
+// otherwise flush it into whichever account just signed in. Then
+// flush (a no-op while the outbox is empty), then refresh the
 // snapshot -- forced after any flush that MOVED items, acked or
 // rejected: acked reviews need the server's FSRS truth pulled down,
 // and a rejected review means the server never rescheduled that card,
@@ -843,36 +687,30 @@ async function initAdoption() {
 // block page behaviors.
 export function init() {
   try {
-    initAdoption()
-      .then((adoption) => {
-        if (adoption.pending) return null;
-        return flushOutbox()
-          .then((result) => {
-            const bits = [];
-            if (result && result.created) {
-              bits.push(
-                result.created === 1
-                  ? "1 offline card added"
-                  : result.created + " offline cards added"
-              );
-            }
-            if (result && result.flushed) {
-              bits.push(
-                result.flushed === 1
-                  ? "1 offline review synced"
-                  : result.flushed + " offline reviews synced"
-              );
-            }
-            if (bits.length) showToast(bits.join(", "));
-            return refreshSnapshot({
-              force: Boolean(
-                result &&
-                  (result.flushed || result.created || result.rejected || result.rejectedCards)
-              ),
-            });
-          })
-          .then(() => maybeConfirmOwnerConflict());
+    wipeLegacyGuestData()
+      .then(() => flushOutbox())
+      .then((result) => {
+        const bits = [];
+        if (result && result.created) {
+          bits.push(
+            result.created === 1 ? "1 offline card added" : result.created + " offline cards added"
+          );
+        }
+        if (result && result.flushed) {
+          bits.push(
+            result.flushed === 1
+              ? "1 offline review synced"
+              : result.flushed + " offline reviews synced"
+          );
+        }
+        if (bits.length) showToast(bits.join(", "));
+        return refreshSnapshot({
+          force: Boolean(
+            result && (result.flushed || result.created || result.rejected || result.rejectedCards)
+          ),
+        });
       })
+      .then(() => maybeConfirmOwnerConflict())
       .catch((e) => {
         console.warn("offline sync failed:", e);
       });

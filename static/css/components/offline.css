@@ -270,32 +270,3 @@
   margin-top: 0.3rem;
   font-size: 0.85rem;
 }
-
-/* Guest mode: the persistent footer nudge and the post-session
- * banner card (renders above the caught-up screen, never a modal). */
-.offline-guest-note {
-  margin-top: 0.4rem;
-  font-size: 0.85rem;
-}
-.offline-guest-note a {
-  color: var(--ink);
-  text-underline-offset: 3px;
-}
-.offline-guest-nudge {
-  margin-block-end: 1.4rem;
-  padding: 1rem 1.1rem 1.15rem;
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--tint) 30%, var(--paper));
-}
-.offline-guest-nudge-copy {
-  margin: 0 0 0.8rem;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-.offline-guest-nudge-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}

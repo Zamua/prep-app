@@ -97,50 +97,6 @@
   line-height: 1.5;
 }
 
-/* returning-visitor strip: one tappable card above the input */
-.instant-continue { margin-block-start: 1.1rem; }
-.instant-continue[hidden] { display: none; }
-.instant-continue-card {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.7rem;
-  padding: 0.75rem 1rem 0.85rem;
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--tint) 30%, var(--paper));
-  text-decoration: none;
-  color: var(--ink);
-}
-.instant-continue-eyebrow {
-  flex-basis: 100%;
-  font-family: var(--mono, monospace);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent, var(--ink));
-}
-.instant-continue-name {
-  font-family: var(--serif);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.instant-continue-counts {
-  font-family: var(--mono, monospace);
-  font-size: 0.82rem;
-  color: var(--ink-mute);
-}
-
-.instant-save-error {
-  margin: 0;
-  font-size: 0.92rem;
-  color: var(--ink-soft);
-}
-.instant-save-error a {
-  color: var(--ink);
-  text-underline-offset: 3px;
-}
-
 .masthead-cta {
   /* Compact pill that sits in the masthead slot where the user-chip
    * lives for authed users — keeps the header's right edge balanced. */

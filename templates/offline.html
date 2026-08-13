@@ -37,8 +37,8 @@
   <header class="masthead-wrap">
     <div class="masthead">
       {# Same anchor shape as base.html's masthead: the brand is the
-         way back to the landing. Load-bearing for guests, whose only
-         other navigation is the study loop itself. #}
+         way back to the landing, and the only navigation out of this
+         shell besides the study loop itself. #}
       <a class="masthead-brand" href="{{ root }}/">
         <span class="brand-mark">P</span>
         <span class="brand-word">Prep&nbsp;·&nbsp;<em>offline</em></span>
@@ -51,7 +51,7 @@
        card / verdict / empty) rendered from IndexedDB. If the module
        never runs, the user sees an honest static message instead of
        a blank page. #}
-    <main class="folio" id="offline-root" data-offline-root data-sign-in-url="{{ sign_in_url }}">
+    <main class="folio" id="offline-root" data-offline-root>
       <section class="empty-state">
         <p>Loading your offline study queue&hellip;</p>
         <noscript><p>Offline study needs JavaScript enabled.</p></noscript>

@@ -5,8 +5,8 @@
 // navigation and nothing here writes card data.
 //
 // Lazy-imported by app.js on the [data-instant-start] hook, so only
-// the instant landing pays for it. Card and deck text is model
-// output: textContent only, never innerHTML.
+// the instant landing pays for it. Server copy reaches the page as
+// textContent only, never innerHTML.
 
 // The deploy's root path, derived from this module's own URL (same
 // trick as offline/sync.js).
@@ -18,39 +18,12 @@ const GENERATE_TIMEOUT_MS = 75000;
 
 let inFlight = false;
 
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-// Existence probe before touching store.js: a bare open() would
-// CREATE an empty prep-offline database for every first-time visitor
-// (same rationale as offline-link.js). Returns null when there is
-// nothing to read.
-async function readGuestState() {
-  if (!("indexedDB" in window)) return null;
-  if (indexedDB.databases) {
-    const existing = await indexedDB.databases();
-    if (!existing.some((db) => db.name === "prep-offline")) return null;
-  }
-  const store = await import("@/offline/store.js");
-  const [owner, guest, cards] = await Promise.all([
-    store.metaGet("owner"),
-    store.metaGet("guest"),
-    store.getAll("local_cards"),
-  ]);
-  return {owner, guest, cards};
-}
-
 export async function init(node) {
   const form = node.querySelector("[data-instant-form]");
   const textarea = form ? form.querySelector("textarea") : null;
   const button = form ? form.querySelector(".instant-generate") : null;
   const statusLine = node.querySelector("[data-instant-status]");
   const errorLine = node.querySelector("[data-instant-error]");
-  const continueStrip = node.querySelector("[data-instant-continue]");
   if (!form || !textarea || !button || !statusLine || !errorLine) return;
   const signInUrl = node.dataset.signInUrl || "";
 
@@ -58,46 +31,10 @@ export async function init(node) {
   // is-loading spinner slot is CSS-reserved, so the box never resizes.
   button.disabled = false;
 
-  renderContinueStrip();
-
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     submit();
   });
-
-  // Returning-visitor strip. The owner-absent condition is
-  // load-bearing: owner-present devices never write meta.guest, and
-  // stale guest metadata must never surface on a device whose cards
-  // sync through the normal owner flush.
-  async function renderContinueStrip() {
-    if (!continueStrip) return;
-    try {
-      const state = await readGuestState();
-      if (!state || state.owner || !state.guest) return;
-      const scheduler = await import("@/offline/scheduler.js");
-      const now = Date.now();
-      const total = state.cards.length;
-      const due = state.cards.filter((c) => scheduler.due(now, c.local_next_due || null)).length;
-      const link = document.createElement("a");
-      link.className = "instant-continue-card";
-      link.href = ROOT_PATH + "/offline";
-      link.appendChild(el("span", "instant-continue-eyebrow", "Continue studying"));
-      link.appendChild(
-        el("span", "instant-continue-name", state.guest.display_name || "Your deck")
-      );
-      link.appendChild(
-        el(
-          "span",
-          "instant-continue-counts",
-          total + (total === 1 ? " card" : " cards") + " · " + due + " due"
-        )
-      );
-      continueStrip.replaceChildren(link);
-      continueStrip.hidden = false;
-    } catch (e) {
-      // Reveal-only affordance; staying hidden is the safe failure mode.
-    }
-  }
 
   async function submit() {
     // The guard must close before the first await: two submit events

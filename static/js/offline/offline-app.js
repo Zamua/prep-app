@@ -8,16 +8,22 @@
 // this shell drives them against a LocalSource (static/js/study/
 // source.js) over the offline stores. What stays here: the overview
 // (owner line, per-deck counts, due list), the needs-attention list,
-// the guest-mode nudges, the storage readout, and the reconnect flow
-// (banner, outbox flush via sync.js, owner-conflict dialog).
+// the storage readout, and the reconnect flow (banner, outbox flush
+// via sync.js, owner-conflict dialog).
 //
 // Plain DOM building, no framework, no innerHTML for data (card
 // prompts, choices, and answers are user content; textContent only,
 // with prompts going through the study components' escape-first
 // markdown renderer).
 
-import {getAll, metaGet, put, remove, withLock} from "./store.js";
-import {flushOutbox, maybeConfirmOwnerConflict, refreshSnapshot, showToast} from "./sync.js";
+import {getAll, metaGet, remove, withLock} from "./store.js";
+import {
+  flushOutbox,
+  maybeConfirmOwnerConflict,
+  refreshSnapshot,
+  showToast,
+  wipeLegacyGuestData,
+} from "./sync.js";
 import {el, prelude, sectionEyebrow} from "../study/dom.js";
 import {
   authorView,
@@ -43,8 +49,6 @@ setActionErrorHandler((e) => {
 
 const state = {
   owner: null,
-  guest: null,
-  guestNudge: null,
   decks: [],
   cards: [],
   localCards: [],
@@ -57,24 +61,6 @@ const source = new LocalSource(state);
 
 let root = null;
 let viewName = "loading";
-
-// Where the guest-mode account nudges send the visitor; supplied by
-// the /offline route as a data attribute on the root element (empty
-// on providers without a hosted sign-in flow). Read at boot.
-let signInUrl = "";
-
-// Guest mode is a client-side derivation: no snapshot owner, but
-// guest data present (meta.guest, or owner-absent local cards). Same
-// definition as sync.js guestAdoptionPending.
-function isGuest() {
-  return !state.owner && Boolean(state.guest || state.localCards.length);
-}
-
-function guestDeckName() {
-  if (state.guest && state.guest.display_name) return state.guest.display_name;
-  const withName = state.localCards.find((c) => c.deck_name);
-  return withName ? withName.deck_name : "Your cards";
-}
 
 // navigator.storage.estimate() + persisted(), folded into one small
 // readout for the overview's footer line. Null when the platform
@@ -100,21 +86,16 @@ function humanBytes(n) {
 }
 
 async function reloadLocal() {
-  const [owner, guest, guestNudge, decks, cards, localCards, outbox, rejects, storage] =
-    await Promise.all([
-      metaGet("owner"),
-      metaGet("guest"),
-      metaGet("guest_nudge"),
-      getAll("decks"),
-      getAll("cards"),
-      getAll("local_cards"),
-      getAll("outbox_reviews"),
-      getAll("rejects"),
-      readStorage(),
-    ]);
+  const [owner, decks, cards, localCards, outbox, rejects, storage] = await Promise.all([
+    metaGet("owner"),
+    getAll("decks"),
+    getAll("cards"),
+    getAll("local_cards"),
+    getAll("outbox_reviews"),
+    getAll("rejects"),
+    readStorage(),
+  ]);
   state.owner = owner;
-  state.guest = guest;
-  state.guestNudge = guestNudge;
   state.decks = decks;
   state.cards = cards;
   state.localCards = localCards;
@@ -139,16 +120,31 @@ function show(node, name) {
 
 // ---- views -----------------------------------------------------------
 
+// The no-owner render. Without a stamped owner the shell cannot say
+// whose cards these are, so it opens no study loop -- but locally
+// authored rows still flush on the next online load, and telling
+// their owner the device holds nothing would be a lie.
 function renderEmpty() {
+  const pending = state.localCards.length;
   show(
-    prelude(
-      "Offline study",
-      "Nothing cached",
-      "yet",
-      "Open prep while online first. Your decks and due cards are " +
-        "saved to this device automatically, and this screen works " +
-        "without a connection after that."
-    ),
+    pending
+      ? prelude(
+          "Offline study",
+          "Waiting to",
+          "sync",
+          pending + (pending === 1 ? " card is" : " cards are") +
+            " saved on this device and not synced yet. Open prep while " +
+            "online to finish saving them; your decks and due cards are " +
+            "cached for offline study after that."
+        )
+      : prelude(
+          "Offline study",
+          "Nothing cached",
+          "yet",
+          "Open prep while online first. Your decks and due cards are " +
+            "saved to this device automatically, and this screen works " +
+            "without a connection after that."
+        ),
     "empty"
   );
 }
@@ -166,19 +162,10 @@ function renderOverview() {
     ? dueCards.length + (dueCards.length === 1 ? " card is" : " cards are") +
       " due right now."
     : "Nothing is due right now.";
-  if (state.owner) {
-    const who = state.owner.display_name || "you";
-    frag.appendChild(prelude("Offline study", "Your cards,", "offline", "Studying as " + who + ". " + dueLede));
-  } else {
-    // Guest mode: no owner to study as; the deck's own name is the
-    // headline. Owner-null guard, not just copy: the boot gate admits
-    // owner-absent guest data.
-    const section = el("section", "prelude");
-    section.appendChild(el("p", "eyebrow", "Your deck"));
-    section.appendChild(el("h1", "display", guestDeckName()));
-    section.appendChild(el("p", "lede", dueLede));
-    frag.appendChild(section);
-  }
+  const who = state.owner.display_name || "you";
+  frag.appendChild(
+    prelude("Offline study", "Your cards,", "offline", "Studying as " + who + ". " + dueLede)
+  );
 
   // ---- study CTA + authoring entry ----------------------------------
   const actions = el("div", "study-actions offline-study-cta");
@@ -197,24 +184,7 @@ function renderOverview() {
   // ---- per-deck counts ----------------------------------------------
   const deckSection = el("section", "offline-decks");
   deckSection.appendChild(sectionEyebrow("Decks"));
-  if (isGuest()) {
-    // The snapshot decks store is empty for guests: the one guest
-    // deck renders from meta.guest with live counts.
-    const total = state.localCards.length;
-    const due = state.localCards.filter((card) => isDueNow(card, now)).length;
-    const list = el("ul", "offline-deck-list");
-    const item = el("li", "offline-deck");
-    item.appendChild(el("span", "offline-deck-name", guestDeckName()));
-    item.appendChild(
-      el(
-        "span",
-        "offline-deck-counts muted",
-        due + " due · " + total + (total === 1 ? " card" : " cards")
-      )
-    );
-    list.appendChild(item);
-    deckSection.appendChild(list);
-  } else if (state.decks.length === 0) {
+  if (state.decks.length === 0) {
     deckSection.appendChild(el("p", "muted", "No decks in the snapshot."));
   } else {
     const byDeck = new Map();
@@ -247,16 +217,8 @@ function renderOverview() {
   const dueSection = el("section", "offline-due");
   dueSection.appendChild(sectionEyebrow("Due now"));
   if (dueCards.length === 0) {
-    // Guests have no account to sync against; the "come back online"
-    // clause only makes sense once an owner exists.
     dueSection.appendChild(
-      el(
-        "p",
-        "muted",
-        state.owner
-          ? "Nothing due. Check back later, or come back online to sync."
-          : "Nothing due right now. Check back later."
-      )
+      el("p", "muted", "Nothing due. Check back later, or come back online to sync.")
     );
   } else {
     const list = el("ul", "offline-due-list");
@@ -271,10 +233,7 @@ function renderOverview() {
   if (state.rejects.length) frag.appendChild(renderRejects());
 
   // ---- footer lines -------------------------------------------------
-  // The waiting-to-sync notes describe the flush into an ACCOUNT.
-  // Guests have nothing to sync against; the disclosure line below
-  // carries their storage story instead.
-  if (state.owner && state.outboxCount) {
+  if (state.outboxCount) {
     frag.appendChild(
       el(
         "p",
@@ -285,7 +244,7 @@ function renderOverview() {
       )
     );
   }
-  if (state.owner && state.localCards.length) {
+  if (state.localCards.length) {
     frag.appendChild(
       el(
         "p",
@@ -296,16 +255,12 @@ function renderOverview() {
       )
     );
   }
-  if (state.owner && state.owner.snapshot_at) {
+  if (state.owner.snapshot_at) {
     const stamp = Date.parse(state.owner.snapshot_at);
     const label = Number.isFinite(stamp)
       ? new Date(stamp).toLocaleString()
       : state.owner.snapshot_at;
     frag.appendChild(el("p", "muted offline-snapshot-stamp", "Snapshot from " + label + "."));
-  } else if (isGuest()) {
-    // The persistent account nudge replaces the snapshot-stamp line:
-    // there is no snapshot, only this device.
-    frag.appendChild(guestDisclosureLine());
   }
   if (state.storage) {
     // Quiet debugging readout (docs/OFFLINE.md section 3), not a nag:
@@ -334,22 +289,6 @@ function renderOverview() {
   }
 
   show(frag, "overview");
-}
-
-// The persistent guest account nudge (footer line). Quiet, always
-// present in guest mode, never animated, never blocking.
-function guestDisclosureLine() {
-  const line = el("p", "muted offline-guest-note");
-  line.appendChild(document.createTextNode("This deck is stored only on this device. "));
-  if (signInUrl) {
-    const a = el("a", null, "Create an account");
-    a.href = signInUrl;
-    line.appendChild(a);
-  } else {
-    line.appendChild(document.createTextNode("Create an account"));
-  }
-  line.appendChild(document.createTextNode(" to keep it across your devices."));
-  return line;
 }
 
 // ---- needs attention (rejects store) ---------------------------------
@@ -483,9 +422,8 @@ function renderVerdict(card, verdict, userAnswer, opts) {
       {
         minutes: opts.minutes,
         idk: opts.idk,
-        // The "offline schedule" qualifier marks divergence from the
-        // server's FSRS truth; for a guest the ladder IS the schedule.
-        scheduleNote: isGuest() ? null : " · offline schedule",
+        // Marks divergence from the server's FSRS truth.
+        scheduleNote: " · offline schedule",
       },
       {
         onNext: () => startStudy(),
@@ -496,63 +434,8 @@ function renderVerdict(card, verdict, userAnswer, opts) {
   );
 }
 
-// Post-session account nudge: shown at most once per page load, only
-// in guest mode, only until dismissed, never as a modal, never over a
-// card. "Not now" stamps meta.guest.nudge_dismissed_at, or the
-// meta.guest_nudge record when no guest record exists (the footer
-// disclosure line stays).
-let nudgeShownThisLoad = false;
-
-function guestNudgeBanner() {
-  const banner = el("section", "offline-guest-nudge");
-  banner.appendChild(
-    el(
-      "p",
-      "offline-guest-nudge-copy",
-      "Nice work. This deck lives only on this device so far. " +
-        "Create a free account to keep it and study anywhere."
-    )
-  );
-  const actions = el("div", "offline-guest-nudge-actions");
-  const cta = el("a", "btn btn-primary", "Create a free account");
-  cta.href = signInUrl;
-  actions.appendChild(cta);
-  const dismiss = el("button", "btn btn-quiet", "Not now");
-  dismiss.type = "button";
-  dismiss.addEventListener("click", () => {
-    runPending(dismiss, async () => {
-      if (state.guest) {
-        const stamped = {...state.guest, nudge_dismissed_at: new Date().toISOString()};
-        await withLock(() => put("meta", stamped, "guest"));
-        state.guest = stamped;
-      } else {
-        // Authored-only guest (owner-absent local cards, no
-        // meta.guest record): the dismissal needs its own meta key
-        // to survive a reload.
-        const stamped = {dismissed_at: new Date().toISOString()};
-        await withLock(() => put("meta", stamped, "guest_nudge"));
-        state.guestNudge = stamped;
-      }
-      banner.remove();
-    });
-  });
-  actions.appendChild(dismiss);
-  banner.appendChild(actions);
-  return banner;
-}
-
 function renderCaughtUp(summary) {
   const frag = document.createDocumentFragment();
-  if (
-    isGuest() &&
-    signInUrl &&
-    !nudgeShownThisLoad &&
-    !(state.guest && state.guest.nudge_dismissed_at) &&
-    !(state.guestNudge && state.guestNudge.dismissed_at)
-  ) {
-    nudgeShownThisLoad = true;
-    frag.appendChild(guestNudgeBanner());
-  }
   frag.appendChild(
     caughtUpView(summary || {nextDueMinutes: nextDueInMinutes(allStudyCards())}, {
       onAdd: () => renderAuthor(),
@@ -631,10 +514,6 @@ async function syncOnReconnect() {
   if (syncing) return;
   syncing = true;
   try {
-    // Guest mode (no snapshot owner): there is no account to sync
-    // with until the online app's adoption confirm decides, so
-    // reconnect is a no-op. No flush, no banner nag.
-    if (!(await metaGet("owner"))) return;
     const [queued, localCards] = await Promise.all([
       getAll("outbox_reviews"),
       getAll("local_cards"),
@@ -704,8 +583,11 @@ async function syncOnReconnect() {
 
 async function boot() {
   root = document.getElementById("offline-root") || document.body;
-  signInUrl = (root.dataset && root.dataset.signInUrl) || "";
   try {
+    // Ahead of every read below: this device may still hold rows a
+    // retired client-side flow wrote, and they must not reach the
+    // study queue or the outbox.
+    await wipeLegacyGuestData();
     await reloadLocal();
   } catch (e) {
     // IndexedDB unavailable (private-mode quirks, storage wiped mid
@@ -714,17 +596,9 @@ async function boot() {
     renderEmpty();
     return;
   }
-  // Empty only when there is neither an owner nor guest data;
-  // owner-absent with guest data boots into the guest-mode overview.
-  if (!state.owner && !isGuest()) {
+  if (!state.owner) {
     renderEmpty();
     return;
-  }
-  if (isGuest()) {
-    // Guest mode reads as the app, not the fallback: plain "Prep",
-    // no "offline" suffix.
-    const brand = document.querySelector(".masthead .brand-word");
-    if (brand) brand.textContent = "Prep";
   }
   renderOverview();
   window.addEventListener("online", () => {

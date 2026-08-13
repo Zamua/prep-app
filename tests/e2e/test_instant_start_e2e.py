@@ -4,8 +4,8 @@
 A successful generation is stored SERVER side under a freshly minted
 anonymous account, and the endpoint answers with the URL to land on.
 So the loop this file pins ends in a normal signed-in-shaped deck
-page, not a device-local guest surface, and the browser's only new
-state is the `prep_anon` cookie.
+page, not a device-local one, and the browser's only new state is the
+`prep_anon` cookie.
 
 Two ways to reach the endpoint, both with ZERO upstream spend:
 
@@ -36,10 +36,6 @@ The suite pins:
 - Busy and day-limit error copy, input preserved, no account minted.
 - The submit guard: two submit events in one task produce exactly one
   POST to the generation endpoint.
-- The reconnect suppression: a guest shell boot with queued reviews
-  never probes, never flushes, never shows the sync banner.
-- Nudge dismissal: "Not now" persists across reloads for a guest with
-  no meta.guest record (owner-absent local_cards only).
 """
 
 from __future__ import annotations
@@ -51,12 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from tests.e2e.conftest import LocalOfflineServer
-from tests.e2e.test_offline_adoption_e2e import _SEED_GUEST_JS
-from tests.e2e.test_offline_study_e2e import (
-    _IDB_META_GET_JS,
-    _idb_all,
-    _module_prefix,
-)
+from tests.e2e.test_offline_study_e2e import _idb_all
 
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
 
@@ -343,7 +334,6 @@ def test_anonymous_generate_lands_on_the_deck_and_studies(instant_server, live_c
 
     # Nothing device-local was written: the deck lives on the server.
     assert _idb_all(page, "local_cards") == []
-    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
 
     # -- study one card through the normal loop -------------------------
     page.get_by_role("button", name="Begin study session").click()
@@ -449,7 +439,6 @@ def test_busy_shows_inline_copy_and_preserves_input(instant_server, instant_ctx)
     assert page.locator("[data-instant-status]").is_hidden()
     # No IDB writes on the error path.
     assert _idb_all(page, "local_cards") == []
-    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
 
 
 def test_day_limit_copy_links_sign_in(instant_server, instant_ctx):
@@ -472,7 +461,6 @@ def test_day_limit_copy_links_sign_in(instant_server, instant_ctx):
     assert link.get_attribute("href") == sign_in_url
     assert page.locator(".instant-form textarea").input_value() == "roman emperors"
     assert _idb_all(page, "local_cards") == []
-    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
 
 
 # ---- submit guard --------------------------------------------------------
@@ -514,131 +502,3 @@ def test_double_submit_sends_one_generate_post(instant_server, live_ctx):
     page.goto(base + "/")
     page.wait_for_selector(".prelude h1")
     assert page.locator("body").inner_text().count("world capitals") == 1
-
-
-# ---- reconnect suppression ---------------------------------------------------
-
-
-def test_guest_shell_boot_never_shows_sync_banner(instant_server, instant_ctx):
-    """A guest with queued reviews boots the shell: syncOnReconnect
-    must return before probing or flushing (no account to sync with
-    until adoption), so no "Back online" banner, no /healthz probe,
-    no sync POST - on boot AND on a later online event."""
-    ctx, gen, sync_posts = instant_ctx
-    base = instant_server.base_url
-    healthz_probes: list[str] = []
-
-    def _count_healthz(route):
-        healthz_probes.append(route.request.url)
-        route.fallback()
-
-    ctx.route("**/healthz", _count_healthz)
-    page = ctx.new_page()
-    instant_server.start()  # idempotent; heals a prior test's failure state
-
-    # Seed guest data + one queued review directly (the exact shape
-    # instant-start generation and a study session write).
-    page.goto(base + "/offline")
-    prefix = _module_prefix(page)
-    page.evaluate(
-        _SEED_GUEST_JS,
-        {
-            "prefix": prefix,
-            "deckName": "Guest Capitals",
-            "kenyaPrompt": "Capital of Kenya?",
-            "ghanaPrompt": "Capital of Ghana?",
-        },
-    )
-
-    # Boot with the guest data present: guest overview renders WITHOUT
-    # the account-flavored waiting-to-sync notes, and the reconnect
-    # path stays silent.
-    page.goto(base + "/offline")
-    page.wait_for_selector(".offline-deck-list")
-    assert "2 cards are due right now." in page.locator(".lede").inner_text()
-    assert "waiting to sync" not in page.locator("#offline-root").inner_text()
-    page.wait_for_timeout(1_500)
-    assert page.locator(".offline-banner").count() == 0
-    assert healthz_probes == []
-    assert sync_posts == []
-
-    # A connectivity event after boot takes the same guest no-op path.
-    page.evaluate("() => window.dispatchEvent(new Event('online'))")
-    page.wait_for_timeout(800)
-    assert page.locator(".offline-banner").count() == 0
-    assert healthz_probes == []
-    assert sync_posts == []
-
-
-# ---- nudge dismissal --------------------------------------------------------
-
-# One owner-absent local_cards row in the M4 authoring shape (no type,
-# no answer_regex, no deck_name): guest data with NO meta.guest record.
-_SEED_AUTHORED_CARD_JS = """
-async ({prefix, prompt}) => {
-  const store = await import(prefix + "offline/store.js");
-  await store.withLock(() =>
-    store.put("local_cards", {
-      client_id: store.uuid(),
-      deck_id: null,
-      prompt,
-      answer: "Forty-two",
-      created_at: new Date().toISOString(),
-      local_step: 0,
-      local_next_due: null,
-    })
-  );
-}
-"""
-
-
-def _study_single_card_to_caught_up(page):
-    """Drive the one due card (reveal + self-verdict shape) through to
-    the caught-up screen."""
-    page.get_by_role("button", name="Study").click()
-    page.wait_for_selector(".study-card textarea")
-    page.locator(".study-card textarea").fill("Forty-two")
-    page.get_by_role("button", name="Submit").click()
-    page.wait_for_selector(".offline-selfgrade-blurb")
-    page.get_by_role("button", name="I got it right").click()
-    page.wait_for_selector("h1.verdict-headline")
-    page.get_by_role("button", name="Next card").click()
-    page.wait_for_selector(".empty-state")
-
-
-def test_nudge_dismiss_persists_without_guest_record(instant_server, instant_ctx):
-    """ "Not now" must survive a reload even when the guest has no
-    meta.guest record (owner-absent local_cards only): the dismissal
-    persists under meta.guest_nudge, so a later caught-up screen never
-    re-shows the banner."""
-    ctx, gen, sync_posts = instant_ctx
-    base = instant_server.base_url
-    page = ctx.new_page()
-    instant_server.start()  # idempotent; heals a prior test's failure state
-
-    page.goto(base + "/offline")
-    prefix = _module_prefix(page)
-    page.evaluate(_SEED_AUTHORED_CARD_JS, {"prefix": prefix, "prompt": "Meaning of life?"})
-
-    # Boot as an authored-only guest and study to caught-up: the nudge
-    # banner renders, and "Not now" removes it.
-    page.goto(base + "/offline")
-    page.wait_for_selector(".offline-deck-list")
-    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
-    _study_single_card_to_caught_up(page)
-    page.wait_for_selector(".offline-guest-nudge")
-    page.get_by_role("button", name="Not now").click()
-    page.wait_for_selector(".offline-guest-nudge", state="detached")
-    dismissed = page.evaluate(_IDB_META_GET_JS, "guest_nudge")
-    assert dismissed and dismissed["dismissed_at"]
-    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
-
-    # A fresh due card, a reload, another caught-up: the banner stays
-    # suppressed by the persisted dismissal.
-    page.evaluate(_SEED_AUTHORED_CARD_JS, {"prefix": prefix, "prompt": "Second question?"})
-    page.goto(base + "/offline")
-    page.wait_for_selector(".offline-deck-list")
-    _study_single_card_to_caught_up(page)
-    assert "All caught up" in page.locator(".empty-state").inner_text()
-    assert page.locator(".offline-guest-nudge").count() == 0
-    assert sync_posts == []

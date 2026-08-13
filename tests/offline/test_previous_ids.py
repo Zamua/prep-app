@@ -31,6 +31,24 @@ def test_a_merged_anon_id_reaches_the_client(client: TestClient, initialized_db:
     assert payload["user"]["previous_ids"] == [ANON, OTHER_ANON]
 
 
+def test_a_client_supplied_previous_ids_is_ignored(client: TestClient, initialized_db: str):
+    """The list is derived from the merge audit and from nothing else.
+    A client naming an id it would like to own gets the server's
+    answer on the read, and the write has no field to carry one."""
+    seed_anon_user(ANON)
+
+    forged = client.get("/api/offline/snapshot", params={"previous_ids": ANON})
+    assert forged.json()["user"]["previous_ids"] == []
+
+    posted = client.post(
+        "/api/offline/sync",
+        json={"device_id": "d1", "new_cards": [], "reviews": [], "previous_ids": [ANON]},
+    )
+    assert posted.status_code == 200
+
+    assert client.get("/api/offline/snapshot").json()["user"]["previous_ids"] == []
+
+
 def test_a_third_users_merge_never_appears_in_someone_elses_snapshot(
     client: TestClient, initialized_db: str
 ):

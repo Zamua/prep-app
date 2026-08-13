@@ -1,8 +1,7 @@
 """Landing hero swap gates (docs/INSTANT-START.md section 2): the
 instant hero renders only when the deploy's free tier is configured
 AND the provider exposes a sign-in URL. A deploy failing either gate
-renders the marketing hero unchanged. Also pins the /offline shell's
-sign_in_url data attribute (the guest-mode nudges read it)."""
+renders the marketing hero unchanged."""
 
 from __future__ import annotations
 
@@ -105,18 +104,6 @@ def test_no_sign_in_url_renders_marketing_hero(
     assert "Remember" in body
 
 
-def test_offline_shell_carries_sign_in_url(client, visitor_provider):
-    r = client.get("/offline")
-    assert r.status_code == 200
-    assert 'data-sign-in-url="/sign-in"' in r.text
-
-
-def test_offline_shell_sign_in_url_empty_without_provider_url(client, visitor_provider_no_sign_in):
-    r = client.get("/offline")
-    assert r.status_code == 200
-    assert 'data-sign-in-url=""' in r.text
-
-
 def test_topic_placeholder_rotates_from_the_pool(
     client, initialized_db, visitor_provider, free_tier, monkeypatch
 ):
@@ -145,10 +132,10 @@ def test_topic_placeholder_rotates_from_the_pool(
 def test_install_nudge_hidden_for_anonymous_visitors(
     client, initialized_db, visitor_provider, free_tier
 ):
-    """iOS gives an installed PWA storage separate from Safari, so a
-    guest who installs opens an empty app while their local-only deck
-    stays behind. The install surfaces render for signed-in users
-    only."""
+    """iOS gives an installed PWA storage separate from Safari, so an
+    anonymous visitor who installs opens the app as a different
+    visitor with none of their decks. The install surfaces render for
+    signed-in users only."""
     body = client.get("/").text
     assert "pwa-install-root" not in body
     assert "colophon-install" not in body

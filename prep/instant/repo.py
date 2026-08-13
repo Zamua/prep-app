@@ -11,6 +11,11 @@ spend until resolved) and count toward every quota window.
 `failed_free` rows are no-spend refusals and count toward the per-IP
 burst window only.
 
+The per-IP windows are the anti-Sybil lever: clearing cookies buys no
+fresh budget. The per-user windows are the anti-NAT lever: a stranger
+behind the same carrier CGNAT cannot spend a signed-in user's budget.
+Neither alone is sufficient, so both must pass.
+
 `create_instant_deck` is the other write: the account, the deck and
 its cards in ONE transaction, because a `users` row without its first
 deck, or a deck missing half its cards, are the states a generated
@@ -42,12 +47,16 @@ RETENTION_DAYS = 7
 DEFAULT_BURST_LIMIT = 1
 DEFAULT_BURST_WINDOW_S = 60
 DEFAULT_PER_IP_PER_DAY = 3
+DEFAULT_PER_ANON_USER_PER_DAY = 3
+DEFAULT_PER_USER_PER_DAY = 20
 DEFAULT_GLOBAL_PER_DAY = 200
 DEFAULT_GLOBAL_PER_MINUTE = 4
 
 _ENV_BURST_LIMIT = "PREP_INSTANT_BURST_LIMIT"
 _ENV_BURST_WINDOW_S = "PREP_INSTANT_BURST_WINDOW_S"
 _ENV_PER_IP_PER_DAY = "PREP_INSTANT_PER_IP_PER_DAY"
+_ENV_PER_ANON_USER_PER_DAY = "PREP_INSTANT_PER_ANON_USER_PER_DAY"
+_ENV_PER_USER_PER_DAY = "PREP_INSTANT_PER_USER_PER_DAY"
 _ENV_GLOBAL_PER_DAY = "PREP_INSTANT_GLOBAL_PER_DAY"
 _ENV_GLOBAL_PER_MINUTE = "PREP_INSTANT_GLOBAL_PER_MINUTE"
 
@@ -113,6 +122,39 @@ def _retry_after(at: datetime, created_at_iso: str | None, window_s: int) -> int
     return max(1, math.ceil(remaining))
 
 
+def _day_window(
+    c, column: str, value: str, *, day_cutoff: str, limit: int, at: datetime
+) -> Refusal | None:
+    """One rolling-24h count of spend outcomes, keyed by `ip` or
+    `user_id`. The window admits again once enough of the oldest
+    counted rows age out to bring the count under the limit."""
+    n = c.execute(
+        f'SELECT COUNT(*) AS n FROM instant_generations WHERE "{column}" = ?'
+        f" AND created_at >= ? AND outcome IN ({_SPEND_MARKS})",
+        (value, day_cutoff, *_SPEND_OUTCOMES),
+    ).fetchone()["n"]
+    if n < limit:
+        return None
+    oldest = c.execute(
+        f'SELECT created_at FROM instant_generations WHERE "{column}" = ?'
+        f" AND created_at >= ? AND outcome IN ({_SPEND_MARKS})"
+        " ORDER BY created_at ASC LIMIT 1 OFFSET ?",
+        (value, day_cutoff, *_SPEND_OUTCOMES, n - limit),
+    ).fetchone()
+    return Refusal("day", _retry_after(at, oldest["created_at"] if oldest else None, DAY_WINDOW_S))
+
+
+def _user_day_limit(c, user_id: str) -> int:
+    """An anonymous account costs one generation to obtain, so it gets
+    the tighter budget. A user id naming no row takes it too."""
+    row = c.execute(
+        "SELECT is_anonymous FROM users WHERE tailscale_login = ?", (user_id,)
+    ).fetchone()
+    if row is None or row["is_anonymous"]:
+        return _env_int(_ENV_PER_ANON_USER_PER_DAY, DEFAULT_PER_ANON_USER_PER_DAY)
+    return _env_int(_ENV_PER_USER_PER_DAY, DEFAULT_PER_USER_PER_DAY)
+
+
 def check_and_reserve(
     ip: str, *, topic_chars: int, user_id: str | None = None, at: datetime | None = None
 ) -> Reservation | Refusal:
@@ -150,22 +192,24 @@ def check_and_reserve(
             return Refusal("minute", _retry_after(at, burst["newest"], burst_window_s))
 
         # Per-IP daily: spend outcomes only.
-        row = c.execute(
-            "SELECT COUNT(*) AS n FROM instant_generations"
-            f" WHERE ip = ? AND created_at >= ? AND outcome IN ({_SPEND_MARKS})",
-            (ip, day_cutoff, *_SPEND_OUTCOMES),
-        ).fetchone()
-        if row["n"] >= per_ip_per_day:
-            # The window admits again once enough of the oldest counted
-            # rows age out to bring the count under the limit.
-            oldest = c.execute(
-                "SELECT created_at FROM instant_generations"
-                f" WHERE ip = ? AND created_at >= ? AND outcome IN ({_SPEND_MARKS})"
-                " ORDER BY created_at ASC LIMIT 1 OFFSET ?",
-                (ip, day_cutoff, *_SPEND_OUTCOMES, row["n"] - per_ip_per_day),
-            ).fetchone()
-            created = oldest["created_at"] if oldest else None
-            return Refusal("day", _retry_after(at, created, DAY_WINDOW_S))
+        refusal = _day_window(c, "ip", ip, day_cutoff=day_cutoff, limit=per_ip_per_day, at=at)
+        if refusal is not None:
+            return refusal
+
+        # Per-user daily. Skipped only for the request that mints an
+        # account, which has no id to count against yet; `resolve`
+        # back-stamps that row, so it counts from that moment on.
+        if user_id is not None:
+            refusal = _day_window(
+                c,
+                "user_id",
+                user_id,
+                day_cutoff=day_cutoff,
+                limit=_user_day_limit(c, user_id),
+                at=at,
+            )
+            if refusal is not None:
+                return refusal
 
         # Global per-minute cap: rations the shared per-minute token
         # budget across the deploy.

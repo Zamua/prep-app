@@ -17,7 +17,37 @@
   <li>The decks, cards, answers, and review history you create.</li>
   <li>Push subscription endpoints, only if you enable notifications.</li>
   <li>Your AI provider key, only if you supply one. Stored encrypted.</li>
+  <li>
+    A cookie holding a random identifier, if you create a deck without
+    signing in.
+  </li>
+  <li>One row per deck generation holding your IP address, kept 7 days.</li>
 </ul>
+
+<h2>Anonymous accounts</h2>
+
+<p>
+  If you create a deck without signing in, we store it on our server
+  and set a cookie named <code>prep_anon</code> on your browser so we
+  can show it back to you. That cookie is a random identifier with a
+  signature. It is not used for analytics or advertising, it is not
+  shared with anyone, and it holds nothing about you beyond that
+  identifier. If you later sign in on the same browser, the decks move
+  to your account and the cookie is deleted. If you clear your
+  cookies, or use "Forget this device", the decks stay on our server
+  but nothing can reach them. Anonymous accounts idle for a year are
+  deleted along with their decks.
+</p>
+
+<h2>Rate-limit records</h2>
+
+<p>
+  Each deck generation writes one row holding your IP address, the
+  time, and the account it was charged to. We use it to enforce the
+  daily generation limits and for nothing else. Those rows are deleted
+  after 7 days, so the link between an IP address and an account does
+  not persist.
+</p>
 
 <h2>Your AI key</h2>
 
@@ -59,7 +89,7 @@
 </p>
 
 <p class="form-hint" style="margin-block-start: 2rem;">
-  Last updated: 2026-06-01.
+  Last updated: 2026-08-13.
 </p>
 
 </article>

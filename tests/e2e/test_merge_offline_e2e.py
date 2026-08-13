@@ -10,10 +10,9 @@ pin here is the whole chain, in the real browser: the merge runs off
 the cookie, the snapshot carries the old id, the guard re-stamps, and
 the queued review flushes with no dialog in the DOM.
 
-sw.js is blocked for the same reason the adoption suite blocks it:
-the test needs repeated authenticated NAVIGATIONS, and a controlling
-service worker re-issues them outside Playwright's routing, dropping
-the injected identity header.
+sw.js is blocked here: the test needs repeated authenticated
+NAVIGATIONS, and a controlling service worker re-issues them outside
+Playwright's routing, dropping the injected identity header.
 """
 
 from __future__ import annotations

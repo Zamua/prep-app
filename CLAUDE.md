@@ -184,9 +184,8 @@ SPA framework, no JS bundler, no Tailwind. Pages POST forms; JS adds
 polish. Most actions degrade to plain forms.
 
 **One deliberate exception: the study loop.** It has to run with no
-server (offline, and for anonymous guests whose deck lives only in
-IndexedDB), so a server-rendered version of it could not be the only
-one. Rather than keep two implementations of the same screens, the
+server (offline, from the IndexedDB snapshot), so a server-rendered
+version of it could not be the only one. Rather than keep two implementations of the same screens, the
 loop is a set of client components in `static/js/study/` behind a
 `CardSource` port with two adapters: `LocalSource` (IndexedDB +
 the JS grader/scheduler) and `ServerSource` (the JSON API in

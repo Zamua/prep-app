@@ -13,7 +13,8 @@ configured night window.
 
 After per-user evaluation, dispatches to the trivia-deck scheduler
 (`prep.trivia.scheduler.tick`) which has its own per-deck cadence
-+ exponential backoff logic.
++ exponential backoff logic, then to the anonymous-account reaper
+(`prep.auth.reaper`). Both run off the event loop.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import logging
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from prep.auth.reaper import reap_idle_anonymous as _reap_idle_anonymous
 from prep.auth.repo import UserRepo
 from prep.decks.repo import DeckRepo
 from prep.notify.push import send_to_user
@@ -90,11 +92,20 @@ async def _tick() -> None:
     """One scheduler iteration — evaluate every subscribed user and fire
     where appropriate."""
     now_utc = datetime.now(timezone.utc)
-    users = UserRepo()
-    subs = PushSubsRepo()
-    reviews = ReviewRepo()
-    decks = DeckRepo()
-    for uid in subs.list_users_with_subs():
+    # Guarded separately from the per-user body below: building the
+    # repos and listing the subscribers is itself fallible, and an
+    # escape from here would cancel the trivia tick and the reaper too.
+    # A retention sweep that stops running is the failure nobody sees.
+    try:
+        users = UserRepo()
+        subs = PushSubsRepo()
+        reviews = ReviewRepo()
+        decks = DeckRepo()
+        subscribed = list(subs.list_users_with_subs())
+    except Exception as e:
+        _log.exception("scheduler could not list subscribed users: %s", e)
+        subscribed = []
+    for uid in subscribed:
         try:
             prefs = users.get_notification_prefs(uid)
             if prefs.get("mode") == "off":
@@ -170,6 +181,16 @@ async def _tick() -> None:
         await asyncio.to_thread(_trivia_tick, now_utc)
     except Exception as e:
         _log.exception("trivia scheduler tick threw: %s", e)
+
+    # ---- idle anonymous accounts ---------------------------------------
+    # Off the loop for the same reason as the trivia tick: the reap is
+    # blocking sqlite, and a cascading delete on the loop parks every
+    # in-flight request behind the write lock. It is bounded per tick,
+    # so a backlog drains over several ticks rather than in one.
+    try:
+        await asyncio.to_thread(_reap_idle_anonymous, now_utc)
+    except Exception as e:
+        _log.exception("anonymous reaper tick threw: %s", e)
 
 
 async def _scheduler_loop() -> None:

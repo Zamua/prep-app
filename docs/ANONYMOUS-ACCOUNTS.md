@@ -633,8 +633,10 @@ what an anonymous user gets:
 | (new) | **Create an account to keep your decks**, a single primary link to `sign_in_url` |
 
 **Forget this device** is a POST that clears the cookie after a
-`window.confirm` naming the consequence ("your decks stay on this
-browser only; sign up first to keep them"). It deletes no rows: the
+`window.confirm` naming the consequence ("your decks stay on our
+server, but this browser will not be able to reach them; create an
+account first to keep them"), which is the same fact section 7's
+privacy page states. It deletes no rows: the
 account survives and reaps on the section 6 schedule. Without it an
 anonymous user on a shared machine has no way to leave.
 
@@ -1397,8 +1399,23 @@ deck line, `guestDisclosureLine()`, `guestNudgeBanner()`, the
 guest-aware boot gate in `init()`, and the guest reconnect
 suppression.
 
+The boot gate that replaces it is `state.owner` alone, which keeps
+the two `state.owner` dereferences in `renderOverview` unguarded. One
+consequence has to be paid for rather than inherited: the owner-absent
+device holding `local_cards` (the same device section 9 protects) now
+takes the empty branch, and "Nothing cached yet" would be a lie told
+to the rows' own author. So the no-owner render counts them instead
+("N cards are saved on this device and not synced yet"), and a shell
+boot test pins that copy for the marker-ABSENT device, next to the
+existing one pinning "Nothing cached" for the marker-present one.
+Studying them there stays out of scope: without a stamped owner the
+shell cannot say whose cards they are, and the next online load
+stamps it.
+
 `static/js/offline/store.js`: the `"guest"` and `"guest_nudge"` meta
-key documentation.
+key documentation, and the `clear(storeName)` export, whose only
+consumer was `discardGuestData` (`wipeAll` covers the wipe that
+stays).
 
 `static/css/components/offline.css`: `.offline-guest-note`,
 `.offline-guest-nudge`, `.offline-guest-nudge-copy`,
@@ -1506,12 +1523,20 @@ export async function wipeLegacyGuestData() {
   await withLock(async () => {
     for (const c of await getAll("local_cards")) await remove("local_cards", c.client_id);
     for (const r of await getAll("outbox_reviews")) await remove("outbox_reviews", r.client_id);
+    for (const r of await getAll("rejects")) await remove("rejects", r.client_id);
     await remove("meta", "guest");
     await remove("meta", "guest_nudge");
   });
   return true;
 }
 ```
+
+The `rejects` store is in that list because the marker survives an
+INTERRUPTED hand-off, and an interrupted hand-off is what parks
+server-rejected rows there. Left behind they render in the offline
+shell's needs-attention list forever, attributed to whoever signs in
+next, and the list offers dismiss only, so nothing can ever retry
+them.
 
 **It must run before anything reads those stores, on EVERY boot path.
 Putting it only on the offline app's boot leaves the larger path
