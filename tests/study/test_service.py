@@ -24,6 +24,13 @@ def repos(initialized_db: str):
     return SessionRepo(), ReviewRepo()
 
 
+@pytest.fixture(autouse=True)
+def funded(monkeypatch):
+    """A workflow start is refused when no tier funds it; these tests
+    pin what a funded start threads through."""
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-test-not-real")
+
+
 @pytest.fixture
 def seeded_deck(initialized_db: str) -> tuple[str, int, int]:
     """(user_id, deck_id, qid) — fresh deck with a single mcq card."""

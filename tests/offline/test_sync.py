@@ -998,3 +998,99 @@ def test_named_deck_regex_and_replay_in_one_batch(client: TestClient, sync_seed:
     q = QuestionRepo().get(user, qid)
     assert q is not None and q.answer_regex == "lima"
     assert _decks_for(user)["postgres-mvcc"]["id"] == q.deck_id
+
+
+# ---- the anonymous row cap ----------------------------------------------
+
+
+def _anon_questions() -> int:
+    from tests.anon_support import ANON_ID
+
+    with cursor() as c:
+        return c.execute(
+            "SELECT COUNT(*) AS n FROM questions WHERE user_id = ?", (ANON_ID,)
+        ).fetchone()["n"]
+
+
+def test_the_outbox_cannot_write_past_the_question_cap(anon_client, monkeypatch):
+    """The outbox is a write path like any other, so it inherits the
+    ceiling. Uncapped, storage per anonymous account is bounded by
+    nothing: MAX_SYNC_CARDS per batch and unlimited batches."""
+    from prep.auth import limits
+    from tests.anon_support import ANON_ID
+
+    monkeypatch.setattr(limits, "ANON_MAX_QUESTIONS", 1)
+    deck_id = DeckRepo().create(ANON_ID, "capitals")
+    r = anon_client.post(
+        SYNC_URL,
+        json={
+            "new_cards": [
+                {"client_id": f"c{i}", "deck_id": deck_id, "prompt": f"q{i}", "answer": "a"}
+                for i in range(3)
+            ]
+        },
+    )
+    assert r.status_code == 200
+    statuses = [c["status"] for c in r.json()["cards"]]
+    assert statuses == ["created", "rejected", "rejected"]
+    assert _anon_questions() == 1
+
+
+def test_an_over_cap_card_does_not_fail_the_batch_around_it(anon_client, monkeypatch):
+    """A full account reports per item: the reviews in the same batch
+    still replay, so the client is never stuck retrying them."""
+    from prep.auth import limits
+    from tests.anon_support import ANON_ID
+
+    monkeypatch.setattr(limits, "ANON_MAX_QUESTIONS", 1)
+    deck_id = DeckRepo().create(ANON_ID, "capitals")
+    qid = QuestionRepo().add(
+        ANON_ID,
+        deck_id,
+        NewQuestion(type=QuestionType.SHORT, prompt="Capital of Peru?", answer="Lima"),
+    )
+    t = _now() - timedelta(hours=1)
+    r = anon_client.post(
+        SYNC_URL,
+        json={
+            "new_cards": [
+                {"client_id": "c1", "deck_id": deck_id, "prompt": "front", "answer": "back"}
+            ],
+            "reviews": [_review("r1", qid, t.isoformat())],
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["cards"][0]["status"] == "rejected"
+    assert "Create an account" in r.json()["cards"][0]["error"]
+    assert r.json()["reviews"] == [{"client_id": "r1", "status": "applied"}]
+    assert _anon_questions() == 1
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        # No deck_id and no deck_name: the inbox, via get-or-create.
+        {"client_id": "c1", "prompt": "front", "answer": "back"},
+        # A named deck: DeckRepo.create.
+        {"client_id": "c1", "deck_name": "Brand New", "prompt": "front", "answer": "back"},
+    ],
+    ids=["inbox", "named"],
+)
+def test_the_outbox_cannot_mint_decks_past_the_deck_cap(anon_client, monkeypatch, item):
+    """Both deck-resolution paths the outbox uses can insert, so both
+    inherit the ceiling, and neither refusal may fail the batch."""
+    from prep.auth import limits
+    from tests.anon_support import ANON_ID
+
+    monkeypatch.setattr(limits, "ANON_MAX_DECKS", 1)
+    DeckRepo().create(ANON_ID, "already-here")
+    r = anon_client.post(SYNC_URL, json={"new_cards": [item]})
+    assert r.status_code == 200
+    assert r.json()["cards"][0]["status"] == "rejected"
+    with cursor() as c:
+        assert (
+            c.execute("SELECT COUNT(*) AS n FROM decks WHERE user_id = ?", (ANON_ID,)).fetchone()[
+                "n"
+            ]
+            == 1
+        )

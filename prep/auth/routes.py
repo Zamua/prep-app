@@ -16,9 +16,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from prep.auth import current_user
+from prep.auth import anon_cookie, current_user, signed_in_user
 from prep.auth.providers import get_provider
 from prep.auth.repo import UserRepo
+from prep.web import responses
 from prep.web.templates import templates
 
 router = APIRouter()
@@ -42,6 +43,25 @@ def sign_in(request: Request):
     return RedirectResponse(urls.sign_in, status_code=303)
 
 
+def _same_origin(request: Request) -> bool:
+    """Whether the browser says this request came from our own pages.
+
+    Guards the two responses that clear `prep_anon`. For an anonymous
+    account the cookie is the only credential, so a cross-site page
+    that could force it cleared would destroy every deck the visitor
+    owns; SameSite=Lax stops the cookie riding such a request but not
+    the response's delete from applying. Every browser that would
+    honour that delete sends `Sec-Fetch-Site`, so its absence means a
+    non-browser caller and is judged by `Origin` instead."""
+    site = request.headers.get("sec-fetch-site")
+    if site is not None:
+        return site in ("same-origin", "none")
+    origin = request.headers.get("origin")
+    if origin is None:
+        return True
+    return origin.split("//", 1)[-1] == (request.headers.get("host") or "")
+
+
 @router.get("/sign-out")
 def sign_out(request: Request):
     """Sign the user out.
@@ -55,17 +75,46 @@ def sign_out(request: Request):
 
     Other providers (Tailscale: no concept of sign-out; FakeProvider:
     explicit URL): keep the legacy redirect-to-provider behavior.
+
+    The anonymous cookie goes too. Provider sign-out leaves it
+    untouched, so the browser would resolve straight back into the
+    pre-signup anonymous account: on a shared machine that hands the
+    next person the first person's decks, and it makes "Forget this
+    device" the only real way to leave.
     """
     provider = get_provider()
     urls = provider.urls()
     if not urls.sign_out:
         raise HTTPException(404, "this deploy has no in-app sign-out flow")
     if provider.name == "clerk":
-        return templates.TemplateResponse(
+        response = templates.TemplateResponse(
             "sign_out_interstitial.html",
             {"request": request, "user": None, "redirect_url": "/"},
         )
-    return RedirectResponse(urls.sign_out, status_code=303)
+    else:
+        response = RedirectResponse(urls.sign_out, status_code=303)
+    if _same_origin(request):
+        anon_cookie.forget_cookie(request, response)
+    return response
+
+
+@router.post("/forget-device")
+def forget_device(request: Request):
+    """Drop the anonymous cookie on this browser.
+
+    Deletes nothing: the account and its decks survive and age out on
+    the reaper's schedule. Without this an anonymous user on a shared
+    machine has no way to leave. A request with no cookie is a no-op
+    that still lands on the landing page.
+
+    Refused unless the browser says the request came from our own
+    pages: the client-side confirm never runs on a cross-site POST,
+    and the cookie is the account's only credential."""
+    if not _same_origin(request):
+        raise HTTPException(403, "cross-site request")
+    response = responses.redirect(request, "/")
+    anon_cookie.forget_cookie(request, response)
+    return response
 
 
 @router.get("/_debug/auth")
@@ -264,7 +313,7 @@ def srs_settings_save(
 
 
 @router.get("/settings/account", response_class=HTMLResponse)
-def account_settings(request: Request, user: dict = Depends(current_user)):
+def account_settings(request: Request, user: dict = Depends(signed_in_user)):
     provider = get_provider()
     if provider.name != "clerk":
         raise HTTPException(404, "this deploy has no in-app account-delete flow")
@@ -278,7 +327,7 @@ def account_settings(request: Request, user: dict = Depends(current_user)):
 def account_settings_delete(
     request: Request,
     confirm: str = Form(""),
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
 ):
     """Delete the caller's Clerk user. Webhook cascades the DB wipe.
 

@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 from prep import notify as _notify_pkg
-from prep.auth import current_user
+from prep.auth import signed_in_user
 from prep.notify.entities import NotificationPrefs
 from prep.notify.repo import NotificationLogRepo, NotifyPrefsRepo, PushSubsRepo
 from prep.web.templates import templates
@@ -38,7 +38,7 @@ def _log_repo() -> NotificationLogRepo:
 @router.get("/notify/log", response_class=HTMLResponse)
 def notification_log(
     request: Request,
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
     log_repo: NotificationLogRepo = Depends(_log_repo),
 ):
     """Render the recent notification history. Marks all currently
@@ -57,7 +57,7 @@ def notification_log(
 @router.get("/notify", response_class=HTMLResponse)
 def notify_settings(
     request: Request,
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
     prefs_repo: NotifyPrefsRepo = Depends(_prefs_repo),
     subs_repo: PushSubsRepo = Depends(_subs_repo),
 ):
@@ -79,7 +79,7 @@ def notify_settings(
 @router.post("/notify/prefs")
 async def notify_prefs_save(
     request: Request,
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
     prefs_repo: NotifyPrefsRepo = Depends(_prefs_repo),
 ):
     """Merge submitted values over the existing prefs so scheduler-only
@@ -112,7 +112,7 @@ def vapid_public_key():
 
 
 @router.post("/notify/subscribe")
-async def notify_subscribe(request: Request, user: dict = Depends(current_user)):
+async def notify_subscribe(request: Request, user: dict = Depends(signed_in_user)):
     """Browser-supplied subscription payload: {endpoint, keys: {p256dh, auth}}.
     Stored via the public surface in prep.notify so future repo extraction
     of the underlying SQL is invisible to the route layer."""
@@ -126,7 +126,7 @@ async def notify_subscribe(request: Request, user: dict = Depends(current_user))
 @router.post("/notify/unsubscribe")
 async def notify_unsubscribe(
     request: Request,
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
     subs_repo: PushSubsRepo = Depends(_subs_repo),
 ):
     """Remove a single device's push subscription. Endpoint is the
@@ -140,7 +140,7 @@ async def notify_unsubscribe(
 
 
 @router.post("/notify/test")
-async def notify_send_test(user: dict = Depends(current_user)):
+async def notify_send_test(user: dict = Depends(signed_in_user)):
     """Send a one-off test push to the current user's devices so they
     can verify subscription is alive end-to-end."""
     res = _notify_pkg.send_to_user(

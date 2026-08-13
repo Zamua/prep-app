@@ -39,6 +39,7 @@ from prep import icons, notify
 from prep import workflows as _workflows_mod
 from prep.agent.routes import router as agent_router
 from prep.api.routes import router as api_router
+from prep.auth.anon_cookie import emit_cookie_updates as emit_anon_cookie_updates
 from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
 from prep.dev import preview as dev_preview
@@ -266,6 +267,11 @@ app.middleware("http")(_metrics.http_metrics_middleware)
 @app.middleware("http")
 async def _no_cache_html(request, call_next):
     response = await call_next(request)
+    # Anonymous-cookie side effects the resolver could only record,
+    # having no response of its own: clear a dead cookie, re-mint an
+    # aging one. Outside the content-type check below, or a JSON
+    # response never clears and never refreshes.
+    emit_anon_cookie_updates(request, response)
     ct = response.headers.get("content-type", "")
     path = request.url.path
     if ct.startswith("text/html") or path.endswith("/manifest.json"):

@@ -1,4 +1,4 @@
-"""instant_generations ledger access: the rate limiter's storage.
+"""Persistence for the instant bounded context.
 
 `check_and_reserve` is the single admission gate. Every window count
 and the `pending` row INSERT run inside one immediate transaction, so
@@ -10,16 +10,26 @@ Outcome classes decide what counts. `pending`, `ok`, and
 spend until resolved) and count toward every quota window.
 `failed_free` rows are no-spend refusals and count toward the per-IP
 burst window only.
+
+`create_instant_deck` is the other write: the account, the deck and
+its cards in ONE transaction, because a `users` row without its first
+deck, or a deck missing half its cards, are the states a generated
+deck must never land in.
 """
 
 from __future__ import annotations
 
 import math
 import os
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from prep.infrastructure.db import cursor
+from prep.auth.anon_cookie import ID_BYTES, external_id_from_bytes
+from prep.auth.limits import refuse_over_row_cap
+from prep.auth.providers.anon import ANON_DISPLAY_NAME
+from prep.decks.entities import SLUG_ALPHABET, SLUG_LENGTH
+from prep.infrastructure.db import cursor, now
 
 # The global per-minute cap's window is fixed: it defines what "per
 # minute" means. The per-IP burst window is env-tunable like the
@@ -46,6 +56,10 @@ _SPEND_MARKS = ",".join("?" for _ in _SPEND_OUTCOMES)
 
 _TERMINAL_OUTCOMES = ("ok", "failed_spent", "failed_free")
 
+# A slug is 40 bits over a per-user namespace, so the bound is only
+# reached when the generator is broken; failing loudly beats looping.
+_MAX_SLUG_ATTEMPTS = 100
+
 
 @dataclass(frozen=True)
 class Reservation:
@@ -63,6 +77,16 @@ class Refusal:
 
     kind: str
     retry_after_s: int | None = None
+
+
+@dataclass(frozen=True)
+class InstantDeckResult:
+    """The stored deck. `minted` is True when this write created the
+    account, which is what tells the caller to set a cookie."""
+
+    user_id: str
+    slug: str
+    minted: bool
 
 
 def _env_int(name: str, default: int) -> int:
@@ -90,11 +114,15 @@ def _retry_after(at: datetime, created_at_iso: str | None, window_s: int) -> int
 
 
 def check_and_reserve(
-    ip: str, *, topic_chars: int, at: datetime | None = None
+    ip: str, *, topic_chars: int, user_id: str | None = None, at: datetime | None = None
 ) -> Reservation | Refusal:
     """Check every limiter window and, if all pass, insert the
     `pending` reservation row - one transaction. Rows older than the
-    retention window are pruned opportunistically here."""
+    retention window are pruned opportunistically here.
+
+    `user_id` is the account the spend is charged to, or None when the
+    request has no account yet: the one that mints it is back-stamped
+    by `resolve`."""
     at = at or datetime.now(timezone.utc)
     burst_limit = _env_int(_ENV_BURST_LIMIT, DEFAULT_BURST_LIMIT)
     burst_window_s = _env_int(_ENV_BURST_WINDOW_S, DEFAULT_BURST_WINDOW_S)
@@ -160,21 +188,92 @@ def check_and_reserve(
             return Refusal("busy")
 
         cur = c.execute(
-            "INSERT INTO instant_generations (ip, created_at, outcome, topic_chars)"
-            " VALUES (?, ?, 'pending', ?)",
-            (ip, at.isoformat(), topic_chars),
+            "INSERT INTO instant_generations (ip, created_at, outcome, topic_chars, user_id)"
+            " VALUES (?, ?, 'pending', ?, ?)",
+            (ip, at.isoformat(), topic_chars, user_id),
         )
         return Reservation(id=cur.lastrowid)
 
 
-def resolve(reservation_id: int, outcome: str, *, cards: int | None = None) -> None:
+def resolve(
+    reservation_id: int, outcome: str, *, cards: int | None = None, user_id: str | None = None
+) -> None:
     """Resolve a reservation's outcome class when the request
     completes. An unresolved row stays `pending`, which counts as
-    spend: crashes fail closed."""
+    spend: crashes fail closed.
+
+    `user_id` stamps the account for the request that minted one. It
+    never clears an id the reservation already carries."""
     if outcome not in _TERMINAL_OUTCOMES:
         raise ValueError(f"unknown outcome: {outcome!r}")
     with cursor() as c:
         c.execute(
-            "UPDATE instant_generations SET outcome = ?, cards = ? WHERE id = ?",
-            (outcome, cards, reservation_id),
+            "UPDATE instant_generations SET outcome = ?, cards = ?,"
+            " user_id = COALESCE(?, user_id) WHERE id = ?",
+            (outcome, cards, user_id, reservation_id),
         )
+
+
+def _free_slug(c, user_id: str) -> str:
+    """An opaque slug free within this user's namespace, drawn and
+    checked on the transaction's own connection."""
+    for _ in range(_MAX_SLUG_ATTEMPTS):
+        candidate = "".join(secrets.choice(SLUG_ALPHABET) for _ in range(SLUG_LENGTH))
+        taken = c.execute(
+            "SELECT 1 FROM decks WHERE user_id = ? AND name = ?", (user_id, candidate)
+        ).fetchone()
+        if taken is None:
+            return candidate
+    raise RuntimeError(f"no free deck slug after {_MAX_SLUG_ATTEMPTS} attempts")
+
+
+def create_instant_deck(
+    *,
+    user_id: str | None,
+    display_name: str,
+    cards: list[dict],
+) -> InstantDeckResult:
+    """Store a generated deck: the account when there is none yet, the
+    deck, and every card - ONE transaction.
+
+    `user_id` None mints an anonymous account. The cards arrive
+    validated by the service, so nothing inside here can reject one:
+    a partial deck and an account with no deck are the two states this
+    method exists to make unreachable.
+
+    Raises `RowCapReached` when the account is at its anonymous row
+    cap, before anything is written."""
+    ts = now()
+    minted = user_id is None
+    with cursor() as c:
+        # IMMEDIATE takes the write lock up front, so the cap count and
+        # the inserts it guards are serialized against a concurrent
+        # generation from the same account.
+        c.execute("BEGIN IMMEDIATE")
+        if user_id is None:
+            user_id = external_id_from_bytes(secrets.token_bytes(ID_BYTES))
+            c.execute(
+                "INSERT INTO users (tailscale_login, display_name, email, created_at,"
+                " last_seen_at, is_anonymous) VALUES (?, ?, NULL, ?, ?, 1)",
+                (user_id, ANON_DISPLAY_NAME, ts, ts),
+            )
+        else:
+            refuse_over_row_cap(c, user_id, new_decks=1, new_questions=len(cards))
+        slug = _free_slug(c, user_id)
+        deck = c.execute(
+            "INSERT INTO decks (user_id, name, display_name, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, slug, display_name, ts),
+        )
+        deck_id = deck.lastrowid
+        for card in cards:
+            question = c.execute(
+                "INSERT INTO questions"
+                " (user_id, deck_id, type, prompt, answer, answer_regex, created_at)"
+                " VALUES (?, ?, 'short', ?, ?, ?, ?)",
+                (user_id, deck_id, card["prompt"], card["answer"], card["answer_regex"], ts),
+            )
+            c.execute(
+                "INSERT INTO cards (question_id, step, next_due) VALUES (?, 0, ?)",
+                (question.lastrowid, ts),
+            )
+    return InstantDeckResult(user_id=user_id, slug=slug, minted=minted)

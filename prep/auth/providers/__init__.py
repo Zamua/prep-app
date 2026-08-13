@@ -21,11 +21,7 @@ from prep.auth.port import AuthConfigError, IdentityProvider
 _provider: IdentityProvider | None = None
 
 
-def _build_provider() -> IdentityProvider:
-    """Resolve PREP_AUTH_MODE to the right adapter. Default
-    `tailscale` keeps the mac-mini install (where the env var is
-    unset) on its historical behavior."""
-    mode = (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower()
+def _adapter_for_mode(mode: str) -> IdentityProvider:
     if mode == "tailscale":
         from prep.auth.providers.tailscale import TailscaleProvider
 
@@ -39,6 +35,27 @@ def _build_provider() -> IdentityProvider:
 
         return FakeProvider()
     raise AuthConfigError(f"unknown PREP_AUTH_MODE={mode!r}; valid: tailscale | clerk | fake")
+
+
+def _build_provider() -> IdentityProvider:
+    """Resolve PREP_AUTH_MODE to the right adapter. Default
+    `tailscale` keeps the mac-mini install (where the env var is
+    unset) on its historical behavior.
+
+    The adapter is then wrapped in the anonymous-cookie fallback when
+    a signing secret resolves. No secret means anonymous accounts are
+    off and the adapter is returned bare."""
+    mode = (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower()
+    adapter = _adapter_for_mode(mode)
+
+    from prep.auth.anon_cookie import is_enabled
+
+    if not is_enabled():
+        return adapter
+
+    from prep.auth.providers.anon import AnonymousFallbackProvider
+
+    return AnonymousFallbackProvider(adapter)
 
 
 def get_provider() -> IdentityProvider:

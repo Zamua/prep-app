@@ -94,6 +94,16 @@ class UserRepo:
                 c.execute("SELECT * FROM users WHERE tailscale_login = ?", (key,)).fetchone()
             )
 
+    def touch(self, user_id: str) -> None:
+        """Bump last_seen_at for an existing row. Unlike upsert this
+        inserts nothing on miss, which is what an identity that must
+        not be created on read (the anonymous cookie) needs."""
+        with cursor() as c:
+            c.execute(
+                "UPDATE users SET last_seen_at = ? WHERE tailscale_login = ?",
+                (now(), user_id),
+            )
+
     def get_editor_input_mode(self, user_id: str) -> str:
         """Returns the user's preferred CodeMirror input mode. Falls
         back to DEFAULT_EDITOR_INPUT_MODE if the column is NULL or

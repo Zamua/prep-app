@@ -15,6 +15,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
+from prep.auth.limits import refuse_over_row_cap
 from prep.domain.srs import CardSRSState, Verdict, schedule_review, step_for_stability
 from prep.infrastructure.db import cursor, now
 from prep.offline.entities import INBOX_DECK_NAME, SnapshotCard, SnapshotDeck
@@ -249,9 +250,15 @@ class SyncRepo:
         have no choices/skeleton/language). The deck ownership + SRS
         check lives inside the same transaction; offline covers SRS
         decks only, and an unknown/foreign/trivia deck_id rejects with
-        the same error (no cross-user existence leak)."""
+        the same error (no cross-user existence leak).
+
+        Raises `RowCapReached` when the account is anonymous and at
+        its question ceiling."""
         ts = now()
         with cursor() as c:
+            # IMMEDIATE up front so the cap count and the insert it
+            # gates are serialized against a concurrent flush.
+            c.execute("BEGIN IMMEDIATE")
             deck = c.execute(
                 "SELECT id FROM decks WHERE id = ? AND user_id = ? "
                 "  AND COALESCE(deck_type, 'srs') = 'srs'",
@@ -259,6 +266,7 @@ class SyncRepo:
             ).fetchone()
             if not deck:
                 raise SyncItemRejected("unknown deck_id")
+            refuse_over_row_cap(c, user_id, new_questions=1)
             cur = c.execute(
                 "INSERT INTO questions "
                 " (user_id, deck_id, type, prompt, answer, answer_regex, created_at) "

@@ -32,6 +32,13 @@ def repos(initialized_db: str):
     return DeckRepo(), QuestionRepo()
 
 
+@pytest.fixture(autouse=True)
+def funded(monkeypatch):
+    """A workflow start is refused when no tier funds it; these tests
+    pin what a funded start threads through."""
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-test-not-real")
+
+
 def test_create_and_list_decks(repos: tuple[DeckRepo, QuestionRepo], initialized_db: str):
     deck_repo, _q = repos
     user = initialized_db

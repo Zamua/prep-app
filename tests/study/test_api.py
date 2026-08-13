@@ -100,12 +100,14 @@ def no_agent():
 
 
 @pytest.fixture
-def with_agent():
+def with_agent(monkeypatch):
     """Pin the deploy to 'AI grader configured' so free-text submits
-    take the Temporal path."""
+    take the Temporal path: an adapter to run, and a tier that funds
+    the workflow start."""
     from prep import agent as agent_mod
     from prep.agent.fake import FakeAgent
 
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-test-not-real")
     agent_mod.set_agent(FakeAgent())
     yield
     agent_mod.set_agent(None)

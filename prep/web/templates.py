@@ -50,6 +50,11 @@ def _agent_context(request: Request) -> dict:
     the cached deploy-wide flag — the old behavior."""
     user = getattr(request.state, "user", None)
     if user is not None:
+        # The anonymous answer is already on the resolved row, and
+        # this processor runs on every render: read the flag rather
+        # than pay the selector a query per page.
+        if isinstance(user, dict) and user.get("is_anonymous"):
+            return {"agent_available": False}
         from prep.agent.selector import agent_available_for_user
 
         uid = user.get("tailscale_login") if isinstance(user, dict) else None
@@ -150,6 +155,18 @@ def _auth_provider_context(request: Request) -> dict:
     return {"auth_provider": (os.environ.get("PREP_AUTH_MODE") or "tailscale").strip().lower()}
 
 
+def _sign_in_url_context(request: Request) -> dict:
+    """The chip panel's create-account link, and the landing CTAs.
+    Empty string on deploys with no in-app sign-in flow, where those
+    surfaces must render no anchor at all."""
+    try:
+        from prep.auth.providers import get_provider
+
+        return {"sign_in_url": get_provider().urls().sign_in or ""}
+    except Exception:  # noqa: BLE001
+        return {"sign_in_url": ""}
+
+
 def _clerk_bootstrap_context(request: Request) -> dict:
     """Expose Clerk publishable key + frontend API host to base.html
     so it can load ClerkJS on every page (not just the landing). The
@@ -245,6 +262,7 @@ templates = Jinja2Templates(
         _agent_context,
         _assets_context,
         _auth_provider_context,
+        _sign_in_url_context,
         _clerk_bootstrap_context,
         _notif_unseen_context,
         _deck_display_context,

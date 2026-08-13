@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 
+from prep.auth.limits import refuse_over_row_cap
 from prep.decks.entities import (
     Deck,
     DeckCard,
@@ -31,7 +32,12 @@ class DeckRepo:
     """Read/write access to the `decks` table."""
 
     def get_or_create(self, user_id: str, name: str) -> int:
-        """Return deck id; create with no context_prompt if missing."""
+        """Return deck id; create with no context_prompt if missing.
+
+        Raises `RowCapReached` when the account is anonymous, the deck
+        does not exist yet and creating it would pass the ceiling. The
+        cap gates the CREATE only: an account already over its ceiling
+        must still resolve a deck it owns."""
         with cursor() as c:
             row = c.execute(
                 "SELECT id FROM decks WHERE user_id = ? AND name = ?",
@@ -39,6 +45,17 @@ class DeckRepo:
             ).fetchone()
             if row:
                 return row["id"]
+            # The write lock is taken only once a create looks needed,
+            # so resolving an existing deck stays a plain read. Re-read
+            # under the lock: a peer may have created it in between.
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute(
+                "SELECT id FROM decks WHERE user_id = ? AND name = ?",
+                (user_id, name),
+            ).fetchone()
+            if row:
+                return row["id"]
+            refuse_over_row_cap(c, user_id, new_decks=1)
             cur = c.execute(
                 "INSERT INTO decks (user_id, name, created_at) VALUES (?, ?, ?)",
                 (user_id, name, now()),
@@ -133,8 +150,13 @@ class DeckRepo:
         slug used in URLs) and `display_name` (user-typed, may contain
         spaces / capitals / punctuation). When display_name is None,
         the UI falls back to `name`. Raises sqlite3.IntegrityError on
-        (user_id, name) collision."""
+        (user_id, name) collision. Raises `RowCapReached` when the
+        account is anonymous and at its deck ceiling."""
         with cursor() as c:
+            # IMMEDIATE up front so the count and the insert it gates
+            # are serialized against a concurrent create.
+            c.execute("BEGIN IMMEDIATE")
+            refuse_over_row_cap(c, user_id, new_decks=1)
             cur = c.execute(
                 "INSERT INTO decks (user_id, name, display_name, created_at, context_prompt)"
                 " VALUES (?, ?, ?, ?, ?)",
@@ -283,6 +305,8 @@ class DeckRepo:
         is the user-typed label; UI falls back to `name` when None.
         """
         with cursor() as c:
+            c.execute("BEGIN IMMEDIATE")
+            refuse_over_row_cap(c, user_id, new_decks=1)
             cur = c.execute(
                 """
                 INSERT INTO decks (user_id, name, display_name, created_at, context_prompt,
@@ -489,6 +513,9 @@ class QuestionRepo:
         decks track their queue in `trivia_queue` instead, so no
         cards row is created (an orphan there would inflate the
         index page's due-count via list_summaries).
+
+        Raises `RowCapReached` when the account is anonymous and at
+        its question ceiling.
         """
         # `answer` for `multi` may come as a list — store canonically as JSON.
         answer = new.answer
@@ -499,6 +526,8 @@ class QuestionRepo:
             rubric = "\n".join(f"- {b}" for b in rubric)
         ts = now()
         with cursor() as c:
+            c.execute("BEGIN IMMEDIATE")
+            refuse_over_row_cap(c, user_id, new_questions=1)
             cur = c.execute(
                 """
                 INSERT INTO questions

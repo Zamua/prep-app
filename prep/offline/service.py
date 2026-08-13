@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
+from prep.auth.limits import RowCapReached
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo
 from prep.domain import grading
@@ -122,6 +123,13 @@ def _process_card(
                 raise
             qid = prior["question_id"]
         return SyncCardResult(client_id=client_id, status="created", question_id=qid)
+    except RowCapReached as e:
+        # The cap is a property of the account, not of the item, but
+        # it still reports per item: a full account must not 4xx a
+        # batch whose reviews are all replayable.
+        return SyncCardResult(
+            client_id=_echo_client_id(item.client_id), status="rejected", error=str(e)
+        )
     except SyncItemRejected as e:
         return SyncCardResult(
             client_id=_echo_client_id(item.client_id), status="rejected", error=str(e)

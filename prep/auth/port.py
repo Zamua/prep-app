@@ -43,6 +43,11 @@ class ResolvedUser:
     # debug logs + the user-indicator chip; downstream code shouldn't
     # branch on it.
     provider: str
+    # True when the identity came from a signed anonymous cookie
+    # rather than an identity provider. The resolver branches on this
+    # (an anonymous id must never be upserted into existence); the
+    # `users.is_anonymous` column is the persisted counterpart.
+    is_anonymous: bool = False
 
 
 @dataclass(frozen=True)
@@ -68,11 +73,12 @@ class IdentityProvider(Protocol):
     def resolve(self, request: Request) -> ResolvedUser | None:
         """Return the resolved user, or None if unauthenticated.
 
-        Implementations MUST NOT raise on missing auth — they return
+        Implementations MUST NOT raise on missing auth: they return
         None and let the dependency layer translate that into a 401.
-        Raise only for malformed-but-present credentials (e.g. a
-        signed cookie that fails signature verification — that's a
-        signal worth surfacing as a 400, not a silent 401)."""
+        A credential that is present but fails verification is the
+        same answer. A forged cookie is an unauthenticated request,
+        not a 400, and raising would hand the forger a way to break
+        every page for whoever holds it."""
         ...
 
     def urls(self) -> SignInUrls:

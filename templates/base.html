@@ -100,7 +100,11 @@
      expired but the durable __client_uat still marks the user signed
      in. The bootstrap below uses this to recover after ClerkJS
      rehydrates the session client-side. #}
-  <script>window.__prepServerSignedOut = {{ 'false' if user else 'true' }};</script>
+  {# An anonymous account counts as signed OUT here. Otherwise a Clerk
+     user whose JWT expired on a browser that still holds prep_anon is
+     served the anonymous account with the recovery that fixes it
+     switched off. #}
+  <script>window.__prepServerSignedOut = {{ 'false' if user and not user.is_anonymous else 'true' }};</script>
   <script>
     (async function () {
       let waited = 0;
@@ -177,7 +181,9 @@
           </summary>
           <div class="user-panel">
             <p class="user-name">{{ user.display_name or user.tailscale_login.split('@')[0] }}</p>
-            <p class="user-login">{{ user.tailscale_login }}</p>
+            {# An anonymous account has no email to show, and its raw id
+               is the one identifier that must never reach a surface. #}
+            <p class="user-login">{% if user.is_anonymous %}Not signed in{% else %}{{ user.tailscale_login }}{% endif %}</p>
             {# Two groups of entries: Activity (the notification log — a
                record of what happened, with the unseen-count badge) and
                Settings (the .../settings/* + /notify pages — places you
@@ -185,31 +191,62 @@
                unseen badge is the most likely reason to open the popover;
                surfacing it ahead of the settings list keeps that the
                first thing you see. Sign out sits below both groups under
-               its own divider. #}
-            <p class="user-group-eyebrow">Activity</p>
-            <ul class="user-links">
-              <li><a href="{{ root }}/notify/log">Notification log{% if notif_unseen_count %} <span class="notif-unseen-badge">{{ notif_unseen_count }}</span>{% endif %} {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
-            </ul>
+               its own divider.
+
+               An anonymous account gets only the entries whose routes
+               admit it: every omission below pairs with a route the
+               signed_in_user dependency gates, and the panel must not
+               link to a route that bounces. #}
+            {% if not user.is_anonymous %}
+              <p class="user-group-eyebrow">Activity</p>
+              <ul class="user-links">
+                <li><a href="{{ root }}/notify/log">Notification log{% if notif_unseen_count %} <span class="notif-unseen-badge">{{ notif_unseen_count }}</span>{% endif %} {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+              </ul>
+            {% endif %}
 
             <p class="user-group-eyebrow">Settings</p>
             <ul class="user-links">
-              <li><a href="{{ root }}/settings/agent">AI agent {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+              {% if not user.is_anonymous %}
+                <li><a href="{{ root }}/settings/agent">AI agent {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+              {% endif %}
               <li><a href="{{ root }}/settings/srs">Scheduling {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
               <li><a href="{{ root }}/settings/editor">Editor {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
-              <li><a href="{{ root }}/notify">Notifications {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
-              <li><a href="{{ root }}/settings/api">API tokens {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
-              {# Clerk-mode only: the account-delete flow needs an upstream
-                 user to delete. Tailscale-mode has no notion of "delete
-                 the user" — identity comes from the proxy. #}
-              {% if auth_provider == 'clerk' %}
-                <li><a href="{{ root }}/settings/account">Account {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+              {% if not user.is_anonymous %}
+                <li><a href="{{ root }}/notify">Notifications {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+                <li><a href="{{ root }}/settings/api">API tokens {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+                {# Clerk-mode only: the account-delete flow needs an upstream
+                   user to delete. Tailscale-mode has no notion of "delete
+                   the user": identity comes from the proxy. #}
+                {% if auth_provider == 'clerk' %}
+                  <li><a href="{{ root }}/settings/account">Account {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+                {% endif %}
               {% endif %}
             </ul>
 
-            {# Sign-out: clerk-only, behind the same identity-revocation gate
-               as the Account row. Tailscale-mode has nothing to revoke
-               client-side (identity comes from the proxy header). #}
-            {% if auth_provider == 'clerk' %}
+            {% if user.is_anonymous %}
+              {# Sign-up is the only way to keep these decks off this one
+                 browser. Nothing renders where the deploy has no in-app
+                 sign-in flow, rather than a dead anchor. #}
+              {% if sign_in_url %}
+                <ul class="user-links user-links-primary">
+                  <li><a href="{{ sign_in_url }}" class="user-link-primary">Create an account to keep your decks {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+                </ul>
+              {% endif %}
+              {# Leaving a shared machine. Clears the cookie only: the
+                 account and its decks survive and reap on their own
+                 schedule. #}
+              <ul class="user-links user-links-signout">
+                <li>
+                  <form method="post" action="{{ root }}/forget-device" class="user-forget-form"
+                        onsubmit="return confirm('Forget this device? Your decks stay on this browser only; sign up first to keep them.')">
+                    <button type="submit" class="user-link-signout user-forget-btn">Forget this device {{ icon('sign-out', class_='icon icon-inline') }}</button>
+                  </form>
+                </li>
+              </ul>
+            {% elif auth_provider == 'clerk' %}
+              {# Sign-out: clerk-only, behind the same identity-revocation gate
+                 as the Account row. Tailscale-mode has nothing to revoke
+                 client-side (identity comes from the proxy header). #}
               <ul class="user-links user-links-signout">
                 <li><a href="{{ root }}/sign-out" class="user-link-signout" data-turbo="false">Sign out {{ icon('sign-out', class_='icon icon-inline') }}</a></li>
               </ul>
@@ -229,11 +266,11 @@
        it's not affected by main-content layout rules. The module
        no-ops on already-installed PWAs and on dismissed/hidden state.
        Signed-in users only: on iOS an installed PWA has storage
-       separate from Safari, so an anonymous guest who installs opens
-       an empty app while their local-only deck stays behind in the
-       browser. Once signed in, the data is server-side and install
-       is safe on every platform. #}
-    {% if user %}
+       separate from Safari, so an anonymous account whose only
+       credential is a cookie opens the installed app as a different
+       visitor with none of its decks. Once signed in, identity
+       travels with the account and install is safe everywhere. #}
+    {% if user and not user.is_anonymous %}
     {% include "partials/pwa_install_nudge.html" %}
     {% endif %}
     <footer class="colophon">
@@ -254,8 +291,10 @@
            modules/pwa-install.js hides this in standalone mode and on
            unsupported browsers; visible otherwise. Same click handler
            as the bottom pill — opens the platform-aware modal.
-           Signed-in only, same reason as the nudge partial above. #}
-        {% if user %}
+           Signed-in only, same reason as the nudge partial above.
+           Both gates carry it: this one alone is a working install
+           path. #}
+        {% if user and not user.is_anonymous %}
         <span aria-hidden="true" class="colophon-install-sep" hidden>·</span>
         <button type="button" class="colophon-install pwa-install-trigger" hidden>
           {{ icon('download-simple', class_='icon icon-inline') }}

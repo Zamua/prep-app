@@ -1,11 +1,20 @@
-"""End-to-end instant-start landing + guest study surface
-(docs/INSTANT-START.md sections 2 and 3.3, M4 scope).
+"""End-to-end instant-start landing
+(docs/ANONYMOUS-ACCOUNTS.md sections 3 and 4, M2 milestone).
 
-Drives the anonymous client machine with ZERO upstream spend:
-Playwright intercepts POST /api/instant/generate via ctx.route and
-serves canned responses, so the suite exercises the landing form
-states, the IndexedDB writes, the guest-mode /offline presentation,
-and the returning-visitor / owner-present edges without an AI call.
+A successful generation is stored SERVER side under a freshly minted
+anonymous account, and the endpoint answers with the URL to land on.
+So the loop this file pins ends in a normal signed-in-shaped deck
+page, not a device-local guest surface, and the browser's only new
+state is the `prep_anon` cookie.
+
+Two ways to reach the endpoint, both with ZERO upstream spend:
+
+- `live_ctx` lets the REAL endpoint run. A stub OpenAI-compatible
+  inference server stands in for the deploy's free tier, so the deck
+  is genuinely generated, stored, and served back. This is the only
+  shape that can prove the redirect target exists.
+- `instant_ctx` intercepts POST /api/instant/generate and serves
+  canned responses, for the error branches where no deck is written.
 
 The server is a LOCAL uvicorn booted in the PUBLIC deploy shape
 (PREP_AUTH_MODE=clerk + free-tier env): the instant hero renders only
@@ -19,20 +28,14 @@ succeeds quietly (no console noise for the zero-console-error pin)
 while navigations and fetches keep hitting Playwright's routing.
 The suite pins:
 
-- The full anonymous loop: land -> hero -> generate -> guest
-  overview -> auto-grade a regex short ->
-  self-verdict a null-regex card -> caught-up nudge banner -> footer
-  disclosure line, with no uncaught page errors and no "Back online"
-  banner anywhere in the session.
-- Busy and day-limit error copy, input preserved, no IDB writes.
+- The M2 loop: land -> hero -> generate -> the deck page for the
+  stored deck -> study one card through the normal loop -> reload `/`
+  and get the dashboard, with no uncaught page errors.
+- The account is the cookie's: a fresh browser sees the landing, not
+  the first browser's deck.
+- Busy and day-limit error copy, input preserved, no account minted.
 - The submit guard: two submit events in one task produce exactly one
   POST to the generation endpoint.
-- The returning-visitor strip, the replace confirm, and the orphan
-  outbox_reviews cleanup when a second generation replaces the deck.
-- The owner-present edge: generation (first AND second, the replace
-  branch must stay skipped) appends plain local_cards rows, never
-  deletes existing ones, never writes meta.guest, never renders the
-  strip or a confirm.
 - The reconnect suppression: a guest shell boot with queued reviews
   never probes, never flushes, never shows the sync banner.
 - Nudge dismissal: "Not now" persists across reloads for a guest with
@@ -42,6 +45,8 @@ The suite pins:
 from __future__ import annotations
 
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
@@ -70,21 +75,6 @@ DECK_A = {
     ],
 }
 
-DECK_B = {
-    "display_name": "Music Intervals",
-    "cards": [
-        {"prompt": "Semitones in a perfect fifth?", "answer": "7", "answer_regex": "7"},
-        {"prompt": "Semitones in a major third?", "answer": "4", "answer_regex": "4"},
-        {"prompt": "Semitones in an octave?", "answer": "12", "answer_regex": "12"},
-        {"prompt": "Semitones in a perfect fourth?", "answer": "5", "answer_regex": "5"},
-        {
-            "prompt": "What is an interval in music?",
-            "answer": "The pitch distance between two notes.",
-            "answer_regex": None,
-        },
-    ],
-}
-
 BUSY_BODY = {
     "kind": "busy",
     "message": "The free AI is busy right now. Try again in a few minutes.",
@@ -97,13 +87,76 @@ DAY_LIMIT_BODY = {
 }
 
 
+class _StubInference:
+    """An OpenAI-compatible `/chat/completions` that answers with a
+    canned card array. Standing in for the deploy's free tier is what
+    makes the real endpoint runnable here: the deck is generated,
+    stored and served back for real, with nothing billed."""
+
+    def __init__(self):
+        self.deck = DECK_A
+        self.prompts: list[str] = []
+        outer = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler's name
+                length = int(self.headers.get("content-length") or 0)
+                raw = self.rfile.read(length)
+                try:
+                    outer.prompts.append(json.loads(raw)["messages"][0]["content"])
+                except Exception:  # noqa: BLE001 - the prompt log is diagnostic
+                    outer.prompts.append("")
+                content = json.dumps(
+                    [
+                        {"q": c["prompt"], "a": c["answer"], "r": c["answer_regex"]}
+                        for c in outer.deck["cards"]
+                    ]
+                )
+                body = json.dumps(
+                    {
+                        "choices": [{"message": {"content": content}}],
+                        "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+                    }
+                ).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        self.base_url = f"http://127.0.0.1:{self._server.server_address[1]}/v1"
+
+    def start(self):
+        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+
+    def stop(self):
+        self._server.shutdown()
+        self._server.server_close()
+
+
 @pytest.fixture(scope="session")
-def instant_server(tmp_path_factory):
+def stub_inference():
+    stub = _StubInference()
+    stub.start()
+    try:
+        yield stub
+    finally:
+        stub.stop()
+
+
+@pytest.fixture(scope="session")
+def instant_server(tmp_path_factory, stub_inference):
     """LOCAL server in the public deploy shape: clerk auth (anonymous
     visitors resolve to None and the provider exposes a sign-in URL
-    for the hero gate + nudges) and a configured free tier (the other
-    hero gate). The upstream is never reached - generation is
-    route-mocked in the browser."""
+    for the hero gate + nudges) and a free tier pointed at the stub.
+
+    The limiter is opened up because several tests generate for real
+    from one client IP; the limiter's own behaviour is pinned by the
+    route tests, which can control the clock."""
     db_path = tmp_path_factory.mktemp("instant-e2e") / "data.sqlite"
     server = LocalOfflineServer(db_path)
     server.extra_env = {
@@ -111,9 +164,13 @@ def instant_server(tmp_path_factory):
         "CLERK_SECRET_KEY": "sk_test_instant_e2e_dummy",
         "CLERK_AUTHORIZED_PARTIES": server.base_url,
         "CLERK_FRONTEND_API_URL": "https://accounts.example.test",
-        "PREP_FREE_INFERENCE_BASE_URL": "https://inference.example.test/v1",
+        "PREP_FREE_INFERENCE_BASE_URL": stub_inference.base_url,
         "PREP_FREE_INFERENCE_API_KEY": "instant-e2e-test-key",
         "PREP_FREE_INFERENCE_MODEL": "instant-e2e-test-model",
+        "PREP_INSTANT_BURST_LIMIT": "100",
+        "PREP_INSTANT_PER_IP_PER_DAY": "100",
+        "PREP_INSTANT_GLOBAL_PER_MINUTE": "100",
+        "PREP_INSTANT_GLOBAL_PER_DAY": "500",
     }
     server.start()
     try:
@@ -122,15 +179,10 @@ def instant_server(tmp_path_factory):
         server.stop()
 
 
-@pytest.fixture()
-def instant_ctx(browser_session, instant_server):
-    """Anonymous browser context: no identity headers of any kind.
-    Yields (ctx, gen, sync_posts): mutate `gen` to steer what the
-    mocked generation endpoint returns; `sync_posts` records every
-    POST to the sync endpoint so 'nothing synced' is a direct
-    observation."""
-    gen = {"status": 200, "body": DECK_A}
-    sync_posts: list[str] = []
+def _new_anon_context(browser_session):
+    """Anonymous browser context: no identity headers of any kind, and
+    a no-op sw.js so registration succeeds without a fetch handler
+    that would bypass Playwright's routing."""
     ctx = browser_session.new_context(
         user_agent=(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
@@ -145,6 +197,41 @@ def instant_ctx(browser_session, instant_server):
     ctx.set_default_timeout(15_000)
     ctx.set_default_navigation_timeout(15_000)
 
+    def _stub_sw(route):
+        route.fulfill(
+            status=200,
+            content_type="application/javascript",
+            body="// instant-e2e stub service worker: no fetch handler\n",
+        )
+
+    ctx.route("**/sw.js", _stub_sw)
+    return ctx
+
+
+@pytest.fixture()
+def live_ctx(browser_session, instant_server, stub_inference):
+    """A context that reaches the REAL generation endpoint. Yields
+    (ctx, stub): set `stub.deck` to steer what the inference stub
+    returns."""
+    stub_inference.deck = DECK_A
+    ctx = _new_anon_context(browser_session)
+    try:
+        yield ctx, stub_inference
+    finally:
+        ctx.close()
+
+
+@pytest.fixture()
+def instant_ctx(browser_session, instant_server):
+    """A context whose generation endpoint is mocked, for the error
+    branches where no deck is written. Yields (ctx, gen, sync_posts):
+    mutate `gen` to steer the canned response; `sync_posts` records
+    every POST to the sync endpoint so 'nothing synced' is a direct
+    observation."""
+    gen = {"status": 200, "body": DECK_A}
+    sync_posts: list[str] = []
+    ctx = _new_anon_context(browser_session)
+
     def _serve_generate(route):
         route.fulfill(
             status=gen["status"],
@@ -156,17 +243,6 @@ def instant_ctx(browser_session, instant_server):
         sync_posts.append(route.request.post_data or "")
         route.fallback()
 
-    def _stub_sw(route):
-        # A no-op worker: registration succeeds (no console noise),
-        # but with no fetch handler every request keeps flowing
-        # through Playwright's routing.
-        route.fulfill(
-            status=200,
-            content_type="application/javascript",
-            body="// instant-e2e stub service worker: no fetch handler\n",
-        )
-
-    ctx.route("**/sw.js", _stub_sw)
     ctx.route("**/api/offline/sync", _count_sync_posts)
     ctx.route("**/api/instant/generate", _serve_generate)
     try:
@@ -194,12 +270,24 @@ def _watch_errors(page) -> tuple[list[str], list[str]]:
     return console_errors, page_errors
 
 
-def _unexpected_console(console_errors: list[str]) -> list[str]:
-    """Strip the one legitimate noise line: the anonymous landing's
-    background snapshot probe 401s by design (sync.js resolves
-    identity on every online page load; a visitor has none). Every
-    other console error is a real finding."""
-    return [m for m in console_errors if not ("/api/offline/snapshot" in m and "401" in m)]
+def _unexpected_console(console_errors: list[str], base: str) -> list[str]:
+    """Console errors this suite is not about.
+
+    Two allowances: the anonymous landing's background snapshot probe
+    401s by design (sync.js resolves identity on every online page
+    load; a visitor has none), and a resource served from another
+    origin (the webfont host) failing to load is the network's
+    business, not this page's. Every other console error is a real
+    finding, including a failed load of one of our own URLs."""
+    kept = []
+    for message in console_errors:
+        if "/api/offline/snapshot" in message and "401" in message:
+            continue
+        source = message.rsplit("[", 1)[-1].rstrip("]")
+        if source and not source.startswith(base):
+            continue
+        kept.append(message)
+    return kept
 
 
 def _goto_landing(page, base: str):
@@ -216,12 +304,17 @@ def _generate(page, topic: str) -> None:
     page.get_by_role("button", name="Generate my deck").click()
 
 
-# ---- the full anonymous loop -------------------------------------------
+# ---- the M2 loop ---------------------------------------------------------
 
 
-def test_full_anonymous_loop_generate_study_nudge(instant_server, instant_ctx):
-    ctx, gen, sync_posts = instant_ctx
-    gen["body"] = DECK_A
+def test_anonymous_generate_lands_on_the_deck_and_studies(instant_server, live_ctx):
+    """The milestone's own acceptance path: type a topic, land on
+    `/deck/<slug>`, study a card through the normal loop, reload `/`
+    and get the dashboard. Every screen after the hero is the same
+    one a signed-in user gets; the only new browser state is the
+    cookie."""
+    ctx, stub = live_ctx
+    stub.deck = DECK_A
     base = instant_server.base_url
     page = ctx.new_page()
     console_errors, page_errors = _watch_errors(page)
@@ -231,115 +324,106 @@ def test_full_anonymous_loop_generate_study_nudge(instant_server, instant_ctx):
     hero = _goto_landing(page, base)
     assert "What do you want to learn today?" in hero.locator("h1").inner_text()
     assert "Deck generation runs on a shared free AI service" in hero.inner_text()
-    sign_in_url = hero.get_attribute("data-sign-in-url")
-    assert sign_in_url
+    assert hero.get_attribute("data-sign-in-url")
 
-    # -- generate (mocked): straight into the deck ---------------------
-    # No summary screen: generating navigates to the study surface, so
-    # the deck view the user lands on is the only deck view there is.
+    # -- generate: straight onto the stored deck's page -----------------
     _generate(page, "world capitals")
-    page.wait_for_url("**/offline")
+    page.wait_for_url("**/deck/**")
+    slug = page.url.rsplit("/", 1)[-1]
+    # The slug is opaque, not derived from the topic text.
+    assert "capital" not in slug
 
-    # -- IDB truth: guest deck written, owner untouched ----------------
-    cards = _idb_all(page, "local_cards")
-    assert len(cards) == 5
-    by_prompt = {c["prompt"]: c for c in cards}
-    assert set(by_prompt) == {c["prompt"] for c in DECK_A["cards"]}
-    for spec_card in DECK_A["cards"]:
-        row = by_prompt[spec_card["prompt"]]
-        assert row["type"] == "short"
-        assert row["deck_name"] == "World Capitals"
-        assert row["answer_regex"] == spec_card["answer_regex"]
-        assert row["deck_id"] is None
-        assert row["local_step"] == 0
-        assert row["local_next_due"] is None
-    guest = page.evaluate(_IDB_META_GET_JS, "guest")
-    assert guest["display_name"] == "World Capitals"
-    assert guest["topic"] == "world capitals"
-    assert page.evaluate(_IDB_META_GET_JS, "owner") is None
+    # The deck page is the ordinary one: display name from the topic,
+    # every generated card present, all of them due.
+    page.wait_for_selector(".deck-hero-cta")
+    assert page.locator(".prelude h1, .deck-hero h1").first.inner_text() == "world capitals"
+    body_text = page.locator("body").inner_text()
+    for card in DECK_A["cards"]:
+        assert card["prompt"] in body_text
 
-    # -- the guest overview --------------------------------------------
-    page.wait_for_selector(".offline-deck-list")
-    assert page.locator(".prelude .eyebrow").inner_text() == "Your deck"
-    assert page.locator(".prelude h1").inner_text() == "World Capitals"
-    assert "5 cards are due right now." in page.locator(".lede").inner_text()
-    # Guest mode reads as the app: plain brand, no "offline" suffix,
-    # and the brand links back to the landing (the guest's only way
-    # out of the study surface).
-    assert page.locator(".masthead .brand-word").inner_text() == "Prep"
-    assert page.locator("a.masthead-brand").get_attribute("href").endswith("/")
-    # The one guest deck renders from meta.guest with live counts.
-    assert "5 due · 5 cards" in page.locator(".offline-deck-list").inner_text()
-    # Persistent disclosure line instead of the snapshot stamp.
-    note = page.locator(".offline-guest-note")
-    assert "This deck is stored only on this device." in note.inner_text()
-    assert note.get_by_role("link", name="Create an account").get_attribute("href") == (
-        page.locator("#offline-root").get_attribute("data-sign-in-url")
-    )
-    assert page.locator(".offline-snapshot-stamp").count() == 0
+    # Nothing device-local was written: the deck lives on the server.
+    assert _idb_all(page, "local_cards") == []
+    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
 
-    # -- study all five: regex shorts auto-grade, the null-regex card
-    #    reveals + self-verdicts. Queue order is shuffled within the
-    #    due bucket, so each card is identified by its prompt. --------
-    spec_by_prompt = {c["prompt"]: c for c in DECK_A["cards"]}
-    auto_graded = 0
-    self_graded = 0
-    page.get_by_role("button", name="Study").click()
-    for _ in range(5):
-        page.wait_for_selector(".study-card textarea")
-        prompt = page.locator(".study-prompt").inner_text()
-        card = spec_by_prompt[prompt]
-        page.locator(".study-card textarea").fill(card["answer"])
-        page.get_by_role("button", name="Submit").click()
-        if card["answer_regex"]:
-            auto_graded += 1
-        else:
-            page.wait_for_selector(".offline-selfgrade-blurb")
-            page.get_by_role("button", name="I got it right").click()
-            self_graded += 1
-        page.wait_for_selector("h1.verdict-headline")
-        assert page.locator("h1.verdict-headline").inner_text() == "Right."
-        # For a guest the ladder IS the schedule: no divergence
-        # qualifier on the verdict.
-        assert "offline schedule" not in page.locator(".verdict-sub").inner_text()
-        page.get_by_role("button", name="Next card").click()
-    assert auto_graded == 4
-    assert self_graded == 1
+    # -- study one card through the normal loop -------------------------
+    page.get_by_role("button", name="Begin study session").click()
+    page.wait_for_selector(".study-card textarea")
+    prompt = page.locator(".study-prompt").inner_text()
+    answer = {c["prompt"]: c["answer"] for c in DECK_A["cards"]}[prompt]
+    page.locator(".study-card textarea").fill(answer)
+    page.get_by_role("button", name="Submit").click()
+    # Free text with no tier to fund a judge reveals and self-grades,
+    # which is what an anonymous account always gets.
+    page.wait_for_selector(".offline-selfgrade-blurb")
+    page.get_by_role("button", name="I got it right").click()
+    page.wait_for_selector("h1.verdict-headline")
+    assert page.locator("h1.verdict-headline").inner_text() == "Right."
 
-    outbox = _idb_all(page, "outbox_reviews")
-    assert len(outbox) == 5
-    assert all(r["card_client_id"] for r in outbox)
-    assert sorted(r["graded_by"] for r in outbox) == ["auto"] * 4 + ["self"]
+    # -- reload the landing URL: the dashboard, not the hero ------------
+    page.goto(base + "/")
+    page.wait_for_selector(".prelude h1")
+    assert page.locator("[data-instant-start]").count() == 0
+    assert "world capitals" in page.locator("body").inner_text()
 
-    # -- caught up: the post-session nudge banner ----------------------
-    page.wait_for_selector(".offline-guest-nudge")
-    nudge = page.locator(".offline-guest-nudge")
-    assert (
-        "Nice work. This deck lives only on this device so far. "
-        "Create a free account to keep it and study anywhere." in nudge.inner_text()
-    )
-    cta = nudge.get_by_role("link", name="Create a free account")
-    assert cta.get_attribute("href") == page.locator("#offline-root").get_attribute(
-        "data-sign-in-url"
-    )
-    assert nudge.get_by_role("button", name="Not now").is_visible()
-    assert "All caught up" in page.locator(".empty-state").inner_text()
-    # Never a modal, never over a card.
-    assert page.locator("dialog[open]").count() == 0
-
-    # -- back to overview: footer line persists, banner never shown ----
-    page.get_by_role("button", name="Back to overview").click()
-    page.wait_for_selector(".offline-guest-note")
-    assert "Nothing is due right now." in page.locator(".lede").inner_text()
-    # The reconnect sync banner never appeared during the guest
-    # session (pins the guest no-op in syncOnReconnect) and nothing
-    # was POSTed to the sync endpoint.
-    assert page.locator(".offline-banner").count() == 0
-    assert sync_posts == []
-
-    # -- browser health: no uncaught errors, no unexplained console ----
     assert page_errors == [], page_errors
-    assert _unexpected_console(console_errors) == [], console_errors
+    assert _unexpected_console(console_errors, base) == [], console_errors
+
+
+def test_forget_this_device_works_from_the_real_page(instant_server, live_ctx):
+    """The route refuses a request the browser reports as cross-site,
+    so the button a real browser presses has to keep working: a real
+    same-origin form POST carries `Sec-Fetch-Site: same-origin`."""
+    ctx, stub = live_ctx
+    stub.deck = DECK_A
+    base = instant_server.base_url
+    page = ctx.new_page()
+    instant_server.start()  # idempotent; heals a prior test's failure state
+
+    _goto_landing(page, base)
+    _generate(page, "world capitals")
+    page.wait_for_url("**/deck/**")
+
+    page.on("dialog", lambda dialog: dialog.accept())
+    page.locator(".user-forget-form").wait_for(state="attached")
+    page.evaluate("() => document.querySelector('.user-forget-form').requestSubmit()")
+
+    # Cookie gone: the landing hero is back and the deck is not.
+    page.wait_for_selector("[data-instant-start]")
+    assert DECK_A["cards"][0]["prompt"] not in page.locator("body").inner_text()
+
+
+def test_the_deck_belongs_to_the_cookie_not_the_deploy(instant_server, live_ctx, browser_session):
+    """The account is the cookie's. A second browser holding no cookie
+    still sees the landing hero, and the deck URL it can read off a
+    shared link answers with the sign-in bounce, never the cards.
+
+    The deck fetch goes through the API request context: a real
+    navigation would follow the bounce to the deploy's (fake) hosted
+    sign-in host and fail on DNS instead of on the assertion."""
+    ctx, stub = live_ctx
+    stub.deck = DECK_A
+    base = instant_server.base_url
+    instant_server.start()  # idempotent; heals a prior test's failure state
+
+    page = ctx.new_page()
+    _goto_landing(page, base)
+    _generate(page, "world capitals")
+    page.wait_for_url("**/deck/**")
+    deck_url = page.url
+    assert DECK_A["cards"][0]["prompt"] in page.locator("body").inner_text()
+
+    other = _new_anon_context(browser_session)
+    try:
+        stranger = other.new_page()
+        stranger.goto(base + "/")
+        stranger.locator("[data-instant-start]").wait_for()
+
+        response = other.request.get(deck_url, max_redirects=0)
+        assert response.status in (303, 401)
+        for card in DECK_A["cards"]:
+            assert card["prompt"] not in response.text()
+    finally:
+        other.close()
 
 
 # ---- error paths ---------------------------------------------------------
@@ -394,12 +478,13 @@ def test_day_limit_copy_links_sign_in(instant_server, instant_ctx):
 # ---- submit guard --------------------------------------------------------
 
 
-def test_double_submit_sends_one_generate_post(instant_server, instant_ctx):
+def test_double_submit_sends_one_generate_post(instant_server, live_ctx):
     """Two submit events landing in one task (double-tap, Enter plus
     click) must produce exactly one POST: the in-flight guard closes
-    before submit()'s first await."""
-    ctx, gen, sync_posts = instant_ctx
-    gen["body"] = DECK_A
+    before submit()'s first await. Run against the real endpoint, so a
+    second POST would also be a second deck and a second spend."""
+    ctx, stub = live_ctx
+    stub.deck = DECK_A
     base = instant_server.base_url
     page = ctx.new_page()
     instant_server.start()  # idempotent; heals a prior test's failure state
@@ -422,173 +507,13 @@ def test_double_submit_sends_one_generate_post(instant_server, instant_ctx):
           form.requestSubmit();
         }"""
     )
-    page.wait_for_url("**/offline")
+    page.wait_for_url("**/deck/**")
     page.wait_for_timeout(400)
     assert len(generate_posts) == 1
-    # One write pass too: the deck landed once.
-    assert len(_idb_all(page, "local_cards")) == 5
-
-
-# ---- returning visitor -----------------------------------------------------
-
-# Queue one review against the first generated card, the shape
-# recordVerdict writes (card_client_id key). The replace must take
-# this orphan-to-be with it.
-_QUEUE_GUEST_REVIEW_JS = """
-async ({prefix}) => {
-  const store = await import(prefix + "offline/store.js");
-  const cards = await store.getAll("local_cards");
-  const target = cards[0];
-  await store.withLock(() =>
-    store.put("outbox_reviews", {
-      client_id: store.uuid(),
-      card_client_id: target.client_id,
-      verdict: "right",
-      user_answer: target.answer,
-      graded_by: "auto",
-      reviewed_at: new Date().toISOString(),
-    })
-  );
-  return target.client_id;
-}
-"""
-
-
-def test_returning_visitor_strip_and_replace_confirm(instant_server, instant_ctx):
-    ctx, gen, sync_posts = instant_ctx
-    gen["body"] = DECK_A
-    base = instant_server.base_url
-    page = ctx.new_page()
-    instant_server.start()  # idempotent; heals a prior test's failure state
-
-    # -- first visit: generate deck A, queue one review ----------------
-    _goto_landing(page, base)
-    _generate(page, "world capitals")
-    page.wait_for_url("**/offline")
-    prefix = _module_prefix(page)
-    page.evaluate(_QUEUE_GUEST_REVIEW_JS, {"prefix": prefix})
-    assert len(_idb_all(page, "outbox_reviews")) == 1
-
-    # -- reload: the Continue-studying strip ----------------------------
+    # One account, one deck: the dashboard lists exactly what was asked for.
     page.goto(base + "/")
-    strip = page.locator("[data-instant-continue]")
-    strip.wait_for(state="visible")
-    # inner_text reflects rendered text and the eyebrow is
-    # CSS-uppercased; compare case-insensitively.
-    strip_text = strip.inner_text()
-    assert "continue studying" in strip_text.lower()
-    assert "World Capitals" in strip_text
-    assert "5 cards · 5 due" in strip_text
-    assert strip.get_by_role("link").get_attribute("href").endswith("/offline")
-
-    # -- second generation: one confirm, then replace -------------------
-    confirms: list[str] = []
-
-    def _on_dialog(dialog):
-        confirms.append(dialog.message)
-        dialog.accept()
-
-    page.on("dialog", _on_dialog)
-    gen["body"] = DECK_B
-    _generate(page, "music intervals")
-    page.wait_for_url("**/offline")
-    assert confirms == [
-        "Replace your current deck (World Capitals)? It's only stored on this device."
-    ]
-    # Landed on the replaced deck, not a summary of it.
-    page.wait_for_selector(".offline-deck-list")
-    assert page.locator(".prelude h1").inner_text() == "Music Intervals"
-
-    # The replace swapped every card, updated meta.guest, and took the
-    # replaced cards' outbox_reviews rows with it (an orphan review
-    # would surface as a reject at adoption time).
-    cards = _idb_all(page, "local_cards")
-    assert {c["prompt"] for c in cards} == {c["prompt"] for c in DECK_B["cards"]}
-    assert page.evaluate(_IDB_META_GET_JS, "guest")["display_name"] == "Music Intervals"
-    assert _idb_all(page, "outbox_reviews") == []
-    assert sync_posts == []
-
-
-# ---- owner-present device ---------------------------------------------------
-
-_SEED_OWNER_JS = """
-async ({prefix}) => {
-  const store = await import(prefix + "offline/store.js");
-  await store.withLock(() =>
-    store.metaPut("owner", {
-      user_id: "owner-device@example.com",
-      display_name: "Device Owner",
-      snapshot_at: new Date().toISOString(),
-      build: null,
-    })
-  );
-}
-"""
-
-
-def test_owner_present_device_appends_without_guest_state(instant_server, instant_ctx):
-    """Spec edge table: on a device with an owner snapshot the landing
-    input still works, generated cards are ordinary authored
-    local_cards rows, meta.guest is NEVER written, no replace confirm
-    fires, and no Continue-studying strip renders on the next visit."""
-    ctx, gen, sync_posts = instant_ctx
-    gen["body"] = DECK_A
-    base = instant_server.base_url
-    page = ctx.new_page()
-    instant_server.start()  # idempotent; heals a prior test's failure state
-
-    # Seed the owner through the un-auth-gated shell (no sync runs
-    # there for a device with no due data).
-    page.goto(base + "/offline")
-    page.evaluate(_SEED_OWNER_JS, {"prefix": _module_prefix(page)})
-    assert page.evaluate(_IDB_META_GET_JS, "owner")["user_id"] == "owner-device@example.com"
-
-    confirms: list[str] = []
-
-    def _on_dialog(dialog):
-        confirms.append(dialog.message)
-        dialog.accept()
-
-    page.on("dialog", _on_dialog)
-
-    _goto_landing(page, base)
-    _generate(page, "world capitals")
-    page.wait_for_url("**/offline")
-
-    # No confirm (there is no guest deck to replace), no guest record;
-    # the cards append to the owner's local state and ride the normal
-    # silent flush next time that owner signs in.
-    assert confirms == []
-    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
-    cards = _idb_all(page, "local_cards")
-    assert {c["prompt"] for c in cards} == {c["prompt"] for c in DECK_A["cards"]}
-    assert all(c["deck_name"] == "World Capitals" for c in cards)
-    owner = page.evaluate(_IDB_META_GET_JS, "owner")
-    assert owner["user_id"] == "owner-device@example.com"
-
-    # Next visit: module init done (button enabled) and the strip
-    # stays hidden; no adoption dialog either (owner present is state
-    # 3, not state 2).
-    page.goto(base + "/")
-    page.wait_for_function("() => !document.querySelector('.instant-generate').disabled")
-    page.wait_for_timeout(400)
-    assert page.locator("[data-instant-continue]").is_hidden()
-    assert page.locator("dialog.offline-adoption-dialog").count() == 0
-    assert sync_posts == []
-
-    # Second generation on the owner device: the replace branch must
-    # stay skipped. Still no confirm, no meta.guest, and the first
-    # deck's cards survive (a regression that deletes unconditionally
-    # would wipe them).
-    gen["body"] = DECK_B
-    _generate(page, "music intervals")
-    page.wait_for_url("**/offline")
-    assert confirms == []
-    assert page.evaluate(_IDB_META_GET_JS, "guest") is None
-    cards = _idb_all(page, "local_cards")
-    assert {c["prompt"] for c in cards} == (
-        {c["prompt"] for c in DECK_A["cards"]} | {c["prompt"] for c in DECK_B["cards"]}
-    )
+    page.wait_for_selector(".prelude h1")
+    assert page.locator("body").inner_text().count("world capitals") == 1
 
 
 # ---- reconnect suppression ---------------------------------------------------

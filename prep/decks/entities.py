@@ -26,6 +26,13 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+# Deck URL slug shape. Nanoid-style alphabet, lowercase only so URLs
+# stay easy to read aloud. 8 chars over 32 symbols is plenty of
+# entropy for per-user uniqueness; every generator retries on
+# collision. Lives here because two contexts mint deck slugs.
+SLUG_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
+SLUG_LENGTH = 8
+
 
 class QuestionType(str, Enum):
     """The four question types the app supports.

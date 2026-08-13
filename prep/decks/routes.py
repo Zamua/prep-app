@@ -23,9 +23,10 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.datastructures import FormData
 
-from prep.auth import current_user
+from prep.agent.port import AgentUnavailable
+from prep.auth import current_user, signed_in_user
 from prep.decks import service
-from prep.decks.entities import NewQuestion, QuestionType
+from prep.decks.entities import SLUG_ALPHABET, SLUG_LENGTH, NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.infrastructure.db import now as db_now
 from prep.web import responses
@@ -92,13 +93,6 @@ def _validate_display_name(name: str) -> str:
     return n
 
 
-# Nanoid-style alphabet, lowercase only so URLs stay easy to read
-# aloud / dictate. 8 chars × 32 alphabet ≈ 40 bits of entropy — plenty
-# for per-user uniqueness; collisions get retried in _unique_slug.
-_SLUG_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
-_SLUG_LENGTH = 8
-
-
 def _unique_slug(deck_repo, user_id: str) -> str:
     """Generate a fresh URL slug for a new deck. The slug is opaque
     (8 chars from a 32-symbol alphabet) so renames don't break links
@@ -108,7 +102,7 @@ def _unique_slug(deck_repo, user_id: str) -> str:
     import secrets
 
     for _ in range(100):
-        candidate = "".join(secrets.choice(_SLUG_ALPHABET) for _ in range(_SLUG_LENGTH))
+        candidate = "".join(secrets.choice(SLUG_ALPHABET) for _ in range(SLUG_LENGTH))
         if deck_repo.find_id(user_id, candidate) is None:
             return candidate
     # 100 collisions in a row means something is very wrong (likely
@@ -395,6 +389,8 @@ async def deck_new_srs_create(
                 deck_name=slug,
                 prompt=context_prompt,
             )
+        except AgentUnavailable as e:
+            return rerender(str(e))
         except Exception as e:
             raise HTTPException(500, f"deck created but failed to start plan workflow: {e}")
         return responses.redirect(request, f"/plan/{res.workflow_id}")
@@ -482,6 +478,11 @@ async def deck_new_trivia_create(
     # Free-tier funded generations are size-capped per call; other
     # tiers keep the worker's default batch size.
     from prep.agent import selector as _selector
+
+    try:
+        _selector.require_funded_workflow(uid)
+    except AgentUnavailable:
+        return responses.redirect(request, f"/deck/{slug}")
 
     start_kwargs: dict = {}
     if _selector.funding_tier_for_user(uid) == "free":
@@ -1091,20 +1092,22 @@ async def deck_transform(
             prompt=prompt.strip(),
             deck_name=name,
         )
+    except AgentUnavailable as e:
+        raise HTTPException(403, str(e)) from e
     except Exception as e:
         raise HTTPException(500, f"failed to start transform: {e}")
     return responses.redirect(request, f"/transform/{result.workflow_id}")
 
 
-@router.get("/reorganize", response_class=HTMLResponse)
-def reorganize_form(
+def _reorganize_page(
     request: Request,
-    user: dict = Depends(current_user),
-    deck_repo: DeckRepo = Depends(_deck_repo),
+    user: dict,
+    deck_repo: DeckRepo,
+    *,
+    prompt: str = "",
+    error: str | None = None,
+    status_code: int = 200,
 ):
-    """Form for the cross-deck reorganize flow. Free-text prompt,
-    plus a collapsible preview of the user's current decks so they
-    can see what the AI has to work with."""
     uid = user["tailscale_login"]
     decks = sorted(deck_repo.list_summaries(uid), key=lambda d: d.name)
     deck_views = []
@@ -1126,10 +1129,23 @@ def reorganize_form(
             "request": request,
             "user": user,
             "decks": deck_views,
-            "form": {"prompt": ""},
-            "error": None,
+            "form": {"prompt": prompt},
+            "error": error,
         },
+        status_code=status_code,
     )
+
+
+@router.get("/reorganize", response_class=HTMLResponse)
+def reorganize_form(
+    request: Request,
+    user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
+):
+    """Form for the cross-deck reorganize flow. Free-text prompt,
+    plus a collapsible preview of the user's current decks so they
+    can see what the AI has to work with."""
+    return _reorganize_page(request, user, deck_repo)
 
 
 @router.post("/reorganize")
@@ -1137,6 +1153,7 @@ async def reorganize_submit(
     request: Request,
     prompt: str = Form(...),
     user: dict = Depends(current_user),
+    deck_repo: DeckRepo = Depends(_deck_repo),
 ):
     """Kick off a cross-deck reorganize workflow."""
     uid = user["tailscale_login"]
@@ -1146,25 +1163,15 @@ async def reorganize_submit(
     from prep import temporal_client
 
     try:
-        result = await temporal_client.start_transform(
-            user_id=uid, scope="reorganize", target_id=0, prompt=cleaned
+        result = await service.start_reorganize_transform(
+            temporal_client, user_id=uid, prompt=cleaned
+        )
+    except AgentUnavailable as e:
+        return _reorganize_page(
+            request, user, deck_repo, prompt=cleaned, error=str(e), status_code=403
         )
     except Exception as e:
         raise HTTPException(500, f"failed to start reorganize: {e}")
-    # Register the cross-deck workflow so the badge shows it as
-    # "reorganize" (no single deck name to attach).
-    from prep.workflows import service as _workflows_service
-    from prep.workflows.entities import WorkflowType as _WT
-
-    _workflows_service.register(
-        user_login=uid,
-        workflow_id=result.workflow_id,
-        workflow_type=_WT.TRANSFORM,
-        deck_id=None,
-        deck_name=None,
-        url_path=f"/transform/{result.workflow_id}",
-        initial_status="computing",
-    )
     return responses.redirect(request, f"/transform/{result.workflow_id}")
 
 
@@ -1206,6 +1213,8 @@ async def question_improve(
             prompt=prompt.strip(),
             deck_name=deck_name,
         )
+    except AgentUnavailable as e:
+        raise HTTPException(403, str(e)) from e
     except Exception as e:
         raise HTTPException(500, f"failed to start transform: {e}")
     return responses.redirect(request, f"/transform/{result.workflow_id}")
@@ -1825,7 +1834,7 @@ def deck_export_apkg(
 
 
 @router.get("/decks/import-csv", response_class=HTMLResponse)
-def decks_import_csv_form(request: Request, user: dict = Depends(current_user)):
+def decks_import_csv_form(request: Request, user: dict = Depends(signed_in_user)):
     """Render the CSV upload page. Posts to the same path."""
     return templates.TemplateResponse(
         "deck_import_csv.html",
@@ -1836,7 +1845,7 @@ def decks_import_csv_form(request: Request, user: dict = Depends(current_user)):
 @router.post("/decks/import-csv", response_class=HTMLResponse)
 async def decks_import_csv_submit(
     request: Request,
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
     q_repo: QuestionRepo = Depends(_question_repo),
 ):
@@ -1891,7 +1900,7 @@ async def decks_import_csv_submit(
 
 
 @router.get("/decks/import-prepdeck", response_class=HTMLResponse)
-def decks_import_prepdeck_form(request: Request, user: dict = Depends(current_user)):
+def decks_import_prepdeck_form(request: Request, user: dict = Depends(signed_in_user)):
     """Render the .prepdeck upload page. POSTs to the same path."""
     return templates.TemplateResponse(
         "deck_import_prepdeck.html",
@@ -1902,7 +1911,7 @@ def decks_import_prepdeck_form(request: Request, user: dict = Depends(current_us
 @router.post("/decks/import-prepdeck", response_class=HTMLResponse)
 async def decks_import_prepdeck_submit(
     request: Request,
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
     q_repo: QuestionRepo = Depends(_question_repo),
 ):
@@ -1952,7 +1961,7 @@ async def decks_import_prepdeck_submit(
 
 
 @router.get("/decks/import-anki", response_class=HTMLResponse)
-def decks_import_anki_form(request: Request, user: dict = Depends(current_user)):
+def decks_import_anki_form(request: Request, user: dict = Depends(signed_in_user)):
     """Render the .apkg upload page. POSTs to the same path."""
     return templates.TemplateResponse(
         "deck_import_anki.html",
@@ -1963,7 +1972,7 @@ def decks_import_anki_form(request: Request, user: dict = Depends(current_user))
 @router.post("/decks/import-anki", response_class=HTMLResponse)
 async def decks_import_anki_submit(
     request: Request,
-    user: dict = Depends(current_user),
+    user: dict = Depends(signed_in_user),
     deck_repo: DeckRepo = Depends(_deck_repo),
     q_repo: QuestionRepo = Depends(_question_repo),
 ):

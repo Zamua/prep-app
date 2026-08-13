@@ -29,7 +29,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from prep.agent.selector import FREE_TIER_MAX_CARDS_PER_CALL, funding_tier_for_user
+from prep.agent.selector import (
+    FREE_TIER_MAX_CARDS_PER_CALL,
+    funding_tier_for_user,
+    require_funded_workflow,
+)
 from prep.decks.entities import (
     DeckCard,
     DeckSummary,
@@ -254,6 +258,7 @@ async def start_plan_generation(
     """Kick off a PlanGenerate Temporal workflow. Returns the workflow
     handle / metadata object the temporal client gives back — caller
     extracts `.workflow_id` to redirect the user to the plan page."""
+    require_funded_workflow(user_id)
     # Free-tier funded plans are size-capped per call; BYOK and
     # subscription plans let the model pick the count.
     extra: dict[str, Any] = {}
@@ -324,6 +329,7 @@ async def start_deck_transform(
 
     `deck_name` is optional but recommended — passed through to the
     workflow tracker for the masthead badge label."""
+    require_funded_workflow(user_id)
     deck_context_prompt = _resolve_deck_context_prompt(deck_repo, user_id, deck_id)
     result = await client.start_transform(
         user_id=user_id,
@@ -362,6 +368,7 @@ async def start_card_transform(
     `context_prompt` through to the model - a single-card edit
     benefits from knowing the deck's overall theme too, not just the
     card JSON in isolation."""
+    require_funded_workflow(user_id)
     deck_context_prompt = ""
     q = question_repo.get(user_id, qid)
     if q is not None:
@@ -379,6 +386,33 @@ async def start_card_transform(
         workflow_type=WorkflowType.TRANSFORM,
         deck_id=None,
         deck_name=deck_name,
+        url_path=f"/transform/{result.workflow_id}",
+        initial_status="computing",
+    )
+    return result
+
+
+async def start_reorganize_transform(
+    client: Any,
+    *,
+    user_id: str,
+    prompt: str,
+) -> Any:
+    """Kick off a cross-deck reorganize Transform. It spans every deck
+    the user owns, so there is no single deck to register against."""
+    require_funded_workflow(user_id)
+    result = await client.start_transform(
+        user_id=user_id,
+        scope="reorganize",
+        target_id=0,
+        prompt=prompt,
+    )
+    workflows_service.register(
+        user_login=user_id,
+        workflow_id=result.workflow_id,
+        workflow_type=WorkflowType.TRANSFORM,
+        deck_id=None,
+        deck_name=None,
         url_path=f"/transform/{result.workflow_id}",
         initial_status="computing",
     )

@@ -123,3 +123,86 @@ def _no_claude_token_leak():
     suite from ~14s to 20+ min."""
     yield
     os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+
+
+# ---- anonymous accounts -------------------------------------------------
+#
+# The three audiences the anonymous-cookie deploy serves. Each installs
+# the real AnonymousFallbackProvider over a stub adapter, so identity
+# resolves through the production precedence rule rather than a
+# shortcut.
+
+
+@pytest.fixture
+def anon_secret(monkeypatch: pytest.MonkeyPatch):
+    """A deploy that can sign cookies, which is what enables anonymous
+    accounts at all."""
+    from prep.auth import anon_cookie as ac
+
+    monkeypatch.delenv(ac.SECRET_ENV, raising=False)
+    monkeypatch.setenv(ac.MASTER_ENV, "11" * 32)
+
+
+@pytest.fixture
+def anon_visitor(client, initialized_db, anon_secret):
+    """No provider identity and no cookie."""
+    from prep.auth.providers import set_provider
+    from prep.auth.providers.anon import AnonymousFallbackProvider
+    from tests.anon_support import Inner
+
+    set_provider(AnonymousFallbackProvider(Inner()))
+    yield client
+    set_provider(None)
+
+
+@pytest.fixture
+def anon_client(client, initialized_db, anon_secret):
+    """An anonymous account, with its cookie on the client."""
+    from prep.auth import anon_cookie as ac
+    from prep.auth.providers import set_provider
+    from prep.auth.providers.anon import AnonymousFallbackProvider
+    from tests.anon_support import ANON_ID, Inner, seed_anon_user
+
+    set_provider(AnonymousFallbackProvider(Inner()))
+    seed_anon_user()
+    client.cookies.set(ac.COOKIE_NAME, ac.mint_cookie(ANON_ID))
+    yield client
+    client.cookies.clear()
+    set_provider(None)
+
+
+@pytest.fixture
+def signed_in_client(client, initialized_db, anon_secret):
+    """A provider identity, plus the anonymous cookie the browser may
+    still carry: the provider result must win."""
+    from prep.auth import anon_cookie as ac
+    from prep.auth.providers import set_provider
+    from prep.auth.providers.anon import AnonymousFallbackProvider
+    from tests.anon_support import ANON_ID, SIGNED_IN, Inner, seed_anon_user
+
+    set_provider(AnonymousFallbackProvider(Inner(user=SIGNED_IN)))
+    seed_anon_user()
+    client.cookies.set(ac.COOKIE_NAME, ac.mint_cookie(ANON_ID))
+    yield client
+    client.cookies.clear()
+    set_provider(None)
+
+
+@pytest.fixture
+def rendered_templates(monkeypatch: pytest.MonkeyPatch):
+    """Records the template name of every render, so a test can assert
+    two audiences reached the same one."""
+    from prep.web.templates import templates
+
+    names: list[str] = []
+    original = templates.TemplateResponse
+
+    def spy(*args, **kwargs):
+        for arg in args:
+            if isinstance(arg, str):
+                names.append(arg)
+                break
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(templates, "TemplateResponse", spy)
+    return names

@@ -34,6 +34,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from prep import chat_handoff
+from prep.agent.port import AgentUnavailable
+from prep.agent.selector import require_funded_workflow
 from prep.auth import current_user
 from prep.decks import service as decks_service
 from prep.decks.entities import DeckType, NewQuestion, Question, QuestionType
@@ -423,6 +425,12 @@ async def _submit(
                 )
         except StaleVersionError as e:
             return _stale(e)
+        except AgentUnavailable:
+            # No tier funds an LLM judge for this user: self-grade
+            # rather than book a worker slot the activity cannot pay.
+            return JSONResponse(
+                {"selfGrade": True, "answer": user_answer, "card": _revealed(q), "session": session}
+            )
         except Exception as e:
             return _error(502, "grading_start_failed", f"failed to start grading workflow: {e}")
         sid = s.id if s is not None else ""
@@ -505,6 +513,7 @@ async def _start_grading_no_session(
 ) -> str:
     """Deck-scoped grading start: no session row to mark, but the
     masthead badge still needs the workflow registered."""
+    require_funded_workflow(uid)
     res = await client.start_grading(qid, deck_name, user_answer, idk, user_id=uid)
     from prep.workflows import service as workflows_service
     from prep.workflows.entities import WorkflowType

@@ -35,6 +35,10 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Same value as the driver default, stated here so it is a decision
+    # rather than an inherited accident: a writer that waits out a
+    # peer's lock beats one that raises OperationalError at it.
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 
@@ -69,6 +73,12 @@ def init() -> None:
     check so re-running is a no-op.
     """
     with cursor() as c:
+        # Journal mode is a property of the FILE, so one execution is
+        # permanent and every later connection inherits it. Readers
+        # stop blocking on the writer, which leaves writer-versus-
+        # writer as the only contention BEGIN IMMEDIATE has to serialize.
+        c.execute("PRAGMA journal_mode = WAL").fetchone()
+
         c.executescript(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -698,3 +708,50 @@ def init() -> None:
             CREATE INDEX IF NOT EXISTS idx_instant_generations_created
                 ON instant_generations (created_at);
         """)
+
+        # 25. Anonymous accounts. `is_anonymous` marks a user row minted
+        #     from a prep_anon cookie rather than an identity provider.
+        #     The partial index serves the reaper's only query.
+        ucols3 = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "is_anonymous" not in ucols3:
+            c.execute("ALTER TABLE users ADD COLUMN is_anonymous INTEGER NOT NULL DEFAULT 0")
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_anon_last_seen "
+            "ON users(last_seen_at) WHERE is_anonymous = 1"
+        )
+
+        # 26. Merge audit. One row per attempted merge of an anonymous
+        #     account into a provider account. Retained: it is the only
+        #     record that a given deck used to belong to a different
+        #     user id, and the offline snapshot reads the completed rows
+        #     to tell a device that its old owner id is now this account.
+        c.executescript("""
+            CREATE TABLE IF NOT EXISTS account_merges (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                anon_user_id   TEXT NOT NULL,
+                target_user_id TEXT NOT NULL,
+                started_at     TEXT NOT NULL,
+                completed_at   TEXT,
+                status         TEXT NOT NULL,   -- started | completed | failed
+                counts         TEXT,            -- JSON {table: rows_moved}
+                error          TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_account_merges_anon
+                ON account_merges(anon_user_id);
+            CREATE INDEX IF NOT EXISTS idx_account_merges_target
+                ON account_merges(target_user_id, status);
+        """)
+
+        # 27. Ledger attribution. `user_id` names the account a
+        #     generation was charged to. NULL means two different
+        #     things and neither is queryable by a per-user window: a
+        #     row predating this column, and the account-minting
+        #     request, whose account does not exist at reserve time
+        #     and which is back-stamped on resolve.
+        igcols = {r["name"] for r in c.execute("PRAGMA table_info(instant_generations)").fetchall()}
+        if "user_id" not in igcols:
+            c.execute("ALTER TABLE instant_generations ADD COLUMN user_id TEXT")
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_instant_generations_user_created "
+            "ON instant_generations (user_id, created_at)"
+        )

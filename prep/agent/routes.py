@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from prep import agent as _agent_mod
 from prep.agent.port import AgentBudgetExhausted, AgentBusy, AgentUnavailable
 from prep.agent.selector import free_tier_configured
-from prep.auth import current_user
+from prep.auth import signed_in_user
 from prep.web.templates import templates
 
 logger = logging.getLogger(__name__)
@@ -279,7 +279,7 @@ def _render_settings(
 
 
 @router.get("/settings/agent", response_class=HTMLResponse)
-def settings_agent_view(request: Request, user: dict = Depends(current_user)):
+def settings_agent_view(request: Request, user: dict = Depends(signed_in_user)):
     # Fold a cache refresh into the page render — whatever the live
     # status says is what the agent_available context_processor will
     # serve next, so AI-gated UI snaps to truth on the next nav.
@@ -288,7 +288,7 @@ def settings_agent_view(request: Request, user: dict = Depends(current_user)):
 
 
 @router.post("/settings/agent/connect", response_class=HTMLResponse)
-async def settings_agent_connect(request: Request, user: dict = Depends(current_user)):
+async def settings_agent_connect(request: Request, user: dict = Depends(signed_in_user)):
     """Persist a `claude setup-token` value to prep-data + activate it
     in-process. Post-SDK migration: no HTTP round-trip to a separate
     container — token storage is fully prep-side.
@@ -355,7 +355,7 @@ async def settings_agent_connect(request: Request, user: dict = Depends(current_
 
 
 @router.post("/settings/agent/disconnect", response_class=HTMLResponse)
-def settings_agent_disconnect(request: Request, user: dict = Depends(current_user)):
+def settings_agent_disconnect(request: Request, user: dict = Depends(signed_in_user)):
     """Delete the persisted token + clear the process env. Idempotent
     — calling on an already-disconnected instance is a no-op."""
     from prep.agent import token_store
@@ -391,7 +391,7 @@ def _parse_provider(slug: str):
 
 @router.post("/settings/agent/byok/{provider}/connect", response_class=HTMLResponse)
 async def settings_byok_connect(
-    provider: str, request: Request, user: dict = Depends(current_user)
+    provider: str, request: Request, user: dict = Depends(signed_in_user)
 ):
     """Store the user's API key for `provider` (encrypted). Key shape
     is validated against the provider's accepted prefixes; the
@@ -446,7 +446,7 @@ async def settings_byok_connect(
 
 
 @router.post("/settings/agent/byok/{provider}/disconnect", response_class=HTMLResponse)
-def settings_byok_disconnect(provider: str, request: Request, user: dict = Depends(current_user)):
+def settings_byok_disconnect(provider: str, request: Request, user: dict = Depends(signed_in_user)):
     """Delete the user's BYOK row for `provider`. Idempotent: missing
     key → still 200. Selector falls back to the next provider in the
     precedence order, or the subscription path, or Noop after this.
@@ -479,7 +479,7 @@ def settings_byok_disconnect(provider: str, request: Request, user: dict = Depen
 
 
 @router.post("/settings/agent/byok/{provider}/use", response_class=HTMLResponse)
-def settings_byok_use(provider: str, request: Request, user: dict = Depends(current_user)):
+def settings_byok_use(provider: str, request: Request, user: dict = Depends(signed_in_user)):
     """Mark `provider` as the user's active BYOK choice. Refuses if
     the user doesn't have a stored key for that provider (UX
     invariant: the 'Use this one' button only appears for configured

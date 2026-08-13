@@ -167,6 +167,16 @@ _FREE_TIER_MAX_TOKENS = 32768
 # and subscription calls are uncapped.
 FREE_TIER_MAX_CARDS_PER_CALL = 5
 
+_ANON_NO_AGENT = (
+    "AI is not configured for a guest account. Create an account and "
+    "add a personal API key on /settings/agent to generate cards."
+)
+
+_NO_FUNDING = (
+    "AI is not configured. Add a personal API key on /settings/agent, "
+    "or ask the deploy admin to configure a shared tier."
+)
+
 
 def free_tier_agent(max_output_tokens: int | None = None) -> AgentPort | None:
     """Build the deploy-configured free-tier adapter, or None.
@@ -267,6 +277,29 @@ def agent_available_for_user(user_id: str | None) -> bool:
     return not isinstance(agent_for_user(user_id), _NoopAgent)
 
 
+def _is_anonymous(user_id: str) -> bool:
+    """Whether the account is a cookie identity. Anonymous users reach
+    the free tier through the instant endpoint and nowhere else, so
+    every other selection path answers Noop for them.
+
+    A primary-key read, not a test on the id's shape: the id format is
+    not a policy carrier."""
+    from prep.infrastructure.db import cursor
+
+    try:
+        with cursor() as c:
+            row = c.execute(
+                "SELECT is_anonymous FROM users WHERE tailscale_login = ?",
+                (user_id,),
+            ).fetchone()
+    except Exception:  # noqa: BLE001
+        # An unreadable users table breaks the request either way;
+        # denying every user AI would turn it into a deploy-wide outage.
+        logger.exception("agent: anonymity check failed for user %s", user_id)
+        return False
+    return bool(row and row["is_anonymous"])
+
+
 def _user_has_byok_rows(user_id: str) -> bool:
     """Whether the user has ANY stored BYOK credential row.
 
@@ -308,6 +341,12 @@ def agent_for_user(user_id: str | None) -> AgentPort:
     """
     if _factory_override is not None:
         return _factory_override(user_id)
+
+    # 0. Anonymous accounts: no tier funds them here. Their one AI
+    #    path is the instant endpoint, which resolves the free-tier
+    #    adapter directly.
+    if user_id and _is_anonymous(user_id):
+        return _NoopAgent(_ANON_NO_AGENT)
 
     # 1. BYOK first — user's own key wins. Honor the user's explicit
     # provider choice (active_byok_provider on the users row) when
@@ -425,6 +464,8 @@ def funding_tier_for_user(user_id: str | None) -> str:
     and the reported tier keeps answering from env/DB.
     """
     if user_id:
+        if _is_anonymous(user_id):
+            return "none"
         try:
             has_rows = _user_has_byok_rows(user_id)
         except Exception:  # noqa: BLE001
@@ -436,3 +477,13 @@ def funding_tier_for_user(user_id: str | None) -> str:
     if free_tier_agent() is not None:
         return "free"
     return "none"
+
+
+def require_funded_workflow(user_id: str | None) -> None:
+    """Refuse a workflow start no tier would fund.
+
+    A start registers an `active_workflows` row and holds a worker
+    slot until the activity discovers the noop adapter, so the
+    refusal has to happen before the start, not inside it."""
+    if funding_tier_for_user(user_id) == "none":
+        raise AgentUnavailable(_NO_FUNDING)

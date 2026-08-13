@@ -1,13 +1,18 @@
 """HTTP surface for the instant bounded context.
 
 POST /api/instant/generate - unauthenticated, JSON in/out. The route
-is the translation layer: derive the limiter bucket, reserve through
-the ledger, call the service, map exceptions to the wire error kinds
+is the translation layer: derive the limiter bucket, resolve the
+account the spend belongs to, reserve through the ledger, call the
+service, store the deck, and map exceptions to the wire error kinds
 and the reservation to its outcome class.
 
 Every response carries a `kind` the client branches on; errors also
 carry a human-readable `message`. The endpoint never 500s: unexpected
 failures map to `generation_failed` and count as spend.
+
+This is the only path that mints an anonymous account, and it mints
+one only after a generation succeeds: no GET, no failed generation
+and no refused request can create a user row.
 """
 
 from __future__ import annotations
@@ -23,6 +28,9 @@ import anyio.to_thread
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from prep.auth import anon_cookie
+from prep.auth.identity import optional_current_user
+from prep.auth.limits import RowCapReached
 from prep.instant import repo, service
 from prep.web.metrics import observe_instant_generate
 
@@ -52,6 +60,8 @@ _ERROR_COPY = {
     "generation_failed": "That didn't work. Try again.",
     "invalid_topic": "Describe your topic in 1 to 500 characters.",
     "not_configured": "Instant decks aren't available on this deploy.",
+    "deck_limit": "You've reached the limit for a guest account. "
+    "Create a free account to keep going.",
 }
 
 
@@ -108,11 +118,15 @@ async def _read_body(request: Request) -> bytes | None:
     return bytes(body)
 
 
-async def _resolve(reservation_id: int, outcome: str, *, cards: int | None = None) -> None:
+async def _resolve(
+    reservation_id: int, outcome: str, *, cards: int | None = None, user_id: str | None = None
+) -> None:
     """Ledger resolution never changes the response: on failure the
     row stays pending, which already counts as spend (fail closed)."""
     try:
-        await anyio.to_thread.run_sync(partial(repo.resolve, reservation_id, outcome, cards=cards))
+        await anyio.to_thread.run_sync(
+            partial(repo.resolve, reservation_id, outcome, cards=cards, user_id=user_id)
+        )
     except Exception:  # noqa: BLE001 - the visitor keeps their mapped response
         logger.exception("instant generate: resolve failed; row stays pending")
 
@@ -171,9 +185,24 @@ async def instant_generate(request: Request) -> JSONResponse:
     if agent is None:
         return _error(ip=ip, started=started, status=503, kind="not_configured", metric=None)
 
+    # Before the reservation, so the ledger row names the account that
+    # is spending. A visitor with no account yet reserves with None and
+    # is back-stamped once the mint happens.
+    try:
+        user = await anyio.to_thread.run_sync(optional_current_user, request)
+    except Exception:  # noqa: BLE001 - an unresolvable identity refuses; no spend has happened
+        logger.exception("instant generate: user resolution failed")
+        return _error(ip=ip, started=started, status=429, kind="busy", metric="busy")
+    user_id = user["tailscale_login"] if user else None
+    if user_id is None and not anon_cookie.is_enabled():
+        # No signing secret means no anonymous accounts, so a
+        # signed-out generation has nowhere to land. Refuse before the
+        # reservation rather than spend on a deck nobody can reach.
+        return _error(ip=ip, started=started, status=503, kind="not_configured", metric=None)
+
     try:
         gate = await anyio.to_thread.run_sync(
-            partial(repo.check_and_reserve, ip, topic_chars=len(topic))
+            partial(repo.check_and_reserve, ip, topic_chars=len(topic), user_id=user_id)
         )
     except Exception:  # noqa: BLE001 - a ledger failure refuses; no spend has happened
         logger.exception("instant generate: check_and_reserve failed")
@@ -211,13 +240,40 @@ async def instant_generate(request: Request) -> JSONResponse:
             ip=ip, started=started, status=502, kind="generation_failed", metric="failed_spent"
         )
 
-    await _resolve(gate.id, "ok", cards=len(deck.cards))
+    try:
+        stored = await anyio.to_thread.run_sync(
+            partial(
+                repo.create_instant_deck,
+                user_id=user_id,
+                display_name=deck.display_name,
+                cards=deck.cards,
+            )
+        )
+    except RowCapReached:
+        await _resolve(gate.id, "failed_spent", user_id=user_id)
+        return _error(ip=ip, started=started, status=429, kind="deck_limit", metric="failed_spent")
+    except Exception:
+        # The tokens were spent and the deck is gone with the
+        # transaction, so this classes as spend and reads as a failed
+        # generation on the wire.
+        logger.exception("instant generate: deck write failed")
+        await _resolve(gate.id, "failed_spent", user_id=user_id)
+        return _error(
+            ip=ip, started=started, status=502, kind="generation_failed", metric="failed_spent"
+        )
+
+    await _resolve(gate.id, "ok", cards=len(deck.cards), user_id=stored.user_id)
     duration = time.monotonic() - started
     observe_instant_generate(outcome="ok", duration_s=duration)
     logger.info(
-        "instant generate: ip=%s outcome=ok cards=%d duration_ms=%d",
+        "instant generate: ip=%s outcome=ok cards=%d minted=%s duration_ms=%d",
         ip,
         len(deck.cards),
+        stored.minted,
         int(duration * 1000),
     )
-    return JSONResponse({"display_name": deck.display_name, "cards": deck.cards})
+    root_path = request.scope.get("root_path", "") or ""
+    response = JSONResponse({"kind": "ok", "redirect": f"{root_path}/deck/{stored.slug}"})
+    if stored.minted:
+        anon_cookie.issue_cookie(request, response, stored.user_id)
+    return response

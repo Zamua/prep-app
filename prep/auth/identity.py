@@ -20,6 +20,12 @@ from prep.auth.providers import get_provider
 from prep.auth.repo import UserRepo
 
 
+class SignInRequired(Exception):
+    """An anonymous account reached a surface that needs a durable
+    identity. Translated by the handler in `prep.web.errors`: a
+    redirect to sign-in for HTML, 403 for JSON."""
+
+
 def current_user(request: Request) -> dict:
     """FastAPI dependency: resolve the request's user, or 401.
 
@@ -39,6 +45,21 @@ def current_user(request: Request) -> dict:
     return user
 
 
+def signed_in_user(request: Request) -> dict:
+    """current_user, plus: anonymous accounts are refused. For
+    surfaces that need a durable, provable identity (a push endpoint
+    that outlives the cookie, a secret we must protect, a token that
+    authenticates elsewhere) and for surfaces whose cost is unbounded
+    per account.
+
+    Applied per route, never to a whole router: a route nobody
+    thought about must not inherit a gate by accident."""
+    user = current_user(request)
+    if user.get("is_anonymous"):
+        raise SignInRequired()
+    return user
+
+
 def optional_current_user(request: Request) -> dict | None:
     """Variant of `current_user` that returns None for unauthenticated
     requests instead of raising 401. Used by routes that have a
@@ -47,11 +68,26 @@ def optional_current_user(request: Request) -> dict | None:
     resolved = get_provider().resolve(request)
     if not resolved:
         return None
-    user = UserRepo().upsert(
-        external_id=resolved.external_id,
-        email=resolved.email,
-        display_name=resolved.display_name,
-        profile_pic_url=resolved.profile_pic_url,
-    )
+    repo = UserRepo()
+    if resolved.is_anonymous:
+        # Never upsert an anonymous id: upsert inserts on miss, so a
+        # cookie naming a reaped account would resurrect it as an
+        # empty user forever. Anonymous rows are created at mint time
+        # only; a missing row means the cookie is dead. So is a row
+        # that no longer carries the flag: every downstream gate reads
+        # the ROW, so honouring the cookie alone would turn a cleared
+        # flag into an unrestricted session for whoever still holds it.
+        user = repo.get_by_external_id(resolved.external_id)
+        if user is None or not user.get("is_anonymous"):
+            request.state.anon_cookie_stale = True
+            return None
+        repo.touch(resolved.external_id)
+    else:
+        user = repo.upsert(
+            external_id=resolved.external_id,
+            email=resolved.email,
+            display_name=resolved.display_name,
+            profile_pic_url=resolved.profile_pic_url,
+        )
     request.state.user = user
     return user

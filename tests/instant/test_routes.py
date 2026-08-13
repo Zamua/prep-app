@@ -8,6 +8,7 @@ must trip the global breaker exactly as successes would.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
@@ -20,6 +21,7 @@ from prep.instant.routes import MAX_BODY_BYTES, SENTINEL_BUCKET, _read_body
 
 URL = "/api/instant/generate"
 IP = {"x-real-ip": "198.51.100.7"}
+REDIRECT_RE = re.compile(r"^/deck/[abcdefghijkmnpqrstuvwxyz23456789]{8}$")
 
 
 def _deck_text(n: int = 5) -> str:
@@ -37,7 +39,8 @@ def _rows() -> list[dict]:
         return [
             dict(r)
             for r in c.execute(
-                "SELECT ip, outcome, cards, topic_chars FROM instant_generations ORDER BY id"
+                "SELECT ip, outcome, cards, topic_chars, user_id"
+                " FROM instant_generations ORDER BY id"
             ).fetchall()
         ]
 
@@ -61,14 +64,21 @@ def test_ok_shape(client, instant_factory):
     r = client.post(URL, json={"topic": "  Postgres   MVCC  "}, headers=IP)
     assert r.status_code == 200
     body = r.json()
-    assert body["display_name"] == "Postgres MVCC"
-    assert len(body["cards"]) == 5
-    assert body["cards"][0] == {
-        "prompt": "Question 0?",
-        "answer": "answer 0",
-        "answer_regex": "answer 0",
-    }
+    assert body["kind"] == "ok"
+    assert REDIRECT_RE.match(body["redirect"])
+    assert "cards" not in body
     assert "Postgres   MVCC" in fake.calls[0]["prompt"]
+
+    # The signed-in requester owns the stored deck; nothing was minted.
+    with infra_db.cursor() as c:
+        deck = dict(c.execute("SELECT * FROM decks").fetchone())
+        questions = c.execute("SELECT COUNT(*) AS n FROM questions").fetchone()["n"]
+        cards = c.execute("SELECT COUNT(*) AS n FROM cards").fetchone()["n"]
+        anon = c.execute("SELECT COUNT(*) AS n FROM users WHERE is_anonymous = 1").fetchone()["n"]
+    assert body["redirect"] == f"/deck/{deck['name']}"
+    assert deck["user_id"] == "testuser@example.com"
+    assert deck["display_name"] == "Postgres MVCC"
+    assert (questions, cards, anon) == (5, 5, 0)
 
     rows = _rows()
     assert len(rows) == 1
@@ -76,6 +86,7 @@ def test_ok_shape(client, instant_factory):
     assert rows[0]["outcome"] == "ok"
     assert rows[0]["cards"] == 5
     assert rows[0]["topic_chars"] == len("Postgres   MVCC")
+    assert rows[0]["user_id"] == "testuser@example.com"
 
 
 # ---- invalid topic ------------------------------------------------------------
@@ -255,20 +266,20 @@ def test_resolve_failure_still_returns_the_deck(client, instant_factory, monkeyp
     # the deck away. The row stays pending, which counts as spend.
     instant_factory(lambda **kw: _fake())
 
-    def locked(reservation_id, outcome, *, cards=None):
+    def locked(reservation_id, outcome, *, cards=None, user_id=None):
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr("prep.instant.repo.resolve", locked)
     r = client.post(URL, json={"topic": "t"}, headers=IP)
     assert r.status_code == 200
-    assert len(r.json()["cards"]) == 5
+    assert REDIRECT_RE.match(r.json()["redirect"])
     assert [row["outcome"] for row in _rows()] == ["pending"]
 
 
 def test_resolve_failure_keeps_the_mapped_error_shape(client, instant_factory, monkeypatch):
     instant_factory(lambda **kw: _fake("a poem, not JSON"))
 
-    def locked(reservation_id, outcome, *, cards=None):
+    def locked(reservation_id, outcome, *, cards=None, user_id=None):
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr("prep.instant.repo.resolve", locked)

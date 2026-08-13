@@ -1,9 +1,8 @@
 // instant-start.js: the landing hero's anonymous generation loop
-// (docs/INSTANT-START.md sections 2 + 3.3). Four form states: idle,
-// generating, ready, error. Generated cards land in the same
-// IndexedDB the offline app studies from; `meta.guest` is written
-// ONLY when `meta.owner` is absent (on an owner-present device the
-// cards are ordinary authored rows that ride the normal sync flush).
+// (docs/ANONYMOUS-ACCOUNTS.md section 3). Four form states: idle,
+// generating, ready, error. The server stores the deck and answers
+// with the URL to land on, so a successful generation ends in a
+// navigation and nothing here writes card data.
 //
 // Lazy-imported by app.js on the [data-instant-start] hook, so only
 // the instant landing pays for it. Card and deck text is model
@@ -113,25 +112,6 @@ export async function init(node) {
         return;
       }
 
-      // Replace-confirm BEFORE any spend: one guest deck per device.
-      // Owner-absent local cards without meta.guest are still guest
-      // data (the adoption gate counts them), so they get the same
-      // confirm rather than a silent wipe.
-      let guestState = null;
-      try {
-        guestState = await readGuestState();
-      } catch (e) {
-        guestState = null;
-      }
-      if (guestState && !guestState.owner && (guestState.guest || guestState.cards.length > 0)) {
-        const name =
-          (guestState.guest && guestState.guest.display_name) || "your saved cards";
-        const ok = window.confirm(
-          "Replace your current deck (" + name + ")? It's only stored on this device."
-        );
-        if (!ok) return;
-      }
-
       button.classList.add("is-loading");
       errorLine.hidden = true;
       statusLine.textContent = "Writing your cards. Usually 10 to 20 seconds.";
@@ -154,22 +134,13 @@ export async function init(node) {
         } catch (e) {
           response = null; // network failure / timeout
         }
-        if (!response || !response.ok || !body || !Array.isArray(body.cards)) {
+        if (!response || !response.ok || !body || typeof body.redirect !== "string") {
           showError(response, body);
           return; // input preserved
         }
-        try {
-          await writeDeck(body, topic);
-        } catch (e) {
-          // Nothing kept the deck, so there is nowhere to send the
-          // user. Say so where the other errors appear.
-          console.warn("instant deck could not be saved on this device:", e);
-          showSaveError();
-          return; // input preserved
-        }
-        // Straight into the deck. A summary screen here would be a
-        // second deck view competing with the real one.
-        window.location.assign(ROOT_PATH + "/offline");
+        // Straight into the deck the server stored. A summary screen
+        // here would be a second deck view competing with the real one.
+        window.location.assign(body.redirect);
         return;
       } finally {
         button.classList.remove("is-loading");
@@ -178,60 +149,6 @@ export async function init(node) {
     } finally {
       inFlight = false;
     }
-  }
-
-  // Everything under one lock turn, with FRESH owner/guest reads: the
-  // confirm above is UX, but the replace/stamp decision must come
-  // from the same instant as the writes.
-  async function writeDeck(payload, topic) {
-    const store = await import("@/offline/store.js");
-    const nowIso = new Date().toISOString();
-    await store.withLock(async () => {
-      const owner = await store.metaGet("owner");
-      if (!owner) {
-        // Guest meta goes first: each put/remove is its own IDB
-        // transaction, and a crash mid-replace must not leave
-        // metadata naming a deck whose cards are gone (guest mode
-        // derives the name from local_cards until the new record
-        // lands).
-        await store.remove("meta", "guest");
-        const existing = await store.getAll("local_cards");
-        const replaced = new Set(existing.map((c) => c.client_id));
-        for (const card of existing) await store.remove("local_cards", card.client_id);
-        if (replaced.size) {
-          // An orphan review whose card no longer exists would
-          // surface as a reject at adoption time.
-          const reviews = await store.getAll("outbox_reviews");
-          for (const review of reviews) {
-            if (review.card_client_id && replaced.has(review.card_client_id)) {
-              await store.remove("outbox_reviews", review.client_id);
-            }
-          }
-        }
-      }
-      for (const card of payload.cards) {
-        await store.put("local_cards", {
-          client_id: store.uuid(),
-          deck_id: null,
-          deck_name: payload.display_name,
-          type: "short",
-          prompt: card.prompt,
-          answer: card.answer,
-          answer_regex: typeof card.answer_regex === "string" ? card.answer_regex : null,
-          created_at: nowIso,
-          local_step: 0,
-          local_next_due: null,
-        });
-      }
-      if (!owner) {
-        await store.metaPut("guest", {
-          deck_client_id: store.uuid(),
-          display_name: payload.display_name,
-          topic,
-          created_at: nowIso,
-        });
-      }
-    });
   }
 
   function showError(response, body) {
@@ -258,6 +175,10 @@ export async function init(node) {
       return "One deck a minute. Try again shortly.";
     }
     if (kind === "busy") return "The free AI is busy right now. Try again in a few minutes.";
+    if (kind === "deck_limit") {
+      return (body && typeof body.message === "string" && body.message) ||
+        "You've reached the limit for a guest account. Create a free account to keep going.";
+    }
     if (kind === "invalid_topic") {
       return (body && typeof body.message === "string" && body.message) ||
         "Describe your topic in 1 to 500 characters.";
@@ -268,25 +189,5 @@ export async function init(node) {
     }
     // generation_failed, network failure, timeout, unknown shapes
     return "That didn't work. Try again.";
-  }
-
-  // The deck could not be stored. The cards are gone with it, so the
-  // honest move is to say that here rather than render a read-only
-  // copy the user cannot study.
-  function showSaveError() {
-    errorLine.replaceChildren();
-    errorLine.appendChild(
-      document.createTextNode("Couldn't save this deck on your device. ")
-    );
-    if (signInUrl) {
-      const a = document.createElement("a");
-      a.href = signInUrl;
-      a.textContent = "Create an account";
-      errorLine.appendChild(a);
-      errorLine.appendChild(document.createTextNode(" to keep decks across devices."));
-    } else {
-      errorLine.appendChild(document.createTextNode("Create an account to keep decks."));
-    }
-    errorLine.hidden = false;
   }
 }

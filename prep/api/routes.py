@@ -31,7 +31,7 @@ from prep.api.auth import bearer_user
 from prep.api.entities import ApiTokenMetadata
 from prep.api.mcp import router as mcp_router
 from prep.api.repo import ApiTokenRepo
-from prep.auth import current_user
+from prep.auth import signed_in_user
 from prep.decks.io import csv_to_deck, deck_to_csv
 from prep.decks.repo import DeckRepo, QuestionRepo
 from prep.web.templates import templates
@@ -65,12 +65,12 @@ def _render_api_settings(
 
 
 @router.get("/settings/api", response_class=HTMLResponse, include_in_schema=False)
-def settings_api(request: Request, user: dict = Depends(current_user)):
+def settings_api(request: Request, user: dict = Depends(signed_in_user)):
     return _render_api_settings(request, user)
 
 
 @router.post("/settings/api/tokens", response_class=HTMLResponse, include_in_schema=False)
-async def settings_api_create(request: Request, user: dict = Depends(current_user)):
+async def settings_api_create(request: Request, user: dict = Depends(signed_in_user)):
     """Mint a token + render it inline on this response. The plaintext
     is NEVER persisted to a session, NEVER put in a query string (would
     leak into nginx access logs + browser history + Referer headers
@@ -87,7 +87,7 @@ async def settings_api_create(request: Request, user: dict = Depends(current_use
     response_class=HTMLResponse,
     include_in_schema=False,
 )
-def settings_api_delete(token_id: int, request: Request, user: dict = Depends(current_user)):
+def settings_api_delete(token_id: int, request: Request, user: dict = Depends(signed_in_user)):
     """Revoke a token. Two response shapes:
 
     - htmx caller (HX-Request header set): empty 200 — the form has

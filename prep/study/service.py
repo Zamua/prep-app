@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from prep.agent.selector import require_funded_workflow
 from prep.study.entities import (
     CardState,
     RecentSession,
@@ -128,7 +129,11 @@ async def start_grading(
 
     The temporal_client.start_grading signature is
     (qid, deck_name, user_answer, idk, *, user_id), so we mirror it
-    here verbatim — adapter, not domain remodeling."""
+    here verbatim: adapter, not domain remodeling.
+
+    Raises AgentUnavailable when no tier funds the call; the caller
+    falls back to the deterministic grader."""
+    require_funded_workflow(user_id)
     result = await client.start_grading(qid, deck_name, user_answer, idk, user_id=user_id)
     session_repo.set_grading(user_id, sid, qid, result.workflow_id, expected_version)
     # Register with the active-workflows tracker so the masthead badge

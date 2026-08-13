@@ -19,6 +19,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from prep.auth.identity import SignInRequired
+from prep.auth.limits import RowCapReached
 from prep.web.templates import templates
 
 _ERROR_COPY = {
@@ -114,6 +116,40 @@ def register(app: FastAPI) -> None:
             if sign_in:
                 return RedirectResponse(sign_in, status_code=303)
         return _render_error(request, exc.status_code, exc.detail)
+
+    @app.exception_handler(SignInRequired)
+    async def sign_in_required_handler(request: Request, exc: SignInRequired):
+        """The gated-route refusal for an anonymous account. JSON
+        callers get 403; a browser goes to sign-in, which is the only
+        action that would make the request succeed."""
+        if _wants_json(request):
+            return JSONResponse({"detail": "sign in required"}, status_code=403)
+        prefix = request.scope.get("root_path", "") or ""
+        return RedirectResponse(f"{prefix}/sign-in", status_code=303)
+
+    @app.exception_handler(RowCapReached)
+    async def row_cap_handler(request: Request, exc: RowCapReached):
+        """Anonymous accounts are row-capped, so every write path can
+        refuse; the translation belongs here rather than in each one.
+
+        The JSON shape is the study API's error envelope: its client
+        reads `error.code` / `error.message`, and any other shape
+        reaches the user as an unlabeled "request failed (429)"."""
+        if _wants_json(request):
+            return JSONResponse(
+                {"error": {"code": "deck_limit", "message": str(exc)}}, status_code=429
+            )
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "status_code": 429,
+                "headline": "Guest account is full.",
+                "blurb": str(exc),
+                "path": request.url.path,
+            },
+            status_code=429,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):

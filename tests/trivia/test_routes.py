@@ -234,6 +234,8 @@ def test_decks_new_trivia_creates_deck_and_starts_workflow(
     from prep import temporal_client as _tc
 
     prep.agent.is_available = True
+    # A start is also refused when no tier funds it.
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-test-not-real")
 
     async def fake_start(**kwargs):
         return _tc.StartResult(workflow_id=f"trivia-{kwargs['deck_name']}-deadbeef01", run_id="r")

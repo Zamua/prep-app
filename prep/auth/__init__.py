@@ -2,6 +2,7 @@
 
 Public surface:
 - current_user(request) → dict (FastAPI Depends target)
+- signed_in_user(request) → dict (same, minus anonymous accounts)
 
 The auth bounded context owns:
 - identity: Tailscale header parsing → user dict (identity.py)
@@ -11,6 +12,6 @@ The auth bounded context owns:
   user_id WHERE-clause discipline already in db.py)
 """
 
-from prep.auth.identity import current_user
+from prep.auth.identity import current_user, signed_in_user
 
-__all__ = ["current_user"]
+__all__ = ["current_user", "signed_in_user"]
