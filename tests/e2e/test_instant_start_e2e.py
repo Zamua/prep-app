@@ -19,8 +19,8 @@ succeeds quietly (no console noise for the zero-console-error pin)
 while navigations and fetches keep hitting Playwright's routing.
 The suite pins:
 
-- The full anonymous loop: land -> hero -> generate -> ready panel ->
-  Start studying -> guest overview -> auto-grade a regex short ->
+- The full anonymous loop: land -> hero -> generate -> guest
+  overview -> auto-grade a regex short ->
   self-verdict a null-regex card -> caught-up nudge banner -> footer
   disclosure line, with no uncaught page errors and no "Back online"
   banner anywhere in the session.
@@ -234,15 +234,11 @@ def test_full_anonymous_loop_generate_study_nudge(instant_server, instant_ctx):
     sign_in_url = hero.get_attribute("data-sign-in-url")
     assert sign_in_url
 
-    # -- generate (mocked): ready panel --------------------------------
+    # -- generate (mocked): straight into the deck ---------------------
+    # No summary screen: generating navigates to the study surface, so
+    # the deck view the user lands on is the only deck view there is.
     _generate(page, "world capitals")
-    ready = page.locator("[data-instant-ready]")
-    ready.wait_for(state="visible")
-    assert (
-        page.locator(".instant-ready-heading").inner_text() == "Your deck: World Capitals, 5 cards"
-    )
-    assert page.locator(".instant-preview li").count() == 3
-    assert page.locator(".instant-form").is_hidden()
+    page.wait_for_url("**/offline")
 
     # -- IDB truth: guest deck written, owner untouched ----------------
     cards = _idb_all(page, "local_cards")
@@ -262,8 +258,7 @@ def test_full_anonymous_loop_generate_study_nudge(instant_server, instant_ctx):
     assert guest["topic"] == "world capitals"
     assert page.evaluate(_IDB_META_GET_JS, "owner") is None
 
-    # -- Start studying: the guest overview ----------------------------
-    page.get_by_role("link", name="Start studying").click()
+    # -- the guest overview --------------------------------------------
     page.wait_for_selector(".offline-deck-list")
     assert page.locator(".prelude .eyebrow").inner_text() == "Your deck"
     assert page.locator(".prelude h1").inner_text() == "World Capitals"
@@ -366,7 +361,7 @@ def test_busy_shows_inline_copy_and_preserves_input(instant_server, instant_ctx)
     # Input preserved, form still live, no retry storm (manual button).
     assert page.locator(".instant-form textarea").input_value() == "kernel scheduling"
     assert page.locator(".instant-form").is_visible()
-    assert page.locator("[data-instant-ready]").is_hidden()
+    assert page.locator(".instant-form").is_visible()
     assert page.locator("[data-instant-status]").is_hidden()
     # No IDB writes on the error path.
     assert _idb_all(page, "local_cards") == []
@@ -427,7 +422,7 @@ def test_double_submit_sends_one_generate_post(instant_server, instant_ctx):
           form.requestSubmit();
         }"""
     )
-    page.locator("[data-instant-ready]").wait_for(state="visible")
+    page.wait_for_url("**/offline")
     page.wait_for_timeout(400)
     assert len(generate_posts) == 1
     # One write pass too: the deck landed once.
@@ -469,7 +464,7 @@ def test_returning_visitor_strip_and_replace_confirm(instant_server, instant_ctx
     # -- first visit: generate deck A, queue one review ----------------
     _goto_landing(page, base)
     _generate(page, "world capitals")
-    page.locator("[data-instant-ready]").wait_for(state="visible")
+    page.wait_for_url("**/offline")
     prefix = _module_prefix(page)
     page.evaluate(_QUEUE_GUEST_REVIEW_JS, {"prefix": prefix})
     assert len(_idb_all(page, "outbox_reviews")) == 1
@@ -496,13 +491,13 @@ def test_returning_visitor_strip_and_replace_confirm(instant_server, instant_ctx
     page.on("dialog", _on_dialog)
     gen["body"] = DECK_B
     _generate(page, "music intervals")
-    page.locator("[data-instant-ready]").wait_for(state="visible")
+    page.wait_for_url("**/offline")
     assert confirms == [
         "Replace your current deck (World Capitals)? It's only stored on this device."
     ]
-    assert (
-        page.locator(".instant-ready-heading").inner_text() == "Your deck: Music Intervals, 5 cards"
-    )
+    # Landed on the replaced deck, not a summary of it.
+    page.wait_for_selector(".offline-deck-list")
+    assert page.locator(".prelude h1").inner_text() == "Music Intervals"
 
     # The replace swapped every card, updated meta.guest, and took the
     # replaced cards' outbox_reviews rows with it (an orphan review
@@ -558,7 +553,7 @@ def test_owner_present_device_appends_without_guest_state(instant_server, instan
 
     _goto_landing(page, base)
     _generate(page, "world capitals")
-    page.locator("[data-instant-ready]").wait_for(state="visible")
+    page.wait_for_url("**/offline")
 
     # No confirm (there is no guest deck to replace), no guest record;
     # the cards append to the owner's local state and ride the normal
@@ -587,7 +582,7 @@ def test_owner_present_device_appends_without_guest_state(instant_server, instan
     # would wipe them).
     gen["body"] = DECK_B
     _generate(page, "music intervals")
-    page.locator("[data-instant-ready]").wait_for(state="visible")
+    page.wait_for_url("**/offline")
     assert confirms == []
     assert page.evaluate(_IDB_META_GET_JS, "guest") is None
     cards = _idb_all(page, "local_cards")

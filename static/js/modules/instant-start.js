@@ -51,9 +51,8 @@ export async function init(node) {
   const button = form ? form.querySelector(".instant-generate") : null;
   const statusLine = node.querySelector("[data-instant-status]");
   const errorLine = node.querySelector("[data-instant-error]");
-  const readyPanel = node.querySelector("[data-instant-ready]");
   const continueStrip = node.querySelector("[data-instant-continue]");
-  if (!form || !textarea || !button || !statusLine || !errorLine || !readyPanel) return;
+  if (!form || !textarea || !button || !statusLine || !errorLine) return;
   const signInUrl = node.dataset.signInUrl || "";
 
   // Idle: enable the button now that the module is live. The
@@ -159,14 +158,19 @@ export async function init(node) {
           showError(response, body);
           return; // input preserved
         }
-        let saved = true;
         try {
           await writeDeck(body, topic);
         } catch (e) {
+          // Nothing kept the deck, so there is nowhere to send the
+          // user. Say so where the other errors appear.
           console.warn("instant deck could not be saved on this device:", e);
-          saved = false;
+          showSaveError();
+          return; // input preserved
         }
-        renderReady(body, saved);
+        // Straight into the deck. A summary screen here would be a
+        // second deck view competing with the real one.
+        window.location.assign(ROOT_PATH + "/offline");
+        return;
       } finally {
         button.classList.remove("is-loading");
         statusLine.hidden = true;
@@ -266,56 +270,23 @@ export async function init(node) {
     return "That didn't work. Try again.";
   }
 
-  function renderReady(payload, saved) {
-    form.hidden = true;
-    errorLine.hidden = true;
-    if (continueStrip) continueStrip.hidden = true;
-    readyPanel.replaceChildren();
-    const n = payload.cards.length;
-    readyPanel.appendChild(
-      el(
-        "h2",
-        "instant-ready-heading",
-        "Your deck: " + payload.display_name + ", " + n + (n === 1 ? " card" : " cards")
-      )
+  // The deck could not be stored. The cards are gone with it, so the
+  // honest move is to say that here rather than render a read-only
+  // copy the user cannot study.
+  function showSaveError() {
+    errorLine.replaceChildren();
+    errorLine.appendChild(
+      document.createTextNode("Couldn't save this deck on your device. ")
     );
-    if (saved) {
-      const list = el("ul", "instant-preview");
-      for (const card of payload.cards.slice(0, 3)) {
-        list.appendChild(el("li", "instant-preview-prompt", card.prompt));
-      }
-      readyPanel.appendChild(list);
-      const actions = el("div", "instant-actions");
-      const start = document.createElement("a");
-      start.className = "btn btn-primary";
-      start.href = ROOT_PATH + "/offline";
-      start.textContent = "Start studying";
-      actions.appendChild(start);
-      readyPanel.appendChild(actions);
+    if (signInUrl) {
+      const a = document.createElement("a");
+      a.href = signInUrl;
+      a.textContent = "Create an account";
+      errorLine.appendChild(a);
+      errorLine.appendChild(document.createTextNode(" to keep decks across devices."));
     } else {
-      // IndexedDB write failure: the deck still renders, read-only
-      // from memory, and the account CTA replaces Start studying.
-      const list = el("ul", "instant-preview instant-preview-full");
-      for (const card of payload.cards) {
-        const item = el("li", "instant-preview-card");
-        item.appendChild(el("p", "instant-preview-prompt", card.prompt));
-        item.appendChild(el("p", "instant-preview-answer", card.answer));
-        list.appendChild(item);
-      }
-      readyPanel.appendChild(list);
-      const note = el("p", "instant-save-error");
-      note.appendChild(document.createTextNode("Couldn't save on this device. "));
-      if (signInUrl) {
-        const a = document.createElement("a");
-        a.href = signInUrl;
-        a.textContent = "Create an account";
-        note.appendChild(a);
-        note.appendChild(document.createTextNode(" to keep this deck."));
-      } else {
-        note.appendChild(document.createTextNode("Create an account to keep this deck."));
-      }
-      readyPanel.appendChild(note);
+      errorLine.appendChild(document.createTextNode("Create an account to keep decks."));
     }
-    readyPanel.hidden = false;
+    errorLine.hidden = false;
   }
 }

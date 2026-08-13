@@ -396,53 +396,6 @@
   color: var(--ink-mute);
 }
 
-/* ready panel: heading + first-3 preview + Start studying */
-.instant-ready { margin-block-start: 1.1rem; }
-.instant-ready[hidden] { display: none; }
-.instant-ready-heading {
-  font-family: var(--serif);
-  font-weight: 450;
-  font-size: 1.25rem;
-  line-height: 1.3;
-  margin: 0 0 0.7rem;
-  overflow-wrap: anywhere;
-}
-.instant-preview {
-  list-style: none;
-  margin: 0 0 1rem;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.instant-preview-prompt {
-  margin: 0;
-  padding: 0.6rem 0.85rem;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--paper);
-  font-size: 0.95rem;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-.instant-preview-card {
-  padding: 0.6rem 0.85rem;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--paper);
-}
-.instant-preview-card .instant-preview-prompt {
-  padding: 0;
-  border: none;
-  background: transparent;
-}
-.instant-preview-answer {
-  margin: 0.35rem 0 0;
-  font-family: var(--mono, monospace);
-  font-size: 0.88rem;
-  color: var(--ink-soft);
-  overflow-wrap: anywhere;
-}
 .instant-save-error {
   margin: 0;
   font-size: 0.92rem;
