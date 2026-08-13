@@ -180,8 +180,11 @@ def test_signed_in_beats_a_valid_cookie(client, initialized_db, signed_in):
     assert "Signing you in" not in r.text
     ids = user_ids()
     assert "user_2abc" in ids
-    # The signed-in request never touched the anonymous identity.
-    assert anon_set_cookie(r) is None
+    # Provider identity wins, and the anonymous account it displaces is
+    # merged into it: its row is gone and its cookie is cleared.
+    assert EXTERNAL_ID not in ids
+    raw = anon_set_cookie(r)
+    assert raw is not None and "Max-Age=0" in raw
 
 
 def test_a_page_view_mints_no_user(client, initialized_db, visitor):

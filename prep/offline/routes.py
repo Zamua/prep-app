@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from prep.auth import current_user
+from prep.auth.merge import previous_user_ids
 from prep.infrastructure.db import now
 from prep.offline import service
 from prep.offline.entities import SyncRequest
@@ -31,12 +32,20 @@ def offline_snapshot(user: dict = Depends(current_user)) -> JSONResponse:
     The identity in the payload is display-only on the client (the
     "Studying as ..." line and ownership stamping); the sync endpoint
     never trusts a client-side identity claim.
+
+    `previous_ids` names the accounts merged into this one, so a
+    device still stamped with a merged-away id recognises itself
+    instead of raising the owner-mismatch dialog over its own data.
     """
     uid = user["tailscale_login"]
     repo = SnapshotRepo()
     return JSONResponse(
         {
-            "user": {"id": uid, "display_name": user.get("display_name") or uid},
+            "user": {
+                "id": uid,
+                "display_name": user.get("display_name") or uid,
+                "previous_ids": previous_user_ids(uid),
+            },
             "generated_at": now(),
             "decks": [d.model_dump() for d in repo.decks(uid)],
             "cards": [c.model_dump() for c in repo.cards(uid)],

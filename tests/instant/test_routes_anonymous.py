@@ -317,7 +317,10 @@ def test_a_signed_in_request_mints_nothing_and_owns_the_deck(signed_in, instant_
     decks = decks_of(SIGNED_IN.external_id)
     assert len(decks) == 1
     assert r.json()["redirect"] == f"/deck/{decks[0]['name']}"
-    assert set_cookie_headers(r) == []
+    # The cookie names no row, so the merge resolves as anon_missing and
+    # the response clears the dead pointer. One header, not a re-mint.
+    raws = set_cookie_headers(r)
+    assert len(raws) == 1 and "Max-Age=0" in raws[0]
 
 
 # ---- the row cap at the endpoint --------------------------------------------

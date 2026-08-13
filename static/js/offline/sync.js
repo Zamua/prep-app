@@ -76,6 +76,15 @@ async function ownerAllows(serverUser) {
   const owner = await metaGet("owner");
   const serverUserId = serverUser && serverUser.id;
   if (owner && owner.user_id && serverUserId && owner.user_id !== serverUserId) {
+    // A merged-away id is this account: the server says so through
+    // previous_ids, which it derives from its own merge audit and
+    // never accepts from a client. Re-stamp so the next sync
+    // compares equal without consulting the list at all.
+    const previous = (serverUser && serverUser.previous_ids) || [];
+    if (previous.includes(owner.user_id)) {
+      await metaPut("owner", {...owner, user_id: serverUserId});
+      return true;
+    }
     syncDisabled = true;
     ownerConflict = {owner, serverUser};
     console.warn(

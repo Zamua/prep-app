@@ -280,10 +280,18 @@ def test_offline_study_and_reconnect_sync(offline_server, offline_ctx, offline_p
     # Client side converges: outbox empty, overlays cleared by the
     # forced post-flush snapshot refresh (nothing queued anymore), and
     # the studied cards now carry the server's FSRS next_due (future).
-    _wait_for(
-        lambda: len(_idb_all(page, "outbox_reviews")) == 0,
-        message="outbox drained after reconnect flush",
-    )
+    #
+    # The overlays are what the wait is FOR. An empty outbox is reached
+    # inside the flush, strictly before the refresh that clears them,
+    # so waiting on the outbox alone races the refresh and the margin
+    # is one snapshot round trip.
+    def _converged():
+        if _idb_all(page, "outbox_reviews"):
+            return None
+        cards = _idb_all(page, "cards")
+        return cards if all(card["local_step"] is None for card in cards) else None
+
+    _wait_for(_converged, message="outbox drained and overlays cleared after the reconnect flush")
     cards = {c["question_id"]: c for c in _idb_all(page, "cards")}
     now = datetime.now(timezone.utc)
     for qid in (seed["mcq_id"], seed["regex_id"], seed["short_id"]):

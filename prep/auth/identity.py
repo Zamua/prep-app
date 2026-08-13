@@ -14,10 +14,17 @@ This module stays a flat import target so any router can
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import HTTPException, Request
 
+from prep.auth.anon_cookie import COOKIE_NAME as ANON_COOKIE
+from prep.auth.anon_cookie import verify_cookie
+from prep.auth.merge import merge_anonymous_into
 from prep.auth.providers import get_provider
 from prep.auth.repo import UserRepo
+
+logger = logging.getLogger(__name__)
 
 
 class SignInRequired(Exception):
@@ -89,5 +96,51 @@ def optional_current_user(request: Request) -> dict | None:
             display_name=resolved.display_name,
             profile_pic_url=resolved.profile_pic_url,
         )
+        # After the upsert, never before: the merge takes the id of
+        # the row upsert just wrote, so running it first makes every
+        # fresh sign-up a no-op that silently loses the account.
+        if _try_merge_anon_cookie(request, user):
+            # The merge may have carried preferences onto this row.
+            user = repo.get_by_external_id(user["tailscale_login"]) or user
     request.state.user = user
     return user
+
+
+def _try_merge_anon_cookie(request: Request, user: dict) -> bool:
+    """Merge the browser's anonymous account into the signed-in one,
+    and never fail the request while doing it. Returns True when data
+    moved.
+
+    Every route reaches this through `current_user`, so an uncaught
+    exception here turns every authenticated request carrying an anon
+    cookie into a 500. Integrity is enforced by the transaction
+    rolling back, availability by the blanket except: a lock timeout
+    or a tripped guard keeps the cookie and retries next request."""
+    raw = request.cookies.get(ANON_COOKIE)
+    if not raw:
+        return False
+    cookie = verify_cookie(raw)
+    if cookie is None:
+        return False
+    target_id = user["tailscale_login"]
+    if cookie.external_id == target_id:
+        # The cookie names the account it is presented on, so it points
+        # at a row that is no longer anonymous. Nothing to move, and
+        # nothing left for the cookie to be.
+        request.state.anon_cookie_stale = True
+        return False
+    try:
+        result = merge_anonymous_into(cookie.external_id, target_id)
+    except Exception:
+        logger.exception("anon merge failed: anon=%s", cookie.external_id)
+        return False
+    if not result.resolved:
+        # The cookie still names a live account holding real decks.
+        logger.warning(
+            "anon merge unresolved: anon=%s reason=%s", cookie.external_id, result.reason
+        )
+        return False
+    request.state.anon_cookie_stale = True
+    if result.merged:
+        request.state.anon_merged = result.counts
+    return result.merged

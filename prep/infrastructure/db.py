@@ -755,3 +755,11 @@ def init() -> None:
             "CREATE INDEX IF NOT EXISTS idx_instant_generations_user_created "
             "ON instant_generations (user_id, created_at)"
         )
+
+        # Fail the boot when a user-scoped table has no merge rule:
+        # the anonymous-account delete cascades, so an uncovered table
+        # loses its rows in silence. Imported here, not at module
+        # scope, to keep this module's inbound-dependency-free shape.
+        from prep.auth.merge import assert_policy_covers_schema
+
+        assert_policy_covers_schema(c)
