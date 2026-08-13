@@ -239,3 +239,108 @@ def test_verdict_offers_the_chat_handoff(offline_server, host_page):
         page.locator("[data-study-root] .discuss-option").first.get_attribute("href")
         == "https://claude.ai/new?q=x"
     )
+
+
+_CODE_CARD = {
+    "question_id": 909,
+    "deck_id": 1,
+    "type": "code",
+    "prompt": "Write a function that reverses a slice in place.",
+    "choices": None,
+    "skeleton": "func reverse(xs []int) {\n\t// your code\n}\n",
+    "language": "go",
+}
+
+
+def test_code_cards_get_the_editor_back(offline_server, host_page):
+    """A `code` card mounts CodeMirror over the textarea, with the
+    toolbar (input mode, copy, reset). The swap to shared components
+    dropped this entirely; the textarea remains the value carrier so
+    the answer still submits either way."""
+    page = host_page
+    offline_server.start()
+    base = offline_server.base_url
+    submits: list[dict] = []
+
+    def _begin(_req):
+        # The server seeds an untouched code card's draft with the
+        # skeleton (prep/study/api.py), so the mock does too.
+        return 200, {"card": _CODE_CARD, "draft": _CODE_CARD["skeleton"], "session": _SESSION}
+
+    def _submit(req):
+        submits.append(json.loads(req.post_data or "{}"))
+        return 200, {
+            "selfGrade": True,
+            "answer": submits[-1].get("answer", ""),
+            "card": {**_CODE_CARD, "answer": "reverse in place"},
+            "session": _SESSION,
+        }
+
+    _json_route(page, "**/api/study/decks/*/session", _begin)
+    _json_route(page, "**/api/study/sessions/*/submit", _submit)
+
+    page.goto(f"{base}/study/{DECK}")
+    page.wait_for_selector(".study-card")
+
+    # The editor mounts asynchronously over the textarea.
+    page.wait_for_selector(".cm-mount .cm-editor", timeout=15_000)
+    assert page.locator(".code-action-mode select").count() == 1
+    assert page.locator("button.code-action.btn-async").count() == 1
+    # Skeleton present on this card, so the reset control is offered.
+    assert page.locator("button.code-action").count() == 2
+    # The skeleton seeded the editor.
+    assert "func reverse" in page.locator(".cm-mount .cm-content").inner_text()
+
+    # Typing in CodeMirror reaches the textarea the form submits.
+    page.locator(".cm-mount .cm-content").click()
+    page.keyboard.type("// done")
+    page.get_by_role("button", name="Submit").click()
+    page.wait_for_selector(".study-card")
+    assert submits, "nothing was submitted"
+    assert "// done" in submits[0]["answer"]
+
+
+def test_pending_screen_shows_what_the_grader_reported(offline_server, host_page):
+    """A grader that is running but unhappy (a busy shared tier telling
+    the user to add their own key) must reach the screen. The old
+    polling fragment printed it on every poll; the pending payload
+    carries it now."""
+    page = host_page
+    offline_server.start()
+    base = offline_server.base_url
+    note = "free tier is busy - add your own key in Settings"
+
+    def _begin(_req):
+        return 200, {"card": _CARD, "draft": "", "session": _SESSION}
+
+    def _submit(_req):
+        return 200, {
+            "pending": {
+                "poll": f"{base}/api/study/grading/grade-x-q4242-abc",
+                "workflow_id": "w",
+                "error": note,
+            },
+            "session": {**_SESSION, "state": "grading"},
+        }
+
+    def _poll(_req):
+        return 200, {
+            "pending": {
+                "poll": f"{base}/api/study/grading/grade-x-q4242-abc",
+                "workflow_id": "w",
+                "status": "grading",
+                "error": note,
+            }
+        }
+
+    _json_route(page, "**/api/study/decks/*/session", _begin)
+    _json_route(page, "**/api/study/sessions/*/submit", _submit)
+    _json_route(page, "**/api/study/grading/**", _poll)
+
+    page.goto(f"{base}/study/{DECK}")
+    page.wait_for_selector(".study-card")
+    page.locator("[data-study-root] textarea").first.fill("something")
+    page.get_by_role("button", name="Submit").click()
+
+    page.wait_for_selector(".grading-panel")
+    assert note in page.locator(".grading-panel").inner_text()

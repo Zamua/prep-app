@@ -473,6 +473,9 @@ export class ServerSource {
     const pending = {
       poll: payload.poll,
       workflowId: payload.workflow_id || "",
+      // What the grader is reporting while it still runs, when it
+      // reports anything. The view shows it; nothing branches on it.
+      error: payload.error || "",
       cancel: () => {
         control.cancelled = true;
       },

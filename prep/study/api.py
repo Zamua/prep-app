@@ -863,15 +863,19 @@ async def grading_poll(
     workflows_service.update_status(workflow_id=wid, new_status=status)
 
     if status not in _TERMINAL:
-        return JSONResponse(
-            {
-                "pending": {
-                    "poll": _poll_url(request, wid, sid),
-                    "workflow_id": wid,
-                    "status": status,
-                }
-            }
-        )
+        # The worker writes progress.error while still running (the
+        # busy-free-tier "add your own key" pointer arrives this way),
+        # so it has to travel with the pending payload or the user
+        # never sees why their grade is slow.
+        pending = {
+            "poll": _poll_url(request, wid, sid),
+            "workflow_id": wid,
+            "status": status,
+        }
+        note = (progress or {}).get("error") or ""
+        if note:
+            pending["error"] = note
+        return JSONResponse({"pending": pending})
 
     # Terminal per the status query, so the result should already be
     # there. Bounded wait rather than a long-poll: a straggler shows up

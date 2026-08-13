@@ -160,7 +160,22 @@ function compareSections(card, userAnswer, opts) {
           ? [userAnswer]
           : [];
     section.appendChild(choiceGrid(card, picked, correct));
+    // Multi-select scores partially, so the counts say more than the
+    // grid colours alone.
+    if (card.type === "multi") {
+      const hit = picked.filter((p) => correct.includes(p)).length;
+      const wrong = picked.filter((p) => !correct.includes(p)).length;
+      const missed = correct.filter((c) => !picked.includes(c)).length;
+      section.appendChild(
+        el(
+          "p",
+          "answer-tally",
+          `${hit} correct picked · ${wrong} wrong included · ${missed} correct missed`
+        )
+      );
+    }
     sections.push(section);
+    sections.push(...rubricSections(card));
     return sections;
   }
   if (!opts.idk) {
@@ -173,13 +188,22 @@ function compareSections(card, userAnswer, opts) {
   model.appendChild(sectionEyebrow(opts.modelLabel));
   model.appendChild(answerBlock(card, card.answer || "", true));
   sections.push(model);
-  if (card.rubric) {
-    const rubric = el("section", "result-section");
-    rubric.appendChild(sectionEyebrow("Rubric"));
-    rubric.appendChild(el("pre", "reproduction reproduction-rubric", card.rubric));
-    sections.push(rubric);
-  }
+  sections.push(...rubricSections(card));
   return sections;
+}
+
+// The grading rubric, collapsed. Every card type that carries one
+// shows it: the choice grid returns early, so it needs its own call.
+function rubricSections(card) {
+  if (!card.rubric) return [];
+  const section = el("section", "result-section");
+  const details = el("details", "rubric-details");
+  const summary = document.createElement("summary");
+  summary.textContent = "Show the grading rubric";
+  details.appendChild(summary);
+  details.appendChild(el("pre", "reproduction reproduction-rubric", card.rubric));
+  section.appendChild(details);
+  return [section];
 }
 
 // ---- views -------------------------------------------------------------
@@ -254,6 +278,7 @@ export function studyCardView(card, {onAnswer, onIdk, onPause, onDraft, draft}) 
     wrap.appendChild(ta);
     form.appendChild(wrap);
     collect = () => ta.value;
+    if (card.type === "code") upgradeToCodeEditor(ta, wrap, card);
   }
 
   const actions = el("div", "study-actions");
@@ -277,6 +302,28 @@ export function studyCardView(card, {onAnswer, onIdk, onPause, onDraft, draft}) 
   article.appendChild(form);
   frag.appendChild(article);
   return frag;
+}
+
+// Code cards get a real editor when the bundle is reachable. Async and
+// fire-and-forget on purpose: the textarea is already interactive, so
+// the upgrade never blocks the card from rendering, and a failed load
+// (offline, cache miss) simply leaves the plain textarea in place.
+function upgradeToCodeEditor(textarea, wrap, card) {
+  const rootPath = new URL(import.meta.url).pathname.replace(/\/static\/js\/.*$/, "");
+  const inputMode = document.body.dataset.editorMode || "vanilla";
+  import("./code-editor.js")
+    .then(({mountCodeEditor, codeToolbar}) =>
+      mountCodeEditor(textarea, {
+        rootPath,
+        language: card.language || "",
+        skeleton: card.skeleton || "",
+        inputMode,
+      }).then((handle) => {
+        if (!handle || !textarea.isConnected) return;
+        wrap.appendChild(codeToolbar(handle, {inputMode, hasSkeleton: Boolean(card.skeleton)}));
+      })
+    )
+    .catch(() => {});
 }
 
 const DEFAULT_REVEAL_BLURB =
@@ -367,6 +414,12 @@ export function pendingView(card, pending, {onPause}) {
     )
   );
   panel.appendChild(hint);
+
+  // The worker reports trouble it can keep running through (a busy
+  // shared grader pointing at BYOK, for one). Showing it is the only
+  // way the user learns why the wait is long.
+  const note = pending && pending.error;
+  if (note) panel.appendChild(el("p", "muted gen-error", note));
 
   frag.appendChild(panel);
   return frag;

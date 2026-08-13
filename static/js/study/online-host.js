@@ -26,6 +26,7 @@ const state = {
   mount: null,
   source: null,
   deck: null,
+  deckId: null,
   deckHref: null,
   signInUrl: null,
   card: null,
@@ -156,8 +157,15 @@ function handleError(e) {
       return;
     case "grading_failed":
       // No verdict is coming. The answer was NOT recorded, so say so
-      // and put the card back rather than implying it counted.
-      toast("The grader failed. Your answer was not recorded.", "error");
+      // and put the card back rather than implying it counted. The
+      // grader's own message (why it failed, sometimes with what to
+      // do about it) beats a generic line.
+      toast(
+        e.message
+          ? `Grading failed: ${e.message}. Your answer was not recorded.`
+          : "The grader failed. Your answer was not recorded.",
+        "error"
+      );
       recover();
       return;
     case "network":
@@ -181,6 +189,9 @@ function onPause() {
 
 function showCard(card, draft) {
   state.card = card;
+  // Authoring files into the deck being studied; the card is where
+  // its id comes from.
+  if (card && card.deck_id) state.deckId = card.deck_id;
   render(
     studyCardView(card, {
       draft: draft || "",
@@ -299,14 +310,19 @@ function showCaughtUp(summary) {
 
 function showAuthor() {
   render(
+    // The deck being studied is the only sensible destination here, so
+    // it is the picker's single option. Without it the card would file
+    // into the inbox and the very next read could not serve it back.
     authorView(
-      {decks: []},
+      {decks: state.deckId ? [{id: state.deckId, name: state.deck}] : []},
       {
-        blurb:
-          "Added to this deck now. It studies as a " +
-          "reveal-and-self-grade card and is due immediately.",
+        blurb: state.deckId
+          ? "Added to this deck now. It studies as a " +
+            "reveal-and-self-grade card and is due immediately."
+          : "Added to your inbox deck. It studies as a " +
+            "reveal-and-self-grade card and is due immediately.",
         onSave: async (input) => {
-          await state.source.author(input);
+          await state.source.author({...input, deck_id: input.deck_id ?? state.deckId ?? null});
           toast("Card added.", "info");
           showNext();
         },
