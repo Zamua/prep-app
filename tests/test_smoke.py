@@ -43,11 +43,12 @@ def test_index_renders_landing_when_no_identity(env: None, monkeypatch):
     c = TestClient(app_mod.app)
     r = c.get("/")
     assert r.status_code == 200
-    # Marketing copy lives in the landing template, not the dashboard.
-    # The headline and the demo-card prompt are landing-only — either
-    # being present is enough to prove the landing template rendered.
-    body = r.text.lower()
-    assert "remember anything" in body or "what does <strong>acid</strong>" in body
+    # The body class is the landing template's own witness: it survives
+    # copy changes, and markup inside the headline (an <em>) would break
+    # a phrase match.
+    body = r.text
+    assert 'class="page-landing"' in body
+    assert "data-study-root" not in body  # not the dashboard
 
 
 def test_protected_route_401s_when_no_identity(env: None, monkeypatch):
