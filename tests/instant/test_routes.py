@@ -335,3 +335,24 @@ def test_failed_spent_run_trips_the_global_breaker(client, instant_factory, monk
     assert r.status_code == 429
     assert r.json()["kind"] == "busy"
     assert [row["outcome"] for row in _rows()] == ["failed_spent"] * 3
+
+
+def test_a_slow_upstream_reads_as_busy_but_still_counts_as_spend(
+    client, initialized_db: str, instant_factory, monkeypatch
+):
+    """A deadline hit on a shared free tier is congestion, not a broken
+    generator: the visitor is told it is busy, while the ledger still
+    records the spend so the quota cannot be drained by slow calls."""
+
+    import asyncio
+
+    class _Stalls:
+        async def run(self, prompt, **kw):
+            await asyncio.sleep(5)
+
+    monkeypatch.setenv("PREP_INSTANT_TIMEOUT_S", "0.05")
+    instant_factory(lambda **kw: _Stalls())
+    r = client.post("/api/instant/generate", json={"topic": "quorum"}, headers=IP)
+    assert r.status_code == 429
+    assert r.json()["kind"] == "busy"
+    assert [row["outcome"] for row in _rows()] == ["failed_spent"]

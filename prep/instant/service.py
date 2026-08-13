@@ -39,12 +39,38 @@ MIN_CARDS = 3
 CARD_PROMPT_MAX_CHARS = 2000
 CARD_ANSWER_MAX_CHARS = 500
 
-GENERATION_TIMEOUT_S = 60.0
 # The service owns the deadline (wait_for below) so a stall always
 # classifies as spend. The adapter's own transport timeout sits above
 # it as a backstop; the shared adapter maps ITS timeout to AgentBusy,
 # which would misclassify the spend as a free refusal.
-_ADAPTER_TIMEOUT_S = 75.0
+#
+# Deploy-tunable because the ceiling is a property of whichever shared
+# endpoint funds the free tier, not of this code: the same prompt has
+# measured 7s and 130s on the same provider hours apart. Raise it to
+# trade a longer wait for fewer refusals when the upstream is slow.
+_ENV_TIMEOUT_S = "PREP_INSTANT_TIMEOUT_S"
+DEFAULT_GENERATION_TIMEOUT_S = 60.0
+_ADAPTER_TIMEOUT_HEADROOM_S = 15.0
+
+
+def generation_timeout_s() -> float:
+    raw = (os.environ.get(_ENV_TIMEOUT_S) or "").strip()
+    if not raw:
+        return DEFAULT_GENERATION_TIMEOUT_S
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.error(
+            "%s=%r is not a number; using %.0f", _ENV_TIMEOUT_S, raw, DEFAULT_GENERATION_TIMEOUT_S
+        )
+        return DEFAULT_GENERATION_TIMEOUT_S
+    if value <= 0:
+        logger.error(
+            "%s=%r must be positive; using %.0f", _ENV_TIMEOUT_S, raw, DEFAULT_GENERATION_TIMEOUT_S
+        )
+        return DEFAULT_GENERATION_TIMEOUT_S
+    return value
+
 
 _ENV_MAX_OUTPUT_TOKENS = "PREP_INSTANT_MAX_OUTPUT_TOKENS"
 DEFAULT_MAX_OUTPUT_TOKENS = 1024
@@ -53,6 +79,12 @@ DEFAULT_MAX_OUTPUT_TOKENS = 1024
 class InstantBusy(RuntimeError):
     """Refused with no upstream spend: concurrency-cap contention or
     shared-capacity contention upstream."""
+
+
+class InstantTimedOut(RuntimeError):
+    """The upstream took longer than the deadline. The call WAS issued,
+    so it counts as spend, but the honest cause is a shared endpoint
+    under load rather than a broken one."""
 
 
 class InstantGenerationFailed(RuntimeError):
@@ -221,18 +253,17 @@ async def generate(agent: AgentPort, topic: str) -> InstantDeck:
     (spend); the caller maps those to the ledger's outcome classes.
     """
     prompt = build_prompt(topic)
+    deadline = generation_timeout_s()
     if _semaphore.locked():
         raise InstantBusy("generation concurrency cap reached")
     async with _semaphore:
         try:
             result = await asyncio.wait_for(
-                agent.run(prompt, timeout_s=_ADAPTER_TIMEOUT_S),
-                timeout=GENERATION_TIMEOUT_S,
+                agent.run(prompt, timeout_s=deadline + _ADAPTER_TIMEOUT_HEADROOM_S),
+                timeout=deadline,
             )
         except asyncio.TimeoutError as e:
-            raise InstantGenerationFailed(
-                f"generation timed out after {GENERATION_TIMEOUT_S:.0f}s"
-            ) from e
+            raise InstantTimedOut(f"generation timed out after {deadline:.0f}s") from e
         except AgentTimeout as e:
             # The adapter's transport timeout: the call was issued and
             # spent upstream tokens, so it must not class as a free

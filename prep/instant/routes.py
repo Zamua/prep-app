@@ -225,6 +225,12 @@ async def instant_generate(request: Request) -> JSONResponse:
     except service.InstantBusy:
         await _resolve(gate.id, "failed_free")
         return _error(ip=ip, started=started, status=429, kind="busy", metric="failed_free")
+    except service.InstantTimedOut as e:
+        # Spend, because the call went out, but the visitor is looking
+        # at a congested shared endpoint, not a broken deck generator.
+        await _resolve(gate.id, "failed_spent")
+        logger.info("instant generate timed out: ip=%s reason=%s", ip, e)
+        return _error(ip=ip, started=started, status=429, kind="busy", metric="failed_spent")
     except service.InstantGenerationFailed as e:
         await _resolve(gate.id, "failed_spent")
         logger.info("instant generate failed: ip=%s reason=%s", ip, e)

@@ -177,7 +177,11 @@ async def test_happy_path_returns_wire_cards(deck_json):
         "answer_regex": "answer 0",
     }
     # The adapter transport timeout backstops the service deadline.
-    assert fake.calls[0]["timeout_s"] == service._ADAPTER_TIMEOUT_S
+    # The adapter's transport timeout sits above the service deadline.
+    assert (
+        fake.calls[0]["timeout_s"]
+        == service.DEFAULT_GENERATION_TIMEOUT_S + service._ADAPTER_TIMEOUT_HEADROOM_S
+    )
 
 
 async def test_fenced_output_survives_the_shared_parser(deck_json):
@@ -216,8 +220,10 @@ async def test_stalled_upstream_times_out_as_spend(monkeypatch):
         async def run(self, prompt, *, model=None, reasoning=None, timeout_s=120.0):
             await asyncio.sleep(30)
 
-    monkeypatch.setattr(service, "GENERATION_TIMEOUT_S", 0.05)
-    with pytest.raises(service.InstantGenerationFailed, match="timed out"):
+    monkeypatch.setenv("PREP_INSTANT_TIMEOUT_S", "0.05")
+    # A deadline hit is its own outcome: still spend, but the cause is a
+    # slow shared endpoint, which the route reports as busy.
+    with pytest.raises(service.InstantTimedOut, match="timed out"):
         await service.generate(_SlowAgent(), "topic")
 
 
@@ -290,3 +296,15 @@ def test_items_missing_fields_or_over_caps_are_skipped():
     assert [c["prompt"] for c in cards] == ["Q1?", "Q2?", "Q3?"]
     # Non-string regex garbage is dropped to null, not an error.
     assert cards[2]["answer_regex"] is None
+
+
+def test_generation_deadline_is_deploy_tunable(monkeypatch):
+    """The ceiling belongs to whichever shared endpoint funds the free
+    tier, so a deploy can raise it when that endpoint is slow."""
+    monkeypatch.delenv("PREP_INSTANT_TIMEOUT_S", raising=False)
+    assert service.generation_timeout_s() == service.DEFAULT_GENERATION_TIMEOUT_S
+    monkeypatch.setenv("PREP_INSTANT_TIMEOUT_S", "150")
+    assert service.generation_timeout_s() == 150.0
+    for bad in ("abc", "0", "-5"):
+        monkeypatch.setenv("PREP_INSTANT_TIMEOUT_S", bad)
+        assert service.generation_timeout_s() == service.DEFAULT_GENERATION_TIMEOUT_S
