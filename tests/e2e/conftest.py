@@ -581,7 +581,11 @@ class LocalOfflineServer:
         self.seed: dict = {}
         # Applied last in start(), so a suite can boot a different
         # deploy shape (e.g. clerk mode + free tier for the instant
-        # landing) without forking the server harness.
+        # landing) without forking the server harness. Rewriting it
+        # between a stop() and a start() brings the same port and the
+        # same database back under a different shape, which is how a
+        # flow test crosses from one identity provider to another
+        # without the browser noticing.
         self.extra_env: dict[str, str] = dict(extra_env or {})
         self._proc: _subprocess.Popen | None = None
 
