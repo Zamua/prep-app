@@ -47,7 +47,11 @@ class FlowRecorder:
         return path
 
     def manifest(self) -> Path:
-        """A flat index, so a reviewer reads the flow without opening each file."""
+        """A flat index, so a reviewer reads the flow without opening each file.
+
+        Also the only record of what THIS run produced: shots overwrite by
+        index and nothing clears the directory, so a run that takes fewer
+        screenshots than the last leaves the older trailing files behind."""
         path = self.dir / "steps.txt"
         path.write_text("\n".join(p.name for p in self.shots) + "\n")
         return path
