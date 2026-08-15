@@ -1,0 +1,53 @@
+name: warm the e2e cache
+
+# Runs NO tests. Its only job is to write the Chromium cache on the default
+# branch, because of how GitHub scopes caches.
+#
+# A cache is readable from the ref that wrote it, and from refs that descend
+# from the default branch. Two sibling pull requests cannot see each other's.
+# So with a pull_request-only trigger, every PR misses, pays the full Chromium
+# install, and writes a 255 MB cache nobody will ever read. Measured across the
+# first three PRs here: three misses, three saves, zero hits.
+#
+# Warming on main gives every later PR a hit to fall back on. Tests still run
+# only on pull requests, which is the intended gate.
+on:
+  push:
+    branches: [main]
+    paths:
+      - uv.lock
+      - .github/workflows/cache-warm.yml
+  workflow_dispatch:
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - run: uv sync --group dev
+
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          v=$(uv run python -c 'from importlib.metadata import version; print(version("playwright"))')
+          [ -n "$v" ] || { echo "could not resolve the playwright version"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      # Key and path must match e2e-pr.yml exactly or the warm cache is unreadable.
+      - name: Cache Chromium
+        id: pwcache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        if: steps.pwcache.outputs.cache-hit != 'true'
+        run: uv run playwright install --with-deps chromium

@@ -38,9 +38,17 @@ jobs:
       # Chromium is ~150 MB and unpacking it is the single slowest install
       # step, so it is cached on the resolved playwright version rather than
       # on the lockfile hash.
+      # The playwright package exposes no __version__ attribute, so read the
+      # installed distribution's metadata. Assigning through $(...) would swallow
+      # a failure into an empty string and still exit 0, silently keying every
+      # cache the same, so the emptiness is checked rather than assumed.
       - name: Resolve Playwright version
         id: pw
-        run: echo "version=$(uv run python -c 'import playwright; print(playwright.__version__)')" >> "$GITHUB_OUTPUT"
+        run: |
+          v=$(uv run python -c 'from importlib.metadata import version; print(version("playwright"))')
+          [ -n "$v" ] || { echo "could not resolve the playwright version"; exit 1; }
+          echo "resolved playwright $v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Restore Chromium cache
         id: pwcache
@@ -49,8 +57,17 @@ jobs:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
+      # On a hit the browser is already unpacked, so only the system libraries
+      # are needed. Note that GitHub scopes a cache to the ref that wrote it and
+      # only falls back to the default branch, so PR-only triggers never share
+      # one: see cache-warm.yml.
       - name: Install Chromium
+        if: steps.pwcache.outputs.cache-hit != 'true'
         run: uv run playwright install --with-deps chromium
+
+      - name: Install Chromium system libraries (cached browser)
+        if: steps.pwcache.outputs.cache-hit == 'true'
+        run: uv run playwright install-deps chromium
 
       - name: Run flow tests
         id: tests
