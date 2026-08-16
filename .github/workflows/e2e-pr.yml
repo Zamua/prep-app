@@ -89,17 +89,6 @@ jobs:
           echo "running: $files"
           uv run pytest -v --tb=short --junit-xml=results.xml $files
 
-      - name: Upload artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flow-artifacts-pr${{ github.event.pull_request.number }}-${{ github.run_attempt }}
-          path: |
-            artifacts/
-            test-results/
-          if-no-files-found: warn
-          retention-days: 30
-
       - name: Render report
         if: always()
         run: |
@@ -114,20 +103,40 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
-      # Anonymous upload on purpose: no deploy key in a public repo, and it
-      # keeps working for pull requests from forks, where secrets are withheld.
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flow-artifacts-pr${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: |
+            report/
+            artifacts/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # hostthis identifies the uploader by ssh key and refuses a keyless
+      # client ("ssh key required"), so publishing needs HOSTTHIS_SSH_KEY.
+      # Absent, this is skipped rather than failed: the rendered report still
+      # ships as a build artifact. Forks never see the secret, by design.
       - name: Publish report
         id: publish
-        if: always()
+        if: always() && env.HOSTTHIS_SSH_KEY != ''
         continue-on-error: true
+        env:
+          HOSTTHIS_SSH_KEY: ${{ secrets.HOSTTHIS_SSH_KEY }}
         run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$HOSTTHIS_SSH_KEY" > ~/.ssh/hostthis
+          chmod 600 ~/.ssh/hostthis
           # stderr is kept: hiding it once already turned a real failure into a
           # blank variable with no way to tell why.
           # errexit is on by default here, so the pipeline must be shielded or
           # the step dies before any diagnostic below it runs.
           set +e
           tar czf - -C report . \
-            | ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 \
+            | ssh -T -i ~/.ssh/hostthis -o IdentitiesOnly=yes \
+                  -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 \
                   hostthis.dev > upload.out 2> upload.err
           rc=$?
           set -e
@@ -161,7 +170,7 @@ jobs:
             echo ""
             echo "| field | value |"
             echo "| --- | --- |"
-            echo "| report | ${{ steps.publish.outputs.url || 'upload failed, see artifact' }} |"
+            echo "| report | ${{ steps.publish.outputs.url || 'not published (no HOSTTHIS_SSH_KEY); see the report artifact' }} |"
             echo "| commit | \`${GITHUB_SHA:0:8}\` |"
             echo "| chromium cache | ${{ steps.pwcache.outputs.cache-hit == 'true' && 'hit' || 'miss' }} |"
             echo "| screenshots | $(find "$PREP_E2E_ARTIFACTS" -name '*.png' 2>/dev/null | wc -l | tr -d ' ') |"
