@@ -121,9 +121,18 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          url=$(tar czf - -C report . \
-            | ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 hostthis.dev 2>/dev/null \
-            | grep -oE 'https://[a-z0-9]+\.hostthis\.dev' | head -1)
+          # stderr is kept: hiding it once already turned a real failure into a
+          # blank variable with no way to tell why.
+          set -x
+          tar czf - -C report . \
+            | ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 \
+                  hostthis.dev > upload.out 2> upload.err
+          rc=$?
+          set +x
+          echo "ssh exit: $rc"
+          echo "--- stdout ---"; head -c 800 upload.out || true
+          echo "--- stderr ---"; head -c 800 upload.err || true
+          url=$(grep -oE 'https://[a-z0-9]+\.hostthis\.dev' upload.out | head -1)
           if [ -z "$url" ]; then
             echo "upload produced no url"
             exit 1
