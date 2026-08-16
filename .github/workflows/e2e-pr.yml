@@ -13,6 +13,12 @@ concurrency:
   group: e2e-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# Least privilege, plus the one write needed to post the report link. A pull
+# request from a fork gets a read-only token regardless of what is asked here.
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   flows:
     runs-on: ubuntu-latest
@@ -69,8 +75,11 @@ jobs:
         if: steps.pwcache.outputs.cache-hit == 'true'
         run: uv run playwright install-deps chromium
 
+      # A failing suite is the case the report matters most for, so this step
+      # records the result and the job is failed at the very end instead.
       - name: Run flow tests
         id: tests
+        continue-on-error: true
         run: |
           mkdir -p "$PREP_E2E_ARTIFACTS"
           files="tests/e2e/test_local_browser_smoke.py"
@@ -78,7 +87,7 @@ jobs:
             [ -e "$f" ] && files="$files $f"
           done
           echo "running: $files"
-          uv run pytest -v --tb=short $files
+          uv run pytest -v --tb=short --junit-xml=results.xml $files
 
       - name: Upload artifacts
         if: always()
@@ -91,18 +100,65 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      # Per-step durations come from the API, which is authoritative. This is
-      # just the at-a-glance version for whoever opens the PR.
-      - name: Timing summary
+      - name: Render report
+        if: always()
+        run: |
+          uv run python scripts/render_test_report.py \
+            --junit results.xml \
+            --artifacts "$PREP_E2E_ARTIFACTS" \
+            --out report \
+            --title "prep e2e - PR #${{ github.event.pull_request.number }}" \
+            --commit "$GITHUB_SHA" \
+            --branch "${{ github.event.pull_request.head.ref }}" \
+            --pr "${{ github.event.pull_request.number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      # Anonymous upload on purpose: no deploy key in a public repo, and it
+      # keeps working for pull requests from forks, where secrets are withheld.
+      - name: Publish report
+        id: publish
+        if: always()
+        continue-on-error: true
+        run: |
+          url=$(tar czf - -C report . \
+            | ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 hostthis.dev 2>/dev/null \
+            | grep -oE 'https://[a-z0-9]+\.hostthis\.dev' | head -1)
+          if [ -z "$url" ]; then
+            echo "upload produced no url"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "published $url"
+
+      - name: Comment the report link
+        # Forks get a read-only token, so this cannot post there. The job
+        # summary below always carries the link.
+        if: always() && steps.publish.outputs.url != '' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" --body \
+            "e2e ${{ steps.tests.outcome }}: ${{ steps.publish.outputs.url }} (commit \`${GITHUB_SHA:0:8}\`)"
+
+      - name: Summary
         if: always()
         run: |
           {
-            echo "### Flow run"
+            echo "### e2e flows: ${{ steps.tests.outcome }}"
             echo ""
             echo "| field | value |"
             echo "| --- | --- |"
+            echo "| report | ${{ steps.publish.outputs.url || 'upload failed, see artifact' }} |"
             echo "| commit | \`${GITHUB_SHA:0:8}\` |"
-            echo "| result | ${{ steps.tests.outcome }} |"
             echo "| chromium cache | ${{ steps.pwcache.outputs.cache-hit == 'true' && 'hit' || 'miss' }} |"
             echo "| screenshots | $(find "$PREP_E2E_ARTIFACTS" -name '*.png' 2>/dev/null | wc -l | tr -d ' ') |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The suite's own result decides the job, after the report exists.
+      - name: Gate on the suite result
+        if: always() && steps.tests.outcome != 'success'
+        run: |
+          echo "flow tests failed; report: ${{ steps.publish.outputs.url }}"
+          exit 1
