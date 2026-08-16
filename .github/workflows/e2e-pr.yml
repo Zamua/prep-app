@@ -128,7 +128,7 @@ jobs:
         if: always() && env.HOSTTHIS_SSH_KEY != ''
         continue-on-error: true
         env:
-          REPORT_NAME: prep e2e PR #${{ github.event.pull_request.number }}
+          REPORT_NAME: "prep e2e PR #${{ github.event.pull_request.number }}"
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$HOSTTHIS_SSH_KEY" > ~/.ssh/hostthis
