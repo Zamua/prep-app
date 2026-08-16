@@ -51,3 +51,8 @@ push-subscriptions.json.archived-*
 # ~/Dropbox/workspace/macmini/infra/prep/ locally.
 /deploy/vps/
 /deploy/vps.compose.yml
+
+# e2e flow screenshots and the rendered report
+artifacts/
+report/
+results.xml
