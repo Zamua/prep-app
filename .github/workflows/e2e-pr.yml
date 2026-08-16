@@ -123,12 +123,14 @@ jobs:
         run: |
           # stderr is kept: hiding it once already turned a real failure into a
           # blank variable with no way to tell why.
-          set -x
+          # errexit is on by default here, so the pipeline must be shielded or
+          # the step dies before any diagnostic below it runs.
+          set +e
           tar czf - -C report . \
             | ssh -T -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 \
                   hostthis.dev > upload.out 2> upload.err
           rc=$?
-          set +x
+          set -e
           echo "ssh exit: $rc"
           echo "--- stdout ---"; head -c 800 upload.out || true
           echo "--- stderr ---"; head -c 800 upload.err || true
