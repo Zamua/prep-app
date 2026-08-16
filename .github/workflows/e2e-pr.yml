@@ -121,23 +121,32 @@ jobs:
       # ships as a build artifact. Forks never see the secret, by design.
       - name: Publish report
         id: publish
-        if: always() && env.HOSTTHIS_SSH_KEY != ''
+        if: always() && secrets.HOSTTHIS_SSH_KEY != ''
         continue-on-error: true
         env:
           HOSTTHIS_SSH_KEY: ${{ secrets.HOSTTHIS_SSH_KEY }}
+          REPORT_NAME: prep e2e PR #${{ github.event.pull_request.number }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$HOSTTHIS_SSH_KEY" > ~/.ssh/hostthis
           chmod 600 ~/.ssh/hostthis
+          hh() { ssh -T -i ~/.ssh/hostthis -o IdentitiesOnly=yes \
+                     -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 "$@"; }
+
+          # One slug per pull request, redeployed in place: the URL in the PR
+          # comment stays correct for the life of the branch, each run becomes a
+          # new version rather than a new paste, and stored bytes grow with the
+          # number of PRs instead of the number of pushes.
+          slug=$(hh hostthis.dev list -o json 2>/dev/null \
+                 | jq -r --arg n "$REPORT_NAME" 'map(select(.name==$n))[0].slug // ""' 2>/dev/null || true)
+          echo "existing slug for '$REPORT_NAME': ${slug:-<none>}"
+
           # stderr is kept: hiding it once already turned a real failure into a
           # blank variable with no way to tell why.
           # errexit is on by default here, so the pipeline must be shielded or
           # the step dies before any diagnostic below it runs.
           set +e
-          tar czf - -C report . \
-            | ssh -T -i ~/.ssh/hostthis -o IdentitiesOnly=yes \
-                  -o StrictHostKeyChecking=accept-new -o ConnectTimeout=40 \
-                  hostthis.dev > upload.out 2> upload.err
+          tar czf - -C report . | hh hostthis.dev $slug > upload.out 2> upload.err
           rc=$?
           set -e
           echo "ssh exit: $rc"
@@ -147,6 +156,10 @@ jobs:
           if [ -z "$url" ]; then
             echo "upload produced no url"
             exit 1
+          fi
+          if [ -z "$slug" ]; then
+            newslug=$(echo "$url" | sed -E 's|https://([a-z0-9]+)\..*|\1|')
+            hh hostthis.dev rename "$newslug" "$REPORT_NAME" || true
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "published $url"
