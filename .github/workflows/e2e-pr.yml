@@ -27,6 +27,10 @@ jobs:
       # Tests write screenshots here. Kept out of test-results/ because the
       # pytest-playwright plugin wipes its own output dir at session start.
       PREP_E2E_ARTIFACTS: ${{ github.workspace }}/artifacts
+      # Job level, not step level: the secrets context is rejected in a step's
+      # `if`, and a step's own env block is not visible to its own condition.
+      # Runner logs mask the value.
+      HOSTTHIS_SSH_KEY: ${{ secrets.HOSTTHIS_SSH_KEY }}
 
     steps:
       - name: Checkout
@@ -121,10 +125,9 @@ jobs:
       # ships as a build artifact. Forks never see the secret, by design.
       - name: Publish report
         id: publish
-        if: always() && secrets.HOSTTHIS_SSH_KEY != ''
+        if: always() && env.HOSTTHIS_SSH_KEY != ''
         continue-on-error: true
         env:
-          HOSTTHIS_SSH_KEY: ${{ secrets.HOSTTHIS_SSH_KEY }}
           REPORT_NAME: prep e2e PR #${{ github.event.pull_request.number }}
         run: |
           install -m 700 -d ~/.ssh
