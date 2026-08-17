@@ -307,16 +307,17 @@ beyond). Provider facts worth recording here because they shaped
 the design (verified against the live API), while the actual
 deploy values live in the private infra repo, never in this repo:
 
-- The API serves four models: DeepSeek-V4-Flash-0731 (512K
-  context), GLM-5.2-NVFP4 (512K), Kimi-K2.7-Code (262K), and
-  Qwen/Qwen3.6-35B-A3B-FP8 (262K).
-- The chosen default is DeepSeek-V4-Flash-0731: measured 5.6s
-  wall on a grading-shaped strict-JSON call, clean JSON on the
-  first try, comfortable under grading's 12s cap. Qwen3.6-35B
-  measured 1.7s on the same call, also clean; it is the
-  documented latency fallback if grading ever gets tight under
-  the cap. Swapping is a `PREP_FREE_INFERENCE_MODEL` change, no
-  code.
+- The API serves one model: Qwen/Qwen3.6-35B-A3B-FP8 (262K
+  context). The launch catalog had three more (DeepSeek-V4-Flash,
+  GLM-5.2, Kimi-K2.7); all were retired from the free tier, so
+  treat the catalog as volatile and re-check `GET /models` before
+  relying on any name here.
+- Qwen3.6-35B measured 1.7s on a grading-shaped strict-JSON call
+  with clean JSON on the first try, comfortable under grading's
+  12s cap; under provider load the same call has measured 35s+,
+  so generation deadlines stay env-tunable
+  (`PREP_INSTANT_TIMEOUT_S`). Swapping models is a
+  `PREP_FREE_INFERENCE_MODEL` change, no code.
 - API keys are minted console-only (no API), so rollout gates on
   the operator pasting a key into the deploy secret.
 - Reasoning ("thinking") is ON by default upstream and silently
@@ -464,9 +465,9 @@ reflect the free tier:
 ## 3. Output contract: a different model, same parsers
 
 prep's AI flows expect structured JSON in freeform text. Claude
-has been the only producer; the free-tier models (DeepSeek
-default, Qwen latency fallback, per section 2) have different
-habits: chattier preambles, different fencing, and (if not
+has been the only producer; the free-tier model (Qwen, per
+section 2) has different habits: chattier preambles,
+different fencing, and (if not
 disabled) reasoning traces in the content. The strategy: **tolerance stays where it already lives,
 in the caller-side parse helpers; the adapter stays dumb text
 transport; contract tests pin both against recorded shapes.**
