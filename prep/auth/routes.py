@@ -88,8 +88,9 @@ def sign_out(request: Request):
         raise HTTPException(404, "this deploy has no in-app sign-out flow")
     if provider.name == "clerk":
         response = templates.TemplateResponse(
+            request,
             "sign_out_interstitial.html",
-            {"request": request, "user": None, "redirect_url": "/"},
+            {"user": None, "redirect_url": "/"},
         )
     else:
         response = RedirectResponse(urls.sign_out, status_code=303)
@@ -184,9 +185,9 @@ def editor_settings(
     repo: UserRepo = Depends(_user_repo),
 ):
     return templates.TemplateResponse(
+        request,
         "settings_editor.html",
         {
-            "request": request,
             "user": user,
             "current_mode": repo.get_editor_input_mode(user["tailscale_login"]),
             "modes": repo.editor_input_modes,
@@ -205,12 +206,14 @@ def editor_settings_save(
     if mode not in repo.editor_input_modes:
         raise HTTPException(400, f'Unknown input mode "{mode}".')
     repo.set_editor_input_mode(user["tailscale_login"], mode)
+    # The _user_context processor overwrites any route-supplied "user"
+    # with request.state.user, so refresh the state row instead; the
+    # re-render's data-editor-mode then shows the saved value.
+    request.state.user = {**user, "editor_input_mode": mode}
     return templates.TemplateResponse(
+        request,
         "settings_editor.html",
         {
-            "request": request,
-            # Reflect the saved value in the next render.
-            "user": {**user, "editor_input_mode": mode},
             "current_mode": mode,
             "modes": repo.editor_input_modes,
             "saved": True,
@@ -247,9 +250,9 @@ def srs_settings(
 
     current = repo.get_desired_retention(user["tailscale_login"])
     return templates.TemplateResponse(
+        request,
         "settings_srs.html",
         {
-            "request": request,
             "user": user,
             "current": current if current is not None else DEFAULT_DESIRED_RETENTION,
             "is_default": current is None,
@@ -284,9 +287,9 @@ def srs_settings_save(
         )
     repo.set_desired_retention(user["tailscale_login"], value)
     return templates.TemplateResponse(
+        request,
         "settings_srs.html",
         {
-            "request": request,
             "user": user,
             "current": value,
             "is_default": abs(value - DEFAULT_DESIRED_RETENTION) < 1e-6,
@@ -318,8 +321,9 @@ def account_settings(request: Request, user: dict = Depends(signed_in_user)):
     if provider.name != "clerk":
         raise HTTPException(404, "this deploy has no in-app account-delete flow")
     return templates.TemplateResponse(
+        request,
         "settings_account.html",
-        {"request": request, "user": user, "error": None},
+        {"user": user, "error": None},
     )
 
 
@@ -343,9 +347,9 @@ def account_settings_delete(
     expected = (user.get("tailscale_login") or "").strip()
     if (confirm or "").strip() != expected:
         return templates.TemplateResponse(
+            request,
             "settings_account.html",
             {
-                "request": request,
                 "user": user,
                 "error": "That doesn't match your account ID. Type it exactly as shown to confirm.",
             },
@@ -363,9 +367,9 @@ def account_settings_delete(
         )
     except httpx.RequestError as e:
         return templates.TemplateResponse(
+            request,
             "settings_account.html",
             {
-                "request": request,
                 "user": user,
                 "error": f"Couldn't reach the auth provider: {e}. Try again in a minute.",
             },
@@ -373,9 +377,9 @@ def account_settings_delete(
         )
     if r.status_code not in (200, 204):
         return templates.TemplateResponse(
+            request,
             "settings_account.html",
             {
-                "request": request,
                 "user": user,
                 "error": (
                     f"Auth provider refused the delete (HTTP {r.status_code}). "

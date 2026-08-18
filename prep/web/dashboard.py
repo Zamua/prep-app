@@ -82,11 +82,11 @@ def overview_payload(
     }
 
 
-def menu_context(request: Request, summaries: list[DeckSummary]) -> dict:
+def menu_context(summaries: list[DeckSummary]) -> dict:
     """Template context for partials/deck_menus.html. The rows read
     the same summary dicts the deck list is built from, so a menu can
     never describe a deck the list does not show."""
-    return {"request": request, "menu_decks": [d.model_dump() for d in summaries]}
+    return {"menu_decks": [d.model_dump() for d in summaries]}
 
 
 @router.get("/api/dashboard/overview", include_in_schema=False)
@@ -108,6 +108,4 @@ def dashboard_deck_menus(
     after a pin toggle: the menu's own Pin/Unpin row is server state
     too, and a stale copy would offer the action the user just took."""
     summaries = deck_repo.list_summaries(user["tailscale_login"])
-    return templates.TemplateResponse(
-        request, "partials/deck_menus.html", menu_context(request, summaries)
-    )
+    return templates.TemplateResponse(request, "partials/deck_menus.html", menu_context(summaries))

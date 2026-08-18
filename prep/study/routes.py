@@ -104,9 +104,9 @@ def session_view(
     if s.status is SessionStatus.ABANDONED:
         return responses.redirect(request, f"/deck/{deck_name}")
     return templates.TemplateResponse(
+        request,
         "study_shell.html",
         {
-            "request": request,
             "user": user,
             "deck_name": deck_name,
             "session_id": sid,
@@ -190,9 +190,9 @@ def study(
     uid = user["tailscale_login"]
     deck_repo.get_or_create(uid, name)
     return templates.TemplateResponse(
+        request,
         "study_shell.html",
         {
-            "request": request,
             "user": user,
             "deck_name": name,
             "session_id": None,

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import mistune
@@ -241,6 +242,24 @@ templates.env.globals["icon"] = icons.icon
 
 # ---- App + mounts ---------------------------------------------------------
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Startup: db.init() (schema bootstrap + idempotent migrations,
+    the deterministic migration trigger for schema changes), one-time
+    legacy push-subscriptions.json cleanup, then the notification and
+    workflow-reconciler background schedulers (one bg task each)."""
+    from prep.infrastructure.db import init as _db_init
+
+    _db_init()
+    legacy = BASE_DIR / "push-subscriptions.json"
+    if legacy.exists():
+        legacy.rename(legacy.with_suffix(".json.archived-pre-v0.5"))
+    notify.start_scheduler()
+    _workflows_mod.start_workflows_scheduler()
+    yield
+
+
 # FastAPI's auto-docs at /docs (Swagger) + /redoc are publicly visible
 # at the deploy's root_path. The title/description below drives the
 # header users see when they hit those URLs, and the version comes
@@ -249,6 +268,7 @@ templates.env.globals["icon"] = icons.icon
 # sort to the top; everything else is internal.
 app = FastAPI(
     root_path=ROOT_PATH,
+    lifespan=_lifespan,
     # Disable FastAPI's auto-mounted /redoc — its default CDN URL
     # uses `redoc@next` which Chromium blocks via Opaque Response
     # Blocking on prepcards.app (the jsdelivr response Content-Type
@@ -506,31 +526,3 @@ else:
         "configures their own BYOK key at /settings/agent (or, on tailscale "
         "single-user installs, runs `claude setup-token` and pastes it)."
     )
-
-
-# ---- Startup hooks --------------------------------------------------------
-
-
-@app.on_event("startup")
-async def _boot() -> None:
-    """Run on app boot:
-
-    1. db.init() — schema bootstrap + idempotent migrations. Was
-       removed during the DDD refactor; re-added here because
-       schema changes (e.g. the trivia phase 1 ALTER TABLEs) need
-       a deterministic migration trigger that isn't 'remember to
-       exec into the container.'
-    2. legacy push-subscriptions.json cleanup (one-time).
-    3. start the notification scheduler.
-    4. start the workflow reconciler — the server-side fallback that
-       keeps active_workflows accurate when the user isn't polling.
-       Same shape as notify.start_scheduler: one bg task per app.
-    """
-    from prep.infrastructure.db import init as _db_init
-
-    _db_init()
-    legacy = BASE_DIR / "push-subscriptions.json"
-    if legacy.exists():
-        legacy.rename(legacy.with_suffix(".json.archived-pre-v0.5"))
-    notify.start_scheduler()
-    _workflows_mod.start_workflows_scheduler()

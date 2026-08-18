@@ -83,9 +83,9 @@ def _render_error(request: Request, status_code: int, detail: str | None = None)
         # context (e.g., "malformed workflow id" vs. generic "Bad request").
         blurb = f"{blurb} ({detail})"
     return templates.TemplateResponse(
+        request,
         "error.html",
         {
-            "request": request,
             "status_code": status_code,
             "headline": headline,
             "blurb": blurb,
@@ -140,9 +140,9 @@ def register(app: FastAPI) -> None:
                 {"error": {"code": "deck_limit", "message": str(exc)}}, status_code=429
             )
         return templates.TemplateResponse(
+            request,
             "error.html",
             {
-                "request": request,
                 "status_code": 429,
                 "headline": "Guest account is full.",
                 "blurb": str(exc),

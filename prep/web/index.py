@@ -179,8 +179,9 @@ def index(
             and request.cookies.get("prep_reauth_fallback") != "1"
         ):
             return templates.TemplateResponse(
+                request,
                 "reauth.html",
-                {"request": request, "user": None},
+                {"user": None},
             )
         urls = provider.urls()
         # ClerkJS itself is loaded by base.html on every page (see
@@ -194,9 +195,9 @@ def index(
         # (instant_enabled and sign_in_url); failing either renders the
         # marketing hero unchanged.
         return templates.TemplateResponse(
+            request,
             "landing.html",
             {
-                "request": request,
                 "user": None,
                 "sign_in_url": urls.sign_in,
                 "instant_enabled": free_tier_configured(),
@@ -257,12 +258,12 @@ def index(
     # Soonest wakes first — same order on both sides of the merge.
     snoozed_views.sort(key=lambda r: r["snoozed_until"] or "")
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "user": user,
             "dashboard_overview": overview,
-            **menu_context(request, summaries),
+            **menu_context(summaries),
             "recent_sessions": [r.model_dump() for r in recents],
             "active_trivia_sessions": active_trivia_views,
             "snoozed_sessions": snoozed_views,

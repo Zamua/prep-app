@@ -87,6 +87,11 @@ def seed_anon_user(external_id: str = EXTERNAL_ID):
         )
 
 
+def cookie_header(value: str) -> dict[str, str]:
+    """Per-request cookie as a raw header; TestClient's cookies= kwarg is deprecated."""
+    return {"cookie": f"{ac.COOKIE_NAME}={value}"}
+
+
 def anon_set_cookie(response) -> str | None:
     for raw in response.headers.get_list("set-cookie"):
         if raw.startswith(f"{ac.COOKIE_NAME}="):
@@ -102,8 +107,7 @@ def user_ids() -> set[str]:
 def test_forged_cookie_is_cleared_on_a_json_response(client, initialized_db, visitor):
     r = client.get(
         "/api/offline/snapshot",
-        cookies={ac.COOKIE_NAME: FORGED},
-        headers={"accept": "application/json"},
+        headers={"accept": "application/json", **cookie_header(FORGED)},
     )
     assert r.status_code == 401
     assert r.headers["content-type"].startswith("application/json")
@@ -132,7 +136,7 @@ def test_aging_cookie_is_refreshed_on_a_json_response(client, initialized_db, vi
     old = int(time.time()) - 31 * DAY
     r = client.get(
         "/api/offline/snapshot",
-        cookies={ac.COOKIE_NAME: ac.mint_cookie(EXTERNAL_ID, issued_at=old)},
+        headers=cookie_header(ac.mint_cookie(EXTERNAL_ID, issued_at=old)),
     )
     assert r.status_code == 200
     assert not r.headers["content-type"].startswith("text/html")
@@ -152,13 +156,13 @@ def test_aging_cookie_is_refreshed_on_a_json_response(client, initialized_db, vi
 
 def test_fresh_cookie_sets_no_cookie(client, initialized_db, visitor):
     seed_anon_user()
-    r = client.get("/api/offline/snapshot", cookies={ac.COOKIE_NAME: ac.mint_cookie(EXTERNAL_ID)})
+    r = client.get("/api/offline/snapshot", headers=cookie_header(ac.mint_cookie(EXTERNAL_ID)))
     assert r.status_code == 200
     assert anon_set_cookie(r) is None
 
 
 def test_stale_cookie_is_cleared_on_html_too(client, initialized_db, visitor):
-    r = client.get("/", cookies={ac.COOKIE_NAME: ac.mint_cookie(EXTERNAL_ID)})
+    r = client.get("/", headers=cookie_header(ac.mint_cookie(EXTERNAL_ID)))
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
     raw = anon_set_cookie(r)
@@ -167,7 +171,7 @@ def test_stale_cookie_is_cleared_on_html_too(client, initialized_db, visitor):
 
 def test_dormant_session_beats_a_valid_cookie_at_the_landing(client, initialized_db, dormant):
     seed_anon_user()
-    r = client.get("/", cookies={ac.COOKIE_NAME: ac.mint_cookie(EXTERNAL_ID)})
+    r = client.get("/", headers=cookie_header(ac.mint_cookie(EXTERNAL_ID)))
     assert r.status_code == 200
     assert "Signing you in" in r.text
     assert anon_set_cookie(r) is None
@@ -175,7 +179,7 @@ def test_dormant_session_beats_a_valid_cookie_at_the_landing(client, initialized
 
 def test_signed_in_beats_a_valid_cookie(client, initialized_db, signed_in):
     seed_anon_user()
-    r = client.get("/", cookies={ac.COOKIE_NAME: ac.mint_cookie(EXTERNAL_ID)})
+    r = client.get("/", headers=cookie_header(ac.mint_cookie(EXTERNAL_ID)))
     assert r.status_code == 200
     assert "Signing you in" not in r.text
     ids = user_ids()
