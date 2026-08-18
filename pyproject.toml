@@ -12,16 +12,16 @@ requires-python = ">=3.10"
 # install time; this list is what humans edit.
 dependencies = [
     "fastapi==0.115.0",
-    "uvicorn[standard]==0.32.0",
-    "jinja2==3.1.4",
-    "python-multipart==0.0.12",
+    "uvicorn[standard]==0.52.3",
+    "jinja2==3.1.6",
+    "python-multipart==0.0.32",
     "temporalio==1.7.1",
-    "mistune==3.0.2",
-    "pywebpush==2.1.2",
+    "mistune==3.3.4",
+    "pywebpush==2.3.0",
     # pydantic is already a transitive dep via fastapi, but we use it
     # directly for entities + value objects under prep/*/entities.py
     # and prep/domain/, so pin it explicitly.
-    "pydantic==2.13.3",
+    "pydantic==2.13.4",
     # httpx — async HTTP client used by prep.trivia.agent_client.run_prompt_async
     # for request-path grading. Was previously dev-only (FastAPI TestClient
     # depends on it); promoted to runtime when async grading landed. Don't
@@ -31,12 +31,12 @@ dependencies = [
     # Prometheus running on the same box. Emitted: anyio threadpool
     # gauge, claude_grade histogram, http request duration.
     # See prep/web/metrics.py for the registry + middleware.
-    "prometheus-client==0.21.0",
+    "prometheus-client==0.26.0",
     # claude-agent-sdk — Python SDK for in-process Claude invocations.
     # Replaces the agent-server container (shelling out to `claude -p`).
     # Auths via CLAUDE_CODE_OAUTH_TOKEN env var (subscription credits).
     # Adapter at prep/agent/sdk_adapter.py wraps it behind AgentPort.
-    "claude-agent-sdk==0.2.87",
+    "claude-agent-sdk==0.2.139",
     # clerk-backend-api + svix — Clerk identity provider for the public
     # VPS deploy (PREP_AUTH_MODE=clerk). Mac-mini install stays on
     # tailscale auth and never imports these at request time, but they
@@ -44,7 +44,7 @@ dependencies = [
     # Adapter at prep/auth/providers/clerk.py; webhook receiver uses
     # svix for HMAC verification of the user.* events Clerk pushes.
     "clerk-backend-api==5.0.7",
-    "svix==1.95.1",
+    "svix==1.99.1",
     "fsrs>=6.3.1",
 ]
 
@@ -64,7 +64,7 @@ dev = [
     "pytest==8.3.3",
     "pytest-asyncio==0.24.0",
     "httpx==0.28.1",
-    "freezegun==1.5.1",
+    "freezegun==1.5.5",
     # End-to-end tests (tests/e2e/) drive Chromium via Playwright against
     # the deployed staging instance. `make promote` runs them before
     # tagging prod, so this stays a dev-time install — production
