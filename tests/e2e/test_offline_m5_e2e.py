@@ -195,6 +195,10 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     identity["name"] = SECOND_NAME
     offline_server.start()
     ctx.set_offline(False)
+    # Chromium no longer re-applies the context's network emulation to
+    # the renderer a SW-fallback navigation created, so no real online
+    # event will fire; deliver the event the shell listens for.
+    page.evaluate("window.dispatchEvent(new Event('online'))")
 
     # The shell's reconnect flow trips the guard and surfaces the
     # dialog on its own (never silent, never automatic beyond this).

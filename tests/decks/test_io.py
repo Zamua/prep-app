@@ -296,9 +296,9 @@ def test_csv_round_trip_preserves_all_fields_all_types(initialized_db: str):
         deck_repo=DeckRepo(),
         question_repo=QuestionRepo(),
     )
-    assert (
-        out.inserted == 4
-    ), f"expected 4 cards reimported, got {out.inserted}; errors={out.errors}"
+    assert out.inserted == 4, (
+        f"expected 4 cards reimported, got {out.inserted}; errors={out.errors}"
+    )
     assert out.errors == []
 
     # Fetch full Question entities directly so we can diff every column
@@ -327,9 +327,9 @@ def test_csv_round_trip_preserves_all_fields_all_types(initialized_db: str):
         assert s.rubric == d.rubric, f"{prompt}: rubric drift"
         assert s.skeleton == d.skeleton, f"{prompt}: skeleton drift"
         assert s.language == d.language, f"{prompt}: language drift {s.language!r} → {d.language!r}"
-        assert (
-            s.answer_regex == d.answer_regex
-        ), f"{prompt}: answer_regex drift {s.answer_regex!r} → {d.answer_regex!r}"
+        assert s.answer_regex == d.answer_regex, (
+            f"{prompt}: answer_regex drift {s.answer_regex!r} → {d.answer_regex!r}"
+        )
         assert s.explanation == d.explanation, f"{prompt}: explanation drift"
 
 
@@ -555,7 +555,7 @@ def test_export_csv_route_404s_for_missing_deck(client, initialized_db: str):
 def test_import_csv_route_renders_outcome(client, initialized_db: str):
     """POST /decks/import-csv with a multipart body lands an outcome
     block in the rendered page."""
-    csv_bytes = b"type,prompt,answer\n" b"short,Q1,A1\n" b"short,Q2,A2\n"
+    csv_bytes = b"type,prompt,answer\nshort,Q1,A1\nshort,Q2,A2\n"
     r = client.post(
         "/decks/import-csv",
         data={"name": "via-http"},

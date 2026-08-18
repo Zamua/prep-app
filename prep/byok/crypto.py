@@ -88,8 +88,7 @@ def load_master_from_env(env_var: str = "PREP_KEY_ENCRYPTION_SECRET") -> bytes:
         key = bytes.fromhex(raw)
     except ValueError as e:
         raise MasterKeyError(
-            f"{env_var} must be hex-encoded (e.g. `openssl rand -hex 32`). "
-            f"Got a non-hex value: {e}"
+            f"{env_var} must be hex-encoded (e.g. `openssl rand -hex 32`). Got a non-hex value: {e}"
         ) from e
     if len(key) != KEY_LEN:
         raise MasterKeyError(
@@ -142,7 +141,7 @@ def decrypt(blob: str, master_key: bytes) -> str:
         plain = aesgcm.decrypt(nonce, ct, associated_data=None)
     except InvalidTag as e:
         raise DecryptionError(
-            "AES-GCM tag mismatch — master key may have rotated or " "ciphertext is corrupt."
+            "AES-GCM tag mismatch — master key may have rotated or ciphertext is corrupt."
         ) from e
     return plain.decode("utf-8")
 

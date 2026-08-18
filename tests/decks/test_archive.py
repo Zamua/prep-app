@@ -347,9 +347,9 @@ def test_prepdeck_double_export_is_byte_identical(initialized_db: str):
             m2.pop("exported_at", None)
             assert m1 == m2
         else:
-            assert (
-                first_sections[name] == second_sections[name]
-            ), f"section {name} drifted between export #1 and export #2"
+            assert first_sections[name] == second_sections[name], (
+                f"section {name} drifted between export #1 and export #2"
+            )
 
 
 # ---- format-version backward compatibility -----------------------------

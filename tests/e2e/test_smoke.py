@@ -50,8 +50,7 @@ def test_versioned_module_path_resolves(http: httpx.Client):
     r = http.get(base)
     assert r.status_code == 200, f"{base} → {r.status_code}"
     assert r.headers.get("cache-control", "").startswith("public, max-age=315"), (
-        f"versioned module should be long-cache + immutable, got "
-        f"{r.headers.get('cache-control')!r}"
+        f"versioned module should be long-cache + immutable, got {r.headers.get('cache-control')!r}"
     )
 
 
@@ -92,7 +91,7 @@ def test_ai_grading_round_trip(http: httpx.Client, test_deck: dict):
     """
     qid = test_deck["qids"][3]  # the AI-routed question
     paraphrase = (
-        "It's a mutex that prevents multiple threads from executing " "Python bytecode in parallel."
+        "It's a mutex that prevents multiple threads from executing Python bytecode in parallel."
     )
     # 30s ceiling on the request itself: 12s ai_grade timeout +
     # margin for HTTP + handler. If the route hangs longer than this,
@@ -107,9 +106,9 @@ def test_ai_grading_round_trip(http: httpx.Client, test_deck: dict):
     # enough that we don't lock in a specific verdict, just that the
     # round-trip rendered SOMETHING. Right-feedback is more common for
     # this paraphrase; this test mainly proves the path didn't hang.
-    assert (
-        "trivia-result-right" in r.text or "trivia-result-wrong" in r.text
-    ), "no result block - the AI path didn't return a verdict"
+    assert "trivia-result-right" in r.text or "trivia-result-wrong" in r.text, (
+        "no result block - the AI path didn't return a verdict"
+    )
 
 
 def test_ai_regrade_round_trip(http: httpx.Client, test_deck: dict):
@@ -133,9 +132,9 @@ def test_ai_regrade_round_trip(http: httpx.Client, test_deck: dict):
     assert r.status_code == 200, r.status_code
     # Re-graded note is rendered when a regrade hits the route, even
     # if the verdict didn't flip.
-    assert (
-        "re-graded by AI" in r.text or "trivia-regrade-note" in r.text
-    ), "regrade did not surface — route may have failed silently"
+    assert "re-graded by AI" in r.text or "trivia-regrade-note" in r.text, (
+        "regrade did not surface — route may have failed silently"
+    )
 
 
 def test_details_toggle_skips_close_on_action_taps(http: httpx.Client):

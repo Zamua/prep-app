@@ -211,9 +211,9 @@ def test_transform_flow_drives_to_awaiting_apply(http: httpx.Client, test_deck: 
     assert f"/transform/{wid}/reject" in r.text, "reject form action missing"
     # Polling must have stopped: server controls the loop, terminal
     # fragments omit hx-trigger so htmx ceases requests.
-    assert not _has_polling_trigger(
-        r.text
-    ), f"awaiting_apply fragment still has hx-trigger; htmx will busy-poll. Body head: {r.text[:400]}"
+    assert not _has_polling_trigger(r.text), (
+        f"awaiting_apply fragment still has hx-trigger; htmx will busy-poll. Body head: {r.text[:400]}"
+    )
 
     # Signal reject. The route returns the freshly-rendered fragment.
     r = http.post(f"/transform/{wid}/reject")
@@ -233,9 +233,9 @@ def test_transform_flow_drives_to_awaiting_apply(http: httpx.Client, test_deck: 
     # Cancelled-state copy on the headline.
     assert "Cancelled." in r.text or "Done." in r.text, "post-reject headline missing"
     # And no more polling.
-    assert not _has_polling_trigger(
-        r.text
-    ), "post-reject terminal fragment still polls — htmx-trigger leak regression"
+    assert not _has_polling_trigger(r.text), (
+        "post-reject terminal fragment still polls — htmx-trigger leak regression"
+    )
 
 
 @pytest.mark.slow
@@ -327,13 +327,13 @@ def test_plan_flow_drives_to_terminal(http: httpx.Client):
         r, status = _poll_until(http, fragment_url, lambda resp, st: st == "awaiting_feedback")
         assert status == "awaiting_feedback", status
         # Plan content rendered: at least one plan-item shows up.
-        assert (
-            'class="plan-item"' in r.text or "plan-item-num" in r.text
-        ), "no plan items rendered on awaiting_feedback fragment"
+        assert 'class="plan-item"' in r.text or "plan-item-num" in r.text, (
+            "no plan items rendered on awaiting_feedback fragment"
+        )
         # And polling has stopped server-side.
-        assert not _has_polling_trigger(
-            r.text
-        ), "awaiting_feedback fragment still polls — htmx-trigger leak"
+        assert not _has_polling_trigger(r.text), (
+            "awaiting_feedback fragment still polls — htmx-trigger leak"
+        )
 
         # Reject the plan. Server returns the fresh fragment.
         r = http.post(f"/plan/{wid}/reject")

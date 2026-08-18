@@ -175,12 +175,12 @@ padding-top:1rem;margin-top:2.5rem}
 
 def render(cases, totals, orphans, meta) -> str:
     ok = totals["failed"] == 0
-    bits = [f'{totals["passed"]} passed']
+    bits = [f"{totals['passed']} passed"]
     if totals["failed"]:
-        bits.append(f'{totals["failed"]} failed')
+        bits.append(f"{totals['failed']} failed")
     if totals["skipped"]:
-        bits.append(f'{totals["skipped"]} skipped')
-    counts = ", ".join(bits) + f' in {totals["duration"]:.2f}s'
+        bits.append(f"{totals['skipped']} skipped")
+    counts = ", ".join(bits) + f" in {totals['duration']:.2f}s"
 
     def ident_value(v: str) -> str:
         safe = html.escape(str(v))
@@ -206,7 +206,7 @@ def render(cases, totals, orphans, meta) -> str:
             body = (c.message + "\n\n" + c.detail).strip()
             fail = f"<pre>{html.escape(body[:4000])}</pre>"
         flow = f' <span class="dur">{html.escape(c.flow)}</span>' if c.flow else ""
-        return f"""<div class="case {c.status}{' orphan' if orphan else ''}">
+        return f"""<div class="case {c.status}{" orphan" if orphan else ""}">
   <div class="chead">
     <span class="cname">{html.escape(c.name)}{flow}</span>
     <span><span class="pill {c.status}">{c.status}</span> <span class="dur">{c.time:.2f}s</span></span>
@@ -229,7 +229,7 @@ def render(cases, totals, orphans, meta) -> str:
                     time=0.0,
                     status="skipped",
                     shots=o["shots"],
-                    flow=f'unmatched nodeid: {o["nodeid"] or "(none)"}',
+                    flow=f"unmatched nodeid: {o['nodeid'] or '(none)'}",
                 ),
                 orphan=True,
             )
@@ -245,31 +245,31 @@ def render(cases, totals, orphans, meta) -> str:
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>{html.escape(meta['title'])}</title>
+<title>{html.escape(meta["title"])}</title>
 <style>{CSS}</style></head><body><div class="shell">
 
-<div class="verdict {'pass' if ok else 'fail'}">
-  <h1>{'PASSED' if ok else 'FAILED'}</h1>
+<div class="verdict {"pass" if ok else "fail"}">
+  <h1>{"PASSED" if ok else "FAILED"}</h1>
   <div class="counts">{html.escape(counts)}</div>
 </div>
 <div class="ident">{ident}</div>
 
 <h2>Flows</h2>
-{''.join(case_html(c) for c in documented) or '<p class="note">No flow recorded a filmstrip.</p>'}
+{"".join(case_html(c) for c in documented) or '<p class="note">No flow recorded a filmstrip.</p>'}
 
 <h2>Other tests</h2>
-{''.join(case_html(c) for c in plain) or '<p class="note">None.</p>'}
+{"".join(case_html(c) for c in plain) or '<p class="note">None.</p>'}
 
 {orphan_html}
 
 <h2>Reproduce</h2>
-<pre class="cmd">{html.escape(meta['reproduce'])}</pre>
+<pre class="cmd">{html.escape(meta["reproduce"])}</pre>
 
 <h2>Environment</h2>
-<pre class="cmd">{html.escape(meta['environment'])}</pre>
+<pre class="cmd">{html.escape(meta["environment"])}</pre>
 
 <footer>
-  Generated {html.escape(meta['generated'])} by <code>scripts/render_test_report.py</code>.
+  Generated {html.escape(meta["generated"])} by <code>scripts/render_test_report.py</code>.
   Screenshots are taken by the tests themselves as they run, on pass as well as failure.
 </footer>
 </div></body></html>

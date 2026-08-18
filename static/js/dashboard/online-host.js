@@ -79,7 +79,11 @@ function paint(overview) {
     render(overview);
     return;
   }
-  document.startViewTransition(() => render(overview));
+  const transition = document.startViewTransition(() => render(overview));
+  // A skipped transition (reduced motion, hidden tab, headless) rejects
+  // its promises; the render itself still ran, so the skip is not an
+  // error and must not surface as an unhandled rejection.
+  for (const q of [transition.ready, transition.finished]) q.catch(() => {});
 }
 
 // ---- pin toggle --------------------------------------------------------

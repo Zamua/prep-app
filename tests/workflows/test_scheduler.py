@@ -75,9 +75,9 @@ async def test_scheduler_loop_continues_after_a_failing_tick(
 
     # The first tick's exception was logged but didn't kill the loop.
     assert tick_count >= 2
-    assert any(
-        "workflow reconciler tick threw" in r.message for r in caplog.records
-    ), "expected the tick failure to be logged at ERROR"
+    assert any("workflow reconciler tick threw" in r.message for r in caplog.records), (
+        "expected the tick failure to be logged at ERROR"
+    )
 
 
 @pytest.mark.asyncio

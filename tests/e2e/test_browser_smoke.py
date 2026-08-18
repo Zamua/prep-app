@@ -203,7 +203,7 @@ def test_transform_polling_fires_in_browser(
         f"/deck/{name}/transform",
         data={
             "prompt": (
-                "rephrase each prompt to be slightly more concise; " "keep the same answer for each"
+                "rephrase each prompt to be slightly more concise; keep the same answer for each"
             )
         },
     )
@@ -302,7 +302,7 @@ def test_transform_reject_button_swaps_fragment_in_place(
         f"/deck/{name}/transform",
         data={
             "prompt": (
-                "rephrase each prompt to be slightly more concise; " "keep the same answer for each"
+                "rephrase each prompt to be slightly more concise; keep the same answer for each"
             )
         },
     )
@@ -350,9 +350,9 @@ def test_transform_reject_button_swaps_fragment_in_place(
 
     # Apply form gone (because the awaiting_apply fragment was
     # replaced).
-    assert (
-        page.locator(f'form[action*="/transform/{wid}/apply"]').count() == 0
-    ), "apply form still in DOM after reject swap — wrong element was replaced"
+    assert page.locator(f'form[action*="/transform/{wid}/apply"]').count() == 0, (
+        "apply form still in DOM after reject swap — wrong element was replaced"
+    )
 
 
 # ---- bug-class 4: the study loop advances in the browser -------------
@@ -384,7 +384,7 @@ def test_study_loop_reaches_a_verdict_in_the_browser(
         # The first due card is a choice card; pick one and submit.
         page.locator("[data-study-root] label.choice").first.click()
     else:
-        answer_box.fill("It is a mutex that stops threads running Python bytecode " "in parallel.")
+        answer_box.fill("It is a mutex that stops threads running Python bytecode in parallel.")
     page.get_by_role("button", name="Submit").click()
 
     # Deterministic grading answers immediately; an AI grade shows the

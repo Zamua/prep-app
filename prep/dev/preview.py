@@ -189,8 +189,7 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
         if ctx is None:
             raise HTTPException(
                 404,
-                f"unknown fixture '{fixture}' for template '{template}' "
-                f"(have: {sorted(fixtures)})",
+                f"unknown fixture '{fixture}' for template '{template}' (have: {sorted(fixtures)})",
             )
         ctx = {**ctx}
         # Result fixtures don't carry the handoff payload (it's computed in
@@ -217,7 +216,7 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
     @app.get("/dev/preview", response_class=HTMLResponse, include_in_schema=False)
     async def preview_index(request: Request):
         rows = "\n".join(
-            f'<li><a href="{request.scope.get("root_path","")}/dev/preview/{t}/{f}">{t}/{f}</a></li>'
+            f'<li><a href="{request.scope.get("root_path", "")}/dev/preview/{t}/{f}">{t}/{f}</a></li>'
             for t, f in all_fixtures()
         )
         return HTMLResponse(

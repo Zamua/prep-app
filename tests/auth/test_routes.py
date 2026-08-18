@@ -223,7 +223,7 @@ def test_record_review_uses_user_retention(initialized_db: str):
 
     # Higher retention → tighter scheduling → shorter interval.
     assert high_interval <= low_interval, (
-        f"high-retention ({high_interval}m) should be ≤ " f"low-retention ({low_interval}m)"
+        f"high-retention ({high_interval}m) should be ≤ low-retention ({low_interval}m)"
     )
 
 

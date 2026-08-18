@@ -389,9 +389,9 @@ def test_dashboard_components_render_only_styled_classes(offline_server, offline
     for cls in PRELUDE_CLASSES + DECK_LIST_CLASSES:
         assert page.locator(f"#harness .{cls}").count() > 0, f"components never rendered .{cls}"
     for cls in EMPTY_STATE_CLASSES:
-        assert (
-            page.locator(f"#harness-empty .{cls}").count() > 0
-        ), f"the empty state never rendered .{cls}"
+        assert page.locator(f"#harness-empty .{cls}").count() > 0, (
+            f"the empty state never rendered .{cls}"
+        )
 
     # The dashboard headline breaks before its italic beat, the way
     # templates/index.html sets it.

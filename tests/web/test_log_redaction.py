@@ -27,8 +27,7 @@ def test_redact_replaces_oauth_token():
 
 def test_redact_handles_multiple_in_one_line():
     raw = (
-        "comparison: sk-ant-api03-AbCdEf012345_678901234 "
-        "vs sk-ant-oat01-ZyXwVu987654_321098765432"
+        "comparison: sk-ant-api03-AbCdEf012345_678901234 vs sk-ant-oat01-ZyXwVu987654_321098765432"
     )
     out = redact(raw)
     assert "AbCdEf" not in out

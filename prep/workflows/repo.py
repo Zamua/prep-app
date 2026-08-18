@@ -139,8 +139,7 @@ class ActiveWorkflowsRepo:
         ts = now()
         with cursor() as c:
             c.execute(
-                f"UPDATE active_workflows SET {col} = ? "
-                f"WHERE workflow_id = ? AND {col} IS NULL",
+                f"UPDATE active_workflows SET {col} = ? WHERE workflow_id = ? AND {col} IS NULL",
                 (ts, workflow_id),
             )
 
@@ -221,9 +220,7 @@ class ActiveWorkflowsRepo:
         stuck or have just transitioned)."""
         with cursor() as c:
             rows = c.execute(
-                "SELECT * FROM active_workflows "
-                "WHERE terminal_at IS NULL "
-                "ORDER BY started_at ASC"
+                "SELECT * FROM active_workflows WHERE terminal_at IS NULL ORDER BY started_at ASC"
             ).fetchall()
         return [_row_to_entity(r) for r in rows]
 

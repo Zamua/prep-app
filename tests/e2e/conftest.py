@@ -177,9 +177,9 @@ def test_deck(http: httpx.Client) -> Iterator[dict]:
         qid = int(m.group(1))
         if qid not in qids:
             qids.append(qid)
-    assert len(qids) >= len(
-        E2E_QUESTIONS
-    ), f"expected {len(E2E_QUESTIONS)} qids on deck page, got {qids}"
+    assert len(qids) >= len(E2E_QUESTIONS), (
+        f"expected {len(E2E_QUESTIONS)} qids on deck page, got {qids}"
+    )
 
     info = {"name": slug, "display_name": E2E_DECK_NAME, "qids": qids[: len(E2E_QUESTIONS)]}
     try:
@@ -435,8 +435,11 @@ def page(browser_session, base_url, default_user_header, clerk_storage_state):
 #   with a live server the SW's navigation fetch succeeds and the
 #   offline fallback never fires. Real offline is simulated by STOPPING
 #   the local server (connection refused rejects the SW's fetch
-#   instantly); set_offline is used only to fire the window
-#   online/offline events the offline app listens for.
+#   instantly). set_offline no longer even reaches the renderer a
+#   SW-fallback navigation created (Chromium drops the context's
+#   emulation there), so reconnect tests dispatch the window `online`
+#   event themselves; the event is browser plumbing, not the contract
+#   under test.
 
 import json as _json
 import socket as _socket

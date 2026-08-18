@@ -68,6 +68,6 @@ def test_the_guest_meta_keys_are_named_only_by_the_wipe():
         text = path.read_text(encoding="utf-8")
         expected = body if path == REPO_ROOT / WIPE_FILE else ""
         for key in ('"guest"', "'guest'", '"guest_nudge"', "'guest_nudge'"):
-            assert text.count(key) == expected.count(
-                key
-            ), f"{path.relative_to(REPO_ROOT)} names the {key} meta key"
+            assert text.count(key) == expected.count(key), (
+                f"{path.relative_to(REPO_ROOT)} names the {key} meta key"
+            )
