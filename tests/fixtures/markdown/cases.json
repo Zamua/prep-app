@@ -261,7 +261,7 @@
   {
    "id": "xss-js-link-divergence",
    "input": "[click](javascript:alert(1))",
-   "expected": "<p><a href=\"#harmful-link\">click</a>)</p>\n",
+   "expected": "<p><a href=\"#harmful-link\">click</a></p>\n",
    "js_expected": "<p>[click](javascript:alert(1))</p>\n",
    "note": "non-http(s) schemes are outside the JS link subset: the twin leaves the text literal, mistune neutralizes to #harmful-link"
   },
