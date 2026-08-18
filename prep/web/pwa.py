@@ -171,9 +171,9 @@ def offline_shell(request: Request, build: str | None = None):
     if build and is_accepted_version_token(build):
         token = build
     return templates.TemplateResponse(
+        request,
         "offline.html",
         {
-            "request": request,
             "build": token,
         },
     )

@@ -69,6 +69,11 @@ def signed_in(client, secret):
     set_provider(None)
 
 
+def cookie_header(value: str) -> dict[str, str]:
+    """Per-request cookie as a raw header; TestClient's cookies= kwarg is deprecated."""
+    return {"cookie": f"{ac.COOKIE_NAME}={value}"}
+
+
 def anon_user_ids() -> list[str]:
     with infra_db.cursor() as c:
         return [
@@ -180,7 +185,7 @@ def test_the_minted_cookie_turns_the_landing_into_the_dashboard(visitor, instant
     r = visitor.post(URL, json={"topic": "Postgres MVCC"}, headers=IP)
     assert r.status_code == 200
 
-    home = visitor.get("/", cookies={ac.COOKIE_NAME: cookie_value(r)})
+    home = visitor.get("/", headers=cookie_header(cookie_value(r)))
 
     assert home.status_code == 200
     assert home.template.name == "index.html"
@@ -251,8 +256,7 @@ def test_a_valid_cookie_reuses_the_account_and_sets_no_cookie(visitor, instant_f
     second = visitor.post(
         URL,
         json={"topic": "Two"},
-        headers={"x-real-ip": "198.51.100.8"},
-        cookies={ac.COOKIE_NAME: ac.mint_cookie(minted)},
+        headers={"x-real-ip": "198.51.100.8", **cookie_header(ac.mint_cookie(minted))},
     )
 
     assert second.status_code == 200
@@ -273,8 +277,7 @@ def test_a_cookie_past_the_rolling_window_is_re_minted_for_the_same_account(
     second = visitor.post(
         URL,
         json={"topic": "Two"},
-        headers={"x-real-ip": "198.51.100.8"},
-        cookies={ac.COOKIE_NAME: aging},
+        headers={"x-real-ip": "198.51.100.8", **cookie_header(aging)},
     )
 
     assert second.status_code == 200
@@ -289,7 +292,7 @@ def test_a_cookie_for_a_deleted_user_mints_a_fresh_account(visitor, instant_fact
     dead = "anon:" + "ab" * 16
 
     r = visitor.post(
-        URL, json={"topic": "t"}, headers=IP, cookies={ac.COOKIE_NAME: ac.mint_cookie(dead)}
+        URL, json={"topic": "t"}, headers={**IP, **cookie_header(ac.mint_cookie(dead))}
     )
 
     assert r.status_code == 200
@@ -308,8 +311,7 @@ def test_a_signed_in_request_mints_nothing_and_owns_the_deck(signed_in, instant_
     r = signed_in.post(
         URL,
         json={"topic": "t"},
-        headers=IP,
-        cookies={ac.COOKIE_NAME: ac.mint_cookie("anon:" + "cd" * 16)},
+        headers={**IP, **cookie_header(ac.mint_cookie("anon:" + "cd" * 16))},
     )
 
     assert r.status_code == 200
@@ -337,8 +339,7 @@ def test_an_account_at_the_deck_cap_is_refused_and_keeps_its_decks(
     r = visitor.post(
         URL,
         json={"topic": "Two"},
-        headers={"x-real-ip": "198.51.100.8"},
-        cookies={ac.COOKIE_NAME: ac.mint_cookie(minted)},
+        headers={"x-real-ip": "198.51.100.8", **cookie_header(ac.mint_cookie(minted))},
     )
 
     assert r.status_code == 429
@@ -388,8 +389,7 @@ def test_a_returning_visitor_carries_the_id_at_reserve_time(visitor, instant_fac
     second = visitor.post(
         URL,
         json={"topic": "Two"},
-        headers={"x-real-ip": "198.51.100.8"},
-        cookies={ac.COOKIE_NAME: ac.mint_cookie(minted)},
+        headers={"x-real-ip": "198.51.100.8", **cookie_header(ac.mint_cookie(minted))},
     )
 
     assert second.status_code == 200

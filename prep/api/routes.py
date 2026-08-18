@@ -53,9 +53,9 @@ def _render_api_settings(
 ):
     tokens = ApiTokenRepo().list_for_user(user["tailscale_login"])
     return templates.TemplateResponse(
+        request,
         "settings_api.html",
         {
-            "request": request,
             "user": user,
             "tokens": tokens,
             "created_plaintext": created_plaintext,

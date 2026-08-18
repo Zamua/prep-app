@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 # convention like any other change. uv lock is the source of truth at
 # install time; this list is what humans edit.
 dependencies = [
-    "fastapi==0.115.0",
+    "fastapi==0.141.1",
     "uvicorn[standard]==0.52.3",
     "jinja2==3.1.6",
     "python-multipart==0.0.32",
@@ -80,10 +80,13 @@ dev = [
 testpaths = ["tests"]
 norecursedirs = ["tests/e2e"]
 asyncio_mode = "auto"
+# Pins the current default; pytest-asyncio warns until it is explicit.
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
-    # FastAPI's TestClient emits a DeprecationWarning about httpx's
-    # deprecated kwarg. Suppress until upstream catches up.
-    "ignore::DeprecationWarning:starlette.*",
+    # fastapi's own testclient module imports the httpx-backed starlette
+    # TestClient; eliminating the warning at the source would need httpx2
+    # in the deps. Drop this entry when fastapi switches.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
 ]
 # Markers for the e2e suite. `slow` flags tests that make real claude
 # calls (transform / plan / trivia generation) — each runs ~30-90s.

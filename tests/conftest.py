@@ -48,10 +48,10 @@ def client(env: None):
 
     Uses importlib.reload so each test sees a fresh module state; otherwise
     the connection cache in prep.infrastructure.db carries state across
-    tests. TestClient is entered as a context manager so the on_event
-    "startup" handler (which runs db.init() to bootstrap the schema)
-    actually fires — without it, smoke tests that don't use the
-    initialized_db fixture would hit "no such table: users"."""
+    tests. TestClient is entered as a context manager so the lifespan
+    startup (which runs db.init() to bootstrap the schema) actually
+    fires; without it, smoke tests that don't use the initialized_db
+    fixture would hit "no such table: users"."""
     import importlib
 
     from prep.infrastructure import db as db_mod

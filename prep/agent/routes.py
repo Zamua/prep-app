@@ -261,9 +261,9 @@ def _render_settings(
     everywhere automatically."""
     s = status if status is not None else _agent_mod.status()
     return templates.TemplateResponse(
+        request,
         "settings_agent.html",
         {
-            "request": request,
             "status": s,
             "error": error,
             "flash": flash,

@@ -65,9 +65,9 @@ def notify_settings(
     prefs = prefs_repo.get(uid)
     devices = subs_repo.count_for_user(uid)
     return templates.TemplateResponse(
+        request,
         "notify_settings.html",
         {
-            "request": request,
             "user": user,
             "prefs": prefs.model_dump(),
             "devices": devices,

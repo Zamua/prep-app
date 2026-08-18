@@ -30,7 +30,7 @@ def privacy(request: Request):
     content describes how prep itself handles data, which applies
     equally to single-user Tailscale installs and multi-user Clerk
     ones."""
-    return templates.TemplateResponse("privacy.html", {"request": request, "user": None})
+    return templates.TemplateResponse(request, "privacy.html", {"user": None})
 
 
 @router.get("/llms.txt", response_class=PlainTextResponse, include_in_schema=False)

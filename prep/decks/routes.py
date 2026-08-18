@@ -283,8 +283,9 @@ def deck_new_chooser(request: Request, user: dict = Depends(current_user)):
     flow actually needs, instead of one mega-form with a multi-action
     submit row."""
     return templates.TemplateResponse(
+        request,
         "deck_new_chooser.html",
-        {"request": request, "user": user},
+        {"user": user},
     )
 
 
@@ -292,9 +293,9 @@ def deck_new_chooser(request: Request, user: dict = Depends(current_user)):
 def deck_new_srs_form(request: Request, user: dict = Depends(current_user)):
     """Step 2 (SRS): name + description + plan-vs-empty submit."""
     return templates.TemplateResponse(
+        request,
         "deck_new_srs.html",
         {
-            "request": request,
             "user": user,
             "name_value": "",
             "context_value": "",
@@ -308,9 +309,9 @@ def deck_new_trivia_form(request: Request, user: dict = Depends(current_user)):
     """Step 2 (trivia): name + topic + interval. Single submit
     button — there's no empty/plan branch here."""
     return templates.TemplateResponse(
+        request,
         "deck_new_trivia.html",
         {
-            "request": request,
             "user": user,
             "name_value": "",
             "topic_value": "",
@@ -342,9 +343,9 @@ async def deck_new_srs_create(
 
     def rerender(error: str, status: int = 400):
         return templates.TemplateResponse(
+            request,
             "deck_new_srs.html",
             {
-                "request": request,
                 "user": user,
                 "name_value": name,
                 "context_value": context_prompt,
@@ -427,9 +428,9 @@ async def deck_new_trivia_create(
         except ValueError:
             interval_value = 30
         return templates.TemplateResponse(
+            request,
             "deck_new_trivia.html",
             {
-                "request": request,
                 "user": user,
                 "name_value": name,
                 "topic_value": topic,
@@ -565,9 +566,9 @@ def deck_view(
         retention_presets = _RETENTION_PRESETS
 
     return templates.TemplateResponse(
+        request,
         "deck.html",
         {
-            "request": request,
             "user": user,
             "deck_name": name,
             "questions": cards,
@@ -690,9 +691,9 @@ def deck_edit_with_ai(
         raise HTTPException(404, "deck not found")
     deck_type = deck_repo.get_type(uid, deck_id)
     return templates.TemplateResponse(
+        request,
         "deck_edit_ai.html",
         {
-            "request": request,
             "user": user,
             "deck_name": name,
             "deck_type": deck_type.value if deck_type else "srs",
@@ -727,9 +728,9 @@ def deck_split_form(
     if deck_type is not None and deck_type.value == "trivia":
         source_topic = deck_repo.get_context_prompt(uid, name) or ""
     return templates.TemplateResponse(
+        request,
         "deck_split.html",
         {
-            "request": request,
             "user": user,
             "deck_name": name,
             "deck_type": deck_type.value if deck_type else "srs",
@@ -771,9 +772,9 @@ async def deck_split_submit(
     def rerender(error: str, status: int = 400):
         deck_type = deck_repo.get_type(uid, source_deck_id)
         return templates.TemplateResponse(
+            request,
             "deck_split.html",
             {
-                "request": request,
                 "user": user,
                 "deck_name": name,
                 "deck_type": deck_type.value if deck_type else "srs",
@@ -922,8 +923,9 @@ def question_new_form(
     if deck_repo.find_id(uid, name) is None:
         raise HTTPException(404, "deck not found")
     return templates.TemplateResponse(
+        request,
         "question_new.html",
-        {"request": request, "deck_name": name, "form": {}, "error": None},
+        {"deck_name": name, "form": {}, "error": None},
     )
 
 
@@ -944,8 +946,9 @@ async def question_new_submit(
     new, raw, err = _parse_question_form(form)
     if err is not None or new is None:
         return templates.TemplateResponse(
+            request,
             "question_new.html",
-            {"request": request, "deck_name": name, "form": raw, "error": err},
+            {"deck_name": name, "form": raw, "error": err},
             status_code=400,
         )
     service.add_question(q_repo, uid, deck_id, new, deck_repo=deck_repo)
@@ -970,9 +973,9 @@ def question_edit_form(
     if deck_name is None:
         raise HTTPException(404, "deck not found")
     return templates.TemplateResponse(
+        request,
         "question_edit.html",
         {
-            "request": request,
             "deck_name": deck_name,
             "q": q,
             "form": _question_form_from_entity(q),
@@ -1001,9 +1004,9 @@ async def question_edit_submit(
     new, raw, err = _parse_question_form(form)
     if err is not None or new is None:
         return templates.TemplateResponse(
+            request,
             "question_edit.html",
             {
-                "request": request,
                 "deck_name": deck_name,
                 "q": q,
                 "form": raw,
@@ -1117,9 +1120,9 @@ def _reorganize_page(
             }
         )
     return templates.TemplateResponse(
+        request,
         "reorganize.html",
         {
-            "request": request,
             "user": user,
             "decks": deck_views,
             "form": {"prompt": prompt},
@@ -1295,9 +1298,9 @@ async def transform_view(
     )
 
     return templates.TemplateResponse(
+        request,
         "transform.html",
         {
-            "request": request,
             "user": user,
             "wid": wid,
             "scope": scope,
@@ -1395,9 +1398,9 @@ async def transform_fragment(
     )
 
     return templates.TemplateResponse(
+        request,
         "partials/transform_progress.html",
         {
-            "request": request,
             "user": user,
             "wid": wid,
             "scope": scope,
@@ -1462,9 +1465,9 @@ async def _render_transform_fragment(
         progress=progress,
     )
     return templates.TemplateResponse(
+        request,
         "partials/transform_progress.html",
         {
-            "request": request,
             "user": user,
             "wid": wid,
             "scope": scope,
@@ -1558,9 +1561,9 @@ async def plan_view(
     if progress is None:
         return responses.redirect(request, f"/deck/{deck_name}")
     return templates.TemplateResponse(
+        request,
         "plan.html",
         {
-            "request": request,
             "wid": wid,
             "deck_name": deck_name,
             "progress": progress,
@@ -1613,9 +1616,9 @@ async def plan_fragment(
     )
 
     return templates.TemplateResponse(
+        request,
         "partials/plan_progress.html",
         {
-            "request": request,
             "user": user,
             "wid": wid,
             "deck_name": deck_name,
@@ -1640,9 +1643,9 @@ async def _render_plan_fragment(
     if progress is None:
         progress = {"status": "gone"}
     return templates.TemplateResponse(
+        request,
         "partials/plan_progress.html",
         {
-            "request": request,
             "user": user,
             "wid": wid,
             "deck_name": deck_name,
@@ -1760,9 +1763,9 @@ def deck_export_hub(
         raise HTTPException(404, "deck not found")
     deck_type = deck_repo.get_type(uid, deck_id)
     return templates.TemplateResponse(
+        request,
         "deck_export.html",
         {
-            "request": request,
             "user": user,
             "deck_name": name,
             "deck_type": deck_type.value if deck_type else "srs",
@@ -1830,8 +1833,9 @@ def deck_export_apkg(
 def decks_import_csv_form(request: Request, user: dict = Depends(signed_in_user)):
     """Render the CSV upload page. Posts to the same path."""
     return templates.TemplateResponse(
+        request,
         "deck_import_csv.html",
-        {"request": request, "user": user, "outcome": None, "error": None},
+        {"user": user, "outcome": None, "error": None},
     )
 
 
@@ -1854,9 +1858,9 @@ async def decks_import_csv_submit(
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         return templates.TemplateResponse(
+            request,
             "deck_import_csv.html",
             {
-                "request": request,
                 "user": user,
                 "outcome": None,
                 "error": "Pick a CSV file to upload.",
@@ -1868,8 +1872,9 @@ async def decks_import_csv_submit(
         clean = _validate_deck_name(name)
     except HTTPException as e:
         return templates.TemplateResponse(
+            request,
             "deck_import_csv.html",
-            {"request": request, "user": user, "outcome": None, "error": e.detail},
+            {"user": user, "outcome": None, "error": e.detail},
             status_code=400,
         )
 
@@ -1887,8 +1892,9 @@ async def decks_import_csv_submit(
         question_repo=q_repo,
     )
     return templates.TemplateResponse(
+        request,
         "deck_import_csv.html",
-        {"request": request, "user": user, "outcome": outcome, "error": None},
+        {"user": user, "outcome": outcome, "error": None},
     )
 
 
@@ -1896,8 +1902,9 @@ async def decks_import_csv_submit(
 def decks_import_prepdeck_form(request: Request, user: dict = Depends(signed_in_user)):
     """Render the .prepdeck upload page. POSTs to the same path."""
     return templates.TemplateResponse(
+        request,
         "deck_import_prepdeck.html",
-        {"request": request, "user": user, "outcome": None, "error": None},
+        {"user": user, "outcome": None, "error": None},
     )
 
 
@@ -1920,9 +1927,9 @@ async def decks_import_prepdeck_submit(
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         return templates.TemplateResponse(
+            request,
             "deck_import_prepdeck.html",
             {
-                "request": request,
                 "user": user,
                 "outcome": None,
                 "error": "Pick a .prepdeck file to upload.",
@@ -1934,8 +1941,9 @@ async def decks_import_prepdeck_submit(
         clean = _validate_deck_name(name)
     except HTTPException as e:
         return templates.TemplateResponse(
+            request,
             "deck_import_prepdeck.html",
-            {"request": request, "user": user, "outcome": None, "error": e.detail},
+            {"user": user, "outcome": None, "error": e.detail},
             status_code=400,
         )
 
@@ -1948,8 +1956,9 @@ async def decks_import_prepdeck_submit(
         question_repo=q_repo,
     )
     return templates.TemplateResponse(
+        request,
         "deck_import_prepdeck.html",
-        {"request": request, "user": user, "outcome": outcome, "error": None},
+        {"user": user, "outcome": outcome, "error": None},
     )
 
 
@@ -1957,8 +1966,9 @@ async def decks_import_prepdeck_submit(
 def decks_import_anki_form(request: Request, user: dict = Depends(signed_in_user)):
     """Render the .apkg upload page. POSTs to the same path."""
     return templates.TemplateResponse(
+        request,
         "deck_import_anki.html",
-        {"request": request, "user": user, "outcome": None, "error": None},
+        {"user": user, "outcome": None, "error": None},
     )
 
 
@@ -1981,9 +1991,9 @@ async def decks_import_anki_submit(
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
         return templates.TemplateResponse(
+            request,
             "deck_import_anki.html",
             {
-                "request": request,
                 "user": user,
                 "outcome": None,
                 "error": "Pick an .apkg file to upload.",
@@ -1995,8 +2005,9 @@ async def decks_import_anki_submit(
         clean = _validate_deck_name(name)
     except HTTPException as e:
         return templates.TemplateResponse(
+            request,
             "deck_import_anki.html",
-            {"request": request, "user": user, "outcome": None, "error": e.detail},
+            {"user": user, "outcome": None, "error": e.detail},
             status_code=400,
         )
 
@@ -2005,12 +2016,14 @@ async def decks_import_anki_submit(
         outcome = apkg_to_deck(uid, clean, raw, deck_repo=deck_repo, question_repo=q_repo)
     except ValueError as e:
         return templates.TemplateResponse(
+            request,
             "deck_import_anki.html",
-            {"request": request, "user": user, "outcome": None, "error": str(e)},
+            {"user": user, "outcome": None, "error": str(e)},
             status_code=400,
         )
 
     return templates.TemplateResponse(
+        request,
         "deck_import_anki.html",
-        {"request": request, "user": user, "outcome": outcome, "error": None},
+        {"user": user, "outcome": outcome, "error": None},
     )

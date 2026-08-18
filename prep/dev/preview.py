@@ -212,8 +212,7 @@ def register(app: FastAPI, templates: Jinja2Templates) -> None:
             ctx["handoff_urls"] = chat_handoff.provider_urls(msg)
             ctx["handoff_providers"] = chat_handoff.CHAT_PROVIDERS
             ctx["handoff_default_provider"] = chat_handoff.DEFAULT_PROVIDER
-        # Inject `request` for url generation in templates.
-        return templates.TemplateResponse(f"{template}.html", {"request": request, **ctx})
+        return templates.TemplateResponse(request, f"{template}.html", ctx)
 
     @app.get("/dev/preview", response_class=HTMLResponse, include_in_schema=False)
     async def preview_index(request: Request):
