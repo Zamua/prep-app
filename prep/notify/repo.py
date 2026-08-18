@@ -144,8 +144,7 @@ class NotificationLogRepo:
         since the user last opened the log."""
         with cursor() as c:
             row = c.execute(
-                "SELECT COUNT(*) AS n FROM notifications_log "
-                "WHERE user_id = ? AND seen_at IS NULL",
+                "SELECT COUNT(*) AS n FROM notifications_log WHERE user_id = ? AND seen_at IS NULL",
                 (user_id,),
             ).fetchone()
         return int(row["n"] or 0)
@@ -156,7 +155,7 @@ class NotificationLogRepo:
         seen_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with cursor() as c:
             c.execute(
-                "UPDATE notifications_log SET seen_at = ? " "WHERE user_id = ? AND seen_at IS NULL",
+                "UPDATE notifications_log SET seen_at = ? WHERE user_id = ? AND seen_at IS NULL",
                 (seen_at, user_id),
             )
 

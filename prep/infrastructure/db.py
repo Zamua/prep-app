@@ -370,9 +370,7 @@ def init() -> None:
             # notification, the route picks N cards (1 fresh + the rest
             # review, backfilled). Default 3 matches the prior hardcoded
             # behavior. Range 1..20 enforced at the setter.
-            c.execute(
-                "ALTER TABLE decks ADD COLUMN trivia_session_size " "INTEGER NOT NULL DEFAULT 3"
-            )
+            c.execute("ALTER TABLE decks ADD COLUMN trivia_session_size INTEGER NOT NULL DEFAULT 3")
 
         # 8b. Pinned decks float to the top of the index. The column
         #     stores the timestamp the user pinned the deck (NULL =

@@ -536,6 +536,6 @@ def test_tick_does_not_resume_when_user_never_engaged(monkeypatch, fixtures):
     sched.tick(datetime.now(timezone.utc))
     assert len(sent) == 1
     body = sent[0]["body"]
-    assert (
-        "Pick up where you left off" not in body
-    ), f"resume-style body fired for never-engaged session: {body!r}"
+    assert "Pick up where you left off" not in body, (
+        f"resume-style body fired for never-engaged session: {body!r}"
+    )

@@ -237,6 +237,11 @@ def test_offline_author_study_and_reconnect_sync(
     # -- reconnect: server back, then the online event -----------------
     offline_server.start()
     offline_ctx.set_offline(False)
+    # Chromium no longer re-applies the context's network emulation to
+    # the renderer a SW-fallback navigation created, so no real online
+    # event will fire; the browser plumbing is not the contract under
+    # test. Deliver the event the shell listens for explicitly.
+    page.evaluate("window.dispatchEvent(new Event('online'))")
 
     # The poll MUST make a Playwright call each iteration: route
     # handlers only dispatch while the test thread is inside a
@@ -255,8 +260,7 @@ def test_offline_author_study_and_reconnect_sync(
             if len(qrows) != 1:
                 return None
             rrows = conn.execute(
-                "SELECT result, user_answer, grader_notes, ts FROM reviews "
-                " WHERE question_id = ?",
+                "SELECT result, user_answer, grader_notes, ts FROM reviews  WHERE question_id = ?",
                 (qrows[0][0],),
             ).fetchall()
         finally:
@@ -321,10 +325,26 @@ def test_offline_author_study_and_reconnect_sync(
         lambda: len(_idb_all(page, "outbox_reviews")) == 0,
         message="outbox drained after reconnect flush",
     )
+    # The flush drains the queues BEFORE its follow-up forced refresh
+    # commits, and it is the refresh that nulls the overlay; a read in
+    # that window sees the overlay the flush carried. Wait for the
+    # refresh's outcome instead of sampling the gap.
+    _wait_for(
+        lambda: (
+            (_idb_all(page, "cards") or None)
+            and next(
+                (
+                    c
+                    for c in _idb_all(page, "cards")
+                    if c["question_id"] == qid and c["local_step"] is None
+                ),
+                None,
+            )
+        ),
+        message="post-flush refresh delivered the created card with a null overlay",
+    )
     cards = {c["question_id"]: c for c in _idb_all(page, "cards")}
-    assert qid in cards, "post-flush snapshot refresh should deliver the created card"
     assert cards[qid]["type"] == "short"
-    assert cards[qid]["local_step"] is None
     assert cards[qid]["local_next_due"] is None
     assert datetime.fromisoformat(cards[qid]["next_due"]) > datetime.now(timezone.utc)
     assert "inbox" in {d["name"] for d in _idb_all(page, "decks")}

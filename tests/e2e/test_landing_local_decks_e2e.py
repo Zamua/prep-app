@@ -448,7 +448,12 @@ def test_a_refresh_that_stores_nothing_does_not_claim_this_device_holds_cards(
     payload = {"decks": records["decks"], "cards": records["cards"]}
     held_page = anon_ctx.new_page()
     held_page.route("**/api/offline/snapshot", _serve_snapshot)
-    _open_landing(held_page, base)
+    # Not _open_landing: with the held payload already being served, the
+    # page's own on-load refresh may store the cards and mount the deck
+    # list before this test's explicit call, so no splash is guaranteed.
+    # The property here is only that the refresh writes the flag.
+    held_page.goto(base + "/")
+    held_page.wait_for_selector("[data-instant-start], [data-landing-decks]", state="attached")
     held = held_page.evaluate(_REFRESH_JS, _module_prefix(held_page))
     held_page.close()
     assert held["result"]["ok"] is True

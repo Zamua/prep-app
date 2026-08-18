@@ -601,7 +601,7 @@ def test_pick_session_does_not_re_serve_a_just_answered_card(repos):
         ids = [p.question_id for p in picked]
         assert len(ids) == 2, "the review pool should fill both slots"
         assert not (set(ids) & just_now), (
-            "a card answered in this sitting was re-served ahead of " "cards answered long ago"
+            "a card answered in this sitting was re-served ahead of cards answered long ago"
         )
         orders.add(tuple(ids))
 

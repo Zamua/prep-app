@@ -20,6 +20,18 @@
      current build token. It keys the stylesheet URL + importmap
      prefix so every URL this shell references is a URL the same SW
      install precached. #}
+  {# index.css opts into cross-document view transitions. A skipped one
+     (reduced motion, hidden tab, headless) rejects its internal promise
+     before any script can hold it, so the absorber must be a classic
+     head script in every document that loads that stylesheet. #}
+  <script>
+    addEventListener("unhandledrejection", function (e) {
+      var r = e.reason;
+      if (r && r.name === "AbortError" && String(r.message).indexOf("Transition was skipped") !== -1) {
+        e.preventDefault();
+      }
+    });
+  </script>
   <link rel="stylesheet" href="{{ root }}/static/css/v{{ build }}/index.css">
   {# Importmap MUST be in <head> before any module script (same rule
      base.html documents): a module script parsed before the importmap

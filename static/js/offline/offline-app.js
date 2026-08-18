@@ -463,7 +463,16 @@ async function syncOnReconnect() {
       getAll("local_cards"),
     ]);
     if (!queued.length && !localCards.length) return;
-    if (!(await probeOnline())) return;
+    // The online event is a hint, not a guarantee: the network can
+    // still be settling when it fires. Give the probe a few tries
+    // before writing the reconnect off, or a queued outbox sits until
+    // the next event.
+    let reachable = false;
+    for (let attempt = 0; attempt < 4 && !reachable; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 800 * attempt));
+      reachable = await probeOnline();
+    }
+    if (!reachable) return;
     showBanner("Back online - syncing…");
     const result = await flushOutbox();
     const moved =

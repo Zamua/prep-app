@@ -367,16 +367,17 @@ route uses:
 def _resolve_login(request: Request) -> str | None:
     hdr = request.headers.get("tailscale-user-login")
     if hdr:
-        return hdr.strip()                    # tailscale headers always win
+        return hdr.strip()  # tailscale headers always win
     fallback = os.environ.get("PREP_DEFAULT_USER")
-    return fallback or None                   # empty/unset → 401
+    return fallback or None  # empty/unset → 401
+
 
 def current_user(request: Request) -> dict:
     login = _resolve_login(request)
     if not login:
         raise HTTPException(401, ...)
-    user = db.upsert_user(login, ...)         # idempotent; refreshes last_seen_at
-    request.state.user = user                 # surfaces to context_processor
+    user = db.upsert_user(login, ...)  # idempotent; refreshes last_seen_at
+    request.state.user = user  # surfaces to context_processor
     return user
 ```
 

@@ -725,16 +725,16 @@ def _try_merge_anon_cookie(request: Request, user: dict) -> None:
     raw = request.cookies.get(ANON_COOKIE)
     if not raw:
         return
-    anon_id = verify_cookie(raw)          # cheap, no DB read on failure
+    anon_id = verify_cookie(raw)  # cheap, no DB read on failure
     if not anon_id or anon_id == user["tailscale_login"]:
         return
     try:
         result = merge_anonymous_into(anon_id, user["tailscale_login"])
     except Exception:
         logger.exception("anon merge failed: anon=%s", anon_id)
-        return                            # cookie SURVIVES; retry next request
+        return  # cookie SURVIVES; retry next request
     if result.resolved:
-        request.state.anon_cookie_stale = True     # only now clear it
+        request.state.anon_cookie_stale = True  # only now clear it
     if result.merged:
         request.state.anon_merged = result.counts  # feeds the toast
 ```

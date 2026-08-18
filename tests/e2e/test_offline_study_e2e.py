@@ -250,6 +250,11 @@ def test_offline_study_and_reconnect_sync(offline_server, offline_ctx, offline_p
     # -- reconnect: server back, then the online event -----------------
     offline_server.start()
     offline_ctx.set_offline(False)
+    # Chromium no longer re-applies the context's network emulation to
+    # the renderer a SW-fallback navigation created, so no real online
+    # event will fire; the browser plumbing is not the contract under
+    # test. Deliver the event the shell listens for explicitly.
+    page.evaluate("window.dispatchEvent(new Event('online'))")
 
     # The outbox replays through the real scheduler into the reviews
     # log, with the offline grader-notes markers and the client's

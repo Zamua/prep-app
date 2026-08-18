@@ -19,6 +19,18 @@
      reliably treats as a new resource. Server route at
      /static/css/v<build>/* strips the version and serves the file
      with immutable cache headers (see prep/app.py). #}
+  {# index.css opts into cross-document view transitions. A skipped one
+     (reduced motion, hidden tab, headless) rejects its internal promise
+     before any script can hold it, so the absorber must be a classic
+     head script in every document that loads that stylesheet. #}
+  <script>
+    addEventListener("unhandledrejection", function (e) {
+      var r = e.reason;
+      if (r && r.name === "AbortError" && String(r.message).indexOf("Transition was skipped") !== -1) {
+        e.preventDefault();
+      }
+    });
+  </script>
   <link rel="stylesheet" href="{{ root }}/static/css/v{{ static_css_mtime|default(0) }}/index.css">
 
   {# PWA install — manifest + iOS-specific meta. iOS doesn't read the

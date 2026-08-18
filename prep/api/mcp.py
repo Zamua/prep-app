@@ -306,8 +306,7 @@ _TOOLS: list[dict[str, Any]] = [
     {
         "name": "prep_delete_card",
         "description": (
-            "Delete a card. Cascade drops the SRS row + every review for "
-            "this card. Irreversible."
+            "Delete a card. Cascade drops the SRS row + every review for this card. Irreversible."
         ),
         "inputSchema": {
             "type": "object",
