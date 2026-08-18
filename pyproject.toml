@@ -17,7 +17,7 @@ dependencies = [
     "python-multipart==0.0.32",
     "temporalio==1.7.1",
     "mistune==3.3.4",
-    "pywebpush==2.3.0",
+    "pywebpush==2.4.0",
     # pydantic is already a transitive dep via fastapi, but we use it
     # directly for entities + value objects under prep/*/entities.py
     # and prep/domain/, so pin it explicitly.
@@ -43,7 +43,7 @@ dependencies = [
     # ride in the wheel so a single image works for both deploys.
     # Adapter at prep/auth/providers/clerk.py; webhook receiver uses
     # svix for HMAC verification of the user.* events Clerk pushes.
-    "clerk-backend-api==5.0.7",
+    "clerk-backend-api==7.0.0",
     "svix==1.99.1",
     "fsrs>=6.3.1",
 ]
