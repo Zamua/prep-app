@@ -101,6 +101,10 @@ def test_the_anonymous_panel_keeps_only_the_ungated_entries(anon_client):
     assert "/settings/editor" in body
     assert "Forget this device" in body
     assert "Create an account to keep your decks" in body
+    assert "/sign-up-here" in body
+    # The way back for someone who already has an account: the panel
+    # must offer sign-IN too, not only account creation.
+    assert "Already have an account? Sign in" in body
     assert "/sign-in-here" in body
 
 

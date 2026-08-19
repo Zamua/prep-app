@@ -36,7 +36,12 @@ class Inner:
         return self._user
 
     def urls(self):
-        return SignInUrls(sign_in="/sign-in-here", sign_out="/sign-out-here", account=None)
+        return SignInUrls(
+            sign_in="/sign-in-here",
+            sign_up="/sign-up-here",
+            sign_out="/sign-out-here",
+            account=None,
+        )
 
     def has_dormant_session(self, request):
         return self._dormant

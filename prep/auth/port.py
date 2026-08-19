@@ -62,6 +62,9 @@ class SignInUrls:
     sign_in: str | None
     sign_out: str | None
     account: str | None  # link to a hosted profile-management page
+    # Default None: most tests fake a provider with only the three
+    # above, and None already means "no such flow".
+    sign_up: str | None = None
 
 
 @runtime_checkable

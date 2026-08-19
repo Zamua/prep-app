@@ -244,11 +244,18 @@
 
             {% if user.is_anonymous %}
               {# Sign-up is the only way to keep these decks off this one
-                 browser. Nothing renders where the deploy has no in-app
+                 browser; sign-in is the way back for someone who already
+                 has an account (their anonymous decks merge in either
+                 flow). Nothing renders where the deploy has no in-app
                  sign-in flow, rather than a dead anchor. #}
-              {% if sign_in_url %}
+              {% if sign_up_url %}
                 <ul class="user-links user-links-primary">
-                  <li><a href="{{ sign_in_url }}" class="user-link-primary">Create an account to keep your decks {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+                  <li><a href="{{ sign_up_url }}" class="user-link-primary">Create an account to keep your decks {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
+                </ul>
+              {% endif %}
+              {% if sign_in_url %}
+                <ul class="user-links">
+                  <li><a href="{{ sign_in_url }}">Already have an account? Sign in {{ icon('arrow-right', class_='icon icon-inline') }}</a></li>
                 </ul>
               {% endif %}
               {# Leaving a shared machine. Clears the cookie only: the

@@ -162,9 +162,16 @@ def _sign_in_url_context(request: Request) -> dict:
     try:
         from prep.auth.providers import get_provider
 
-        return {"sign_in_url": get_provider().urls().sign_in or ""}
+        urls = get_provider().urls()
+        return {
+            "sign_in_url": urls.sign_in or "",
+            # Falls back to sign-in for providers whose hosted UI has
+            # no distinct sign-up page; both flows merge an anonymous
+            # account's decks identically.
+            "sign_up_url": urls.sign_up or urls.sign_in or "",
+        }
     except Exception:  # noqa: BLE001
-        return {"sign_in_url": ""}
+        return {"sign_in_url": "", "sign_up_url": ""}
 
 
 def _sign_out_url_context(request: Request) -> dict:
