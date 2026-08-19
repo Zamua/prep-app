@@ -51,4 +51,4 @@ class TailscaleProvider(IdentityProvider):
         # Tailscale auth is implicit (you're either on the tailnet or
         # not). No sign-in/out UI to point at — the template uses None
         # to hide sign-in/out chrome on this deploy.
-        return SignInUrls(sign_in=None, sign_out=None, account=None)
+        return SignInUrls(sign_in=None, sign_up=None, sign_out=None, account=None)

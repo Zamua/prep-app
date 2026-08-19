@@ -51,6 +51,7 @@ class FakeProvider(IdentityProvider):
     def urls(self) -> SignInUrls:
         return SignInUrls(
             sign_in="/fake/sign-in",
+            sign_up="/fake/sign-up",
             sign_out="/fake/sign-out",
             account="/fake/account",
         )

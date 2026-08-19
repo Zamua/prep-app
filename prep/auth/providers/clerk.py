@@ -145,6 +145,7 @@ class ClerkProvider(IdentityProvider):
         back = quote_plus(self._authorized_parties[0] + "/")
         return SignInUrls(
             sign_in=f"{self._frontend}/sign-in?redirect_url={back}",
+            sign_up=f"{self._frontend}/sign-up?redirect_url={back}",
             sign_out=f"{self._frontend}/sign-out?redirect_url={back}",
             account=f"{self._frontend}/user",
         )
