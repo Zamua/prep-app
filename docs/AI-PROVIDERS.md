@@ -307,16 +307,18 @@ beyond). Provider facts worth recording here because they shaped
 the design (verified against the live API), while the actual
 deploy values live in the private infra repo, never in this repo:
 
-- The API serves one model: Qwen/Qwen3.6-35B-A3B-FP8 (262K
-  context). The launch catalog had three more (DeepSeek-V4-Flash,
-  GLM-5.2, Kimi-K2.7); all were retired from the free tier, so
-  treat the catalog as volatile and re-check `GET /models` before
-  relying on any name here.
-- Qwen3.6-35B measured 1.7s on a grading-shaped strict-JSON call
-  with clean JSON on the first try, comfortable under grading's
-  12s cap; under provider load the same call has measured 35s+,
-  so generation deadlines stay env-tunable
-  (`PREP_INSTANT_TIMEOUT_S`). Swapping models is a
+- The catalog is volatile: re-check `GET /models` before relying
+  on any name here. It has served Qwen3.8-27B and
+  Qwen/Qwen3.6-35B-A3B-FP8; the launch catalog had three more
+  (DeepSeek-V4-Flash, GLM-5.2, Kimi-K2.7), all since retired.
+- The deploys run Qwen3.8-27B. Measured on prep's own 5-card
+  instant prompt, parsed by the real `_extract_cards`: 5/5 cards
+  and self-matching regexes across three topics, 19-26s per
+  generation. A trivial 2-token probe returns in under a second on
+  the same model, so probe latency does NOT predict generation
+  latency; measure with the real prompt. Deadlines stay env-tunable
+  (`PREP_INSTANT_TIMEOUT_S`) because provider load has pushed the
+  same call past 2 minutes. Swapping models is a
   `PREP_FREE_INFERENCE_MODEL` change, no code.
 - API keys are minted console-only (no API), so rollout gates on
   the operator pasting a key into the deploy secret.
