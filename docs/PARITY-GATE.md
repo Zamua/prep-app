@@ -216,8 +216,12 @@ images: identical, AA noise, 0.01% scattered, a 3x9 shifted stem
 ```python
 @dataclass(frozen=True)
 class Flow:
-    name: str; phase: int; seed: str; covers: tuple[str, ...]
-    service_workers: str = "block"; schemes = ("light", "dark")
+    name: str
+    phase: int
+    seed: str
+    covers: tuple[str, ...]
+    service_workers: str = "block"
+    schemes = ("light", "dark")
     steps: Callable[[FlowCtx], None]
 ```
 
