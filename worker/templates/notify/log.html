@@ -1,0 +1,50 @@
+{# Notification history. Every push send_to_user fires lands here so
+   the user can find a notification they missed, dismissed, or that
+   silently glitched on the device. Tapping an entry opens the same
+   URL the push would have. #}
+{% extends "base.html" %}
+{% block title %}notifications · log · prep{% endblock %}
+{% block page_class %}notify-log{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/", "home") }}
+
+<section class="prelude">
+  <p class="eyebrow">Notifications</p>
+  <h1 class="display">Recent&nbsp;<em>nudges</em>.</h1>
+  <p class="lede">
+    Every push prep has sent you, most recent first. Tap to open the
+    same target the notification would have. Useful if a push got
+    dismissed accidentally or never surfaced on your device.
+  </p>
+</section>
+
+{% if entries|length %}
+<ol class="notif-log" role="list">
+  {% for e in entries %}
+    <li class="notif-log-item notif-log-source-{{ e.source }}">
+      <a class="notif-log-link" href="{{ e.url }}">
+        <div class="notif-log-head">
+          <span class="notif-log-title">{{ e.title }}</span>
+          <span class="tag tag-notif-source">{{ e.source }}</span>
+        </div>
+        <p class="notif-log-body">{{ e.body }}</p>
+        <p class="notif-log-meta">
+          {# Relative ("30 min ago") leads, with the absolute UTC
+             timestamp as the muted secondary so you can hover for
+             precision when the relative is too lossy. #}
+          <span class="notif-log-relative">{{ e.sent_at | relative_time }}</span>
+          <span class="notif-log-divider" aria-hidden="true">·</span>
+          <time class="notif-log-absolute" datetime="{{ e.sent_at }}">
+            {{ e.sent_at|slice(0, 19)|replace('T', ' ') }}Z
+          </time>
+        </p>
+      </a>
+    </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="empty-state">No notifications yet. Once prep starts pushing, they'll show up here.</p>
+{% endif %}
+
+{% endblock %}

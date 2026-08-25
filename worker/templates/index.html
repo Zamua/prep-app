@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}decks · prep{% endblock %}
+{% block page_class %}index{% endblock %}
+{# The deck list is the page, and it is client-rendered: without these
+   the chain is only discovered at the bottom of the body and then
+   fetched a level at a time. Same versioned prefix the importmap
+   resolves "@/" to, so these are the URLs the imports ask for. #}
+{% block head_preload %}
+{%- set _js = root ~ '/static/js/v' ~ (static_css_mtime|default(0)) -%}
+<link rel="modulepreload" href="{{ _js }}/dashboard/online-host.js">
+<link rel="modulepreload" href="{{ _js }}/dashboard/components.js">
+<link rel="modulepreload" href="{{ _js }}/dashboard/source.js">
+<link rel="modulepreload" href="{{ _js }}/study/dom.js">
+{% endblock %}
+{% block main %}
+{# Detect a brand-new user (no decks AND no in-flight sessions) so
+   the prelude lede + the deck-list area can switch to onboarding
+   copy. Once a user has any content, they're past first-impression
+   and the dashboard reads normally. #}
+{% set is_new_user = not (dashboard_overview.decks|length or recent_sessions|length or active_trivia_sessions|length or snoozed_sessions|length) %}
+{# The prelude and the deck list are rendered by the shared dashboard
+   components (static/js/dashboard/), the same views the offline shell
+   runs, so the two surfaces cannot drift apart. The shell embeds the
+   overview the route already read: the host paints from it directly
+   instead of opening the page with a fetch. #}
+<div data-dashboard-prelude></div>
+
+{# Reusable overflow menu for a session card. View deck, Snooze
+   (both card types), Mute push (trivia only — SRS has no per-deck
+   push), Discard. Snooze + Mute open the shared bottom-sheet (see
+   the duration-sheet element below the lists) via data-sheet-open;
+   the form keeps the .session-discard-form class so the existing
+   JS handler picks up its submit. #}
+{% macro session_menu(deck_name, deck_display, snooze_action, discard_action, mute_deck_id=null) %}
+{%- set _label = deck_display or deck_name -%}
+<details class="session-menu row-overflow-menu">
+  <summary class="row-overflow-trigger" title="Session actions" aria-label="Session actions for {{ _label }}"><span aria-hidden="true">⋯</span></summary>
+  <div class="session-menu-popover" data-details-body role="menu">
+    <a class="session-menu-row" role="menuitem"
+       href="{{ root }}/deck/{{ deck_name }}">
+      {{ icon('cards', class_='icon icon-inline') }}
+      View deck
+    </a>
+    <button type="button" class="session-menu-row" role="menuitem"
+            data-sheet-open="duration-sheet"
+            data-sheet-action="{{ root }}{{ snooze_action }}"
+            data-sheet-title="snooze"
+            data-sheet-deck="{{ _label }}"
+            data-sheet-subtitle="hides from your continue list until the picked time. nothing else changes.">
+      {{ icon('clock', class_='icon icon-inline') }}
+      Snooze
+    </button>
+    {% if mute_deck_id %}
+    <button type="button" class="session-menu-row" role="menuitem"
+            data-sheet-open="duration-sheet"
+            data-sheet-action="{{ root }}/trivia/decks/{{ mute_deck_id }}/mute"
+            data-sheet-title="mute"
+            data-sheet-deck="{{ _label }}"
+            data-sheet-subtitle="silences push notifications for this deck. auto-unmutes when the timer runs out.">
+      {{ icon('bell-slash', class_='icon icon-inline') }}
+      Mute notifications
+    </button>
+    {% endif %}
+    <hr class="session-menu-sep">
+    <form method="post"
+          action="{{ root }}{{ discard_action }}"
+          class="session-discard-form session-discard-form-inline">
+      <button type="submit" class="session-menu-row danger" role="menuitem"
+              data-deck="{{ _label }}" aria-label="Discard this session">
+        {{ icon('trash', class_='icon icon-inline') }}
+        Discard session
+      </button>
+    </form>
+  </div>
+</details>
+{% endmacro %}
+
+{% if active_trivia_sessions|length %}
+<section class="recent-sessions">
+  <p class="section-eyebrow"><span>Continue trivia</span><span class="rule"></span></p>
+  <ul class="session-list" role="list">
+    {% for s in active_trivia_sessions %}
+      <li class="session-card">
+        {{ session_menu(
+             s.deck_name,
+             s.deck_display,
+             snooze_action="/trivia/session/" ~ s.deck_name ~ "/snooze",
+             discard_action="/trivia/session/" ~ s.deck_name ~ "/abandon",
+             mute_deck_id=s.deck_id
+           ) }}
+        <a href="{{ root }}/trivia/session/{{ s.deck_name }}?cards={{ s.queue_param }}{% if s.done_param %}&amp;done={{ s.done_param }}{% endif %}" class="session-link">
+          <span class="session-deck">{{ s.deck_display or s.deck_name }}</span>
+          <span class="session-meta">
+            <span class="session-state">{{ s.remaining }} of {{ s.total }} cards left</span>
+          </span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if recent_sessions|length %}
+<section class="recent-sessions">
+  <p class="section-eyebrow"><span>Pick up where you left off</span><span class="rule"></span></p>
+  <ul class="session-list" role="list">
+    {% for s in recent_sessions %}
+      <li class="session-card" data-session-id="{{ s.id }}">
+        {{ session_menu(
+             s.deck_name,
+             s.deck_display_name or s.deck_name,
+             snooze_action="/session/" ~ s.id ~ "/snooze",
+             discard_action="/session/" ~ s.id ~ "/abandon"
+           ) }}
+        <a href="{{ root }}/session/{{ s.id }}" class="session-link">
+          <span class="session-deck">{{ s.deck_display_name or s.deck_name }}</span>
+          <span class="session-meta">
+            {% if s.state == 'grading' %}<span class="session-state">grading…</span>
+            {% elif s.state == 'showing-result' %}<span class="session-state">just answered</span>
+            {% elif s.current_type %}<span class="session-state">on {{ s.current_type }} card</span>
+            {% endif %}
+            {% if s.device_label %}<span class="session-divider" aria-hidden="true">·</span><em>{{ s.device_label }}</em>{% endif %}
+          </span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if snoozed_sessions|length %}
+{# Collapsed group below the active strips. Tap header → expand to see
+   each snoozed session with "wakes in X" + chevron. Tapping any row
+   opens the shared duration sheet pre-targeted at the snooze route;
+   the sheet's "Wake now" chip lets the user clear the snooze without
+   waiting it out. #}
+<details class="snoozed-group">
+  <summary class="snoozed-header" aria-label="{{ snoozed_sessions|length }} snoozed">
+    {{ icon('moon', class_='icon icon-inline snoozed-glyph') }}
+    <span class="snoozed-count"><strong>{{ snoozed_sessions|length }}</strong> snoozed</span>
+    <span class="snoozed-caret" aria-hidden="true">▾</span>
+  </summary>
+  <ul class="snoozed-list" role="list">
+    {% for s in snoozed_sessions %}
+      <li class="snoozed-row">
+        {%- if s.kind == 'srs' -%}
+          {%- set action_url = root ~ '/session/' ~ s.id ~ '/snooze' -%}
+        {%- else -%}
+          {%- set action_url = root ~ '/trivia/session/' ~ s.deck_name ~ '/snooze' -%}
+        {%- endif -%}
+        {%- set _label = s.deck_display or s.deck_name -%}
+        <button type="button" class="snoozed-row-button"
+                data-sheet-open="duration-sheet"
+                data-sheet-action="{{ action_url }}"
+                data-sheet-title="adjust snooze for"
+                data-sheet-deck="{{ _label }}"
+                data-sheet-subtitle="wake now, or pick a new duration. picking a new one overwrites the current snooze."
+                data-sheet-show-wake="1">
+          <span class="snoozed-row-text">
+            <span class="snoozed-row-deck">{{ _label }}</span>
+            {%- set _wakes = s.snoozed_until|wakes_in -%}
+            <span class="snoozed-row-wakes">
+              {%- if _wakes == 'forever' -%}snoozed indefinitely
+              {%- else -%}wakes {{ _wakes }}
+              {%- endif -%}
+            </span>
+          </span>
+          {{ icon('caret-right', class_='icon icon-inline snoozed-row-caret') }}
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+{# Single shared confirm dialog for "Discard session" across both
+   sections. The JS below interpolates the deck name into the title
+   before opening, then dispatches confirm/cancel back to the
+   originating form. #}
+{% if recent_sessions|length or active_trivia_sessions|length or snoozed_sessions|length %}
+{% include "partials/sheet_duration.html" %}
+<dialog id="session-discard-dialog" data-dialog class="session-confirm-dialog">
+  <h3 id="session-discard-title">Discard session?</h3>
+  <p>Reviews already recorded are kept; the session itself becomes abandoned and falls out of the Continue list.</p>
+  <div class="session-confirm-actions">
+    <button type="button" data-action="cancel">Cancel</button>
+    <button type="button" data-action="confirm" class="danger">Discard</button>
+  </div>
+</dialog>
+
+<script>
+// Discard flow:
+//   1. The overflow-menu's discard form submits → we capture it
+//   2. Open the shared confirm dialog with the deck name interpolated
+//   3. On Confirm: fetch the abandon URL, optimistically remove the card
+//      (works for both trivia and SRS — they POST to different URLs but
+//      the response is the same 303 redirect).
+//   4. On Cancel / backdrop / Esc: close, do nothing.
+//
+// Fall back to a real submit on network failure so the canonical
+// (full-page-redirect) error path still runs.
+(function () {
+  const dlg = document.getElementById('session-discard-dialog');
+  const title = document.getElementById('session-discard-title');
+  if (!dlg) return;
+  let pendingForm = null;
+
+  document.addEventListener('submit', (e) => {
+    const form = e.target;
+    if (!form.classList.contains('session-discard-form')) return;
+    e.preventDefault();
+    const btn = form.querySelector('.session-menu-row');
+    const deck = btn?.dataset.deck || 'this session';
+    title.textContent = `Discard "${deck}"?`;
+    pendingForm = form;
+    // Close the parent <details> so the popover collapses behind the dialog
+    form.closest('details.session-menu')?.removeAttribute('open');
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  });
+
+  dlg.addEventListener('click', async (e) => {
+    const action = e.target?.dataset?.action;
+    if (!action) return;
+    if (action === 'cancel') { dlg.close(); pendingForm = null; return; }
+    if (action !== 'confirm' || !pendingForm) return;
+    const form = pendingForm;
+    pendingForm = null;
+    dlg.close();
+    const card = form.closest('.session-card');
+    try {
+      const r = await fetch(form.action, {
+        method: 'POST',
+        headers: { 'accept': 'text/html' },
+        redirect: 'manual',
+      });
+      if (!r.ok && r.type !== 'opaqueredirect' && r.status !== 0) {
+        throw new Error('non-success: ' + r.status);
+      }
+      const list = card.closest('.session-list');
+      const section = card.closest('section.recent-sessions');
+      card.style.transition = 'opacity 180ms ease, transform 180ms ease';
+      card.style.opacity = '0';
+      card.style.transform = 'translateX(-1rem)';
+      setTimeout(() => {
+        card.remove();
+        // Empty-state cleanup: if this was the last card in its
+        // section, drop the whole section so the eyebrow header
+        // doesn't sit alone above an empty list.
+        if (list && list.children.length === 0 && section) section.remove();
+      }, 200);
+    } catch (err) {
+      form.submit();
+    }
+  });
+})();
+</script>
+{% endif %}
+
+{# The dashboard's client-rendered region. `dashboard-overview` is the
+   DeckSource payload (prep/web/dashboard.py), embedded so the first
+   paint needs no request; the same JSON is re-readable from
+   /api/dashboard/overview. The menus live in an inert <template>:
+   every row of them is a server route, so the host clones them into
+   the shared deck rows instead of re-composing them in JS. #}
+<script type="application/json" id="dashboard-overview">{{ dashboard_overview|tojson }}</script>
+<template data-deck-menus>{% include "partials/deck_menus.html" %}</template>
+<div data-dashboard-decks
+     data-new-user="{{ 1 if is_new_user else 0 }}"
+     data-has-sessions="{{ 1 if (recent_sessions|length or active_trivia_sessions|length) else 0 }}"
+     data-agent-available="{{ 1 if agent_available else 0 }}">
+  {# The region is empty until the host mounts, and a module that
+     never loads reports nothing: no <noscript>, no error event the
+     region can see. So the fallback is real markup, not a <noscript>,
+     and the host clears it by replacing these children. The static
+     copy is the no-JS answer; the script below tracks the mount. #}
+  <section class="empty-state index-empty-state">
+    <p class="empty-sub" data-dashboard-fallback>Your decks need JavaScript
+      enabled. Turn it on and reload to see them.</p>
+  </section>
+</div>
+<script>
+(function () {
+  var note = document.querySelector("[data-dashboard-fallback]");
+  if (!note) return;
+  note.textContent = "Loading your decks…";
+  // isConnected is false once the host has replaced the region, so a
+  // mounted list never sees this. Generous, because the deck list is
+  // one module chain behind a slow connection, not a fast one.
+  setTimeout(function () {
+    if (!note.isConnected) return;
+    note.textContent = "Your decks did not load. Reload the page to try again.";
+  }, 8000);
+})();
+</script>
+<script type="module">import "@/dashboard/online-host.js";</script>
+{% endblock %}

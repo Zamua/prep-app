@@ -1,0 +1,82 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "deck_name": "history-trivia",
+  "google_search_url": "https://www.google.com/search?q=Who+painted+the+Mona+Lisa%3F",
+  "handoff_providers": {
+   "chatgpt": {
+    "label": "ChatGPT",
+    "url": "https://chatgpt.com/?q={q}"
+   },
+   "claude": {
+    "label": "Claude",
+    "url": "https://claude.ai/new?q={q}"
+   }
+  },
+  "handoff_urls": {
+   "chatgpt": "https://chatgpt.com/?q=Who+painted+the+Mona+Lisa%3F",
+   "claude": "https://claude.ai/new?q=Who+painted+the+Mona+Lisa%3F"
+  },
+  "notif_unseen_count": 0,
+  "q": {
+   "answer": "Leonardo da Vinci",
+   "answer_regex": null,
+   "attempts": 0,
+   "choices": null,
+   "choices_list": [],
+   "explanation": null,
+   "id": 51,
+   "language": null,
+   "last_review": null,
+   "next_due": null,
+   "prompt": "Who painted the Mona Lisa?",
+   "rights": 0,
+   "rubric": null,
+   "skeleton": null,
+   "step": 0,
+   "suspended": false,
+   "topic": null,
+   "type": "short"
+  },
+  "result": {
+   "correct": false,
+   "expected": "Leonardo da Vinci",
+   "feedback": null,
+   "given": "Raphael",
+   "idk": false,
+   "overridden": false,
+   "regex_updated": false,
+   "regraded": false
+  },
+  "session_done": "52:r",
+  "session_position": 2,
+  "session_remaining": "51",
+  "session_total": 3,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  }
+ },
+ "template": "trivia/card.html"
+}

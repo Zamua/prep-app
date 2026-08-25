@@ -1,0 +1,79 @@
+{# Step 2 (trivia path): name + topic + interval. Single submit. #}
+{% extends "base.html" %}
+{% block title %}new trivia deck · prep{% endblock %}
+{% block page_class %}deck-new{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/decks/new", "back") }}
+
+<section class="prelude">
+  <p class="eyebrow">A new trivia deck</p>
+  <h1 class="display">Push&nbsp;<em>me</em>&nbsp;a question.</h1>
+  <p class="lede">
+    Tell prep what to quiz you on, then pick how often you want to see
+    a card. The scheduler pings you on the interval, you tap to answer
+    in seconds. {% if agent_available %}With an AI agent configured, a fresh batch is generated up front and new batches drop in as you cycle through.{% else %}Add cards yourself, or <a href="{{ root }}/settings/agent">configure an AI agent</a> to have batches generated for you.{% endif %}
+  </p>
+</section>
+
+{% if error %}
+<p class="form-error">{{ error|safe }}</p>
+{% endif %}
+
+{% if not agent_available %}
+<p class="form-hint" style="border:1px solid var(--rule); border-radius:8px; padding:0.9rem 1rem; color:var(--ink-soft);">
+  No AI agent is configured, so prep won't generate a starter batch.
+  The deck is created empty and you can add cards manually from the
+  deck page. <a href="{{ root }}/settings/agent">Set up an agent</a> if you'd like AI-generated batches.
+</p>
+{% endif %}
+
+<form method="post" action="{{ root }}/decks/new/trivia" class="deck-new-form" autocomplete="off" data-submit-pending>
+  <label class="form-field">
+    <span class="form-label">Deck name</span>
+    <input type="text" name="name" value="{{ name_value }}" required maxlength="60"
+           placeholder="e.g. World Capitals">
+    <span class="form-hint">
+      Up to 60 chars; spaces and punctuation are fine. We'll derive a
+      kebab-case URL slug from it (so "World Capitals" lives at
+      <code>/deck/world-capitals</code>).
+    </span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">Topic</span>
+    <textarea name="topic" rows="6" maxlength="8000"
+              placeholder="What should the deck quiz you on? Be specific: 'world capitals', 'Rust ownership rules', '1990s NBA finals MVPs'. The more focused, the better the questions."
+              required>{{ topic_value }}</textarea>
+    <span class="form-hint">
+      Free-form. Describes what this deck is for{% if agent_available %} — and the AI uses it to generate 25 short-answer questions per batch{% endif %}. URLs are fine.
+    </span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">Notification interval (minutes)</span>
+    <input type="number" name="notification_interval_minutes"
+           min="1" max="720" value="{{ interval_value }}" required>
+    <span class="form-hint">
+      How often you want a question pushed to you. Default 30 min.
+      Range 1–720 (12 hours).
+    </span>
+    <span class="form-hint">
+      Trivia notifications respect your <a href="{{ root }}/notify">quiet hours</a>
+      — set them once on the notifications settings page and they
+      apply across SRS + trivia.
+    </span>
+  </label>
+
+  <div class="study-actions deck-new-actions">
+    <button type="submit" class="btn btn-primary" id="trivia-submit"
+            data-pending-label="{% if agent_available %}Generating 25 questions…{% else %}Creating deck…{% endif %}">
+      Create trivia deck
+    </button>
+    <a class="btn btn-quiet" href="{{ root }}/decks/new">Cancel</a>
+  </div>
+</form>
+
+{# Submit-pending behavior is wired by static/js/modules/submit-pending.js
+   via the form's data-submit-pending attr. #}
+{% endblock %}

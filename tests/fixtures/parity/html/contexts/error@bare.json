@@ -1,0 +1,26 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "blurb": "",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "headline": "Forbidden.",
+  "notif_unseen_count": 0,
+  "path": "",
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "status_code": 403,
+  "user": null
+ },
+ "template": "error.html"
+}

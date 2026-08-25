@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f5efe6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1612" media="(prefers-color-scheme: dark)">
+  <title>prep · offline</title>
+  {# Standalone document, deliberately NOT extending base.html: base
+     pulls in the identity provider's CDN script, the web-font
+     stylesheet, and htmx, all of which need network or a
+     server-resolved user. This shell must render from the service
+     worker cache with no network at all. The shared stylesheet's
+     font stacks fall back to system fonts, so the missing web font
+     degrades gracefully offline.
+
+     `build` is supplied by the /offline route (prep/web/pwa.py): the
+     validated ?build= token when the SW fetched the shell, else the
+     current build token. It keys the stylesheet URL + importmap
+     prefix so every URL this shell references is a URL the same SW
+     install precached. #}
+  {# index.css opts into cross-document view transitions. A skipped one
+     (reduced motion, hidden tab, headless) rejects its internal promise
+     before any script can hold it, so the absorber must be a classic
+     head script in every document that loads that stylesheet. #}
+  <script>
+    addEventListener("unhandledrejection", function (e) {
+      var r = e.reason;
+      if (r && r.name === "AbortError" && String(r.message).indexOf("Transition was skipped") !== -1) {
+        e.preventDefault();
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="{{ root }}/static/css/v{{ build }}/index.css">
+  {# Importmap MUST be in <head> before any module script (same rule
+     base.html documents): a module script parsed before the importmap
+     cannot resolve "@/" bare specifiers. #}
+  <script type="importmap">
+  {
+    "imports": {
+      "@/": "{{ root }}/static/js/v{{ build }}/"
+    }
+  }
+  </script>
+  <script type="module">import "@/offline/offline-app.js";</script>
+</head>
+<body class="page-offline">
+  <header class="masthead-wrap">
+    <div class="masthead">
+      {# The same wordmark base.html renders, not a variant: what is
+         different about this surface is said once, in the dashboard's
+         status line, not in the branding. The brand is the way back to
+         the landing, and the only navigation out of this shell besides
+         the study loop itself. #}
+      <a class="masthead-brand" href="{{ root }}/">
+        <span class="brand-mark">P</span>
+        <span class="brand-word">Prep&nbsp;·&nbsp;<em>a commonplace book</em></span>
+      </a>
+    </div>
+  </header>
+  <div class="paper">
+    {# Minimal placeholder chrome only: offline-app.js replaces the
+       contents of [data-offline-root] with the real views (queue /
+       card / verdict / empty) rendered from IndexedDB. If the module
+       never runs, the user sees an honest static message instead of
+       a blank page. #}
+    <main class="folio" id="offline-root" data-offline-root>
+      <section class="empty-state">
+        <p>Loading your offline study queue&hellip;</p>
+        <noscript><p>Offline study needs JavaScript enabled.</p></noscript>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

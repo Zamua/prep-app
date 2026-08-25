@@ -1,0 +1,71 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "deck_meta": {
+   "context_prompt": "",
+   "deck_id": 1,
+   "display_name": null,
+   "interval_minutes": null,
+   "notifications_enabled": true,
+   "pinned": false,
+   "session_size": 3
+  },
+  "deck_name": "capitals",
+  "deck_retention": null,
+  "deck_type": "srs",
+  "due_count": 0,
+  "notif_unseen_count": 0,
+  "questions": [],
+  "retention_presets": [
+   [
+    0.8,
+    "80% — Relaxed",
+    "Fewer reviews; more cards slip through."
+   ],
+   [
+    0.85,
+    "85% — Mild",
+    "Slightly less frequent; light maintenance."
+   ],
+   [
+    0.9,
+    "90% — Default",
+    "Anki's default. Balances retention vs work."
+   ],
+   [
+    0.95,
+    "95% — Strict",
+    "Tighter recall, more frequent reviews."
+   ]
+  ],
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "trivia": null,
+  "trivia_stats": null,
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "user_retention": 0.85
+ },
+ "template": "deck.html"
+}

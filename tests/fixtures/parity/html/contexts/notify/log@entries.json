@@ -1,0 +1,74 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "entries": [
+   {
+    "body": "3 cards are due in World Capitals.",
+    "id": 3,
+    "seen_at": null,
+    "sent_at": "2026-03-14T14:59:30+00:00",
+    "source": "trivia",
+    "title": "trivia nudge",
+    "url": "/deck/capitals",
+    "user_id": "parity@example.com"
+   },
+   {
+    "body": "3 cards are due in World Capitals.",
+    "id": 2,
+    "seen_at": "2026-03-14T15:00:00+00:00",
+    "sent_at": "2026-03-14T12:00:00+00:00",
+    "source": "srs-when-ready",
+    "title": "srs-when-ready nudge",
+    "url": "/deck/capitals",
+    "user_id": "parity@example.com"
+   },
+   {
+    "body": "3 cards are due in World Capitals.",
+    "id": 1,
+    "seen_at": "2026-03-14T15:00:00+00:00",
+    "sent_at": "2026-02-12T15:00:00+00:00",
+    "source": "srs-digest",
+    "title": "srs-digest nudge",
+    "url": "/deck/capitals",
+    "user_id": "parity@example.com"
+   },
+   {
+    "body": "3 cards are due in World Capitals.",
+    "id": 0,
+    "seen_at": "2026-03-14T15:00:00+00:00",
+    "sent_at": "2024-12-01T09:00:00+00:00",
+    "source": "manual",
+    "title": "manual nudge",
+    "url": "/deck/capitals",
+    "user_id": "parity@example.com"
+   }
+  ],
+  "notif_unseen_count": 0,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  }
+ },
+ "template": "notify/log.html"
+}

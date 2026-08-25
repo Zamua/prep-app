@@ -1,0 +1,280 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "deck_id_to_name": {
+   "3": "history-trivia"
+  },
+  "deck_name": "",
+  "deletion_decks": {
+   "101": "capitals",
+   "102": "distsys",
+   "103": "capitals",
+   "104": "distsys"
+  },
+  "desc": {},
+  "modification_diffs": [
+   {
+    "deck_name": "capitals",
+    "new": {
+     "answer": "Paris",
+     "answer_regex": "",
+     "explanation": "",
+     "language": "",
+     "prompt": "Capital city of France?",
+     "rubric": "",
+     "skeleton": "",
+     "topic": "europe",
+     "type": "short"
+    },
+    "old": {
+     "answer": "Paris",
+     "answer_regex": "",
+     "explanation": "",
+     "language": "",
+     "prompt": "Capital of France?",
+     "rubric": "",
+     "skeleton": "",
+     "topic": "europe",
+     "type": "short"
+    },
+    "question_id": 41
+   },
+   {
+    "deck_name": "distsys",
+    "new": {
+     "answer": "Paris",
+     "answer_regex": "",
+     "explanation": "",
+     "language": "",
+     "prompt": "Capital of France?",
+     "rubric": "- returns a + b",
+     "skeleton": "def add(a, b):",
+     "topic": "europe",
+     "type": "short"
+    },
+    "old": {
+     "answer": "Paris",
+     "answer_regex": "",
+     "explanation": "",
+     "language": "",
+     "prompt": "Capital of France?",
+     "rubric": "",
+     "skeleton": "",
+     "topic": "europe",
+     "type": "short"
+    },
+    "question_id": 44
+   },
+   {
+    "deck_name": "distsys",
+    "new": {
+     "answer": "Paris",
+     "answer_regex": "",
+     "explanation": "",
+     "language": "",
+     "prompt": "Capital of France?",
+     "rubric": "",
+     "skeleton": "",
+     "topic": "europe",
+     "type": "short"
+    },
+    "old": {
+     "answer": "Paris",
+     "answer_regex": "",
+     "explanation": "",
+     "language": "",
+     "prompt": "Capital of France?",
+     "rubric": "",
+     "skeleton": "",
+     "topic": "europe",
+     "type": "short"
+    },
+    "question_id": 45
+   }
+  ],
+  "move_source_decks": {
+   "201": "distsys",
+   "202": "distsys",
+   "203": "capitals",
+   "44": "distsys"
+  },
+  "notif_unseen_count": 0,
+  "progress": {
+   "plan": {
+    "additions": [
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 0 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 1 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 2 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 3 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 4 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 5 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 6 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Addition 7 with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt with a long prompt ",
+      "type": "short"
+     },
+     {
+      "dest_deck": "capitals",
+      "prompt": "Capital of Peru?",
+      "type": "mcq"
+     },
+     {
+      "dest_deck": "distsys",
+      "prompt": "Quorum size for n=5?",
+      "type": "short"
+     }
+    ],
+    "card_moves": [
+     {
+      "dest_deck": "consensus",
+      "question_id": 201
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 202
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 203
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 204
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 205
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 206
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 207
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 208
+     },
+     {
+      "dest_deck": "consensus",
+      "question_id": 209
+     },
+     {
+      "dest_deck": "capitals",
+      "question_id": 44
+     }
+    ],
+    "deck_deletions": [
+     3,
+     99
+    ],
+    "deck_renames": [
+     {
+      "deck_id": 2,
+      "new_name": "distributed-systems"
+     }
+    ],
+    "deletions": [
+     101,
+     102,
+     103,
+     104,
+     105,
+     106,
+     107,
+     108
+    ],
+    "modifications": [
+     {
+      "question_id": 41
+     },
+     {
+      "question_id": 44
+     },
+     {
+      "question_id": 45
+     }
+    ],
+    "new_decks": [
+     {
+      "deck_type": "srs",
+      "name": "consensus",
+      "topic": "Distributed systems consensus: Paxos, Raft, quorum intersection, leader election, linearizability versus sequential consistency, and the failure modes of each."
+     },
+     {
+      "deck_type": "trivia",
+      "name": "pub-quiz",
+      "topic": null
+     },
+     {
+      "deck_type": null,
+      "name": "untyped",
+      "topic": "short topic"
+     }
+    ],
+    "notes": "Split the consensus material out and tighten the wording."
+   },
+   "status": "awaiting_apply"
+  },
+  "scope": "reorganize",
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "target_id": 2,
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "wid": "transform-reorganize-PARITY01"
+ },
+ "template": "partials/transform_progress.html"
+}

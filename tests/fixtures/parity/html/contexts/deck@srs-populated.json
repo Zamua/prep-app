@@ -1,0 +1,192 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "deck_meta": {
+   "context_prompt": "",
+   "deck_id": 1,
+   "display_name": "World Capitals",
+   "interval_minutes": null,
+   "notifications_enabled": true,
+   "pinned": true,
+   "session_size": 3
+  },
+  "deck_name": "capitals",
+  "deck_retention": 0.95,
+  "deck_type": "srs",
+  "due_count": 2,
+  "notif_unseen_count": 0,
+  "questions": [
+   {
+    "answer": "Paris",
+    "answer_regex": "paris",
+    "attempts": 5,
+    "choices": null,
+    "choices_list": [],
+    "explanation": "Paris has been the capital since 987.",
+    "id": 41,
+    "language": null,
+    "last_review": "2026-02-12T15:00:00+00:00",
+    "next_due": "2026-03-13T09:30:00+00:00",
+    "prompt": "Capital of **France**?",
+    "rights": 4,
+    "rubric": null,
+    "skeleton": null,
+    "step": 3,
+    "suspended": false,
+    "topic": "europe",
+    "type": "short"
+   },
+   {
+    "answer": "Tokyo",
+    "answer_regex": null,
+    "attempts": 2,
+    "choices": [
+     "Tokyo",
+     "Osaka",
+     "Kyoto",
+     "Nagoya"
+    ],
+    "choices_list": [
+     "Tokyo",
+     "Osaka",
+     "Kyoto",
+     "Nagoya"
+    ],
+    "explanation": null,
+    "id": 42,
+    "language": null,
+    "last_review": "2026-03-13T09:30:00+00:00",
+    "next_due": "2026-03-15T15:00:00+00:00",
+    "prompt": "Which city is the capital of Japan?",
+    "rights": 1,
+    "rubric": null,
+    "skeleton": null,
+    "step": 1,
+    "suspended": false,
+    "topic": "asia",
+    "type": "mcq"
+   },
+   {
+    "answer": "[\"Lima\", \"Quito\"]",
+    "answer_regex": null,
+    "attempts": 0,
+    "choices": [
+     "Lima",
+     "Quito",
+     "Cusco",
+     "Guayaquil"
+    ],
+    "choices_list": [
+     "Lima",
+     "Quito",
+     "Cusco",
+     "Guayaquil"
+    ],
+    "explanation": null,
+    "id": 43,
+    "language": null,
+    "last_review": null,
+    "next_due": "2026-03-14T15:00:00+00:00",
+    "prompt": "Which of these are capitals?",
+    "rights": 0,
+    "rubric": "- both Andean capitals",
+    "skeleton": null,
+    "step": 0,
+    "suspended": false,
+    "topic": "south-america",
+    "type": "multi"
+   },
+   {
+    "answer": "def add(a, b):\n    return a + b",
+    "answer_regex": null,
+    "attempts": 9,
+    "choices": null,
+    "choices_list": [],
+    "explanation": null,
+    "id": 44,
+    "language": "python",
+    "last_review": "2026-03-13T09:30:00+00:00",
+    "next_due": "2026-03-21T15:00:00+00:00",
+    "prompt": "Write `add(a, b)` returning the sum.\n\n```python\ndef add(a, b):\n    ...\n```",
+    "rights": 9,
+    "rubric": "- returns a + b\n- no side effects",
+    "skeleton": "def add(a, b):\n    pass",
+    "step": 5,
+    "suspended": false,
+    "topic": "python",
+    "type": "code"
+   },
+   {
+    "answer": "long",
+    "answer_regex": null,
+    "attempts": 1,
+    "choices": null,
+    "choices_list": [],
+    "explanation": null,
+    "id": 45,
+    "language": null,
+    "last_review": null,
+    "next_due": null,
+    "prompt": "A very long prompt that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going that keeps going until it is truncated on the card.",
+    "rights": 0,
+    "rubric": null,
+    "skeleton": null,
+    "step": 2,
+    "suspended": true,
+    "topic": null,
+    "type": "short"
+   }
+  ],
+  "retention_presets": [
+   [
+    0.8,
+    "80% — Relaxed",
+    "Fewer reviews; more cards slip through."
+   ],
+   [
+    0.85,
+    "85% — Mild",
+    "Slightly less frequent; light maintenance."
+   ],
+   [
+    0.9,
+    "90% — Default",
+    "Anki's default. Balances retention vs work."
+   ],
+   [
+    0.95,
+    "95% — Strict",
+    "Tighter recall, more frequent reviews."
+   ]
+  ],
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "trivia": null,
+  "trivia_stats": null,
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "user_retention": 0.85
+ },
+ "template": "deck.html"
+}

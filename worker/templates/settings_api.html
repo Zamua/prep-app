@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}API tokens · settings · prep{% endblock %}
+{% block page_class %}settings settings-api{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/", "back") }}
+{%- set _root = root -%}
+
+<section class="prelude">
+  <p class="eyebrow">API tokens</p>
+  <h1 class="display"><em>Manage</em> your prep<br>from anywhere.</h1>
+  <p class="lede">
+    Generate a personal access token to call prep's REST API or wire
+    prep up as an MCP server to your AI coding assistant. Tokens are
+    long-lived and per-account; revoke any one without touching the
+    others.
+  </p>
+</section>
+
+{# How to use — placed FIRST so context is established before the
+   create-token form, per the design feedback. The form lives in the
+   "Tokens" card below. #}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>How to use</span><span class="rule"></span></p>
+
+  <p style="margin-block-start: 0.5rem;">
+    Set the token as a Bearer credential on the <code>Authorization</code> header:
+  </p>
+  <pre class="reproduction" style="margin-block-start: 0.5rem;"><code>curl -H "Authorization: Bearer prep_pat_..." \
+  https://prepcards.app/api/v1/decks</code></pre>
+
+  <p style="margin-block-start: 1rem;">
+    Full endpoint reference + try-it-now console live at
+    <a href="{{ _root }}/docs">/docs</a> (Swagger UI)
+    or <a href="{{ _root }}/redoc">/redoc</a>.
+    Raw schema at <a href="{{ _root }}/openapi.json">/openapi.json</a>.
+  </p>
+  <p style="margin-block-start: 0.5rem;">
+    Setting prep up as an MCP server in Claude or other AI clients:
+    walk-through at <a href="{{ _root }}/settings/agent">/settings/agent</a>.
+  </p>
+</section>
+
+{% if flash %}<p class="notify-status" data-kind="ok">{{ flash }}</p>{% endif %}
+
+{# Single tokens card — create form on top, table of existing tokens
+   below. Replaces the previous split-into-three-cards layout. #}
+<section class="agent-panel">
+  <p class="section-eyebrow"><span>Tokens</span><span class="rule"></span></p>
+
+  <form method="post" action="{{ _root }}/settings/api/tokens"
+        class="api-token-create-form" autocomplete="off"
+        data-submit-pending>
+    <div class="api-token-create-row">
+      <label class="freetext" style="flex: 1; margin: 0;">
+        <span class="visually-hidden">Token label</span>
+        <input type="text" name="label" maxlength="60"
+               placeholder="Label (optional) — e.g. claude desktop, laptop">
+      </label>
+      <button type="submit" class="btn btn-primary" data-pending-label="Generating…">
+        Generate
+      </button>
+    </div>
+  </form>
+
+  {% if tokens|length %}
+    <table class="api-token-table">
+      <thead>
+        <tr>
+          <th scope="col">Token</th>
+          <th scope="col">Created</th>
+          <th scope="col">Last used</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tokens %}
+          <tr>
+            <td>
+              <code>{{ t.key_prefix }}</code>
+              {% if t.label %}<div class="api-token-label">{{ t.label }}</div>{% endif %}
+            </td>
+            <td class="api-token-date">{{ t.created_at|slice(0, 10) }}</td>
+            <td class="api-token-date">
+              {% if t.last_used_at %}{{ t.last_used_at|slice(0, 10) }}{% else %}<em>never</em>{% endif %}
+            </td>
+            <td>
+              {# Revoke posts via htmx and swaps out just this row, so
+                 the page doesn't jump to the top. Non-JS fallback hits
+                 the same route via the form action; the route 303s
+                 back to /settings/api so it still works without JS. #}
+              <form method="post"
+                    action="{{ _root }}/settings/api/tokens/{{ t.id }}/delete"
+                    hx-post="{{ _root }}/settings/api/tokens/{{ t.id }}/delete"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML swap:120ms"
+                    hx-confirm="Revoke this token? Any client using it will start getting 401s."
+                    style="margin: 0;">
+                <button type="submit" class="btn btn-quiet btn-tiny">Revoke</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="form-hint" style="margin-block-start: 1rem;">No tokens yet. Generate one above.</p>
+  {% endif %}
+</section>
+
+{# Modal: when a new token was just minted, the plaintext lands here
+   with a Copy button. JS auto-opens on page render. The form re-POSTs
+   to the same URL so server-side rendering populates this; reloading
+   the page wipes the dialog (the plaintext is only on the response,
+   never stored). #}
+{% if created_plaintext %}
+<dialog id="new-token-dialog" data-dialog class="new-token-dialog"
+        aria-labelledby="new-token-heading">
+  <h3 id="new-token-heading">Your new token</h3>
+  <p class="form-hint">
+    This is the <strong>only time</strong> prep will show this value.
+    Copy it now and paste it into your AI client's config or password manager.
+  </p>
+  <div class="new-token-value">
+    <code id="new-token-plaintext">{{ created_plaintext }}</code>
+    <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy">
+      Copy
+    </button>
+  </div>
+
+  {# Setup-prompt button — copies a natural-language instruction the
+     user can paste straight into their AI client (Claude Code,
+     Claude Desktop, Telegram-bot Claude, etc.).  The AI then runs
+     `claude mcp add` (or edits its config file) and verifies via
+     prep_list_decks.  Saves a separate visit to /settings/agent.
+
+     The token is embedded inline — flagged prominently in the UI so
+     the user knows whatever they paste this into has access to
+     their account. #}
+  <p class="form-hint" style="margin-block-end: 0.5rem;">
+    Or paste this whole prompt into your AI client — it'll wire prep
+    up and confirm the connection in one shot:
+  </p>
+  <div class="new-token-prompt">
+    <span class="new-token-prompt-preview">
+      <span class="new-token-prompt-headline">
+        {{ icon('key', class_='icon icon-inline') }}
+        Setup prompt for your AI
+      </span>
+      <span class="new-token-prompt-warn">
+        <strong>Includes your token.</strong>
+        Only paste into clients you trust — anywhere this clipboard
+        lands gets access to your account until you revoke.
+      </span>
+    </span>
+    {# Build the absolute base URL server-side so the JS doesn't have
+       to derive it from window.location (which lands on the POST
+       endpoint /settings/api/tokens, not the app root). request.base_url
+       is the host root; we append root_path so deploys under /prep/ or
+       /prep-staging/ get the right prefix. #}
+    {%- set _scheme = request.url.scheme -%}
+    {%- set _host = request.url.netloc -%}
+    {%- set _app_base = _scheme ~ '://' ~ _host ~ _root -%}
+    <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy-prompt"
+            data-app-base="{{ _app_base }}">
+      Copy setup prompt
+    </button>
+  </div>
+
+  <div class="new-token-actions">
+    <form method="dialog" style="margin: 0;">
+      <button type="submit" class="btn btn-primary">Done</button>
+    </form>
+  </div>
+</dialog>
+<script>
+(function () {
+  const dlg = document.getElementById('new-token-dialog');
+  if (!dlg) return;
+  /* Auto-open on render so the user doesn't have to chase the value. */
+  if (!dlg.open && dlg.showModal) dlg.showModal();
+  const copyBtn = document.getElementById('new-token-copy');
+  const src = document.getElementById('new-token-plaintext');
+  function flash(btn, label, original) {
+    btn.textContent = label;
+    setTimeout(() => { btn.textContent = original; }, 1400);
+  }
+  if (copyBtn && src) {
+    copyBtn.addEventListener('click', async () => {
+      const orig = copyBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(src.textContent.trim());
+        flash(copyBtn, 'Copied ✓', orig);
+      } catch (e) { flash(copyBtn, 'Copy failed', orig); }
+    });
+  }
+
+  /* Setup-prompt: natural-language instruction the user pastes into
+   * their AI client.  Embeds the bearer token + the canonical mount
+   * URL so the agent can `claude mcp add` itself and verify.
+   *
+   * The base URL is computed server-side and stamped into a data-
+   * attribute below — we used to derive it via window.location with
+   * a regex strip, but the POST response landed on /settings/api/
+   * tokens (a sibling path) which the regex didn't match, baking
+   * /settings/api/tokens/mcp into the prompt. Server-rendered base
+   * URL is the only reliable source. */
+  const promptBtn = document.getElementById('new-token-copy-prompt');
+  if (promptBtn && src) {
+    const token = src.textContent.trim();
+    const base = (promptBtn.dataset.appBase || '').replace(/\/$/, '');
+    const mcp_url = base + '/mcp';
+    const prompt = [
+      'Please connect prep as an MCP server so I can manage my flashcards from here.',
+      '',
+      'Server (streamable HTTP): ' + mcp_url,
+      'Authorization header: Bearer ' + token,
+      '',
+      "Register this server at user / global scope (NOT project scope) so it's available across every session of yours regardless of working directory. In Claude Code, that's `claude mcp add -s user ...`; in other harnesses, pick the equivalent — config file in your user dir, global settings page, etc.",
+      '',
+      "After registering, verify the connection. If your harness needs me to do something to surface the new tools (e.g. restart your session), tell me what's needed. Once you can call prep tools, run prep_list_decks and tell me which decks I have.",
+      '',
+      'Tool reference: ' + base + '/llms.txt',
+    ].join('\n');
+    promptBtn.addEventListener('click', async () => {
+      const orig = promptBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(prompt);
+        flash(promptBtn, 'Copied ✓', orig);
+      } catch (e) { flash(promptBtn, 'Copy failed', orig); }
+    });
+  }
+})();
+</script>
+{% endif %}
+
+{% endblock %}

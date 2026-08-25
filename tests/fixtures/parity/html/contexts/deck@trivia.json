@@ -1,0 +1,104 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "deck_meta": {
+   "context_prompt": "Distributed systems consensus: Paxos, Raft, quorum intersection, leader election, linearizability versus sequential consistency, and the failure modes of each.",
+   "deck_id": 3,
+   "display_name": "World History Trivia",
+   "interval_minutes": 45,
+   "notifications_enabled": true,
+   "pinned": false,
+   "session_size": 5
+  },
+  "deck_name": "history-trivia",
+  "deck_retention": null,
+  "deck_type": "trivia",
+  "due_count": 0,
+  "notif_unseen_count": 0,
+  "questions": [
+   {
+    "answer": "Leonardo da Vinci",
+    "answer_regex": null,
+    "attempts": 0,
+    "choices": null,
+    "choices_list": [],
+    "explanation": null,
+    "id": 51,
+    "language": null,
+    "last_review": null,
+    "next_due": null,
+    "prompt": "Who painted the Mona Lisa?",
+    "rights": 0,
+    "rubric": null,
+    "skeleton": null,
+    "step": 0,
+    "suspended": false,
+    "topic": null,
+    "type": "short"
+   },
+   {
+    "answer": "1989",
+    "answer_regex": null,
+    "attempts": 0,
+    "choices": null,
+    "choices_list": [],
+    "explanation": "November 9.",
+    "id": 52,
+    "language": null,
+    "last_review": null,
+    "next_due": null,
+    "prompt": "Year the Berlin Wall fell?",
+    "rights": 0,
+    "rubric": null,
+    "skeleton": null,
+    "step": 0,
+    "suspended": false,
+    "topic": null,
+    "type": "short"
+   }
+  ],
+  "retention_presets": null,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "trivia": {
+   "context_prompt": "Distributed systems consensus: Paxos, Raft, quorum intersection, leader election, linearizability versus sequential consistency, and the failure modes of each.",
+   "deck_id": 3,
+   "display_name": "World History Trivia",
+   "interval_minutes": 45,
+   "notifications_enabled": true,
+   "pinned": false,
+   "session_size": 5
+  },
+  "trivia_stats": {
+   "mastered": 1,
+   "total": 2,
+   "unanswered": 1,
+   "wrong": 0
+  },
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "user_retention": null
+ },
+ "template": "deck.html"
+}

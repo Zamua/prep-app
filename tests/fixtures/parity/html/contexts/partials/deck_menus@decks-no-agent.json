@@ -1,0 +1,73 @@
+{
+ "context": {
+  "agent_available": false,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "menu_decks": [
+   {
+    "deck_id": 1,
+    "deck_type": "srs",
+    "display_name": "World Capitals",
+    "due": 2,
+    "id": 1,
+    "interval_minutes": null,
+    "name": "capitals",
+    "notifications_enabled": true,
+    "pinned": true,
+    "session_size": 3,
+    "total": 5
+   },
+   {
+    "deck_id": 2,
+    "deck_type": "srs",
+    "display_name": "Distributed Systems",
+    "due": 0,
+    "id": 2,
+    "interval_minutes": null,
+    "name": "distsys",
+    "notifications_enabled": true,
+    "pinned": false,
+    "session_size": 3,
+    "total": 0
+   },
+   {
+    "deck_id": 3,
+    "deck_type": "trivia",
+    "display_name": "World History Trivia",
+    "due": 0,
+    "id": 3,
+    "interval_minutes": 45,
+    "name": "history-trivia",
+    "notifications_enabled": true,
+    "pinned": false,
+    "session_size": 5,
+    "total": 2
+   }
+  ],
+  "notif_unseen_count": 0,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  }
+ },
+ "template": "partials/deck_menus.html"
+}

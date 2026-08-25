@@ -1,0 +1,45 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "devices": 0,
+  "notif_unseen_count": 0,
+  "prefs": {
+   "digest_hour": 9,
+   "last_digest_date": null,
+   "last_when_ready_at": null,
+   "mode": "off",
+   "quiet_end_hour": 8,
+   "quiet_hours_enabled": false,
+   "quiet_start_hour": 22,
+   "threshold": 3,
+   "tz": "America/New_York"
+  },
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "vapid_key": "BParityVapidKey"
+ },
+ "template": "notify_settings.html"
+}

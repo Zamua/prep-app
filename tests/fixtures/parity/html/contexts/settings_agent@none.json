@@ -1,0 +1,104 @@
+{
+ "context": {
+  "agent_available": false,
+  "auth_provider": "tailscale",
+  "byok_error": null,
+  "byok_flash": null,
+  "byok_sections": [
+   {
+    "info": {
+     "console_url": "https://docs.claude.com/en/docs/agent-sdk/auth#claude-app-tokens",
+     "default_model": "model",
+     "key_prefixes": [
+      "sk-ant-oat01-"
+     ],
+     "label": "Claude subscription",
+     "provider": "claude-subscription",
+     "short_label": "claude"
+    },
+    "is_active": false,
+    "metadata": null,
+    "provider": "claude-subscription"
+   },
+   {
+    "info": {
+     "console_url": "https://console.anthropic.com/settings/keys",
+     "default_model": "model",
+     "key_prefixes": [
+      "sk-ant-api03-"
+     ],
+     "label": "Anthropic",
+     "provider": "anthropic-api",
+     "short_label": "anthropic"
+    },
+    "is_active": false,
+    "metadata": null,
+    "provider": "anthropic-api"
+   },
+   {
+    "info": {
+     "console_url": "https://platform.openai.com/api-keys",
+     "default_model": "model",
+     "key_prefixes": [
+      "sk-"
+     ],
+     "label": "OpenAI",
+     "provider": "openai-api",
+     "short_label": "openai"
+    },
+    "is_active": false,
+    "metadata": null,
+    "provider": "openai-api"
+   },
+   {
+    "info": {
+     "console_url": "https://openrouter.ai/keys",
+     "default_model": "model",
+     "key_prefixes": [
+      "sk-or-v1-"
+     ],
+     "label": "OpenRouter",
+     "provider": "openrouter-api",
+     "short_label": "openrouter"
+    },
+    "is_active": false,
+    "metadata": null,
+    "provider": "openrouter-api"
+   }
+  ],
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "error": null,
+  "flash": null,
+  "free_tier_configured": false,
+  "notif_unseen_count": 0,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "status": {
+   "kind": "unconfigured",
+   "logged_in": false,
+   "reason": "no token"
+  },
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  }
+ },
+ "template": "settings_agent.html"
+}

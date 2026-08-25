@@ -1,0 +1,74 @@
+{# Masthead "running operations" badge.
+
+   Rendered by GET /api/active-workflows-badge. htmx polls this URL
+   every 5s and swaps the response in place via outerHTML on the
+   #workflow-badge slot in base.html.
+
+   Renders nothing when the user has no active workflows — keeps the
+   masthead uncluttered. Renders a small <details> popover with N
+   workflow rows when there are. Sort order is set server-side
+   (awaiting-action → in-progress → just-completed) so the template
+   just iterates.
+
+   The wrapper carries its own hx-* attributes so the swap response
+   continues the polling loop without a separate trigger declaration
+   in base.html. #}
+{%- set _root = root -%}
+{%- set _n = workflows|length -%}
+{%- set _n_active = active_workflow_count -%}
+{%- set _all_done = _n > 0 and _n_active == 0 -%}
+<div id="workflow-badge"
+     class="workflow-badge"
+     hx-get="{{ _root }}/api/active-workflows-badge"
+     hx-trigger="every 5s"
+     hx-swap="outerHTML"
+     {% if _n == 0 %}data-empty="1"{% endif %}>
+  {% if _n > 0 %}
+    <details class="workflow-indicator {% if _all_done %}workflow-indicator--done{% endif %}">
+      <summary class="workflow-chip" aria-label="{% if _all_done %}recently completed operations ({{ _n }}){% else %}active workflows ({{ _n_active }} of {{ _n }}){% endif %}">
+        <span class="workflow-chip-inner" aria-hidden="true">
+          {% if _all_done %}
+            {{ icon('check', class_='icon icon-inline workflow-chip-icon') }}
+          {% else %}
+            {{ icon('circle-notch', class_='icon icon-inline workflow-chip-icon') }}
+          {% endif %}
+          <span class="workflow-chip-count">{{ _n }}</span>
+        </span>
+      </summary>
+      <div class="workflow-panel" data-details-body>
+        <p class="workflow-panel-head">
+          {% if _all_done %}
+            {{ _n }} recently completed
+          {% elif _n_active == _n %}
+            {{ _n }} active operation{{ '' if _n == 1 else 's' }}
+          {% else %}
+            {{ _n_active }} active · {{ _n - _n_active }} just done
+          {% endif %}
+        </p>
+        <ul class="workflow-list">
+          {% for w in workflows %}
+            <li class="workflow-row workflow-row--{% if w.is_action_required %}action{% elif w.is_terminal %}terminal{% else %}inprogress{% endif %}">
+              <span class="workflow-row-marker" aria-hidden="true">
+                {% if w.is_action_required %}
+                  {{ icon('warning-circle', class_='icon icon-inline workflow-marker-action') }}
+                {% elif w.is_terminal %}
+                  {{ icon('check', class_='icon icon-inline workflow-marker-done') }}
+                {% else %}
+                  {{ icon('circle-notch', class_='icon icon-inline workflow-marker-inprogress') }}
+                {% endif %}
+              </span>
+              <span class="workflow-row-body">
+                <span class="workflow-row-label">{{ w.display_label }}</span>
+                <span class="workflow-row-meta">
+                  <span class="workflow-row-type">{{ w.workflow_type|string|replace('_', ' ') }}</span>
+                  <span class="workflow-row-status">· {{ w.display_status }}</span>
+                </span>
+              </span>
+              <a class="workflow-row-link" href="{{ _root }}{{ w.url_path }}">view {{ icon('arrow-right', class_='icon icon-inline') }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </details>
+  {% endif %}
+</div>

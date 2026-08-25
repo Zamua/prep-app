@@ -1,0 +1,58 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "notif_unseen_count": 0,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "workflows": [
+   {
+    "deck_display_name": "World Capitals",
+    "deck_name": "capitals",
+    "display_label": "World Capitals",
+    "display_status": "planning",
+    "is_action_required": false,
+    "is_terminal": false,
+    "status": "planning",
+    "url_path": "/plan/w1",
+    "workflow_id": "w1",
+    "workflow_type": "plan"
+   },
+   {
+    "deck_display_name": null,
+    "deck_name": "history-trivia",
+    "display_label": "history-trivia",
+    "display_status": "generating",
+    "is_action_required": false,
+    "is_terminal": false,
+    "status": "generating",
+    "url_path": "/trivia/gen/w2",
+    "workflow_id": "w2",
+    "workflow_type": "trivia_gen"
+   }
+  ]
+ },
+ "template": "partials/workflow_badge.html"
+}

@@ -1,0 +1,60 @@
+{# PWA install nudge — pill anchored bottom-center + modal with
+   platform-aware instructions. JS in static/js/modules/pwa-install.js
+   shows/hides + wires the buttons. Sits inside base.html on every
+   page; the JS bails on focused screens via document state checks
+   and on already-installed PWAs via the standalone media query.
+
+   This partial is markup only. No inline JS — the module captures
+   the elements by class name. #}
+<div id="pwa-install-root">
+  <button type="button" class="pwa-install-pill" hidden aria-label="Install prep on your home screen">
+    {{ icon('download-simple', class_='icon icon-inline') }}
+    <span>Install prep</span>
+  </button>
+
+  <dialog class="pwa-install-dialog" aria-labelledby="pwa-install-heading" data-dialog>
+    <form method="dialog" class="pwa-install-close-form">
+      <button type="submit" class="pwa-install-close" aria-label="Close">
+        {{ icon('x', class_='icon') }}
+      </button>
+    </form>
+
+    <h2 id="pwa-install-heading" class="pwa-install-headline">
+      Install <em>prep</em> on your home screen.
+    </h2>
+    <p class="pwa-install-blurb">
+      Faster open, offline-tolerant, push-notified when a stack of cards comes due.
+    </p>
+
+    {# Each platform block is hidden by default; JS unhides whichever
+       one matches the user's device. Only one is ever visible. #}
+    <div class="pwa-install-ios" hidden>
+      <ol class="pwa-install-steps">
+        <li>Tap the <strong>Share</strong> button {{ icon('share', class_='icon icon-inline') }} in the Safari toolbar.</li>
+        <li>Scroll and pick <strong>Add to Home Screen</strong>.</li>
+        <li>Tap <strong>Add</strong>.</li>
+      </ol>
+    </div>
+
+    <div class="pwa-install-android" hidden>
+      <p>Tap <strong>Install prep</strong> below and your browser will offer to add it to your home screen.</p>
+    </div>
+
+    <div class="pwa-install-ios-non-safari" hidden>
+      <p>
+        On iPhone and iPad, only the system <strong>Safari</strong> browser can install web apps. Open this page in Safari and tap the <em>Install prep</em> pill at the bottom to continue.
+      </p>
+    </div>
+
+    <div class="pwa-install-unsupported" hidden>
+      <p>Your browser doesn't support installing this as an app. Try Chrome, Edge, or Safari.</p>
+    </div>
+
+    <div class="pwa-install-actions">
+      <button type="button" class="btn btn-primary pwa-install-action" hidden>
+        Install prep
+      </button>
+      <a href="#" class="pwa-install-dont-show">Don't show again</a>
+    </div>
+  </dialog>
+</div>

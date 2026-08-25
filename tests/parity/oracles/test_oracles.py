@@ -162,8 +162,8 @@ def compare_fsrs(corpus_text: str, candidate_text: str) -> list[str]:
 
 
 def compare_html(rel: str, corpus_text: str, candidate_text: str) -> list[str]:
-    if rel == "index.json":
-        return [] if corpus_text == candidate_text else ["index.json differs"]
+    if rel == "index.json" or rel.startswith("contexts/"):
+        return compare_exact(rel, corpus_text, candidate_text)
     if os.environ.get(ENV_PERTURB_DOM) == "1" and rel == "deck@srs-populated.html":
         candidate_text = re.sub(r'data-qid="(\d+)"', r'data-qid="99\1"', candidate_text, count=1)
     return [f"{rel}: {d}" for d in dom_diff(corpus_text, candidate_text)]
@@ -412,5 +412,9 @@ def test_xss_deck_name_is_escaped_in_goldens():
 def test_golden_index_lists_every_file():
     corpus = committed("html")
     index = json.loads(corpus["index.json"])
-    assert {e["file"] for e in index} == set(corpus) - {"index.json"}
+    goldens = {rel for rel in corpus if rel != "index.json" and not rel.startswith("contexts/")}
+    assert {e["file"] for e in index} == goldens
     assert all(Path(e["file"]).suffix == ".html" for e in index)
+    assert {rel for rel in corpus if rel.startswith("contexts/")} == {
+        f"contexts/{rel[:-5]}.json" for rel in goldens
+    }

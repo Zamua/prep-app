@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}notifications · prep{% endblock %}
+{% block page_class %}notify{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+
+{{ nav.back("/", "back") }}
+
+<section class="prelude">
+  <p class="eyebrow">Notifications</p>
+  <h1 class="display">When prep&nbsp;<em>nudges</em>.</h1>
+  <p class="lede">
+    Push notifications arrive even when prep isn't open — on iOS this
+    only works if you've installed the app to your home screen. Choose
+    how often you'd like to be nudged; you can change this any time.
+  </p>
+</section>
+
+<section class="notify-explainer">
+  <details class="rubric-details">
+    <summary>How notifications work</summary>
+    <ul>
+      <li><strong>Daily digest</strong> — one notification per day at the hour you choose, summarizing what's due across all decks. Best if you want a single morning prompt.</li>
+      <li><strong>When ready</strong> — fires the first moment your due-pile crosses a threshold (default 3 cards), and won't re-fire for 4&nbsp;hours after, regardless of new arrivals. Best if your study windows are flexible.</li>
+      <li><strong>Off</strong> — no pushes. The app still works, you just open it on your own schedule.</li>
+    </ul>
+    <p class="muted">All modes respect a quiet-hours window so you don't get pinged overnight. Time-zone is auto-detected from this device.</p>
+  </details>
+</section>
+
+<form id="notify-form" class="notify-form" autocomplete="off">
+  <fieldset class="notify-mode">
+    <legend class="visually-hidden">Mode</legend>
+    {% for value, label, help in [
+      ['off',        'Off',           'No notifications.'],
+      ['digest',     'Daily digest',  'One ping per day at a chosen hour.'],
+      ['when-ready', 'When ready',    'Ping when N or more cards become due.']
+    ] %}
+    <label class="notify-mode-option {% if prefs.mode == value %}is-selected{% endif %}">
+      <input type="radio" name="mode" value="{{ value }}" {% if prefs.mode == value %}checked{% endif %}>
+      <span class="notify-mode-marker" aria-hidden="true"></span>
+      <span class="notify-mode-text">
+        <span class="notify-mode-label">{{ label }}</span>
+        <span class="notify-mode-help">{{ help }}</span>
+      </span>
+    </label>
+    {% endfor %}
+  </fieldset>
+
+  <div class="notify-extras" id="extras-digest" {% if prefs.mode != 'digest' %}hidden{% endif %}>
+    <label class="time-input">
+      <span class="time-label">send at</span>
+      {# step="3600" pins to whole hours; the browser still renders an
+         AM/PM picker on iOS/Android in 12-hour locales. We round-trip
+         "HH:00" strings, parsing back to the int hour on save. #}
+      <input type="time" name="digest_time" step="3600"
+             value="{{ '%02d:00'|format(prefs.digest_hour) }}">
+    </label>
+  </div>
+
+  <div class="notify-extras" id="extras-when-ready" {% if prefs.mode != 'when-ready' %}hidden{% endif %}>
+    <label class="number-input">
+      <span>nudge when</span>
+      <input type="number" name="threshold" min="1" max="99" value="{{ prefs.threshold }}" inputmode="numeric">
+      <span>or more cards are due</span>
+    </label>
+  </div>
+
+  {# Quiet hours used to be tied to when-ready; now applies to BOTH
+     SRS when-ready notifications AND trivia notifications. Daily
+     digest still ignores it — the digest hour IS the schedule. #}
+  <div class="notify-extras" id="extras-quiet">
+    <p class="section-eyebrow"><span>Quiet hours</span><span class="rule"></span></p>
+    <label class="toggle-check">
+      <input type="checkbox" name="quiet_hours_enabled" id="quiet-toggle"
+             {% if prefs.quiet_hours_enabled %}checked{% endif %}>
+      <span>Set quiet hours</span>
+    </label>
+    <div class="quiet-row" id="quiet-row" {% if not prefs.quiet_hours_enabled %}hidden{% endif %}>
+      <label class="time-input">
+        <span class="time-label">from</span>
+        <input type="time" name="quiet_start_time" step="3600"
+               value="{{ '%02d:00'|format(prefs.quiet_start_hour) }}">
+      </label>
+      <label class="time-input">
+        <span class="time-label">to</span>
+        <input type="time" name="quiet_end_time" step="3600"
+               value="{{ '%02d:00'|format(prefs.quiet_end_hour) }}">
+      </label>
+    </div>
+    <p class="quiet-help">
+      Suppresses SRS "when ready" pings AND trivia notifications during these hours. Daily digest is exempt — it always fires at the time you picked.
+      <br>
+      <span class="quiet-tz">Times shown in <em id="tz-display">{{ prefs.tz }}</em> (auto-detected).</span>
+    </p>
+  </div>
+  <input type="hidden" name="tz" id="tz-input" value="{{ prefs.tz }}">
+
+  <p class="notify-status" id="status" data-devices="{{ devices }}">
+    {% if devices == 0 %}
+      No devices subscribed yet — enable below to get pushes on this device.
+    {% else %}
+      Subscribed on {{ devices }} device{{ '' if devices == 1 else 's' }}.
+    {% endif %}
+  </p>
+
+  {# Three action buttons. Toggle is a single button whose label and
+     primary/secondary styling flip based on the local subscription
+     state — JS sets data-state="on"/"off". Two static buttons would
+     waste vertical space and split the user's attention. #}
+  <div class="study-actions" id="actions">
+    <button type="button" class="btn btn-primary" id="save-btn"   hidden>Save settings</button>
+    <button type="button" class="btn"             id="toggle-btn" hidden data-state="off">
+      <span class="toggle-label-off">Enable on this device</span>
+      <span class="toggle-label-on">Disable on this device</span>
+    </button>
+    {# Stateful button: shows pending / success / error inline rather than
+       updating the floating status pill. CSS picks which child <span>
+       group is visible based on the is-* class on the button itself. #}
+    <button type="button" class="btn btn-quiet btn-async" id="test-btn" hidden>
+      <span class="btn-async-state btn-async-default">
+        {{ icon('paper-plane-tilt', class_='icon icon-inline') }}
+        <span>Send test push</span>
+      </span>
+      <span class="btn-async-state btn-async-pending">
+        {{ icon('circle-notch', class_='icon icon-inline btn-async-spin') }}
+        <span>Sending…</span>
+      </span>
+      <span class="btn-async-state btn-async-success">
+        {{ icon('check-circle', class_='icon icon-inline') }}
+        <span>Sent — check your home screen</span>
+      </span>
+      <span class="btn-async-state btn-async-error">
+        {{ icon('warning-circle', class_='icon icon-inline') }}
+        <span>Couldn't send — try again</span>
+      </span>
+    </button>
+  </div>
+</form>
+
+<script type="module">
+  import {init} from "@/modules/notify-settings.js";
+  init({
+    rootPath: "{{ root }}",
+    vapidKey: "{{ vapid_key }}",
+  });
+</script>
+
+{% endblock %}

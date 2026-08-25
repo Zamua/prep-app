@@ -1,0 +1,70 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "capitals": "World Capitals",
+   "distsys": "Distributed Systems",
+   "history-trivia": "World History Trivia",
+   "inbox": "inbox",
+   "xss": "</script><script>alert(1)</script>"
+  },
+  "deck_name": "capitals",
+  "notif_unseen_count": 0,
+  "progress": {
+   "error": "the model returned no plan",
+   "plan": [
+    {
+     "brief": "Why quorums must intersect.",
+     "language": null,
+     "title": "Consensus basics",
+     "topic": "consensus",
+     "type": "short"
+    },
+    {
+     "brief": "Terms, votes, split votes.",
+     "language": null,
+     "title": "Raft leader election",
+     "topic": "raft",
+     "type": "mcq"
+    },
+    {
+     "brief": "A minimal append-entries handler.",
+     "language": "go",
+     "title": "Implement a log append",
+     "topic": "raft",
+     "type": "code"
+    },
+    {
+     "brief": "No type, no topic.",
+     "language": null,
+     "title": "Untyped item",
+     "topic": null,
+     "type": null
+    }
+   ],
+   "round": 1,
+   "status": "failed",
+   "total": 4
+  },
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "created_at": "2026-02-12T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": "vim",
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "wid": "plan-capitals-PARITY01"
+ },
+ "template": "plan.html"
+}

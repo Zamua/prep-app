@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}planning {{ deck_display(deck_name) }} · prep{% endblock %}
+{% block page_class %}plan{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+
+{{ nav.back("/deck/" ~ deck_name, deck_display(deck_name)) }}
+
+{# Progress region in its own partial — htmx polls
+   GET /plan/{wid}/fragment every 2s while the workflow is alive and
+   swaps it back in via hx-swap=outerHTML. The partial omits the
+   hx-trigger attribute on polling-terminal states (`awaiting_feedback`,
+   `done`, `rejected`, `failed`, `gone`) so polling stops without any
+   client-side state. See partials/plan_progress.html. #}
+{% include "partials/plan_progress.html" %}
+
+{% endblock %}
