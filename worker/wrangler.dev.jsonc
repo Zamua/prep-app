@@ -1,0 +1,28 @@
+// Deploy contract for the Workers runtime (celld), the dev environment.
+// Public values only: a secret or an internal address never enters this file.
+{
+  "name": "prep",
+  "main": "runtime/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "USER", "class_name": "UserCell" },
+      { "name": "DIRECTORY", "class_name": "DirectoryCell" },
+      { "name": "INSTANT_LIMITER", "class_name": "InstantLimiterCell" },
+      { "name": "JOB", "class_name": "JobCell" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["UserCell", "DirectoryCell", "InstantLimiterCell", "JobCell"] }
+  ],
+  "assets": { "directory": "dist/assets", "binding": "ASSETS", "run_worker_first": true },
+  "vars": {
+    "PREP_ENV": "dev",
+    // Parity pins, local only (docs/PARITY-GATE.md section 0).
+    "PREP_PARITY_MODE": "1",
+    "PREP_FAKE_NOW": "2026-03-14T15:00:00Z",
+    "PREP_BUILD_ID": "ce11d0000000",
+    "PREP_PLACEHOLDER_INDEX": "0",
+    "PREP_INTERNAL_TOKEN": "parity-internal-token"
+  }
+}

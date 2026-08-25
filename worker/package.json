@@ -1,0 +1,21 @@
+{
+  "name": "prep-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-pages.mjs && node scripts/build.mjs",
+    "build:pages": "node scripts/build-pages.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "nunjucks": "3.2.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260809.1",
+    "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
