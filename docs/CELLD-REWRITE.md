@@ -56,9 +56,9 @@ arithmetic, anonymous row caps); auth (Clerk sessions with the
 and the reauth shell with its fallback cookie, the anonymous cookie's
 mint / refresh / clear middleware, forget-device, PAT, webhooks, the
 merge saga); the AI adapters; push; the 4 workflows; the 4 jobs; the MCP
-server (17 tools); CSV, `.prepdeck`, Anki import/export; the PWA routes;
-the debug endpoints (`/_debug/auth`, `/debug/session`), kept because
-they are the documented Clerk diagnostics.
+server (17 tools); CSV, `.prepdeck`, Anki import/export; the PWA routes.
+The debug endpoints (`/_debug/auth`, `/debug/session`) are not ported
+(decision 7.6).
 
 ### 1.3 Dropped, and one decision the operator owns
 
@@ -501,8 +501,8 @@ Can start against phase 2 before phase 3 finishes.
 
 ### 5.7 Phase 5, the long tail
 
-CSV, `.prepdeck`, Anki; legal pages; `/metrics`; the debug endpoints;
-the e2e suite re-pointed: the Clerk-staging files carry over as they
+CSV, `.prepdeck`, Anki; legal pages; `/metrics`; the e2e suite
+re-pointed: the Clerk-staging files carry over as they
 are, the local offline suites run against a local celld node through
 the fake provider with the harness able to kill the node. Gate: the
 full e2e suite green against the staging fleet.
@@ -566,17 +566,18 @@ critical path is 0b -> 0 -> 1 -> 3 -> 6; phases 2 and 4 overlap it.
 
 ---
 
-## 7. Decisions the operator owns before phase 1
+## 7. Decisions (all settled 2026-08-25)
 
 1. Settled: the four-class taxonomy (2.1), approved 2026-08-25.
 2. Settled: in-repo `worker/` (3), approved 2026-08-25.
-3. PAT reissue and its notice channel (2.5).
+3. Settled: PATs are reissued in the new format; one token exists and
+   its holder is told directly.
 4. Settled: drop the `claude_subscription` provider, BYOK stays as API
    keys (1.3).
-5. FSRS fuzz: keep it in TS (`ts-fsrs` fuzz, verified only
-   distributionally) or turn it off (a scheduling change for every
-   user, not pixel-visible, behavior-visible).
-6. The debug endpoints: keep (assumed) or drop.
+5. Settled: FSRS fuzz stays on (`ts-fsrs` fuzz; the oracle checks the
+   unfuzzed math exactly and the fuzz distributionally).
+6. Settled: the debug endpoints (`/_debug/auth`, `/debug/session`) are
+   not ported.
 
 ---
 
