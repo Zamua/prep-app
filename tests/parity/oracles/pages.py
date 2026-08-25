@@ -168,10 +168,24 @@ def record(h, req: Req, *, headers: dict, deck_display: dict[str, str]) -> dict:
     return page
 
 
+def mount_parity_routes(app) -> None:
+    """`prep.app` mounts the `/_parity/*` routes at import under the
+    flag; a process that imported it earlier without the flag (pytest)
+    gets them here, once."""
+    from prep.dev import parity_seed
+    from prep.web.parity import router
+
+    if not any(getattr(r, "path", None) == "/_parity/raise" for r in app.routes):
+        app.include_router(router)
+    parity_seed.register(app)
+
+
 def extract() -> dict[str, str]:
     files: dict[str, str] = {}
     with scratch_app(raise_server_exceptions=False) as h:
         from prep.dev.parity_seed import seed
+
+        mount_parity_routes(h.client.app)
 
         for profile, (seed_profile, build) in PROFILES.items():
             ids = seed(PARITY_USER, seed_profile) if seed_profile else {}

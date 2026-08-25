@@ -193,6 +193,7 @@ def scratch_app(*, seed: int = 20260314, raise_server_exceptions: bool = True) -
         db_mod.DB_PATH = db_path
 
         import prep.app as app_mod
+        from prep import agent as agent_mod
         from prep.api import repo as api_repo
         from prep.auth import anon_cookie
         from prep.auth import merge as merge_mod
@@ -212,6 +213,9 @@ def scratch_app(*, seed: int = 20260314, raise_server_exceptions: bool = True) -
             (push, "_KEYS_PATH", tmp / "vapid-keys.json"),
             (push, "_KEY_PEM_PATH", tmp / "vapid-private.pem"),
             (templates_mod, "_BUILD_TOKEN", PARITY_BUILD_ID),
+            # No deploy-wide agent under the parity env; the probe flag is
+            # process state another test may have flipped.
+            (agent_mod, "is_available", False),
         ]
         originals = [(mod, attr, getattr(mod, attr)) for mod, attr, _ in patched]
         for mod, attr, value in patched:
