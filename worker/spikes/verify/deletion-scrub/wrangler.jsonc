@@ -1,0 +1,11 @@
+// Spike 4 verification: deleteAll leaves the row bodies on SQLite's
+// freelist and every epoch snapshot re-uploads them. Three wipes to
+// compare in the bucket: plain, secure_delete, vacuum.
+{
+  "name": "spike-deletion-scrub",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["delete_all_deletes_alarm"],
+  "durable_objects": { "bindings": [{ "name": "USER", "class_name": "UserCell" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserCell"] }]
+}

@@ -1,0 +1,9 @@
+// Spike 3 verification: same as ../../sqljs, with every runtime
+// compile-from-bytes path trapped. Deploy with run-node.sh like any spike.
+{
+  "name": "spike-sqljs-strict",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": { "bindings": [{ "name": "ANKI", "class_name": "AnkiCell" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AnkiCell"] }]
+}
