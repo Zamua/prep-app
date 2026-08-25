@@ -7,13 +7,17 @@
 #   PARITY_PERTURB_DOM=1   red: test_oracles[html]      green: everything else
 #
 # Usage: tests/parity/redproof.sh   (from the repo root; PARITY_PHASE
-# defaults to 1 for the pixel run).
+# defaults to 1 for the pixel run). Pixel flow files run one per
+# pytest invocation, like tests/e2e.
 set -u
 cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
 OUT="${PARITY_REDPROOF_OUT:-artifacts/parity/redproof}"
+rm -rf "$OUT"
 mkdir -p "$OUT"
 export PARITY_PHASE="${PARITY_PHASE:-1}"
+
+ORACLES="tests/parity/oracles/test_oracles.py tests/parity/test_dom_diff.py"
 
 run() {  # name knob -- pytest args...
   local name="$1" knob="$2"; shift 2
@@ -21,11 +25,15 @@ run() {  # name knob -- pytest args...
     --junitxml="$OUT/$name.xml" >"$OUT/$name.log" 2>&1 || true
 }
 
-run css  PARITY_PERTURB_CSS  tests/parity/test_flows_*.py tests/parity/test_oracles.py tests/parity/test_dom_diff.py
-run fsrs PARITY_PERTURB_FSRS tests/parity/test_oracles.py tests/parity/test_dom_diff.py tests/parity/harness
-run dom  PARITY_PERTURB_DOM  tests/parity/test_oracles.py tests/parity/test_dom_diff.py tests/parity/harness
+for f in tests/parity/test_flows_*.py; do
+  stem="$(basename "$f" .py)"
+  run "css-${stem#test_flows_}" PARITY_PERTURB_CSS "$f"
+done
+run css-oracles PARITY_PERTURB_CSS $ORACLES
+run fsrs PARITY_PERTURB_FSRS $ORACLES tests/parity/harness
+run dom  PARITY_PERTURB_DOM  $ORACLES tests/parity/harness
 
-"$PY" - "$OUT" <<'EOF'
+"$PY" - "$OUT" <<'PYEOF'
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -33,23 +41,24 @@ from pathlib import Path
 out = Path(sys.argv[1])
 
 
-def outcomes(name):
+def outcomes(prefix):
     ran, failed = set(), set()
-    for case in ET.parse(out / f"{name}.xml").iter("testcase"):
-        nodeid = f"{case.get('classname')}::{case.get('name')}"
-        if case.find("skipped") is not None:
-            continue
-        ran.add(nodeid)
-        if case.find("failure") is not None or case.find("error") is not None:
-            failed.add(nodeid)
+    for report in sorted(out.glob(f"{prefix}*.xml")):
+        for case in ET.parse(report).iter("testcase"):
+            nodeid = f"{case.get('classname')}::{case.get('name')}"
+            if case.find("skipped") is not None:
+                continue
+            ran.add(nodeid)
+            if case.find("failure") is not None or case.find("error") is not None:
+                failed.add(nodeid)
     return ran, failed
 
 
 ok = True
 for name, want in (
     ("css", lambda n: "test_flows_" in n),
-    ("fsrs", lambda n: n.endswith("test_oracles[fsrs]") or n.endswith("test_oracles::test_oracles[fsrs]")),
-    ("dom", lambda n: n.endswith("test_oracles[html]") or n.endswith("test_oracles::test_oracles[html]")),
+    ("fsrs", lambda n: n.endswith("test_oracles[fsrs]")),
+    ("dom", lambda n: n.endswith("test_oracles[html]")),
 ):
     ran, failed = outcomes(name)
     expected = {n for n in ran if want(n)}
@@ -62,4 +71,4 @@ for name, want in (
     else:
         print(f"{name}: red exactly {len(expected)} of {len(ran)}")
 sys.exit(0 if ok else 1)
-EOF
+PYEOF

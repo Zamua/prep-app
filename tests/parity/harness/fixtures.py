@@ -17,25 +17,10 @@ from tests.parity.harness.server import (
 )
 
 
-class _NoLlm:
-    """Stands in until the canned LLM is importable: a dead loopback
-    URL is enough for the free tier to count as configured."""
-
-    base_url = "http://127.0.0.1:9/v1"
-
-    def hold(self) -> None:
-        raise RuntimeError("no LLM stub available")
-
-    release = reset = hold
-
-
 @pytest.fixture(scope="session")
 def parity_llm():
-    try:
-        from tests.parity.llm_stub import FIXTURES_DIR, LLMStub
-    except ImportError:
-        yield _NoLlm()
-        return
+    from tests.parity.llm_stub import FIXTURES_DIR, LLMStub
+
     with LLMStub(FIXTURES_DIR) as stub:
         yield stub
 

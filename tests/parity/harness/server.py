@@ -46,7 +46,6 @@ def parity_env(db_path: Path, llm_base_url: str) -> dict[str, str]:
             "PREP_DB_PATH": str(db_path),
             "PREP_KEY_ENCRYPTION_SECRET": _TEST_KEY_ENCRYPTION_SECRET,
             "PREP_FAKE_NOW": PARITY_NOW_ISO,
-            "PARITY_FREEZE_NOW": PARITY_NOW_ISO,
             "PREP_PARITY_MODE": "1",
             "PREP_BUILD_ID": PARITY_BUILD_ID,
             "PREP_INTERNAL_TOKEN": PARITY_INTERNAL_TOKEN,
