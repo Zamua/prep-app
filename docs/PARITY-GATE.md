@@ -168,9 +168,18 @@ tests/parity/
   flows/__init__.py flows/<flow>.py ...
   test_flows_<flow>.py            (one browser file per flow)
   goldens/<flow>/<NN-label>@<scheme>.png
+  goldens/browser.txt             (the browser every golden came from)
 ```
 
 Dev deps added: `pillow`, `numpy` (`uv sync --group dev`).
+
+`goldens/browser.txt` (`harness/browser.py`) names the Playwright browser
+and version the goldens were captured with. A compare run on any other
+browser fails before its first shot, because a browser bump moves glyph
+rasterization by a device pixel and would read as an app regression;
+golden mode rewrites the pin, so a browser bump means re-goldening every
+flow. The comparator deletes a stale `.diff.png` before it decides, so
+only the latest run's failures exist under `artifacts/`.
 
 ### C2. Context
 
@@ -364,6 +373,15 @@ pixel flows see.
   CSS-like path. `test_dom_diff.py`: `&#34;` vs `&quot;`, attribute
   order, trailing newline, `tojson` separators, a changed `data-*`
   (reported at its path), a reordered `<link>`.
+- Not pinned by the differ, by construction: a `None` printed as `None`
+  by Jinja and as `""` by another renderer inside otherwise-equal text
+  is caught (text differs), but inside a `<script type="application/json">`
+  payload the comparison is on parsed values, so number formatting
+  (`50.0` vs `50`, integral floats) and escaping choices (a `<` written
+  as `\u003c` or left as `<` inside a string, a raw 0x7f) can never
+  redden a golden. Those hold only as far as the JS consumers
+  parse, not as bytes; a consumer that reads the raw text needs its own
+  contract test.
 - Golden renderer, `oracles/render_templates.py` ->
   `tests/fixtures/parity/html/<template>@<context>.html`, rendering
   `templates.env.get_template(name).render(base_context() | ctx)` with

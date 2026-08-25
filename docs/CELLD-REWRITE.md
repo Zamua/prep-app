@@ -318,13 +318,15 @@ The rewrite lives **in the same repo**, as kcal's did: a top-level
 `worker/` beside the Python tree. Python stays the reference and the
 golden generator until cutover, then is deleted in one commit.
 
-Deploy targets live in `infra/prep/` (never in the app repo): a
-`celld/{staging,prod}.yaml` pair, buckets `prep-cells-staging` and
-`prep-cells`, one least-privilege MinIO user each, the digest-pinned
+Deploy targets live in the operator's private infra repo (never in the
+app repo): a `celld/{staging,prod}.yaml` pair, one bucket per
+environment with one least-privilege MinIO user each, the digest-pinned
 celld image, `CELLD_IDLE_EVICT_S`, the internal-listener NetworkPolicy,
-a nightly `mc mirror` backup like kcal's. Prod is pinned by a
+a nightly `mc mirror` backup like kcal's. Bucket names, credentials,
+hosts and kubeconfigs are named there only. Prod is pinned by a
 `.celld-version` naming the bundle tag, mirroring `.vps-version`; merge
-and tag before the first deploy, as always.
+and tag before the first deploy, staging included, as always; the
+staging deploy target enforces it.
 
 `wrangler.jsonc` is per environment and **public-values only** (Clerk
 issuer, publishable key, JWKS), with the house deny-list rule: a value
@@ -625,8 +627,23 @@ critical path is 0b -> 0 -> 1 -> 3 -> 6; phases 2 and 4 overlap it.
 
 ---
 
-## 7. Decisions (all settled 2026-08-25)
+## 7. Decisions
 
+Settled 2026-08-25 unless marked open.
+
+0. **OPEN, due before phase 3 ships real data to the parity host.** Phase
+   1 enables the fake identity provider on the staging fleet, which
+   answers from the public internet, against 2.5's "never enabled by a
+   deploy file" (PHASE-1 A5 records the override). Inert while cells hold
+   fixture pages; from phase 3 on, anyone who sends
+   `tailscale-user-login: <subject>` to that host reads that user's cell.
+   Options: (a) the parity fleet never holds real data, and phase 3
+   stands up a second staging fleet without the pins; (b) the parity
+   host's ingress requires a secret header or an IP allowlist, and the
+   pixel harness sends it; (c) the fake provider itself requires
+   `X-Internal-Token` beside the tailscale headers, so the harness's
+   existing seed credential also gates identity. Record the choice here
+   and in the staging manifest.
 1. Settled: the four-class taxonomy (2.1), approved 2026-08-25.
 2. Settled: in-repo `worker/` (3), approved 2026-08-25.
 3. Settled: PATs are reissued in the new format; one token exists and

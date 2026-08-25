@@ -112,30 +112,42 @@ export interface Renderer { render(template: string, context: Record<string, unk
 
 `compose(env)`, memoized per isolate, returns `{ clock, identity, renderer,
 buildToken, parity }`. `parity = env.PREP_PARITY_MODE === "1"`. **Guard:**
-`parity && env.PREP_ENV === "prod"` throws `refusing the fake identity
-provider on prod`; without parity, phase 1 has no identity provider
-(`identify` returns `null`) and phase 3 adds Clerk. Cross-cutting wrappers
-live here, never in handlers: `noCacheHtml(res)` sets `Cache-Control:
-no-cache` on `text/html`; `cookieHooks(req, res)` is the identity function
-with the signature the anonymous-cookie wrapper takes in phase 3. Test:
-prod + parity throws; staging + parity composes the fake provider;
-no-cache lands on HTML, not on JSON.
+every var matching `PREP_PARITY*`, `PREP_FAKE*` or `PREP_PLACEHOLDER*` is
+refused unless `PREP_ENV` is exactly `dev` or `staging`; a missing or
+misspelt `PREP_ENV` refuses too (allow-on-known, never deny-on-prod), and
+the error names the offending vars. Without parity, phase 1 has no
+identity provider (`identify` returns `null`) and phase 3 adds Clerk.
+Cross-cutting wrappers live here, never in handlers: `noCacheHtml(res)`
+sets `Cache-Control: no-cache` on `text/html`; `cookieHooks(req, res)` is
+the identity function with the signature the anonymous-cookie wrapper
+takes in phase 3. Test: parity on prod, parity with no `PREP_ENV`, a
+frozen clock on prod and a placeholder pin under `production` all throw;
+prod without pins composes on the system clock; staging + parity composes
+the fake provider; no-cache lands on HTML, not on JSON.
 
 Staging gets the flag without a wrangler var: celld reads
 `CELLD_VAR_PREP_PARITY_MODE=1` from the node process env (spike 1), set
-explicitly in the staging manifest (D1). No prod manifest carries it, and
-`PREP_ENV=prod` in `wrangler.prod.jsonc` makes the worker refuse it anyway.
+explicitly in the staging deploy (lane D). No prod deploy carries it, and
+the guard above refuses it under `PREP_ENV=prod` anyway. **This overrides
+plan 2.5** ("a fake identity provider, never enabled by a deploy file"):
+the staging parity host enables it on an internet-reachable ingress, which
+is inert while cells hold fixture pages only. Plan section 7 carries the
+decision that must land before phase 3 gives that host real data.
 
 ### A6. Router (`runtime/worker.ts`) and cells
 
 Dispatch order, each step a translation only:
 
-1. `/healthz`, `/readyz`: `ok`, no storage touched.
+1. `/healthz`: `ok` before anything composes, no storage touched.
+   `/readyz`: `ok` only after `compose(env)` succeeds, so a misconfigured
+   worker is alive but never ready.
 2. `serveStatic(request, env, buildToken)` (C2); a non-null response returns.
 3. `/sw.js`, `/manifest.json` (C3); `/offline` renders `offline.html`
    with `{ build }`, echoing `?build=` only when
    `isAcceptedVersionToken` (C1) accepts it.
-4. `/privacy`: `privacy.html`, `user: null`.
+4. `/privacy`: `privacy.html`, `user: null`. `/offline` and `/privacy`
+   answer `GET` and `HEAD`; any other method is the 405 page with detail
+   `Method Not Allowed`, as Starlette answers a GET route.
 5. Under parity only: `GET /_parity/raise` renders the 500 page (`?status=429`
    the 429 page); `GET /_parity/reauth` renders `reauth.html`
    `{ user: null }`; `GET /_parity/sign-out` renders
@@ -147,7 +159,10 @@ Dispatch order, each step a translation only:
    from the anonymous fixture page (A7); `null` elsewhere is a 404 page.
    An identity forwards the request to `USER.get(USER.idFromName(subject))`
    with the identity in `x-prep-subject` / `x-prep-display-name` headers,
-   inbound copies of which the router strips first.
+   inbound copies of which the router strips first. Identification reads a
+   bodiless copy of the headers; the request itself is rebuilt exactly
+   once, for the cell, so a form body arrives intact (a body stream can be
+   consumed once, and a second `new Request(request)` throws).
 7. Anything else: the 404 page.
 
 `runtime/errors.ts` ports `_ERROR_COPY` from `prep/web/errors.py` verbatim
@@ -155,13 +170,17 @@ and renders `error.html` with `{ status_code, headline, blurb, path }` at
 that status. Router-rendered pages get the nine processor names: `user:
 null`, `agent_available: false`, `auth_provider: "tailscale"`, empty
 sign-in and sign-out URLs, Clerk keys `null`, `notif_unseen_count: 0`,
-`deck_display: {}`, `static_css_mtime: buildToken`.
+`deck_display: {}`, `static_css_mtime: buildToken`; plus `app_base`, the
+request origin (`runtime/appBase.ts`: `scheme://host`, the forwarded
+scheme first because TLS ends at the ingress), which stands in for the
+`request` object every Python context carried and is the only thing a
+template may read of the request. Cells add the same field.
 
 `UserCell` (`extends DurableObject`) keeps `{ profile, flags }` in
 `ctx.storage` so an eviction mid-flow loses nothing. `seed(profile)`
 resets to `{ profile, flags: {} }` and returns the corpus `seed.json`.
 `fetch` resolves the fixture page for `(profile, method, path, flags)`,
-applies `derive(template, context)` (B4), renders, answers with the
+adds `app_base`, applies `derive(template, context)` (B4), renders, answers with the
 recorded status and headers, then flips the page's `sets` flags; JSON
 pages return the recorded body; no page is a 404 page. `DirectoryCell`,
 `InstantLimiterCell`, `JobCell`: declared, exported from `worker.ts`,
@@ -248,10 +267,13 @@ hand-written input. Nothing else lives here in phase 1.
 ### B5. The DOM gate
 
 `render_templates.py` gains `contexts/<stem>@<name>.json` beside every
-golden (`to_jsonable`, A7; `test_oracles[html]` pins it).
+golden (`to_jsonable`, A7, plus `app_base`, the origin of the fake
+`request` the golden was rendered with; `test_oracles[html]` pins it).
 `scripts/render-fixtures.mjs` (bundled by C4 for node) loads every
 `contexts/*.json`, applies `derive`, renders under `FixedClock(PARITY_NOW)`,
-writes `artifacts/parity/ts-html/<name>.html`.
+writes `artifacts/parity/ts-html/<name>.html`; it injects nothing of its
+own, so a template that still reads `request` fails the gate. The
+templates unit test greps for `request.` as a Python-only smell.
 `tests/parity/test_ts_templates.py` runs it once per session, then
 `dom_diff(golden, candidate)` from `tests/parity/dom_diff.py` for every
 file in `tests/fixtures/parity/html/` except `index.json` and `contexts/`;
@@ -320,103 +342,25 @@ icons; sorted as `prep/web/pwa.py` sorts; `application/javascript`,
 The spike harness (`git show spikes/celld-0b:worker/spikes/run-node.sh`)
 made repo-local: `npm run build`, `celld deploy worker --config
 wrangler.dev.jsonc --bucket s3://prep-dev --endpoint http://127.0.0.1:9010`
-(the scratch MinIO container `celld-scratch-minio`, `scratchadmin`;
+(the scratch MinIO container `celld-scratch-minio`, its root credential
+taken from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` with no default;
 `docker start` it when exited; create the bucket once), node on
-`127.0.0.1:8790`, internal listener `127.0.0.1:8800`, wait for `/healthz`;
-`run-node.sh stop`. State under `/private/tmp/prep-dev-state/`. The dev
-file carries the pins, so no `CELLD_VAR_*` is needed.
+`127.0.0.1:8791` (`PREP_DEV_PORT`; 8790 is taken on the dev box), internal
+listener on port + 10, wait for `/healthz`; `run-node.sh stop`. State
+under `/private/tmp/prep-dev-state/`. The dev file carries the pins, so no
+`CELLD_VAR_*` is needed.
 
-## D. The staging fleet (lane D, in `infra/`)
+## D. The staging fleet (lane D, in the operator's infra repo)
 
-Owns `infra/prep/celld/`, `infra/prep/DEPLOY-CELLD.md`, the celld
-targets in `infra/prep/Makefile`, `infra/iac/environments/staging/dns.tf`.
-Staging only; nothing named prod is created. Never touch ns `prep`, vps2,
-`prepcards.app`, bucket `prep-cells`, or another app's resources.
-
-### D1. `infra/prep/celld/staging.yaml`
-
-kcal's `k8s/celld/staging.yaml` with these substitutions: namespace
-`prep-staging`; bucket `s3://prep-cells-staging`; the same digest-pinned
-image; `CELLD_IDLE_EVICT_S=300`; `CELLD_FETCH_TIMEOUT_S=180` (instant
-generation is 60s plus 15s headroom, plan 2.4); explicit env
-`CELLD_VAR_PREP_PARITY_MODE=1`, `CELLD_VAR_PREP_FAKE_NOW=2026-03-14T15:00:00Z`,
-`CELLD_VAR_PREP_PLACEHOLDER_INDEX=0`, commented as the parity host and
-absent from any prod manifest; `envFrom: [{ secretRef: { name:
-prep-secrets }, prefix: CELLD_VAR_ }]`; `AWS_*` from `celld-bucket`; the
-same probes, resources, `emptyDir`, Service `celld`, NetworkPolicy
-`celld-internal` (8080 open, 8081 from `app=celld` pods only). The build
-token is not pinned on the fleet: pixels never show it, and pinning would
-freeze the service worker across deploys.
-
-Ingress in the same file: `celld-https` (issuer `letsencrypt`, secret
-`celld-staging-tls`, host `celld.staging.prepcards.app`, backend
-`celld:80`, entrypoint `websecure`) and `celld-http-redirect` (entrypoint
-`web`, middleware `prep-staging-redirect-https@kubernetescrd`, which
-exists).
-
-### D2. Bucket, user, secrets (kcal's shape, via a MinIO port-forward)
-
-`kubectl -n minio port-forward svc/minio-dist 9033:9000`, `mc alias set
-stag http://127.0.0.1:9033` with the root creds in
-`~/keys/minio-staging-creds`, then: `mc mb stag/prep-cells-staging`;
-policy `prep-cells-staging-rw` (`s3:*` on `arn:aws:s3:::prep-cells-staging`
-and `/*`, exactly `kcal-cells-staging-rw`); user `prep-cells-staging`
-with a generated secret, the policy attached; the two lines (access key,
-secret key) to `~/keys/prep-cells-staging-minio`; Secret `celld-bucket`
-in `prep-staging` with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-
-`prep-secrets` in `prep-staging`: six keys copied with their values from
-the namespace's `prep-env` Secret (`PREP_INTERNAL_TOKEN`,
-`PREP_KEY_ENCRYPTION_SECRET`, `PREP_ANON_COOKIE_SECRET`, `CLERK_SECRET_KEY`,
-`CLERK_WEBHOOK_SECRET`, `PREP_FREE_INFERENCE_API_KEY`); the cutover needs
-the same encryption and cookie keys. Commit
-`infra/prep/celld/prep-secrets.keys` (names only). Verify no value holds
-a newline.
-
-### D3. DNS
-
-`staging.prepcards.app` is OpenTofu-managed (`iac/environments/staging/dns.tf`,
-one grey A record per fleet node). Add `cloudflare_record.celld_staging`
-there: name `celld.staging`, one A record per `module.fleet.public_ips`,
-`ttl 60`, `proxied false`, comment `celld parity host (managed by
-OpenTofu)`, prepcards zone only. `tofu plan -target=cloudflare_record.celld_staging`
-must show exactly three creates; then apply; `dig +short
-celld.staging.prepcards.app` returns the three staging IPs.
-
-### D4. Clerk
-
-Staging Clerk is the development instance (`perfect-bengal-99`, secret in
-`~/keys/clerk-dev`). Register the host as prep did
-(`infra/prep/k8s/10-secret.yaml.example`): `curl -X PATCH
-https://api.clerk.com/v1/instance -H "Authorization: Bearer $SK"` with
-`allowed_origins` set to the FULL list, `https://staging.prepcards.app`
-and `https://celld.staging.prepcards.app` (the PATCH replaces the list),
-`development_origin` unchanged. `DEPLOY-CELLD.md` records that the
-worker's `CLERK_AUTHORIZED_PARTIES` (a phase 3 wrangler var) names the
-host too.
-
-### D5. Makefile targets (`infra/prep/Makefile`)
-
-`CELLD_SRC ?= $(APP_REPO)/worker`, `CELLD ?= $(HOME)/.local/bin/celld`,
-`CELLD_ESBUILD ?= $(CELLD_SRC)/node_modules/.bin/esbuild`.
-`_require-celld-project`: `wrangler.staging.jsonc` exists, its `name` is
-`prep`, esbuild exists, the app tree is clean (`git status --porcelain`
-empty), print the commit. `celld-staging-deploy`: `npm run build` in
-`CELLD_SRC` with `PREP_BUILD_ID=$(git rev-parse HEAD)`, port-forward the
-staging MinIO on 9033, `celld deploy $(CELLD_SRC) --config
-wrangler.staging.jsonc --bucket s3://prep-cells-staging --endpoint
-http://127.0.0.1:9033` with creds from `~/keys/prep-cells-staging-minio`,
-kill the port-forward, `rollout restart` and `rollout status` of
-`deploy/celld`, `curl -sf https://celld.staging.prepcards.app/healthz`.
-`celld-staging-status`: image and pods. `celld-staging-logs`: `logs -f`.
-All against `STAGING_KUBECONFIG`, namespace `prep-staging`. From the
-worktree: `make -C infra/prep celld-staging-deploy APP_REPO=/private/tmp/prep-phase1-wt`.
-
-### D6. `infra/prep/DEPLOY-CELLD.md`
-
-hostthis's shape: layout, why its own bucket, publish, first-boot
-ordering (CrashLoop until the first deploy), the parity pins and why they
-never reach prod, rotation, the Clerk note.
+The staging fleet, its bucket and credentials, its DNS, the Clerk
+registration of the parity host and the deploy targets are operator
+concerns and are specified in the operator's private infra repo
+(`infra/prep/`, runbook `DEPLOY-CELLD.md`), never here. What this repo
+relies on: a celld fleet named for staging that serves
+`wrangler.staging.jsonc`, carries the three parity pins as node-side
+`CELLD_VAR_*` (A5), mounts the worker secrets the same way, and answers
+the eleven phase-1 flows over HTTPS. Staging only; nothing named prod is
+created in phase 1.
 
 ## E. Integration and gates
 
@@ -436,12 +380,15 @@ browser files one per invocation:
 4. Local pixel gate: `worker/scripts/run-node.sh`, then for each flow in
    `landing privacy errors reauth dashboard dashboard_empty deck deck_new
    question settings sign_out`:
-   `PARITY_BASE_URL=http://127.0.0.1:8790 PARITY_INTERNAL_TOKEN=parity-internal-token
+   `PARITY_BASE_URL=http://127.0.0.1:8791 PARITY_INTERNAL_TOKEN=parity-internal-token
    PARITY_PHASE=1 .venv/bin/pytest tests/parity/test_flows_<flow>.py -q`.
-5. Deploy: `make -C infra/prep celld-staging-deploy APP_REPO=/private/tmp/prep-phase1-wt`.
-6. Staging pixel gate: the same eleven files against
-   `PARITY_BASE_URL=https://celld.staging.prepcards.app`,
-   `PARITY_INTERNAL_TOKEN` read from the `prep-secrets` Secret.
+5. Release, then deploy: merge to `main` and cut the semver tag BEFORE the
+   first deploy of anything, staging included; the operator's staging
+   deploy target refuses a commit that is untagged or not on `main`. Never
+   deploy a branch tip or a working tree.
+6. Staging pixel gate: the same eleven files against the staging fleet's
+   URL, `PARITY_INTERNAL_TOKEN` read from the fleet's secret; both in the
+   operator's runbook.
 
 Acceptance: DOM equivalence for every golden of all 49 templates; every
 shot of the eleven phase-1 flows passes the comparator, both schemes,
@@ -460,4 +407,4 @@ MCP surfaces, migration, anything named prod, any visual change.
 | A | `worker/**` minus B and C files; `tests/parity/oracles/pages.py`, `to_jsonable`, `tests/fixtures/parity/pages/**` | `cd worker && npm run typecheck && npx vitest run tests/{layering,wrangler,router,cells,compose,clock}.test.ts`; `.venv/bin/python -m tests.parity.oracles.pages && .venv/bin/pytest tests/parity/oracles/test_oracles.py -q -k pages` |
 | B | `worker/templates/**`, `worker/runtime/adapters/nunjucks/**`, `worker/app/viewmodels/**`, `worker/scripts/render-fixtures.mjs`, `worker/tests/{shims,templates}.test.ts`, `tests/parity/test_ts_templates.py`, the `contexts/` addition | `cd worker && npx vitest run tests/shims.test.ts tests/templates.test.ts`; `.venv/bin/python -m tests.parity.oracles.render_templates && .venv/bin/pytest tests/parity/oracles/test_oracles.py -q -k html`; `.venv/bin/pytest tests/parity/test_ts_templates.py -q` |
 | C | `worker/runtime/{buildToken,assets,sw}.ts`, `worker/scripts/{build.mjs,run-node.sh}`, `worker/tests/{buildToken,assets,sw}.test.ts` | `cd worker && npx vitest run tests/{buildToken,assets,sw}.test.ts`; `npm run build && scripts/run-node.sh` then `curl -sf http://127.0.0.1:8790/static/css/index.css` and `/sw.js` |
-| D | `infra/prep/celld/**`, `infra/prep/DEPLOY-CELLD.md`, celld targets in `infra/prep/Makefile`, `dns.tf` | `kubectl --kubeconfig $STAGING_KUBE -n prep-staging apply -f infra/prep/celld/staging.yaml`; `tofu plan -target=...` then apply; `make -C infra/prep celld-staging-status`; after E5, `curl -sf https://celld.staging.prepcards.app/healthz` |
+| D | the operator's infra repo (`infra/prep/`), nothing in this repo | the operator's runbook (`infra/prep/DEPLOY-CELLD.md`); after E5, `/healthz` over HTTPS on the fleet |
