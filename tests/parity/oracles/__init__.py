@@ -19,18 +19,20 @@ import os
 import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-PARITY_NOW_ISO = "2026-03-14T15:00:00Z"
-PARITY_NOW = datetime(2026, 3, 14, 15, 0, 0, tzinfo=timezone.utc)
-PARITY_TZ = "America/New_York"
-PARITY_USER = "parity@example.com"
-PARITY_USER_NAME = "Parity"
-PARITY_BUILD_ID = "ce11d0000000"
-PARITY_INTERNAL_TOKEN = "parity-internal-token"
+from tests.parity.harness.constants import (  # noqa: F401  re-exported
+    PARITY_BUILD_ID,
+    PARITY_INTERNAL_TOKEN,
+    PARITY_NOW,
+    PARITY_NOW_ISO,
+    PARITY_TZ,
+    PARITY_USER,
+    PARITY_USER_NAME,
+    REPO_ROOT,
+)
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES_ROOT = REPO_ROOT / "tests" / "fixtures" / "parity"
 
 ENV_FAKE_NOW = "PREP_FAKE_NOW"

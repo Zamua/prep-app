@@ -105,6 +105,7 @@ def test_docs_oauth2_redirect_still_mounted(client):
 
 def test_parity_routes_absent_without_the_flag(client):
     assert client.get("/_parity/raise").status_code == 404
+    assert client.post("/_parity/seed", json={"user": "x", "profile": "empty"}).status_code == 404
 
 
 # ---- with the flag ---------------------------------------------------------
@@ -145,6 +146,16 @@ def test_raise_is_a_deliberate_500(parity_env, client):
         r = c.get("/_parity/raise")
     assert r.status_code == 500
     assert "Something broke" in r.text
+
+
+def test_seed_route_is_mounted_and_token_gated(parity_env, client, monkeypatch):
+    monkeypatch.setenv("PREP_INTERNAL_TOKEN", "t0k")
+    body = {"user": "seeded@example.com", "profile": "empty"}
+    assert client.post("/_parity/seed", json=body).status_code == 401
+    r = client.post("/_parity/seed", json=body, headers={"X-Internal-Token": "t0k"})
+    assert r.status_code == 200
+    assert r.json()["user"] == "seeded@example.com"
+    assert r.json()["profile"] == "empty"
 
 
 def test_boot_warning_names_the_flag(parity_env):

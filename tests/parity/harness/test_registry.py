@@ -55,6 +55,27 @@ def test_seed_profiles_exist():
             assert f.seed in PROFILES, f"{f.name} seeds unknown profile {f.seed!r}"
 
 
+def test_seed_timezone_matches_the_shared_constant():
+    from prep.dev import parity_seed
+    from tests.parity.harness.constants import PARITY_TZ
+
+    assert parity_seed.PARITY_TZ == PARITY_TZ
+
+
+def test_seed_timestamps_follow_the_process_clock():
+    from datetime import datetime, timezone
+
+    from prep.dev.parity_seed import at
+    from prep.infrastructure import clock
+
+    pinned = datetime(2030, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    clock.set_clock(clock.FixedClock(pinned))
+    try:
+        assert at(hours=1) == "2030-01-02T04:04:05+00:00"
+    finally:
+        clock.reset_clock()
+
+
 def test_registering_a_name_twice_is_an_error():
     name = next(iter(registry.all_flows())).name
     with pytest.raises(ValueError):

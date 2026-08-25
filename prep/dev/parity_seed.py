@@ -3,18 +3,18 @@
 `POST /_parity/seed` wipes one login's rows, recreates the user in the
 parity timezone and inserts a named profile through the repositories,
 so the same call works on every target and survives migrations.
-Timestamps that decide what a page shows are absolute from
-`PARITY_NOW`; `created_at`-style stamps come from the process clock.
+Every timestamp is relative to the process clock, which a parity
+target pins with `PREP_FAKE_NOW`.
 
-Mounted by `register(app)`, which the parity target launcher calls;
-never mount it in a deploy.
+`prep.app` mounts it through `register(app)` under `PREP_PARITY_MODE=1`
+only.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
@@ -24,6 +24,7 @@ from prep.auth.merge import discover_user_scoped_tables
 from prep.auth.repo import UserRepo
 from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo, QuestionRepo
+from prep.infrastructure import clock
 from prep.infrastructure.db import cursor
 from prep.notify.repo import NotificationLogRepo
 from prep.study.repo import SessionRepo
@@ -31,7 +32,6 @@ from prep.trivia.repo import TriviaQueueRepo
 from prep.workflows.entities import WorkflowType
 from prep.workflows.repo import ActiveWorkflowsRepo
 
-PARITY_NOW = datetime(2026, 3, 14, 15, 0, 0, tzinfo=timezone.utc)
 PARITY_TZ = "America/New_York"
 PARITY_DISPLAY_NAME = "Parity"
 DEVICE_LABEL = "iPhone"
@@ -40,9 +40,9 @@ SEED_PATH = "/_parity/seed"
 
 
 def at(**delta) -> str:
-    """`PARITY_NOW` shifted by `timedelta(**delta)`, in the column format
-    `db.now()` writes."""
-    return (PARITY_NOW + timedelta(**delta)).isoformat()
+    """The process clock shifted by `timedelta(**delta)`, in the column
+    format `db.now()` writes."""
+    return (clock.now() + timedelta(**delta)).isoformat()
 
 
 class SeedRequest(BaseModel):
@@ -430,7 +430,7 @@ def seed(user: str, profile: str) -> dict:
     wipe_user(user)
     create_user(user)
     ids = build(user)
-    return {"user": user, "profile": profile, "now": PARITY_NOW.isoformat(), **ids}
+    return {"user": user, "profile": profile, "now": clock.now_iso(), **ids}
 
 
 # ---- routes ----------------------------------------------------------------

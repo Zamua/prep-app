@@ -561,7 +561,10 @@ if os.environ.get("PREP_DEV") == "1":
     dev_preview.register(app, templates)
 
 if parity_mode():
+    from prep.dev import parity_seed
+
     app.include_router(parity_router)
+    parity_seed.register(app)
 
 
 # ---- Boot logging ---------------------------------------------------------
