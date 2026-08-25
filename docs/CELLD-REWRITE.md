@@ -72,10 +72,14 @@ container.
 **Decision 7.4: the per-user `claude_subscription` BYOK provider.** It
 is live in Clerk mode today, listed first in the settings UI, and it
 runs the Python `claude-agent-sdk`, which spawns a Claude Code
-subprocess. A V8 cell cannot do that. Options: drop it and notify the
-users holding such a row (their ciphertext survives, useless), or keep
-it behind a sidecar, which is not "full native celld". The plan assumes
-drop-and-notify until the operator says otherwise.
+subprocess. A V8 cell cannot do that. Measured on prod: **every BYOK
+row is this provider**; no user holds an Anthropic, OpenAI or
+OpenRouter key. Options: drop it, and those users move to an API key or
+the free tier; or keep it as a small Node sidecar (the Agent SDK is
+JavaScript) behind the same `AgentPort` over HTTP, the one component
+that would not be a cell. Calling the Messages API directly with the
+subscription token is not an option: Anthropic's policy forbids
+embedding subscription OAuth in third-party apps. Decision 7.4.
 
 ---
 
