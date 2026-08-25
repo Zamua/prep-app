@@ -63,7 +63,7 @@ def wipe_user(user: str) -> None:
 
 def create_user(user: str) -> None:
     repo = UserRepo()
-    repo.upsert(user, display_name=PARITY_DISPLAY_NAME)
+    repo.upsert(user, email=user, display_name=PARITY_DISPLAY_NAME)
     prefs = repo.get_notification_prefs(user)
     prefs["tz"] = PARITY_TZ
     repo.set_notification_prefs(user, prefs)

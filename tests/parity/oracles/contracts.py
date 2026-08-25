@@ -22,9 +22,8 @@ import json
 import re
 from datetime import timedelta
 
-from tests.parity.oracles import PARITY_NOW, dump_json, write_corpus
+from tests.parity.oracles import PARITY_NOW, PARITY_USER, dump_json, write_corpus
 from tests.parity.oracles.harness import Harness, jsonable, scratch_app
-from tests.parity.oracles.seed import seed_reader
 
 NAME = "contracts"
 
@@ -131,9 +130,9 @@ def record_offline(h: Harness, H: dict, ids: dict) -> None:
             "reviews": [
                 {
                     "client_id": "contract-review",
-                    "question_id": ids["questions"]["raft"],
+                    "question_id": ids["questions"]["srs_b"]["raft"],
                     "verdict": "right",
-                    "user_answer": "leader",
+                    "user_answer": "It becomes a candidate.",
                     "graded_by": "auto",
                     "reviewed_at": (PARITY_NOW - timedelta(minutes=5)).isoformat(),
                 }
@@ -143,21 +142,26 @@ def record_offline(h: Harness, H: dict, ids: dict) -> None:
 
 
 def record_study(h: Harness, H: dict, ids: dict) -> None:
-    q = ids["questions"]
-    r = h.call("study-begin", "POST", "/api/study/decks/capitals/session", headers=H, json_body={})
+    """The `reader` profile's due order: World Capitals has the mcq,
+    the regex short and the multi due; Distributed Systems has one
+    plain short due, which is the self-verdict path."""
+    a, b = ids["questions"]["srs_a"], ids["questions"]["srs_b"]
+    r = h.call(
+        "study-begin", "POST", "/api/study/decks/world-capitals/session", headers=H, json_body={}
+    )
     sid = r.json()["session"]["id"]
     version = r.json()["session"]["version"]
     h.call(
         "study-begin-resumes",
         "POST",
-        "/api/study/decks/capitals/session",
+        "/api/study/decks/world-capitals/session",
         headers=H,
         json_body={"fresh": False},
     )
     h.call(
         "study-begin-trivia",
         "POST",
-        "/api/study/decks/history-trivia/session",
+        "/api/study/decks/world-history/session",
         headers=H,
         json_body={},
     )
@@ -169,7 +173,7 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
         "POST",
         f"/api/study/sessions/{sid}/draft",
         headers=H,
-        json_body={"version": version, "draft": "Par"},
+        json_body={"version": version, "draft": "Can"},
     )
     version = r.json()["version"]
     h.call(
@@ -184,7 +188,7 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
         "POST",
         f"/api/study/sessions/{sid}/submit",
         headers=H,
-        json_body={"question_id": q["paris"], "idk": True},
+        json_body={"question_id": a["mcq"], "answer": "Canberra"},
     )
     h.call(
         "study-submit-unknown-question",
@@ -194,11 +198,11 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
         json_body={"question_id": 999999, "version": version, "idk": True},
     )
     r = h.call(
-        "study-submit-idk",
+        "study-submit-mcq-right",
         "POST",
         f"/api/study/sessions/{sid}/submit",
         headers=H,
-        json_body={"question_id": q["paris"], "version": version, "idk": True},
+        json_body={"question_id": a["mcq"], "version": version, "answer": "Canberra"},
     )
     version = r.json()["session"]["version"]
     h.call("study-next-showing-result", "GET", f"/api/study/sessions/{sid}/next", headers=H)
@@ -217,12 +221,14 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
         json_body={"version": version},
     )
     version = r.json()["session"]["version"]
+    # A typed free-text answer books the LLM grader; `idk` is the
+    # deterministic short-card path.
     r = h.call(
-        "study-submit-mcq-right",
+        "study-submit-idk",
         "POST",
         f"/api/study/sessions/{sid}/submit",
         headers=H,
-        json_body={"question_id": q["tokyo"], "version": version, "answer": "Tokyo"},
+        json_body={"question_id": a["short_regex"], "version": version, "idk": True},
     )
     version = r.json()["session"]["version"]
     r = h.call(
@@ -238,30 +244,11 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
         "POST",
         f"/api/study/sessions/{sid}/submit",
         headers=H,
-        json_body={"question_id": q["andes"], "version": version, "answer": json.dumps(["Lima"])},
-    )
-    version = r.json()["session"]["version"]
-    r = h.call(
-        "study-advance-3",
-        "POST",
-        f"/api/study/sessions/{sid}/advance",
-        headers=H,
-        json_body={"version": version},
-    )
-    version = r.json()["session"]["version"]
-    h.call(
-        "study-submit-bad-verdict",
-        "POST",
-        f"/api/study/sessions/{sid}/submit",
-        headers=H,
-        json_body={"question_id": q["add"], "version": version, "verdict": "meh"},
-    )
-    r = h.call(
-        "study-submit-self-verdict",
-        "POST",
-        f"/api/study/sessions/{sid}/submit",
-        headers=H,
-        json_body={"question_id": q["add"], "version": version, "verdict": "right"},
+        json_body={
+            "question_id": a["multi"],
+            "version": version,
+            "answer": json.dumps(["Ottawa"]),
+        },
     )
     version = r.json()["session"]["version"]
     h.call(
@@ -273,14 +260,55 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
     )
     h.call("study-next-completed", "GET", f"/api/study/sessions/{sid}/next", headers=H)
 
+    h.call("study-deck-next", "GET", "/api/study/decks/distributed-systems/next", headers=H)
+    h.call("study-deck-next-caught-up", "GET", "/api/study/decks/world-capitals/next", headers=H)
+    h.call("study-deck-next-trivia", "GET", "/api/study/decks/world-history/next", headers=H)
+    h.call("study-deck-next-unknown", "GET", "/api/study/decks/nope/next", headers=H)
+    h.call(
+        "study-deck-submit-idk",
+        "POST",
+        "/api/study/decks/distributed-systems/submit",
+        headers=H,
+        json_body={"question_id": b["phi"], "idk": True},
+    )
+    h.call(
+        "study-deck-submit-mcq-wrong",
+        "POST",
+        "/api/study/decks/distributed-systems/submit",
+        headers=H,
+        json_body={"question_id": b["quorum"], "answer": "2"},
+    )
+    h.call(
+        "study-deck-submit-unknown-deck",
+        "POST",
+        "/api/study/decks/nope/submit",
+        headers=H,
+        json_body={"question_id": b["phi"], "idk": True},
+    )
+
     r = h.call(
         "study-begin-fresh",
         "POST",
-        "/api/study/decks/distsys/session",
+        "/api/study/decks/distributed-systems/session",
         headers=H,
         json_body={"fresh": True},
     )
     sid2 = r.json()["session"]["id"]
+    version = r.json()["session"]["version"]
+    h.call(
+        "study-submit-bad-verdict",
+        "POST",
+        f"/api/study/sessions/{sid2}/submit",
+        headers=H,
+        json_body={"question_id": b["raft"], "version": version, "verdict": "meh"},
+    )
+    h.call(
+        "study-submit-self-verdict",
+        "POST",
+        f"/api/study/sessions/{sid2}/submit",
+        headers=H,
+        json_body={"question_id": b["raft"], "version": version, "verdict": "right"},
+    )
     h.call(
         "study-snooze-preset",
         "POST",
@@ -313,32 +341,6 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
     h.call("study-abandon-unknown", "POST", "/api/study/sessions/nope/abandon", headers=H)
     h.call("study-next-abandoned", "GET", f"/api/study/sessions/{sid2}/next", headers=H)
 
-    h.call("study-deck-next", "GET", "/api/study/decks/distsys/next", headers=H)
-    h.call("study-deck-next-caught-up", "GET", "/api/study/decks/capitals/next", headers=H)
-    h.call("study-deck-next-trivia", "GET", "/api/study/decks/history-trivia/next", headers=H)
-    h.call("study-deck-next-unknown", "GET", "/api/study/decks/nope/next", headers=H)
-    h.call(
-        "study-deck-submit-idk",
-        "POST",
-        "/api/study/decks/distsys/submit",
-        headers=H,
-        json_body={"question_id": q["quorum"], "idk": True},
-    )
-    h.call(
-        "study-deck-submit-mcq-wrong",
-        "POST",
-        "/api/study/decks/distsys/submit",
-        headers=H,
-        json_body={"question_id": q["raft"], "answer": "follower"},
-    )
-    h.call(
-        "study-deck-submit-unknown-deck",
-        "POST",
-        "/api/study/decks/nope/submit",
-        headers=H,
-        json_body={"question_id": q["quorum"], "idk": True},
-    )
-
     h.call(
         "study-author-inbox",
         "POST",
@@ -354,7 +356,7 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
         json_body={
             "prompt": "Capital of Sweden?",
             "answer": "Stockholm",
-            "deck_id": ids["decks"]["capitals"],
+            "deck_id": ids["decks"]["srs_a"]["id"],
         },
     )
     h.call(
@@ -369,7 +371,7 @@ def record_study(h: Harness, H: dict, ids: dict) -> None:
         "POST",
         "/api/study/cards",
         headers=H,
-        json_body={"prompt": "x", "answer": "y", "deck_id": ids["decks"]["history-trivia"]},
+        json_body={"prompt": "x", "answer": "y", "deck_id": ids["decks"]["trivia"]["id"]},
     )
     h.call(
         "study-author-unknown-deck",
@@ -583,9 +585,9 @@ def record_api_and_mcp(h: Harness, H: dict) -> None:
     h.call("v1-decks-create-invalid", "POST", "/api/v1/decks", headers=B, json_body={"name": "x"})
     h.call("v1-deck-meta", "GET", "/api/v1/decks/api-deck", headers=B)
     h.call("v1-deck-meta-unknown", "GET", "/api/v1/decks/nope", headers=B)
-    h.call("v1-deck-cards", "GET", "/api/v1/decks/capitals/cards", headers=B)
+    h.call("v1-deck-cards", "GET", "/api/v1/decks/world-capitals/cards", headers=B)
     h.call("v1-deck-cards-unknown", "GET", "/api/v1/decks/nope/cards", headers=B)
-    h.call("v1-deck-export-csv", "GET", "/api/v1/decks/capitals/export.csv", headers=B)
+    h.call("v1-deck-export-csv", "GET", "/api/v1/decks/world-capitals/export.csv", headers=B)
     h.call("v1-deck-export-csv-unknown", "GET", "/api/v1/decks/nope/export.csv", headers=B)
     rows = [
         {
@@ -655,7 +657,7 @@ def record_api_and_mcp(h: Harness, H: dict) -> None:
         "POST",
         "/mcp",
         headers=B,
-        json_body=_tool("prep_get_deck", {"name": "capitals"}),
+        json_body=_tool("prep_get_deck", {"name": "world-capitals"}),
     )
     h.call(
         "mcp-call-prep_get_deck-missing-name",
@@ -676,14 +678,14 @@ def record_api_and_mcp(h: Harness, H: dict) -> None:
         "POST",
         "/mcp",
         headers=B,
-        json_body=_tool("prep_list_cards", {"name": "capitals"}),
+        json_body=_tool("prep_list_cards", {"name": "world-capitals"}),
     )
     h.call(
         "mcp-call-prep_export_deck_csv",
         "POST",
         "/mcp",
         headers=B,
-        json_body=_tool("prep_export_deck_csv", {"name": "capitals"}),
+        json_body=_tool("prep_export_deck_csv", {"name": "world-capitals"}),
     )
     h.call(
         "mcp-call-prep_create_deck",
@@ -887,7 +889,9 @@ def covered_routes(app, pairs: list[dict]) -> tuple[list[dict], list[dict]]:
 
 def extract() -> dict[str, str]:
     with scratch_app() as h:
-        ids = seed_reader()
+        from prep.dev.parity_seed import seed
+
+        ids = seed(PARITY_USER, "reader")
         H = {**h.headers(), **JSON}
         record_dashboard(h, H)
         record_offline(h, H, ids)

@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from tests.parity.oracles import PARITY_NOW, dump_json, write_corpus
+from tests.parity.oracles import PARITY_NOW, PARITY_USER, dump_json, write_corpus
 from tests.parity.oracles.harness import jsonable, scratch_app
-from tests.parity.oracles.seed import ANON_ID, seed_anonymous, seed_reader
+from tests.parity.oracles.seed import ANON_ID, seed_anonymous
 
 NAME = "offline"
 SYNC = "/api/offline/sync"
@@ -28,7 +28,7 @@ def _at(**delta) -> str:
 
 
 def build_batch(ids: dict) -> dict:
-    q = ids["questions"]
+    q = ids["questions"]["srs_a"]
     return {
         "device_id": "parity-device",
         "new_cards": [
@@ -61,7 +61,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "card-explicit-deck",
-                "deck_id": ids["decks"]["distsys"],
+                "deck_id": ids["decks"]["srs_b"]["id"],
                 "deck_name": None,
                 "prompt": "Paxos phase count?",
                 "answer": "2",
@@ -76,7 +76,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "card-trivia-deck",
-                "deck_id": ids["decks"]["history-trivia"],
+                "deck_id": ids["decks"]["trivia"]["id"],
                 "prompt": "Not for trivia",
                 "answer": "no",
             },
@@ -87,26 +87,26 @@ def build_batch(ids: dict) -> dict:
         ],
         "reviews": [
             {
-                "client_id": "review-paris-right",
-                "question_id": q["paris"],
+                "client_id": "review-nairobi-right",
+                "question_id": q["short_regex"],
                 "verdict": "right",
-                "user_answer": "Paris",
+                "user_answer": "Nairobi",
                 "graded_by": "auto",
                 "reviewed_at": _at(hours=1),
             },
             {
-                "client_id": "review-paris-older",
-                "question_id": q["paris"],
+                "client_id": "review-nairobi-older",
+                "question_id": q["short_regex"],
                 "verdict": "wrong",
-                "user_answer": "Lyon",
+                "user_answer": "Mombasa",
                 "graded_by": "self",
                 "reviewed_at": _at(hours=2),
             },
             {
-                "client_id": "review-tokyo-self",
-                "question_id": q["tokyo"],
+                "client_id": "review-canberra-self",
+                "question_id": q["mcq"],
                 "verdict": "wrong",
-                "user_answer": "Osaka",
+                "user_answer": "Sydney",
                 "graded_by": "self",
                 "reviewed_at": _at(minutes=30),
             },
@@ -120,9 +120,9 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "review-future",
-                "question_id": q["andes"],
+                "question_id": q["multi"],
                 "verdict": "right",
-                "user_answer": '["Lima", "Quito"]',
+                "user_answer": '["Ottawa", "Lima"]',
                 "graded_by": "self",
                 "reviewed_at": "2099-01-01T00:00:00+00:00",
             },
@@ -144,7 +144,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "review-both-targets",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "card_client_id": "card-inbox",
                 "verdict": "right",
                 "user_answer": "",
@@ -160,7 +160,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "verdict": "right",
                 "user_answer": "",
                 "graded_by": "auto",
@@ -168,7 +168,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "review-bad-timestamp",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "verdict": "right",
                 "user_answer": "",
                 "graded_by": "auto",
@@ -176,7 +176,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "review-naive-timestamp",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "verdict": "right",
                 "user_answer": "",
                 "graded_by": "auto",
@@ -184,14 +184,14 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "review-missing-timestamp",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "verdict": "right",
                 "user_answer": "",
                 "graded_by": "auto",
             },
             {
                 "client_id": "review-bad-verdict",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "verdict": "meh",
                 "user_answer": "",
                 "graded_by": "auto",
@@ -199,7 +199,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "review-bad-grader",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "verdict": "right",
                 "user_answer": "",
                 "graded_by": "friend",
@@ -207,7 +207,7 @@ def build_batch(ids: dict) -> dict:
             },
             {
                 "client_id": "card-inbox",
-                "question_id": q["paris"],
+                "question_id": q["short_regex"],
                 "verdict": "right",
                 "user_answer": "",
                 "graded_by": "auto",
@@ -227,7 +227,9 @@ def build_batch(ids: dict) -> dict:
 
 def extract() -> dict[str, str]:
     with scratch_app() as h:
-        ids = seed_reader()
+        from prep.dev.parity_seed import seed
+
+        ids = seed(PARITY_USER, "reader")
         headers = {**h.headers(), "accept": "application/json"}
         h.call("snapshot", "GET", "/api/offline/snapshot", headers=headers)
         h.call("snapshot-unauthenticated", "GET", "/api/offline/snapshot")
@@ -272,7 +274,7 @@ def extract() -> dict[str, str]:
                 "reviews": [
                     {
                         "client_id": f"r{i}",
-                        "question_id": ids["questions"]["paris"],
+                        "question_id": ids["questions"]["srs_a"]["short_regex"],
                         "verdict": "right",
                         "user_answer": "",
                         "graded_by": "auto",
