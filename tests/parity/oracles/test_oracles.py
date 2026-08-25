@@ -163,7 +163,7 @@ def compare_html(rel: str, corpus_text: str, candidate_text: str) -> list[str]:
     if rel == "index.json":
         return [] if corpus_text == candidate_text else ["index.json differs"]
     if os.environ.get(ENV_PERTURB_DOM) == "1" and rel == "deck@srs-populated.html":
-        candidate_text = candidate_text.replace('data-qid="41"', 'data-qid="9941"', 1)
+        candidate_text = re.sub(r'data-qid="(\d+)"', r'data-qid="99\1"', candidate_text, count=1)
     return [f"{rel}: {d}" for d in dom_diff(corpus_text, candidate_text)]
 
 

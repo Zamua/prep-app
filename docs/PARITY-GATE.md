@@ -7,8 +7,10 @@ user sees except the font bytes (A4).
 
 ## 0. Shared constants
 
-Defined once in `tests/parity/constants.py` (lane C's file; other
-lanes hardcode the values until integration):
+Defined once in `tests/parity/harness/constants.py`; the oracles
+import them from there. `prep/dev/parity_seed.py` (which cannot import
+`tests/`) carries only the timezone, pinned equal by a registry test,
+and takes every timestamp from the process clock:
 
 - `PARITY_NOW = 2026-03-14T15:00:00Z` (Saturday, DST on in the parity tz)
 - `PARITY_TZ = America/New_York`; the parity user's tz pref matches
@@ -156,9 +158,12 @@ against an in-process fake upstream.
 
 ```
 tests/parity/
-  constants.py contextspec.py capture.py compare.py conftest.py server.py
+  conftest.py redproof.sh
+  harness/constants.py contextspec.py capture.py compare.py registry.py
+          runner.py server.py serve.py fixtures.py
+          test_compare.py test_registry.py
   flows/__init__.py flows/<flow>.py ...
-  test_compare.py test_registry.py test_pixels.py redproof.sh
+  test_flows_<flow>.py            (one browser file per flow)
   goldens/<flow>/<NN-label>@<scheme>.png
 ```
 
@@ -259,21 +264,23 @@ at every cap). Anonymous flows mint their cookie through
 
 `PARITY_MODE=golden` writes `goldens/<flow>/<NN-label>@<scheme>.png`
 and passes; default mode compares and fails per shot. `PARITY_BASE_URL`
-unset boots a local uvicorn through `server.py` (the
+unset boots a local uvicorn through `harness/server.py` (the
 `LocalOfflineServer` shape, section 0 env, the stub's URL); set, the
-harness seeds and captures against it unchanged. `test_pixels.py`
-parametrizes one `browser`-marked test per `(flow, scheme)` and
-re-seeds at the start of each flow.
+harness seeds and captures against it unchanged. Each
+`test_flows_<flow>.py` holds one `browser`-marked test per scheme and
+re-seeds at the start of the flow; files run one per invocation.
 
 ## D. The domain oracles (lane D)
 
 Each extractor is `python -m tests.parity.oracles.<name>`, writing
-under `tests/fixtures/parity/<name>/`. `tests/parity/test_oracles.py`
-re-runs every extractor in memory and asserts equality with the
-committed corpus, so no corpus drifts from Python silently; the FSRS
-perturbation goes red here. Extractors set `PREP_FAKE_NOW=PARITY_NOW`
-and, until lane A lands, patch `prep.infrastructure.db.now` to the
-same instant.
+under `tests/fixtures/parity/<name>/`.
+`tests/parity/oracles/test_oracles.py` re-runs every extractor in
+memory and asserts equality with the committed corpus, so no corpus
+drifts from Python silently; the FSRS perturbation goes red here.
+Extractors run under `pin_clock()`: `PREP_FAKE_NOW=PARITY_NOW` and the
+process clock re-resolved from it. The DB-backed extractors seed the
+`reader` profile from `prep/dev/parity_seed.py`, the same rows the
+pixel flows see.
 
 - `fsrs`: fuzz off by pre-populating `srs._SCHEDULER_CACHE[round(r, 3)]`
   with `Scheduler(desired_retention=r, enable_fuzzing=False)` for each
@@ -317,7 +324,7 @@ same instant.
   clock advanced, clear on `/forget-device` and on a bad signature);
   MCP `tools/list` and one call per tool (17); `openapi.json`. A
   `VOLATILE` map of JSON paths compared by regex covers the PAT secret.
-- DOM differ, `tests/parity/domdiff.py: dom_diff(a, b) -> list[Diff]`
+- DOM differ, `tests/parity/dom_diff.py: dom_diff(a, b) -> list[Diff]`
   (stdlib `html.parser`, `convert_charrefs=True`, void elements
   closed): equal element tree; attribute sets with decoded values
   (`disabled` equals `disabled=""`); text decoded and
@@ -325,7 +332,7 @@ same instant.
   `style`; `<script type="application/json">` compared as parsed
   JSON; comments and doctype ignored; the ordered `(tag, src|href)`
   list of `script` and `link` must match. Each `Diff` carries a
-  CSS-like path. `test_domdiff.py`: `&#34;` vs `&quot;`, attribute
+  CSS-like path. `test_dom_diff.py`: `&#34;` vs `&quot;`, attribute
   order, trailing newline, `tojson` separators, a changed `data-*`
   (reported at its path), a reordered `<link>`.
 - Golden renderer, `oracles/render_templates.py` ->
@@ -347,17 +354,19 @@ same instant.
 
 Three env knobs, each flipping exactly one check:
 
-- `PARITY_PERTURB_CSS=1` (C): `capture.py` adds `.paper{margin-top:1px}`
-  via `page.add_style_tag`. Red: every `test_pixels` shot. Green:
-  oracles, domdiff.
+- `PARITY_PERTURB_CSS=1` (C): `capture.py` adds
+  `main{transform:translateY(1px)}` via `page.add_style_tag`, a shift
+  that trips the block rule without changing the page size. Red: every
+  `test_flows_*` shot. Green: oracles, domdiff.
 - `PARITY_PERTURB_FSRS=1` (D): the fsrs extractor bumps `w[0]` by
   `1e-6`. Red: `test_oracles[fsrs]` only.
 - `PARITY_PERTURB_DOM=1` (D): `test_oracles[html]` rewrites one
   `data-qid` in the candidate before diffing. Red: `test_oracles[html]`
   only, path named.
 
-`tests/parity/redproof.sh` (C) runs the three with `--junitxml` and
-exits 0 only when the failing ids are exactly the expected sets.
+`tests/parity/redproof.sh` (C) runs the three with `--junitxml` (the
+pixel files one per invocation) and exits 0 only when the failing ids
+are exactly the expected sets.
 
 ## F. Lanes, acceptance, commands
 
@@ -365,10 +374,10 @@ exits 0 only when the failing ids are exactly the expected sets.
 | --- | --- | --- | --- |
 | A | `prep/**` except `prep/dev/parity_seed.py`; `templates/base.html`; `static/fonts/**`, `static/css/fonts.css`, `static/css/index.css`; the five test files named in A | clock scan at 0; A tests green; `make test` green once at the end | `.venv/bin/pytest tests/infrastructure tests/web/test_fonts_pin.py tests/web/test_parity_mode.py tests/web/test_landing_instant.py tests/domain -q`, then `make test` |
 | B | `tests/parity/llm_stub.py`, `tests/parity/test_llm_stub.py`, `tests/fixtures/parity/llm/**` | byte-stable replay, hold, record, no network | `.venv/bin/pytest tests/parity/test_llm_stub.py -q` |
-| C | `tests/parity/**` except B and D files; `prep/dev/parity_seed.py` plus its `register` line in `prep/app.py`; `pyproject.toml` dev deps | registry and comparator tests green; golden then compare mode pass locally for phases 1 and 3; `redproof.sh` exits 0 once D lands | `.venv/bin/pytest tests/parity/test_compare.py tests/parity/test_registry.py -q`; browser: `PARITY_PHASE=1 .venv/bin/pytest tests/parity/test_pixels.py -q`, one invocation at a time |
-| D | `tests/parity/oracles/**`, `tests/parity/domdiff.py`, `tests/parity/test_domdiff.py`, `tests/parity/test_oracles.py`, `tests/fixtures/parity/**` except `llm/` | every corpus committed and reproducible; coverage tests green; both D knobs red as E states | `.venv/bin/pytest tests/parity/test_domdiff.py tests/parity/test_oracles.py -q` |
+| C | `tests/parity/**` except B and D files; `prep/dev/parity_seed.py` plus its `register` line in `prep/app.py`; `pyproject.toml` dev deps | registry and comparator tests green; golden then compare mode pass locally for phases 1 and 3; `redproof.sh` exits 0 once D lands | `.venv/bin/pytest tests/parity/harness -q`; browser: `PARITY_PHASE=3 .venv/bin/pytest tests/parity/test_flows_<flow>.py -q`, one file per invocation |
+| D | `tests/parity/oracles/**`, `tests/parity/dom_diff.py`, `tests/parity/test_dom_diff.py`, `tests/fixtures/parity/**` except `llm/` | every corpus committed and reproducible; coverage tests green; both D knobs red as E states | `.venv/bin/pytest tests/parity/test_dom_diff.py tests/parity/oracles/test_oracles.py -q` |
 
-Lane A merges first; D's `db.now` patch is then removed.
+The whole gate, locally: `.venv/bin/pytest tests/parity/harness tests/parity/test_dom_diff.py tests/parity/test_llm_stub.py tests/parity/oracles/test_oracles.py -q`, then `PARITY_PHASE=3 .venv/bin/pytest tests/parity/test_flows_<flow>.py -q` per flow file, then `tests/parity/redproof.sh`.
 
 Out of scope: anything under `worker/`; staging capture and the Clerk
 authorized-party registration; a BYOK key at the stub; git LFS for
