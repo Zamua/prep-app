@@ -123,6 +123,19 @@ def _pin_workflow_started(workflow_id: str, started_at: str) -> None:
         )
 
 
+def _insert_api_token(user: str, *, plaintext: str, label: str, created_at: str) -> int:
+    """A PAT with a known plaintext, so its masked prefix is stable;
+    `ApiTokenRepo.issue` draws the secret at random."""
+    from prep.api.repo import _hash, _mask
+
+    with cursor() as c:
+        return c.execute(
+            "INSERT INTO api_tokens (user_id, token_hash, label, key_prefix, created_at,"
+            " last_used_at) VALUES (?, ?, ?, ?, ?, NULL)",
+            (user, _hash(plaintext), label, _mask(plaintext), created_at),
+        ).lastrowid
+
+
 # ---- card sets --------------------------------------------------------------
 
 
@@ -280,6 +293,8 @@ def profile_reader(user: str) -> dict:
     decks.set_pinned(user, b, True)
     _pin_pinned_at(b, at(days=-1))
 
+    e = decks.create(user, "scratch", context_prompt=None, display_name="Scratch")
+
     t = decks.create_trivia(
         user,
         "world-history",
@@ -346,6 +361,13 @@ def profile_reader(user: str) -> dict:
     )
     _pin_notification(n2, at(days=-1))
 
+    token = _insert_api_token(
+        user,
+        plaintext="prep_pat_ParityCliToken0000000000000000000000",
+        label="Parity CLI",
+        created_at=at(days=-3),
+    )
+
     wid = "transform-world-capitals-parity01"
     ActiveWorkflowsRepo().register(
         workflow_id=wid,
@@ -362,18 +384,21 @@ def profile_reader(user: str) -> dict:
         "decks": {
             "srs_a": {"id": a, "slug": "world-capitals", "display": "World Capitals"},
             "srs_b": {"id": b, "slug": "distributed-systems", "display": "Distributed Systems"},
+            "empty": {"id": e, "slug": "scratch", "display": "Scratch"},
             "trivia": {"id": t, "slug": "world-history", "display": "World History Trivia"},
         },
         "questions": {"srs_a": a_ids, "srs_b": b_ids, "trivia": t_ids},
         "sessions": {"active": active, "snoozed": snoozed},
         "notifications": [n1, n2],
+        "api_tokens": [token],
         "workflows": {"transform": wid},
     }
 
 
 def profile_study(user: str) -> dict:
     """One deck with every card type due, the mcq first, and a session
-    one answer in."""
+    one answer in (a warm-up mcq already reviewed). Dues sit in distinct
+    wall-clock hours: the queue shuffles ties within an hour."""
     decks = DeckRepo()
     sessions = SessionRepo()
     d = decks.create(
@@ -385,21 +410,34 @@ def profile_study(user: str) -> dict:
     cards = _capitals_cards()
     cards = [c for c in cards if c[0] != "suspended"]
     pins = {
-        "mcq": at(hours=-3),
-        "short_regex": at(hours=-2),
-        "multi": at(hours=-1),
-        "code": at(minutes=-30),
-        "short_plain": at(minutes=-10),
+        "mcq": at(hours=-5),
+        "short_regex": at(hours=-4),
+        "multi": at(hours=-3),
+        "code": at(hours=-2),
+        "short_plain": at(hours=-1),
     }
     for key, _new, p in cards:
         p["due"] = pins[key]
         p.pop("step", None)
         p.pop("last_review", None)
+    cards.append(
+        (
+            "warmup",
+            _q(
+                "mcq",
+                "Which continent is Egypt in?",
+                "Africa",
+                choices=["Africa", "Asia", "Europe"],
+                topic="geography",
+            ),
+            {"due": at(days=1), "step": 1, "last_review": at(minutes=-4)},
+        )
+    )
     ids = _insert_cards(user, d, cards)
     sid = sessions.create(user, d, DEVICE_LABEL)
     _pin_session(sid, last_active=at(minutes=-2), created_at=at(minutes=-6))
-    _answer_in_session(sid, ids["short_plain"], answered_at=at(minutes=-4), result="right")
-    _add_review(ids["short_plain"], ts=at(minutes=-4), result="right", user_answer="Lima")
+    _answer_in_session(sid, ids["warmup"], answered_at=at(minutes=-4), result="right")
+    _add_review(ids["warmup"], ts=at(minutes=-4), result="right", user_answer="Africa")
     return {
         "deck": {"id": d, "slug": "geography", "display": "Geography"},
         "questions": ids,

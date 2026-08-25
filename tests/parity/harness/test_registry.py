@@ -36,9 +36,12 @@ def test_flow_phases_and_schemes_are_known():
 
 
 def test_every_cover_names_a_template_and_a_present_state():
+    """`@name` covers a surface with no template (the vendor doc shells)."""
     for f in registry.all_flows():
         assert f.covers, f"{f.name} covers nothing"
         for cover in f.covers:
+            if cover.startswith("@"):
+                continue
             name, state = _split_cover(cover)
             path = TEMPLATES / name
             assert path.is_file(), f"{f.name}: {cover} names no template"
@@ -97,7 +100,7 @@ def test_selection_env(monkeypatch):
     assert {f.name for f, _ in registry.selected()} == {f.name for f in flows}
 
     monkeypatch.setenv(registry.FLOWS_ENV, "dash*,deck")
-    assert {f.name for f, _ in registry.selected()} == {"dashboard", "deck"}
+    assert {f.name for f, _ in registry.selected()} == {"dashboard", "dashboard-empty", "deck"}
 
     monkeypatch.setenv(registry.SCHEME_ENV, "dark")
     assert {s for _, s in registry.selected()} == {"dark"}

@@ -108,8 +108,11 @@ the families in `fonts.css` equal those in `tokens.css`;
   `prep/web/parity.py: strip_cross_origin_tags(html, host)`, removing
   `<script src>` and `<link href>` whose host is not the request host;
   the gate compares the empty vendor shells.
-- `POST /_parity/seed` and `GET /_parity/raise` (a deliberate 500)
-  exist (C6).
+- `POST /_parity/seed` (C6), `GET /_parity/raise` (a deliberate 500,
+  or 429 with `?status=429`), and `GET /_parity/reauth` and
+  `GET /_parity/sign-out`, which render the two shells `GET /` and
+  `GET /sign-out` serve only under a Clerk session state, with the
+  same context.
 
 Tests, `tests/web/test_parity_mode.py`: with the flag, landing,
 dashboard, `/docs`, `/redoc` reference no other origin; without it,
@@ -238,6 +241,21 @@ dialogs appear in at least one flow.
 About 70 screens. `PARITY_PHASE=n` runs phases `<= n`; `PARITY_FLOWS`
 globs names; `PARITY_SCHEME` picks one scheme.
 
+Target-bound states, phases 1 and 3: the landing renders the instant
+hero only where the provider exposes a sign-in URL, so a tailscale
+target captures the marketing hero and a Clerk target the instant
+one; `settings_account.html` is a 404 outside Clerk; the reauth shell
+and the sign-out interstitial come from the `/_parity/*` routes, and
+the device-wipe choice is opened from `offline/wipe.js` directly, the
+row that opens it being provider-gated. The offline flow runs with
+service workers blocked: a controlling worker re-issues the snapshot
+fetch without the injected identity header, trips the owner guard
+and wipes the stores. Free-text study answers book the LLM grader,
+so the short and code cards take the `idk` path. The trivia session
+is opened with an explicit `?cards=` queue; a fresh session draws its
+order at random. `navigator.storage.estimate()` and `persisted()` are
+pinned in the context, like the clock.
+
 ### C6. Seed mechanism
 
 Decision: an env-gated endpoint, not a sqlite file. A committed sqlite
@@ -253,12 +271,15 @@ It deletes every user-scoped row of that login (tables from
 with tz `PARITY_TZ`, inserts the profile. Profiles live in
 `prep/dev/parity_seed.py` beside `preview.py`, timestamps absolute
 from `PARITY_NOW`. Response: the ids the flows need. Profiles:
-`empty`; `reader` (two srs decks, one trivia, a suspended card, a
-snoozed session, a pinned deck, unseen notifications); `study` (a
-session mid-way); `workflows` (a plan, a transform per scope, a trivia
-generation, each in the requested state); `caps` (an anonymous account
-at every cap). Anonymous flows mint their cookie through
-`/api/instant/generate`.
+`empty`; `reader` (two srs decks, one trivia, one empty, a suspended
+card, a snoozed session, a pinned deck, unseen notifications, a PAT
+with a fixed plaintext); `study` (a session mid-way, every card type
+due in its own wall-clock hour: the queue shuffles ties within an
+hour); `workflows` (a plan, a transform per scope, a trivia
+generation, each in the requested state; phase 4, needs a worker
+since the pages query Temporal) and `caps` (an anonymous account at
+every cap) are not implemented yet. Anonymous flows mint their cookie
+through `/api/instant/generate`.
 
 ### C7. Modes and the server
 

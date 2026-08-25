@@ -2,7 +2,15 @@
  "header": {
   "comparison": "JSON responses compared as parsed values; Set-Cookie by regex",
   "ids": {
+   "api_tokens": [
+    1
+   ],
    "decks": {
+    "empty": {
+     "display": "Scratch",
+     "id": 3,
+     "slug": "scratch"
+    },
     "srs_a": {
      "display": "World Capitals",
      "id": 1,
@@ -15,7 +23,7 @@
     },
     "trivia": {
      "display": "World History Trivia",
-     "id": 3,
+     "id": 4,
      "slug": "world-history"
     }
    },
@@ -213,6 +221,13 @@
        "total": 3
       },
       {
+       "display_name": "Scratch",
+       "id": 3,
+       "name": "scratch",
+       "pinned_at": null,
+       "total": 0
+      },
+      {
        "display_name": "World Capitals",
        "id": 1,
        "name": "world-capitals",
@@ -311,7 +326,7 @@
       {
        "answer": "no",
        "client_id": "card-trivia-deck",
-       "deck_id": 3,
+       "deck_id": 4,
        "prompt": "Not for trivia"
       },
       {
@@ -677,7 +692,7 @@
       {
        "answer": "no",
        "client_id": "card-trivia-deck",
-       "deck_id": 3,
+       "deck_id": 4,
        "prompt": "Not for trivia"
       },
       {
@@ -1135,7 +1150,7 @@
        "answer": "Lima",
        "answer_regex": "lima",
        "choices": null,
-       "deck_id": 4,
+       "deck_id": 5,
        "explanation": null,
        "next_due": "2026-03-14T14:50:00+00:00",
        "prompt": "Capital of Peru?",
@@ -1163,7 +1178,7 @@
        "answer": "Nairobi",
        "answer_regex": null,
        "choices": null,
-       "deck_id": 5,
+       "deck_id": 6,
        "explanation": null,
        "next_due": "2026-03-14T15:00:00+00:00",
        "prompt": "Capital of Kenya?",
@@ -1198,10 +1213,17 @@
       },
       {
        "display_name": "Offline Notes",
-       "id": 5,
+       "id": 6,
        "name": "offline-notes",
        "pinned_at": null,
        "total": 1
+      },
+      {
+       "display_name": "Scratch",
+       "id": 3,
+       "name": "scratch",
+       "pinned_at": null,
+       "total": 0
       },
       {
        "display_name": "World Capitals",
@@ -1212,7 +1234,7 @@
       },
       {
        "display_name": null,
-       "id": 4,
+       "id": 5,
        "name": "inbox",
        "pinned_at": null,
        "total": 1
@@ -10555,7 +10577,7 @@
       {
        "answer": "no",
        "client_id": "card-trivia-deck",
-       "deck_id": 3,
+       "deck_id": 4,
        "prompt": "Not for trivia"
       },
       {

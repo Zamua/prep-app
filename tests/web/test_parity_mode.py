@@ -104,7 +104,8 @@ def test_docs_oauth2_redirect_still_mounted(client):
 
 
 def test_parity_routes_absent_without_the_flag(client):
-    assert client.get("/_parity/raise").status_code == 404
+    for path in ("/_parity/raise", "/_parity/reauth", "/_parity/sign-out"):
+        assert client.get(path).status_code == 404, path
     assert client.post("/_parity/seed", json={"user": "x", "profile": "empty"}).status_code == 404
 
 
@@ -146,6 +147,22 @@ def test_raise_is_a_deliberate_500(parity_env, client):
         r = c.get("/_parity/raise")
     assert r.status_code == 500
     assert "Something broke" in r.text
+
+
+def test_raise_429_renders_the_throttle_page(parity_env, client):
+    r = client.get("/_parity/raise", params={"status": 429})
+    assert r.status_code == 429
+    assert "Busy right now" in r.text
+
+
+def test_reauth_and_sign_out_shells(parity_env, client):
+    r = client.get("/_parity/reauth")
+    assert r.status_code == 200
+    assert "Signing you in" in r.text
+    r = client.get("/_parity/sign-out")
+    assert r.status_code == 200
+    assert "Signing out" in r.text
+    assert "__prepSuppressReauth" in r.text
 
 
 def test_seed_route_is_mounted_and_token_gated(parity_env, client, monkeypatch):

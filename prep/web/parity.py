@@ -3,7 +3,8 @@ same bytes for the parity gate. Never set in a deploy file.
 
 Under the flag base.html omits ClerkJS, the vendor doc shells lose
 their cross-origin script and stylesheet tags, and the `/_parity/*`
-routes exist.
+routes exist: the seed, a deliberate error, and the two shells only
+a Clerk session state can otherwise reach.
 """
 
 from __future__ import annotations
@@ -12,7 +13,10 @@ import os
 import re
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse
+
+from prep.web.templates import templates
 
 ENV_PARITY_MODE = "PREP_PARITY_MODE"
 
@@ -53,6 +57,24 @@ router = APIRouter()
 
 
 @router.get("/_parity/raise", include_in_schema=False)
-def parity_raise() -> None:
-    """A deliberate 500, so the error page can be captured."""
+def parity_raise(status: int = 500) -> None:
+    """A deliberate error page: 500 by default, 429 on request."""
+    if status == 429:
+        raise HTTPException(429, "parity: deliberate throttle")
     raise RuntimeError("parity: deliberate server error")
+
+
+@router.get("/_parity/reauth", response_class=HTMLResponse, include_in_schema=False)
+def parity_reauth(request: Request):
+    """The session-restoring shell `GET /` serves on a dormant Clerk
+    session, rendered with the same context."""
+    return templates.TemplateResponse(request, "reauth.html", {"user": None})
+
+
+@router.get("/_parity/sign-out", response_class=HTMLResponse, include_in_schema=False)
+def parity_sign_out(request: Request):
+    """The interstitial `GET /sign-out` serves under Clerk, rendered
+    with the same context."""
+    return templates.TemplateResponse(
+        request, "sign_out_interstitial.html", {"user": None, "redirect_url": "/"}
+    )

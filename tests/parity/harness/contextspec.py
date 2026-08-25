@@ -26,6 +26,17 @@ window.__paritySwaps = 0;
 document.addEventListener('htmx:afterSwap', () => { window.__paritySwaps += 1; });
 """
 
+# The offline shell prints `navigator.storage.estimate()` and whether
+# persistence was granted, both decided by the browser's own on-disk
+# state; pinned like the clock.
+_STORAGE_ESTIMATE_PIN = """
+if (navigator.storage) {
+  navigator.storage.estimate = async () => ({usage: 1048576, quota: 1073741824});
+  navigator.storage.persisted = async () => false;
+  navigator.storage.persist = async () => false;
+}
+"""
+
 
 def new_context(
     browser,
@@ -38,9 +49,10 @@ def new_context(
     default_timeout_ms: int = 20_000,
 ):
     """393x852 at DPR 3, iOS UA, touch, reduced motion, the parity tz
-    and locale, `color_scheme` per `scheme`. Same-origin requests carry
-    the tailscale identity headers for `identity`; `None` leaves the
-    context anonymous. A Clerk target passes `storage_state` instead."""
+    and locale, `color_scheme` per `scheme`, the storage estimate
+    pinned. Same-origin requests carry the tailscale identity headers
+    for `identity`; `None` leaves the context anonymous. A Clerk target
+    passes `storage_state` instead."""
     if scheme not in ("light", "dark"):
         raise ValueError(f"scheme must be light|dark, got {scheme!r}")
     if service_workers not in ("block", "allow"):
@@ -61,6 +73,7 @@ def new_context(
     ctx.set_default_timeout(default_timeout_ms)
     ctx.set_default_navigation_timeout(default_timeout_ms)
     ctx.add_init_script(_SWAP_COUNTER)
+    ctx.add_init_script(_STORAGE_ESTIMATE_PIN)
 
     parsed = urlparse(base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
