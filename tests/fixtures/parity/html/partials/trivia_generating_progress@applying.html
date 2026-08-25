@@ -1,0 +1,32 @@
+<div id="trivia-gen-progress"
+     
+     hx-get="/trivia/gen/trivia-gen-PARITY01/fragment"
+     hx-trigger="every 1.5s"
+     hx-target="this"
+     hx-swap="outerHTML"
+     >
+  <section class="prelude">
+    <p class="eyebrow">World History Trivia · generating</p>
+    <h1 class="display" id="display-headline">
+      <em>Saving</em><span class="ellipsis"></span>
+    </h1>
+  </section>
+
+  <div class="transform-panel" data-wid="trivia-gen-PARITY01" data-deck-name="history-trivia" id="trivia-gen-panel">
+    <p class="transform-status" id="trivia-gen-status" data-status="applying">
+      <span id="trivia-gen-label">saving cards</span>
+      <span class="trivia-gen-status-counts" id="trivia-gen-counts">12 / 25</span>
+      <a href="/trivia/gen/trivia-gen-PARITY01" class="transform-refresh">refresh now</a>
+    </p>
+
+    
+    
+      <progress class="trivia-gen-progress" id="trivia-gen-progress-bar"
+                value="48" max="100"></progress>
+    
+
+    
+
+    
+  </div>
+</div>

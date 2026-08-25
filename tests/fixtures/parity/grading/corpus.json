@@ -1,0 +1,432 @@
+{
+ "grade": [
+  {
+   "id": "mcq-right",
+   "idk": false,
+   "question": {
+    "answer": "Paris",
+    "type": "mcq"
+   },
+   "result": {
+    "feedback": "Correct.",
+    "model_answer_summary": "Paris",
+    "result": "right"
+   },
+   "user_answer": "Paris"
+  },
+  {
+   "id": "mcq-right-surrounding-space",
+   "idk": false,
+   "question": {
+    "answer": "Paris",
+    "type": "mcq"
+   },
+   "result": {
+    "feedback": "Correct.",
+    "model_answer_summary": "Paris",
+    "result": "right"
+   },
+   "user_answer": "  Paris  "
+  },
+  {
+   "id": "mcq-wrong",
+   "idk": false,
+   "question": {
+    "answer": "Paris",
+    "type": "mcq"
+   },
+   "result": {
+    "feedback": "Wrong choice.",
+    "model_answer_summary": "Paris",
+    "result": "wrong"
+   },
+   "user_answer": "Lyon"
+  },
+  {
+   "id": "mcq-wrong-case",
+   "idk": false,
+   "question": {
+    "answer": "Paris",
+    "type": "mcq"
+   },
+   "result": {
+    "feedback": "Wrong choice.",
+    "model_answer_summary": "Paris",
+    "result": "wrong"
+   },
+   "user_answer": "paris"
+  },
+  {
+   "id": "mcq-empty",
+   "idk": false,
+   "question": {
+    "answer": "Paris",
+    "type": "mcq"
+   },
+   "result": {
+    "feedback": "Wrong choice.",
+    "model_answer_summary": "Paris",
+    "result": "wrong"
+   },
+   "user_answer": ""
+  },
+  {
+   "id": "mcq-idk",
+   "idk": true,
+   "question": {
+    "answer": "Paris",
+    "type": "mcq"
+   },
+   "result": {
+    "feedback": "Marked as 'I don't know' — see again soon.",
+    "model_answer_summary": "Paris",
+    "result": "wrong"
+   },
+   "user_answer": "Lyon"
+  },
+  {
+   "id": "multi-exact",
+   "idk": false,
+   "question": {
+    "answer": "[\"Paris\", \"Lyon\"]",
+    "type": "multi"
+   },
+   "result": {
+    "feedback": "Correct.",
+    "model_answer_summary": "['Lyon', 'Paris']",
+    "result": "right"
+   },
+   "user_answer": "[\"Lyon\", \"Paris\"]"
+  },
+  {
+   "id": "multi-partial",
+   "idk": false,
+   "question": {
+    "answer": "[\"Paris\", \"Lyon\"]",
+    "type": "multi"
+   },
+   "result": {
+    "feedback": "Expected: ['Lyon', 'Paris']; you picked: ['Paris'].",
+    "model_answer_summary": "['Lyon', 'Paris']",
+    "result": "wrong"
+   },
+   "user_answer": "[\"Paris\"]"
+  },
+  {
+   "id": "multi-extra",
+   "idk": false,
+   "question": {
+    "answer": "[\"Paris\", \"Lyon\"]",
+    "type": "multi"
+   },
+   "result": {
+    "feedback": "Expected: ['Lyon', 'Paris']; you picked: ['Lyon', 'Nice', 'Paris'].",
+    "model_answer_summary": "['Lyon', 'Paris']",
+    "result": "wrong"
+   },
+   "user_answer": "[\"Paris\", \"Lyon\", \"Nice\"]"
+  },
+  {
+   "id": "multi-missing-and-extra",
+   "idk": false,
+   "question": {
+    "answer": "[\"Paris\", \"Lyon\"]",
+    "type": "multi"
+   },
+   "result": {
+    "feedback": "Expected: ['Lyon', 'Paris']; you picked: ['Nice'].",
+    "model_answer_summary": "['Lyon', 'Paris']",
+    "result": "wrong"
+   },
+   "user_answer": "[\"Nice\"]"
+  },
+  {
+   "id": "multi-empty",
+   "idk": false,
+   "question": {
+    "answer": "[\"Paris\", \"Lyon\"]",
+    "type": "multi"
+   },
+   "result": {
+    "feedback": "Expected: ['Lyon', 'Paris']; you picked: [].",
+    "model_answer_summary": "['Lyon', 'Paris']",
+    "result": "wrong"
+   },
+   "user_answer": ""
+  },
+  {
+   "id": "multi-malformed-json",
+   "idk": false,
+   "question": {
+    "answer": "[\"Paris\", \"Lyon\"]",
+    "type": "multi"
+   },
+   "result": {
+    "feedback": "Correct.",
+    "model_answer_summary": "[]",
+    "result": "right"
+   },
+   "user_answer": "not json"
+  },
+  {
+   "id": "multi-idk",
+   "idk": true,
+   "question": {
+    "answer": "[\"Paris\", \"Lyon\"]",
+    "type": "multi"
+   },
+   "result": {
+    "feedback": "Marked as 'I don't know' — see again soon.",
+    "model_answer_summary": "[\"Paris\", \"Lyon\"]",
+    "result": "wrong"
+   },
+   "user_answer": "[\"Paris\"]"
+  },
+  {
+   "error": {
+    "message": "grade() called with type='short'; free-text grading goes through the Temporal worker (GradeFreeText activity), not this synchronous helper.",
+    "type": "ValueError"
+   },
+   "id": "short-refused",
+   "idk": false,
+   "question": {
+    "answer": "Paris",
+    "answer_regex": "paris|par(is)?",
+    "type": "short"
+   },
+   "user_answer": "Paris"
+  },
+  {
+   "id": "short-idk",
+   "idk": true,
+   "question": {
+    "answer": "Paris",
+    "answer_regex": "paris|par(is)?",
+    "type": "short"
+   },
+   "result": {
+    "feedback": "Marked as 'I don't know' — see again soon.",
+    "model_answer_summary": "Paris",
+    "result": "wrong"
+   },
+   "user_answer": ""
+  },
+  {
+   "error": {
+    "message": "grade() called with type='code'; free-text grading goes through the Temporal worker (GradeFreeText activity), not this synchronous helper.",
+    "type": "ValueError"
+   },
+   "id": "code-refused",
+   "idk": false,
+   "question": {
+    "answer": "return a + b",
+    "type": "code"
+   },
+   "user_answer": "return a + b"
+  },
+  {
+   "id": "code-idk",
+   "idk": true,
+   "question": {
+    "answer": "return a + b",
+    "type": "code"
+   },
+   "result": {
+    "feedback": "Marked as 'I don't know' — see again soon.",
+    "model_answer_summary": "return a + b",
+    "result": "wrong"
+   },
+   "user_answer": ""
+  },
+  {
+   "id": "idk-truncates-long-answer",
+   "idk": true,
+   "question": {
+    "answer": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "type": "short"
+   },
+   "result": {
+    "feedback": "Marked as 'I don't know' — see again soon.",
+    "model_answer_summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "result": "wrong"
+   },
+   "user_answer": ""
+  },
+  {
+   "id": "idk-missing-answer",
+   "idk": true,
+   "question": {
+    "type": "short"
+   },
+   "result": {
+    "feedback": "Marked as 'I don't know' — see again soon.",
+    "model_answer_summary": "",
+    "result": "wrong"
+   },
+   "user_answer": ""
+  }
+ ],
+ "header": {
+  "max_regex_len": 500
+ },
+ "match_regex": [
+  {
+   "given": "Paris",
+   "id": "no-pattern-none",
+   "pattern": null,
+   "result": null
+  },
+  {
+   "given": "Paris",
+   "id": "no-pattern-empty",
+   "pattern": "",
+   "result": null
+  },
+  {
+   "given": "Paris",
+   "id": "invalid-pattern",
+   "pattern": "(",
+   "result": null
+  },
+  {
+   "given": "a",
+   "id": "over-length",
+   "pattern": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "result": null
+  },
+  {
+   "given": "Paris",
+   "id": "match-exact",
+   "pattern": "paris",
+   "result": true
+  },
+  {
+   "given": "paris",
+   "id": "match-case-insensitive",
+   "pattern": "PARIS",
+   "result": true
+  },
+  {
+   "given": "par",
+   "id": "match-alternation",
+   "pattern": "paris|par",
+   "result": true
+  },
+  {
+   "given": "Paris",
+   "id": "match-fullmatch-only",
+   "pattern": "par",
+   "result": false
+  },
+  {
+   "given": "  paris \n",
+   "id": "match-strips-whitespace",
+   "pattern": "paris",
+   "result": true
+  },
+  {
+   "given": "Lyon",
+   "id": "miss",
+   "pattern": "paris",
+   "result": false
+  },
+  {
+   "given": "a\nb",
+   "id": "match-dotall",
+   "pattern": "a.b",
+   "result": true
+  },
+  {
+   "given": "paris",
+   "id": "miss-partial-prefix",
+   "pattern": "pa",
+   "result": false
+  }
+ ],
+ "validate_regex_update": [
+  {
+   "expected_literal": "Paris",
+   "id": "non-str",
+   "pattern": 42,
+   "prior_given": null,
+   "result": null
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "none",
+   "pattern": null,
+   "prior_given": null,
+   "result": null
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "empty",
+   "pattern": "",
+   "prior_given": null,
+   "result": null
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "whitespace-only",
+   "pattern": "   ",
+   "prior_given": null,
+   "result": null
+  },
+  {
+   "expected_literal": "a",
+   "id": "over-length",
+   "pattern": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "prior_given": null,
+   "result": null
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "invalid",
+   "pattern": "(",
+   "prior_given": null,
+   "result": null
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "misses-expected",
+   "pattern": "lyon",
+   "prior_given": null,
+   "result": null
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "misses-prior",
+   "pattern": "paris",
+   "prior_given": "Lyon",
+   "result": null
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "accepted",
+   "pattern": "paris|lyon",
+   "prior_given": null,
+   "result": "paris|lyon"
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "accepted-with-prior",
+   "pattern": "paris|lyon",
+   "prior_given": "lyon",
+   "result": "paris|lyon"
+  },
+  {
+   "expected_literal": "Paris",
+   "id": "accepted-strips",
+   "pattern": "  paris  ",
+   "prior_given": null,
+   "result": "paris"
+  },
+  {
+   "expected_literal": "",
+   "id": "accepted-expected-none",
+   "pattern": ".*",
+   "prior_given": null,
+   "result": ".*"
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+
+<form method="post"
+      action="/deck/capitals/pin"
+      class="deck-pin-form"
+      hx-post="/deck/capitals/pin"
+      hx-target="this"
+      hx-swap="outerHTML">
+  <input type="hidden" name="pinned" value="on">
+  <button type="submit"
+          class="tag tag-pin "
+          title="Pin to top of index">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="icon icon-inline" aria-hidden="true"><path d="M216,170H205L183.15,46H192a6,6,0,0,0,0-12H64a6,6,0,0,0,0,12h8.85L51,170H40a6,6,0,0,0,0,12h82v58a6,6,0,0,0,12,0V182h82a6,6,0,0,0,0-12ZM85,46H171l21.88,124H63.15Z"/></svg>
+    <span>Pin</span>
+  </button>
+</form>

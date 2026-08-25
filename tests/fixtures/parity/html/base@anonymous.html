@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f5efe6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1612" media="(prefers-color-scheme: dark)"><title>prep</title>
+  
+  <link rel="stylesheet" href="/static/css/vce11d0000000/fonts.css">
+  
+  
+  <script>
+    addEventListener("unhandledrejection", function (e) {
+      var r = e.reason;
+      if (r && r.name === "AbortError" && String(r.message).indexOf("Transition was skipped") !== -1) {
+        e.preventDefault();
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="/static/css/vce11d0000000/index.css">
+
+  
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/static/pwa/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="prep">
+
+  
+  <script type="importmap">
+  {
+    "imports": {
+      "@/": "/static/js/vce11d0000000/"
+    }
+  }
+  </script>
+  <script type="module" src="/static/js/app.js?v=ce11d0000000" defer></script>
+
+  
+  
+
+  
+  <script src="/static/js/vendor/htmx-2.0.4.min.js?v=ce11d0000000" defer></script>
+
+  
+  
+</head>
+<body class="page-default"
+      >
+  
+  <header class="masthead-wrap">
+    <div class="masthead">
+      <a href="/" class="masthead-brand">
+        <span class="brand-mark">P</span>
+        <span class="brand-word">Prep&nbsp;·&nbsp;<em>a commonplace book</em></span>
+      </a>
+      
+        
+        <div id="workflow-badge"
+             class="workflow-badge"
+             data-empty="1"
+             hx-get="/api/active-workflows-badge"
+             hx-trigger="load, every 5s"
+             hx-swap="outerHTML"></div>
+        
+        <details class="user-indicator">
+          <summary class="user-chip" aria-label="account">
+            <span class="user-mark" aria-hidden="true">G</span>
+          </summary>
+          <div class="user-panel">
+            <p class="user-name">Guest</p>
+            
+            <p class="user-login">Not signed in</p>
+            
+            
+
+            <p class="user-group-eyebrow">Settings</p>
+            <ul class="user-links">
+              
+              <li><a href="/settings/srs">Scheduling <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="icon icon-inline" aria-hidden="true"><path d="M220.24,132.24l-72,72a6,6,0,0,1-8.48-8.48L201.51,134H40a6,6,0,0,1,0-12H201.51L139.76,60.24a6,6,0,0,1,8.48-8.48l72,72A6,6,0,0,1,220.24,132.24Z"/></svg></a></li>
+              <li><a href="/settings/editor">Editor <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="icon icon-inline" aria-hidden="true"><path d="M220.24,132.24l-72,72a6,6,0,0,1-8.48-8.48L201.51,134H40a6,6,0,0,1,0-12H201.51L139.76,60.24a6,6,0,0,1,8.48-8.48l72,72A6,6,0,0,1,220.24,132.24Z"/></svg></a></li>
+              
+            </ul>
+
+            
+              
+              
+                <ul class="user-links user-links-primary">
+                  <li><a href="https://accounts.example.test/sign-up" class="user-link-primary">Create an account to keep your decks <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="icon icon-inline" aria-hidden="true"><path d="M220.24,132.24l-72,72a6,6,0,0,1-8.48-8.48L201.51,134H40a6,6,0,0,1,0-12H201.51L139.76,60.24a6,6,0,0,1,8.48-8.48l72,72A6,6,0,0,1,220.24,132.24Z"/></svg></a></li>
+                </ul>
+              
+              
+                <ul class="user-links">
+                  <li><a href="https://accounts.example.test/sign-in">Already have an account? Sign in <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="icon icon-inline" aria-hidden="true"><path d="M220.24,132.24l-72,72a6,6,0,0,1-8.48-8.48L201.51,134H40a6,6,0,0,1,0-12H201.51L139.76,60.24a6,6,0,0,1,8.48-8.48l72,72A6,6,0,0,1,220.24,132.24Z"/></svg></a></li>
+                </ul>
+              
+              
+              <ul class="user-links user-links-signout">
+                <li>
+                  
+                  <form method="post" action="/forget-device" class="user-forget-form"
+                        data-forget-device
+                        onsubmit="return confirm('Forget this device? Your decks stay on our server, but this browser will not be able to reach them. Create an account first to keep them.')">
+                    <button type="submit" class="user-link-signout user-forget-btn">Forget this device <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="icon icon-inline" aria-hidden="true"><path d="M118,216a6,6,0,0,1-6,6H48a6,6,0,0,1-6-6V40a6,6,0,0,1,6-6h64a6,6,0,0,1,0,12H54V210h58A6,6,0,0,1,118,216Zm110.24-92.24-40-40a6,6,0,0,0-8.48,8.48L209.51,122H112a6,6,0,0,0,0,12h97.51l-29.75,29.76a6,6,0,1,0,8.48,8.48l40-40A6,6,0,0,0,228.24,123.76Z"/></svg></button>
+                  </form>
+                </li>
+              </ul>
+            
+          </div>
+        </details>
+      
+      
+    </div>
+  </header>
+  <div class="paper">
+    <main class="folio">
+      
+    </main>
+    
+    
+    <footer class="colophon">
+      <span class="rule"></span>
+      
+      <nav class="colophon-links" aria-label="Footer">
+        <a href="/privacy">Privacy</a>
+        <span aria-hidden="true">·</span>
+        <a href="/docs">API docs</a>
+        <span aria-hidden="true">·</span>
+        <a href="/llms.txt">llms.txt</a>
+        <span aria-hidden="true">·</span>
+        <a href="https://github.com/Zamua/prep-app" target="_blank" rel="noopener">Source</a>
+        
+        
+      </nav>
+    </footer>
+  </div>
+</body>
+</html>

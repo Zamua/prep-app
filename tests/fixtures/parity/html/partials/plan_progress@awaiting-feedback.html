@@ -1,0 +1,133 @@
+<div id="plan-progress"
+     
+>
+  <section class="prelude">
+    <p class="eyebrow">World Capitals · plan</p>
+    <h1 class="display" id="display-headline">
+      4 cards.
+      
+    </h1>
+    <p class="lede">
+      
+        Skim the outline below. Send feedback to refine, or accept and we'll
+        write the full content for each card in parallel.
+      
+    </p>
+  </section>
+
+  <div class="transform-panel plan-panel">
+    <p class="transform-status" id="t-status" data-status="awaiting_feedback">
+      awaiting_feedback
+      
+      
+        <a href="/plan/plan-capitals-PARITY01" class="transform-refresh">refresh now</a>
+      
+    </p>
+
+    
+      <ol class="plan-list" role="list">
+        
+          <li class="plan-item">
+            <span class="plan-item-num">1</span>
+            <div class="plan-item-body">
+              <div class="plan-item-head">
+                <span class="plan-item-title">Consensus basics</span>
+                <span class="plan-item-tags">
+                  <span class="tag tag-type tag-short">short</span>
+                  <span class="tag tag-topic">consensus</span>
+                  
+                </span>
+              </div>
+              <p class="plan-item-brief">Why quorums must intersect.</p>
+            </div>
+          </li>
+        
+          <li class="plan-item">
+            <span class="plan-item-num">2</span>
+            <div class="plan-item-body">
+              <div class="plan-item-head">
+                <span class="plan-item-title">Raft leader election</span>
+                <span class="plan-item-tags">
+                  <span class="tag tag-type tag-mcq">mcq</span>
+                  <span class="tag tag-topic">raft</span>
+                  
+                </span>
+              </div>
+              <p class="plan-item-brief">Terms, votes, split votes.</p>
+            </div>
+          </li>
+        
+          <li class="plan-item">
+            <span class="plan-item-num">3</span>
+            <div class="plan-item-body">
+              <div class="plan-item-head">
+                <span class="plan-item-title">Implement a log append</span>
+                <span class="plan-item-tags">
+                  <span class="tag tag-type tag-code">code</span>
+                  <span class="tag tag-topic">raft</span>
+                  <span class="tag lang-tag">go</span>
+                </span>
+              </div>
+              <p class="plan-item-brief">A minimal append-entries handler.</p>
+            </div>
+          </li>
+        
+          <li class="plan-item">
+            <span class="plan-item-num">4</span>
+            <div class="plan-item-body">
+              <div class="plan-item-head">
+                <span class="plan-item-title">Untyped item</span>
+                <span class="plan-item-tags">
+                  
+                  
+                  
+                </span>
+              </div>
+              <p class="plan-item-brief">No type, no topic.</p>
+            </div>
+          </li>
+        
+      </ol>
+    
+
+    
+
+    
+      
+      <form method="post" action="/plan/plan-capitals-PARITY01/feedback"
+            hx-post="/plan/plan-capitals-PARITY01/feedback"
+            hx-target="#plan-progress"
+            hx-swap="outerHTML"
+            class="plan-feedback-form">
+        <label class="freetext">
+          <span class="freetext-label">Refine the plan</span>
+          <textarea name="feedback" rows="3" maxlength="2000"
+                    placeholder="e.g. add 2 more on goroutines · drop the mcq about syntax · split #4 into two cards · use python instead of go"
+                    required></textarea>
+        </label>
+        <div class="plan-actions">
+          <button class="btn btn-quiet" type="submit">Send feedback</button>
+        </div>
+      </form>
+
+      <div class="plan-decide">
+        <form method="post" action="/plan/plan-capitals-PARITY01/accept"
+              hx-post="/plan/plan-capitals-PARITY01/accept"
+              hx-target="#plan-progress"
+              hx-swap="outerHTML"
+              style="flex:1;min-width:10rem">
+          <button class="btn btn-primary" type="submit" style="width:100%">Accept &amp; generate 4 cards</button>
+        </form>
+        <form method="post" action="/plan/plan-capitals-PARITY01/reject"
+              hx-post="/plan/plan-capitals-PARITY01/reject"
+              hx-target="#plan-progress"
+              hx-swap="outerHTML"
+              style="flex:1;min-width:8rem">
+          <button class="btn btn-quiet" type="submit" style="width:100%">Cancel</button>
+        </form>
+      </div>
+    
+
+    
+  </div>
+</div>
