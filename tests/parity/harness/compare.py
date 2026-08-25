@@ -94,6 +94,8 @@ def write_diff_mask(
 
 
 def compare(golden: Path, candidate: Path, diff_out: Path) -> Report:
+    # A diff from an earlier run must not outlive this run's verdict.
+    diff_out.unlink(missing_ok=True)
     a = load_rgb(golden)
     b = load_rgb(candidate)
     gsize = (int(a.shape[1]), int(a.shape[0]))

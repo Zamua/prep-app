@@ -8,6 +8,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from tests.parity.harness import browser as browser_pin
 from tests.parity.harness import registry, runner
 from tests.parity.harness.server import (
     BASE_URL_ENV,
@@ -37,6 +38,12 @@ def parity_browser():
         except Exception as e:  # noqa: BLE001
             pytest.skip(f"chromium launch failed: {e}")
         try:
+            label = browser_pin.browser_label(browser)
+            if runner.mode() == "golden":
+                browser_pin.write_pin(label)
+            reason = browser_pin.check_pin(browser_pin.read_pin(), label, runner.mode())
+            if reason:
+                pytest.fail(reason)
             yield browser
         finally:
             browser.close()

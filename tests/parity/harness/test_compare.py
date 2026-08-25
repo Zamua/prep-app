@@ -52,6 +52,15 @@ def test_identical_passes(tmp_path):
     assert not (tmp_path / "out" / "diff.png").exists()
 
 
+def test_pass_removes_a_stale_diff(tmp_path):
+    stale = tmp_path / "out" / "diff.png"
+    stale.parent.mkdir()
+    stale.write_bytes(b"old verdict")
+    base = _base()
+    assert _run(tmp_path, base, base.copy()).passed
+    assert not stale.exists()
+
+
 def test_within_channel_tolerance_everywhere_passes(tmp_path):
     base = _base()
     cand = np.clip(base.astype(np.int16) + cmp.CHANNEL_TOL, 0, 255).astype(np.uint8)
