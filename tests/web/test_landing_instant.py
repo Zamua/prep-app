@@ -166,6 +166,14 @@ def test_placeholder_index_wraps(monkeypatch):
     assert _topic_placeholder() == TOPIC_PLACEHOLDERS[0]
 
 
+def test_placeholder_index_malformed_names_the_variable(monkeypatch):
+    from prep.web.index import placeholder_index
+
+    monkeypatch.setenv("PREP_PLACEHOLDER_INDEX", "first")
+    with pytest.raises(ValueError, match="PREP_PLACEHOLDER_INDEX"):
+        placeholder_index()
+
+
 def test_placeholder_unset_stays_random(monkeypatch):
     from prep.web.index import TOPIC_PLACEHOLDERS, _topic_placeholder
 

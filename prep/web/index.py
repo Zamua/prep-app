@@ -57,10 +57,26 @@ TOPIC_PLACEHOLDERS = (
 ENV_PLACEHOLDER_INDEX = "PREP_PLACEHOLDER_INDEX"
 
 
-def _topic_placeholder() -> str:
+def placeholder_index() -> int | None:
+    """`PREP_PLACEHOLDER_INDEX` as an int, `None` when unset; malformed
+    raises `ValueError` naming the variable."""
     raw = os.environ.get(ENV_PLACEHOLDER_INDEX, "").strip()
-    if raw:
-        return TOPIC_PLACEHOLDERS[int(raw) % len(TOPIC_PLACEHOLDERS)]
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError as e:
+        raise ValueError(f"{ENV_PLACEHOLDER_INDEX}={raw!r} is not an integer") from e
+
+
+# Malformed values fail here, at import, rather than on the first render.
+placeholder_index()
+
+
+def _topic_placeholder() -> str:
+    index = placeholder_index()
+    if index is not None:
+        return TOPIC_PLACEHOLDERS[index % len(TOPIC_PLACEHOLDERS)]
     return random.choice(TOPIC_PLACEHOLDERS)
 
 
