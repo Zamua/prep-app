@@ -71,6 +71,8 @@ dev = [
     # containers don't ship with playwright.
     "playwright==1.62.0",
     "pytest-playwright==0.9.0",
+    "pillow==12.1.1",
+    "numpy==2.2.6",
 ]
 
 [tool.pytest.ini_options]
