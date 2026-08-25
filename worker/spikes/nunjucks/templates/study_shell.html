@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{# The signed-in study loop. The server renders this shell (auth,
+   masthead, importmap); study/online-host.js mounts the shared study
+   views into it and drives them through the JSON study API. Unlike the
+   offline shell this extends base.html: the page is online by
+   definition, so the identity script and web font are free to load. #}
+
+{% block title %}Studying {{ deck_display(deck_name) }} · prep{% endblock %}
+{% block page_class %}page-study{% endblock %}
+
+{% block main %}
+<div class="study-toast" data-study-toast hidden role="status"></div>
+
+<main class="folio" data-study-root
+      data-deck="{{ deck_name }}"
+      data-session-id="{{ session_id or '' }}"
+      data-sign-in-url="{{ sign_in_url or '' }}">
+  <section class="empty-state">
+    <p>Loading your cards&hellip;</p>
+    <noscript>
+      <p>Studying needs JavaScript enabled. Turn it on and reload to
+        review this deck.</p>
+      <p><a href="{{ root }}/deck/{{ deck_name }}">Back to the deck</a></p>
+    </noscript>
+  </section>
+</main>
+
+{# base.html puts the importmap in <head>, so this inline module can
+   resolve the "@/" specifier. There is no scripts block to use. #}
+<script type="module">import "@/study/online-host.js";</script>
+{% endblock %}

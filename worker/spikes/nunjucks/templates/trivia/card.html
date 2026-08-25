@@ -1,0 +1,266 @@
+{# Single-card trivia view. Two modes:
+
+   - Standalone (no `session_total` in context): used by the legacy
+     `/trivia/<question_id>` deep-link route. Form posts to the
+     single-card answer endpoint; "Dismiss" goes home.
+   - Session (set `session_total` + `session_remaining`): part of a
+     mini-session driven by /trivia/session/<deck>. Form posts to
+     the session endpoint with the queue carried in a hidden field;
+     "Next" advances to the head-popped queue. Progress indicator
+     ("1 of 3") rendered when in session mode. #}
+{% extends "base.html" %}
+{% block title %}{{ deck_display(deck_name) or 'trivia' }} · prep{% endblock %}
+{% block page_class %}trivia-card{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{% call nav.back_with_aside("/", deck_name or "home") %}
+  {# Post-answer: verdict pill sits in the nav row next to the back
+     link, leaves the card body free for the answer compare + actions. #}
+  {% if result is not none %}
+    <span class="trivia-verdict-pill {{ 'tvp-right' if result.correct else 'tvp-wrong' }}">
+      {% if result.correct %}{{ icon('check', class_='icon icon-inline') }} correct
+      {% else %}{{ icon('x', class_='icon icon-inline') }} not quite{% endif %}
+    </span>
+  {% endif %}
+  {% if session_total %}
+    <span class="card-id">{{ session_position }} of {{ session_total }}</span>
+  {% else %}
+    <span class="card-id">№ {{ q.id }}</span>
+  {% endif %}
+{% endcall %}
+
+<article class="trivia-card-body">
+  {# Render prompt through the markdown filter so technical decks
+     (DSA, Python idioms, Go concurrency, etc.) can include fenced
+     code blocks in the question text. The .prose class carries the
+     existing app-wide code/inline-code/list/heading styling — same
+     rules used by the SRS study prompt. #}
+  <div class="trivia-prompt prose">{{ q.prompt|markdown }}</div>
+
+  {% if result is none %}
+    <form method="post"
+          action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/answer{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/answer{% endif %}"
+          class="trivia-answer-form"
+          autocomplete="off"
+          data-submit-pending>
+      {% if session_total %}
+        <input type="hidden" name="cards" value="{{ session_remaining }}">
+        <input type="hidden" name="done" value="{{ session_done or '' }}">
+      {% endif %}
+      {# Match the SRS short-answer chrome: .freetext wrapper, italic
+         eyebrow label, input gets the same border/padding as the
+         textarea via the .trivia-answer-input rule. #}
+      <label class="freetext">
+        <span class="freetext-label">Your answer</span>
+        <input
+          type="text"
+          name="answer"
+          class="trivia-answer-input"
+          placeholder="A word or two."
+          autofocus
+          required>
+      </label>
+      {# Side-by-side Submit + IDK in session mode (the IDK button
+         lets the user record a wrong without typing or guessing).
+         Standalone deep-link keeps the original single-button row. #}
+      {% if session_total %}
+        <div class="trivia-actions">
+          <button type="submit" class="btn btn-primary" id="trivia-submit-btn"
+                  data-pending-label="Grading…">
+            Submit
+          </button>
+          <button type="submit" name="idk" value="1" class="btn btn-quiet"
+                  formnovalidate>
+            I don't know
+          </button>
+        </div>
+      {% else %}
+        <div class="study-actions">
+          <button type="submit" class="btn btn-primary" id="trivia-submit-btn"
+                  data-pending-label="Grading…">
+            Submit
+          </button>
+        </div>
+      {% endif %}
+    </form>
+  {% else %}
+    <div class="trivia-result trivia-result-{{ 'right' if result.correct else 'wrong' }}">
+      {# Side-by-side answer compare. Correct-answer card tints --right
+         on a right verdict, --wrong on a wrong one — visual diff at
+         a glance. #}
+      <section class="trivia-answers">
+        <div class="trivia-answer-block">
+          <p class="trivia-answer-eyebrow">your answer</p>
+          <p class="trivia-answer-text">
+            {%- if result.idk -%}<em>I don't know</em>
+            {%- elif result.given -%}{{ result.given }}
+            {%- else -%}<em>(empty)</em>
+            {%- endif -%}
+          </p>
+        </div>
+        <div class="trivia-answer-block trivia-answer-correct">
+          <p class="trivia-answer-eyebrow">correct answer</p>
+          <p class="trivia-answer-text">{{ result.expected }}</p>
+        </div>
+      </section>
+
+      {# AI feedback (only present when the question hit the
+         AI-graded path; deterministic-graded answers don't need
+         narration since the visual diff between the two answer
+         blocks already tells the story). #}
+      {% if result.feedback %}
+        <p class="trivia-feedback">{{ result.feedback }}</p>
+      {% endif %}
+
+      {# Two outlined disclosure pills sit side-by-side; tapping one
+         reveals its content in a panel below the row. Both are
+         optional — the row's grid collapses gracefully if only one
+         disclosure is present. #}
+      {# Disc row: tertiary actions on the result panel. Three pills
+         share the same chrome (outlined, italic uppercase, sparkle/
+         arrow icon): Explain (expands inline) / Explore further
+         (expands inline) / Re-grade (POSTs to the regrade route).
+         Each is optional — the row's grid auto-fits 1..3 children
+         so missing pills don't leave dead space. The Re-grade pill
+         is shown only on wrong verdicts where the user typed an
+         answer (IDK submissions are confessions, not disputes). #}
+      {% set _show_regrade = (not result.correct) and (not result.idk) and result.given %}
+      {% if q.explanation or handoff_urls or _show_regrade %}
+        {# Bodies live as siblings of the disc-row inside .trivia-discs
+           — that way they can span full width without fighting the
+           grid placement of the summary pills. CSS :has() shows the
+           matching body when its <details> is open. (Earlier tried
+           display:contents on .trivia-disc to lift the body up to the
+           grid; iOS Safari rendered that as chaotic overlapping
+           columns. Sibling pattern is reliable.) #}
+        <div class="trivia-discs">
+          <div class="trivia-disc-row">
+            {% if q.explanation %}
+              <details class="trivia-disc trivia-disc-explain" name="trivia-disc-{{ q.id }}">
+                <summary>
+                  <span>Explain</span>
+                  {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
+                </summary>
+              </details>
+            {% endif %}
+            {% if handoff_urls %}
+              <details class="trivia-disc trivia-disc-explore" name="trivia-disc-{{ q.id }}">
+                <summary>
+                  <span>Explore</span>
+                  {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
+                </summary>
+              </details>
+            {% endif %}
+            {% if _show_regrade %}
+              {# Dispute disclosure — collapses the two verdict-action
+                 forms (Re-grade + I-was-right) under a single pill so
+                 the disc row stays at 3 wide. The forms themselves
+                 live in the body (sibling of .trivia-disc-row inside
+                 .trivia-discs), revealed by the :has() selector when
+                 this <details> is open. #}
+              <details class="trivia-disc trivia-disc-dispute" name="trivia-disc-{{ q.id }}">
+                <summary>
+                  <span>Dispute</span>
+                  {{ icon('caret-down', class_='icon icon-inline trivia-disc-caret') }}
+                </summary>
+              </details>
+            {% endif %}
+          </div>
+          {% if q.explanation %}
+            <p class="trivia-disc-body trivia-disc-body-explain" data-details-body>{{ q.explanation }}</p>
+          {% endif %}
+          {% if handoff_urls %}
+            <div class="trivia-disc-body trivia-disc-body-explore trivia-explore-options" data-details-body>
+              {% for key in ['claude', 'chatgpt'] %}
+                {% if key in handoff_urls %}
+                  <a class="trivia-explore-option"
+                     href="{{ handoff_urls[key] }}"
+                     target="_blank" rel="noopener noreferrer">
+                    <span>Discuss with {{ handoff_providers[key].label }}</span>
+                    {{ icon('arrow-up-right', class_='icon icon-inline') }}
+                  </a>
+                {% endif %}
+              {% endfor %}
+              <a class="trivia-explore-option"
+                 href="{{ google_search_url }}"
+                 target="_blank" rel="noopener noreferrer">
+                <span>Search on Google</span>
+                {{ icon('arrow-up-right', class_='icon icon-inline') }}
+              </a>
+            </div>
+          {% endif %}
+          {% if _show_regrade %}
+            {# Dispute body — sibling of .trivia-disc-row, shown via
+               the :has(.trivia-disc-dispute[open]) selector. Two
+               forms side-by-side: ask the AI to re-evaluate, or
+               manually flip the verdict. #}
+            <div class="trivia-disc-body trivia-disc-body-dispute" data-details-body>
+              <p class="trivia-dispute-eyebrow">if the grader was harsh</p>
+              <div class="trivia-dispute-grid">
+                <form method="post"
+                      action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/regrade{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/regrade{% endif %}"
+                      class="trivia-regrade-form"
+                      data-submit-pending>
+                  <input type="hidden" name="answer" value="{{ result.given }}">
+                  {% if session_total %}
+                    <input type="hidden" name="question_id" value="{{ q.id }}">
+                    <input type="hidden" name="cards" value="{{ session_remaining }}">
+                    <input type="hidden" name="done" value="{{ session_done or '' }}">
+                  {% endif %}
+                  <button type="submit" class="trivia-regrade-btn">
+                    {{ icon('sparkle', class_='icon icon-inline') }}
+                    <span>Re-grade</span>
+                  </button>
+                </form>
+                <form method="post"
+                      action="{% if session_total %}{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}/override{% else %}{{ request.scope.get('root_path','') }}/trivia/{{ q.id }}/override{% endif %}"
+                      class="trivia-override-form">
+                  <input type="hidden" name="answer" value="{{ result.given }}">
+                  {% if session_total %}
+                    <input type="hidden" name="question_id" value="{{ q.id }}">
+                    <input type="hidden" name="cards" value="{{ session_remaining }}">
+                    <input type="hidden" name="done" value="{{ session_done or '' }}">
+                  {% endif %}
+                  <button type="submit" class="trivia-override-btn"
+                          title="Flip the verdict to right without consulting the AI — for when the grader was simply too harsh">
+                    {{ icon('check', class_='icon icon-inline') }}
+                    <span>I was right</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if result.regraded %}
+        <p class="trivia-regrade-note">
+          <em>re-graded by AI{% if result.regex_updated %} · accepted answers expanded{% endif %}</em>
+        </p>
+      {% elif result.overridden %}
+        <p class="trivia-regrade-note">
+          <em>verdict overridden by you</em>
+        </p>
+      {% elif result.regex_updated %}
+        <p class="trivia-regrade-note">
+          <em>AI expanded the accepted-answer regex</em>
+        </p>
+      {% endif %}
+
+      {% if session_total %}
+        <a href="{{ request.scope.get('root_path','') }}/trivia/session/{{ deck_name }}?cards={{ session_remaining }}{% if session_done %}&amp;done={{ session_done }}{% endif %}"
+           class="btn btn-primary trivia-next-cta">
+          {% if session_remaining %}Next card{% else %}Finish session{% endif %}
+        </a>
+      {% else %}
+        <a href="{{ request.scope.get('root_path','') }}/" class="btn btn-secondary trivia-next-cta">Dismiss</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</article>
+
+<script type="module">
+  import {init} from "@/modules/trivia-card.js";
+  init();
+</script>
+{% endblock %}

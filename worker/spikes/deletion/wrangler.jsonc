@@ -1,0 +1,9 @@
+// Spike 4: write rows, deleteAll, watch the bucket, restart, re-activate.
+{
+  "name": "spike-deletion",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["delete_all_deletes_alarm"],
+  "durable_objects": { "bindings": [{ "name": "USER", "class_name": "UserCell" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserCell"] }]
+}

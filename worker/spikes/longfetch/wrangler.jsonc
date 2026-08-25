@@ -1,0 +1,10 @@
+// Spike 2: one request awaits an outbound fetch that takes N seconds,
+// from the entry worker and from inside a cell.
+{
+  "name": "spike-longfetch",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": { "bindings": [{ "name": "SLOW", "class_name": "SlowCell" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SlowCell"] }],
+  "vars": { "SLOW_ORIGIN": "http://127.0.0.1:8999" }
+}

@@ -1,0 +1,25 @@
+{# Navigation macros — shared back-link patterns used at the top of
+   most pages. Import + call from a template:
+
+     {% import "macros/nav.html" as nav %}
+     {{ nav.back("/", "all decks") }}
+
+   The macro renders the same <nav class="study-nav"> + <a class="back">
+   chrome that 23 templates were duplicating inline. Adds the icon
+   automatically. #}
+
+{% macro back(href, label) %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}{{ href }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ label }}</a>
+</nav>
+{% endmacro %}
+
+{# Two-slot variant: back link on the left, free-form right slot
+   (verdict pill, position indicator, etc.). Use when the page wants
+   something next to the back link. #}
+{% macro back_with_aside(href, label) %}
+<nav class="study-nav">
+  <a href="{{ request.scope.get('root_path','') }}{{ href }}" class="back">{{ icon('arrow-left', class_='icon icon-inline') }} {{ label }}</a>
+  {{ caller() }}
+</nav>
+{% endmacro %}

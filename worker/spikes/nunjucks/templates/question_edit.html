@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}edit card № {{ q.id }} · {{ deck_display(deck_name) }} · prep{% endblock %}
+{% block page_class %}deck-new{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% import "macros/question_form.html" as qf with context %}
+{% block main %}
+{% call nav.back_with_aside("/deck/" ~ deck_name, deck_name) %}
+  <span class="card-id">№ {{ q.id }}</span>
+{% endcall %}
+
+<article class="deck-new-card">
+  <p class="section-eyebrow"><span>Edit card</span><span class="rule"></span></p>
+  <p class="deck-new-blurb">
+    Edit fields by hand. SRS state (step + next-due + review history) is
+    preserved across edits — only the question content changes.
+  </p>
+
+  {% if error %}
+    <p class="form-error">{{ error }}</p>
+  {% endif %}
+
+  {{ qf.form(
+       action=request.scope.get('root_path','') ~ "/question/" ~ q.id ~ "/edit",
+       submit_label="Save changes",
+       form=form,
+       cancel_href=request.scope.get('root_path','') ~ "/deck/" ~ deck_name,
+       show_answer_regex=True
+  ) }}
+</article>
+{% endblock %}

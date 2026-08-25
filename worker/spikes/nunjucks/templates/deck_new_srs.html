@@ -1,0 +1,63 @@
+{# Step 2 (SRS path): name + free-form description + plan/empty submit. #}
+{% extends "base.html" %}
+{% block title %}new SRS deck · prep{% endblock %}
+{% block page_class %}deck-new{% endblock %}
+{% import "macros/nav.html" as nav with context %}
+{% block main %}
+{{ nav.back("/decks/new", "back") }}
+
+<section class="prelude">
+  <p class="eyebrow">A new SRS deck</p>
+  <h1 class="display">Tell prep&nbsp;<em>about it</em>.</h1>
+  <p class="lede">
+    Pick a short name, then describe what you want to learn — a topic, a
+    textbook chapter, a paper, a syllabus. Paste links to docs that should
+    ground the questions. The more concrete you are, the better the cards.
+  </p>
+</section>
+
+{% if error %}
+<p class="form-error">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="{{ request.scope.get('root_path','') }}/decks/new/srs" class="deck-new-form" autocomplete="off">
+  <label class="form-field">
+    <span class="form-label">Deck name</span>
+    <input type="text" name="name" value="{{ name_value }}" required maxlength="60"
+           placeholder="e.g. Distributed Systems">
+    <span class="form-hint">
+      Up to 60 chars; spaces and punctuation are fine. We'll derive a
+      kebab-case URL slug from it (so "Distributed Systems" lives at
+      <code>/deck/distributed-systems</code>).
+    </span>
+  </label>
+
+  <label class="form-field">
+    <span class="form-label">Description</span>
+    <textarea name="context_prompt" rows="10" maxlength="8000"
+              placeholder="What do you want to learn? Be concrete: a topic, a textbook chapter, a paper, a syllabus, a body of code. Paste links — the AI will web-fetch anything you reference. The more specific you are, the better the cards."
+              >{{ context_value }}</textarea>
+    <span class="form-hint">
+      Free-form. The AI reads this when generating cards. URLs are fine —
+      they'll be web-fetched if useful.
+    </span>
+  </label>
+
+  <div class="study-actions deck-new-actions">
+    {% if agent_available %}
+      <button type="submit" name="action" value="plan" class="btn btn-primary">
+        Plan &amp; generate cards
+      </button>
+      <button type="submit" name="action" value="empty" class="btn btn-quiet">
+        Create empty deck
+      </button>
+    {% else %}
+      <button type="submit" name="action" value="empty" class="btn btn-primary">
+        Create deck
+      </button>
+    {% endif %}
+    <a class="btn btn-quiet" href="{{ request.scope.get('root_path','') }}/decks/new">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

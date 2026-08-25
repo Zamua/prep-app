@@ -1,0 +1,8 @@
+// Spike 5: the precompiled template set rendered inside a cell.
+{
+  "name": "spike-nunjucks",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": { "bindings": [{ "name": "PAGE", "class_name": "PageCell" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PageCell"] }]
+}

@@ -1,0 +1,14 @@
+// Spike 6: JobCell RPCs into UserCell with an idempotency key; the node
+// is killed mid-flight and the same key is retried after restart.
+{
+  "name": "spike-idempotent",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "USER", "class_name": "UserCell" },
+      { "name": "JOB", "class_name": "JobCell" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserCell", "JobCell"] }]
+}

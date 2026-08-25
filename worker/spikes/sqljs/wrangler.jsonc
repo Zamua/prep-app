@@ -1,0 +1,8 @@
+// Spike 3: sql.js inside a cell, WASM through the module-import path.
+{
+  "name": "spike-sqljs",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": { "bindings": [{ "name": "ANKI", "class_name": "AnkiCell" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AnkiCell"] }]
+}

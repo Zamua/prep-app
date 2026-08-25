@@ -1,0 +1,12 @@
+{
+  "name": "prep-celld-spikes",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "esbuild": "0.28.0",
+    "nunjucks": "3.2.4",
+    "sql.js": "1.14.2",
+    "typescript": "^5.6.0"
+  }
+}
