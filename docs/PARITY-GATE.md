@@ -233,7 +233,7 @@ dialogs appear in at least one flow.
 
 | phase | flows (both schemes each) |
 | --- | --- |
-| 1 | `landing` (instant on/off), `privacy`, `errors` (404, 429, 500 via `/_parity/raise`), `reauth` (both cookie states), `dashboard` (empty; populated with snoozed, pinned, badge, PWA nudge), `deck` (srs with suspended; empty; trivia; menus, overflow, pin form, duration sheet, delete dialog), `deck-new` (chooser, srs, trivia), `question` (new, edit), `settings` (all five pages, agent none/connected, api with a token, notify prefs and log), `sign-out` (interstitial, device-wipe dialog), `docs` (both shells) |
+| 1 | `landing` (instant on/off), `privacy`, `errors` (404, 429, 500 via `/_parity/raise`), `reauth` (both cookie states), `dashboard` (empty; populated with snoozed, pinned, badge, PWA nudge), `deck` (srs with suspended; empty; trivia; menus, overflow, pin form, duration sheet, delete dialog), `deck-new` (chooser, srs, trivia), `question` (new, edit), `settings` (all five pages, agent none/connected, api with a token, notify prefs and log), `sign-out` (interstitial, device-wipe dialog) |
 | 3 | `study` (five card types; right, wrong, idk; done; snooze), `trivia` (deep link, session, done), `offline` (SW allowed: shell, study, dashboard) |
 | 4 | `plan` (every status incl. round 2 and `gone`; planning held), `transform` (three scopes, every status, nine diff-card states, improve dialog), `reorganize`, `trivia-generating` (held, applying, done), `grading` (held), `badge` (after first swap) |
 | 5 | `import` (csv, prepdeck, anki, each with an error state), `export`, `split` |
@@ -254,7 +254,9 @@ and wipes the stores. Free-text study answers book the LLM grader,
 so the short and code cards take the `idk` path. The trivia session
 is opened with an explicit `?cards=` queue; a fresh session draws its
 order at random. `navigator.storage.estimate()` and `persisted()` are
-pinned in the context, like the clock.
+pinned in the context, like the clock. The two vendor doc shells are
+blank under the flag, so no CSS knob can redden a shot of them; they
+are held by the contracts corpus (D) as DOM pairs instead.
 
 ### C6. Seed mechanism
 
@@ -343,8 +345,10 @@ pixel flows see.
   `reader` profile; the anonymous `Set-Cookie` lifecycle (mint on
   instant generate, refresh after `REFRESH_AFTER_SECONDS` with the
   clock advanced, clear on `/forget-device` and on a bad signature);
-  MCP `tools/list` and one call per tool (17); `openapi.json`. A
-  `VOLATILE` map of JSON paths compared by regex covers the PAT secret.
+  MCP `tools/list` and one call per tool (17); `openapi.json`; the
+  `/docs` and `/redoc` shells under `PREP_PARITY_MODE=1`, compared as
+  DOM. A `VOLATILE` map of JSON paths compared by regex covers the PAT
+  secret.
 - DOM differ, `tests/parity/dom_diff.py: dom_diff(a, b) -> list[Diff]`
   (stdlib `html.parser`, `convert_charrefs=True`, void elements
   closed): equal element tree; attribute sets with decoded values

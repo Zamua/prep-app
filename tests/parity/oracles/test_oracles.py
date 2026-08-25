@@ -302,6 +302,10 @@ def test_contracts_corpus_lists_every_route():
         assert any(path.startswith(prefix) for _, path in listed), prefix
     assert ("GET", "/openapi.json") in listed
     assert ("POST", "/forget-device") in listed
+    by_name = {p["name"]: p for p in corpus["pairs"]}
+    for name in ("docs-shell", "redoc-shell"):
+        text = by_name[name]["response"]["text"]
+        assert "<title>" in text and "cdn.jsdelivr.net" not in text, name
     names = [p["name"] for p in corpus["pairs"]]
     assert len(names) == len(set(names))
     mcp_tools = {

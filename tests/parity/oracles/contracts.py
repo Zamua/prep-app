@@ -900,6 +900,8 @@ def extract() -> dict[str, str]:
         record_notify(h, H)
         record_api_and_mcp(h, H)
         h.call("openapi", "GET", "/openapi.json", headers=JSON)
+        h.call("docs-shell", "GET", "/docs", note="vendor bundle stripped under the flag")
+        h.call("redoc-shell", "GET", "/redoc", note="vendor bundle stripped under the flag")
         h.call("workflow-badge-unauthenticated", "GET", "/api/active-workflows-badge", headers=JSON)
         pairs = jsonable(h.recorded)
         listed, missing = covered_routes(h.client.app, pairs)

@@ -5,7 +5,6 @@ from tests.parity.flows import (  # noqa: F401
     dashboard_empty,
     deck,
     deck_new,
-    docs,
     errors,
     landing,
     offline,
