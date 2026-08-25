@@ -106,3 +106,11 @@ def test_each_font_is_served_as_woff2(client):
 def test_fonts_stay_out_of_the_precache(client):
     body = client.get("/sw.js").text
     assert "/static/fonts/" not in body
+
+
+def test_dockerfile_ships_the_font_files():
+    """The image copies static/ by subdirectory, so a new subdirectory
+    is invisible to prod until named here. fonts.css points at
+    static/fonts; the image must carry it."""
+    dockerfile = (REPO_ROOT / "docker" / "Dockerfile.prep").read_text()
+    assert "COPY static/fonts/ ./static/fonts/" in dockerfile
