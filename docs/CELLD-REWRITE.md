@@ -78,8 +78,15 @@ OpenRouter key. Options: drop it, and those users move to an API key or
 the free tier; or keep it as a small Node sidecar (the Agent SDK is
 JavaScript) behind the same `AgentPort` over HTTP, the one component
 that would not be a cell. Calling the Messages API directly with the
-subscription token is not an option: Anthropic's policy forbids
-embedding subscription OAuth in third-party apps. Decision 7.4.
+subscription token is not an option: the token is scoped by Anthropic's
+docs to Claude Code and the surfaces that wrap it, and the policy
+forbids embedding subscription OAuth in third-party apps.
+
+**Decided 2026-08-25: drop the subscription provider; BYOK stays as API
+keys** (`anthropic_api`, `openai_api`, `openrouter_api`, all native
+`fetch` adapters that exist today). Migration: the users holding a
+subscription row are told in the settings page to paste an Anthropic
+API key; their ciphertext rows are deleted at cutover.
 
 ---
 
@@ -561,11 +568,11 @@ critical path is 0b -> 0 -> 1 -> 3 -> 6; phases 2 and 4 overlap it.
 
 ## 7. Decisions the operator owns before phase 1
 
-1. The four-class taxonomy (2.1). It cannot be renamed later.
-2. In-repo `worker/` over a new repository (3).
+1. Settled: the four-class taxonomy (2.1), approved 2026-08-25.
+2. Settled: in-repo `worker/` (3), approved 2026-08-25.
 3. PAT reissue and its notice channel (2.5).
-4. The per-user `claude_subscription` BYOK provider: drop and notify, or
-   a sidecar (1.3).
+4. Settled: drop the `claude_subscription` provider, BYOK stays as API
+   keys (1.3).
 5. FSRS fuzz: keep it in TS (`ts-fsrs` fuzz, verified only
    distributionally) or turn it off (a scheduling change for every
    user, not pixel-visible, behavior-visible).
