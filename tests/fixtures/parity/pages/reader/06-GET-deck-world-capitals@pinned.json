@@ -1,0 +1,206 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "distributed-systems": "Distributed Systems",
+   "scratch": "Scratch",
+   "world-capitals": "World Capitals",
+   "world-history": "World History Trivia"
+  },
+  "deck_meta": {
+   "context_prompt": "Capital cities of the world, one card per country.",
+   "deck_id": 1,
+   "display_name": "World Capitals",
+   "interval_minutes": null,
+   "notifications_enabled": true,
+   "pinned": true,
+   "session_size": 3
+  },
+  "deck_name": "world-capitals",
+  "deck_retention": null,
+  "deck_type": "srs",
+  "due_count": 3,
+  "notif_unseen_count": 2,
+  "questions": [
+   {
+    "answer": "Accra",
+    "answer_regex": null,
+    "attempts": 0,
+    "choices": null,
+    "id": 6,
+    "language": null,
+    "last_review": null,
+    "next_due": "2026-03-14T11:00:00+00:00",
+    "prompt": "Capital of Ghana?",
+    "rights": 0,
+    "rubric": null,
+    "skeleton": null,
+    "step": 0,
+    "suspended": true,
+    "topic": "africa",
+    "type": "short"
+   },
+   {
+    "answer": "Canberra",
+    "answer_regex": null,
+    "attempts": 2,
+    "choices": [
+     "Sydney",
+     "Canberra",
+     "Melbourne",
+     "Perth"
+    ],
+    "id": 1,
+    "language": null,
+    "last_review": "2026-03-12T15:00:00+00:00",
+    "next_due": "2026-03-14T12:00:00+00:00",
+    "prompt": "Which city is the capital of Australia?",
+    "rights": 1,
+    "rubric": null,
+    "skeleton": null,
+    "step": 2,
+    "suspended": false,
+    "topic": "oceania",
+    "type": "mcq"
+   },
+   {
+    "answer": "Nairobi",
+    "answer_regex": "(?i)^\\s*nairobi\\s*$",
+    "attempts": 1,
+    "choices": null,
+    "id": 2,
+    "language": null,
+    "last_review": "2026-03-13T15:00:00+00:00",
+    "next_due": "2026-03-14T13:00:00+00:00",
+    "prompt": "Capital of Kenya?",
+    "rights": 1,
+    "rubric": null,
+    "skeleton": null,
+    "step": 1,
+    "suspended": false,
+    "topic": "africa",
+    "type": "short"
+   },
+   {
+    "answer": "[\"Ottawa\", \"Lima\"]",
+    "answer_regex": null,
+    "attempts": 0,
+    "choices": [
+     "Ottawa",
+     "Toronto",
+     "Lima",
+     "Rio de Janeiro"
+    ],
+    "id": 3,
+    "language": null,
+    "last_review": null,
+    "next_due": "2026-03-14T14:00:00+00:00",
+    "prompt": "Which of these are national capitals?",
+    "rights": 0,
+    "rubric": null,
+    "skeleton": null,
+    "step": 0,
+    "suspended": false,
+    "topic": "americas",
+    "type": "multi"
+   },
+   {
+    "answer": "def capital(code, table):\n    return table.get(code)\n",
+    "answer_regex": null,
+    "attempts": 1,
+    "choices": null,
+    "id": 4,
+    "language": "python",
+    "last_review": "2026-03-09T15:00:00+00:00",
+    "next_due": "2026-03-16T15:00:00+00:00",
+    "prompt": "Return the capital for a country code from `table`, or `None` when unknown.",
+    "rights": 1,
+    "rubric": "- Uses dict.get\n- Returns None on a miss",
+    "skeleton": "def capital(code, table):\n    ...\n",
+    "step": 3,
+    "suspended": false,
+    "topic": "python",
+    "type": "code"
+   },
+   {
+    "answer": "Lima",
+    "answer_regex": null,
+    "attempts": 0,
+    "choices": null,
+    "id": 5,
+    "language": null,
+    "last_review": "2026-03-05T15:00:00+00:00",
+    "next_due": "2026-03-19T15:00:00+00:00",
+    "prompt": "Capital of Peru?",
+    "rights": 0,
+    "rubric": null,
+    "skeleton": null,
+    "step": 4,
+    "suspended": false,
+    "topic": "americas",
+    "type": "short"
+   }
+  ],
+  "retention_presets": [
+   [
+    0.8,
+    "80% — Relaxed",
+    "Fewer reviews; more cards slip through."
+   ],
+   [
+    0.85,
+    "85% — Mild",
+    "Slightly less frequent; light maintenance."
+   ],
+   [
+    0.9,
+    "90% — Default",
+    "Anki's default. Balances retention vs work."
+   ],
+   [
+    0.95,
+    "95% — Strict",
+    "Tighter recall, more frequent reviews."
+   ]
+  ],
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "trivia": {
+   "context_prompt": "Capital cities of the world, one card per country.",
+   "deck_id": 1,
+   "display_name": "World Capitals",
+   "interval_minutes": null,
+   "notifications_enabled": true,
+   "pinned": true,
+   "session_size": 3
+  },
+  "trivia_stats": null,
+  "user": {
+   "active_byok_provider": null,
+   "created_at": "2026-03-14T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": null,
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "notification_prefs": "{\"mode\": \"off\", \"digest_hour\": 9, \"tz\": \"America/New_York\", \"threshold\": 3, \"quiet_hours_enabled\": false, \"quiet_start_hour\": 22, \"quiet_end_hour\": 8, \"last_digest_date\": null, \"last_when_ready_at\": null}",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  },
+  "user_retention": null
+ },
+ "headers": {
+  "content-type": "text/html; charset=utf-8"
+ },
+ "method": "GET",
+ "path": "/deck/world-capitals",
+ "sets": [],
+ "status": 200,
+ "template": "deck.html"
+}

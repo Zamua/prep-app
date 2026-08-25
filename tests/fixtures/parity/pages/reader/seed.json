@@ -1,0 +1,61 @@
+{
+ "api_tokens": [
+  1
+ ],
+ "decks": {
+  "empty": {
+   "display": "Scratch",
+   "id": 3,
+   "slug": "scratch"
+  },
+  "srs_a": {
+   "display": "World Capitals",
+   "id": 1,
+   "slug": "world-capitals"
+  },
+  "srs_b": {
+   "display": "Distributed Systems",
+   "id": 2,
+   "slug": "distributed-systems"
+  },
+  "trivia": {
+   "display": "World History Trivia",
+   "id": 4,
+   "slug": "world-history"
+  }
+ },
+ "notifications": [
+  1,
+  2
+ ],
+ "now": "2026-03-14T15:00:00+00:00",
+ "profile": "reader",
+ "questions": {
+  "srs_a": {
+   "code": 4,
+   "mcq": 1,
+   "multi": 3,
+   "short_plain": 5,
+   "short_regex": 2,
+   "suspended": 6
+  },
+  "srs_b": {
+   "phi": 9,
+   "quorum": 8,
+   "raft": 7
+  },
+  "trivia": {
+   "magna": 12,
+   "print": 11,
+   "rome": 10
+  }
+ },
+ "sessions": {
+  "active": "81426e386f04220d",
+  "snoozed": "951ddc296f6f0ff5"
+ },
+ "user": "parity@example.com",
+ "workflows": {
+  "transform": "transform-world-capitals-parity01"
+ }
+}

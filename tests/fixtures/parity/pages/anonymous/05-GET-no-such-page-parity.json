@@ -1,0 +1,27 @@
+{
+ "context": {
+  "agent_available": false,
+  "auth_provider": "tailscale",
+  "blurb": "We couldn't find what you were looking for. Maybe a typo, or the link is stale. (Not Found)",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {},
+  "headline": "Not found.",
+  "notif_unseen_count": 0,
+  "path": "/no-such-page-parity",
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "status_code": 404,
+  "user": null
+ },
+ "headers": {
+  "content-type": "text/html; charset=utf-8"
+ },
+ "method": "GET",
+ "path": "/no-such-page-parity",
+ "sets": [],
+ "status": 404,
+ "template": "error.html"
+}

@@ -169,10 +169,12 @@ def _restore_env(saved: dict[str, str | None]) -> None:
 
 
 @contextlib.contextmanager
-def scratch_app(*, seed: int = 20260314) -> Iterator[Harness]:
+def scratch_app(*, seed: int = 20260314, raise_server_exceptions: bool = True) -> Iterator[Harness]:
     """The app against a fresh sqlite under the parity env, seeded
     randomness, and the anonymous-cookie provider over Tailscale
-    headers. Everything re-pointed is restored on exit."""
+    headers. Everything re-pointed is restored on exit.
+    `raise_server_exceptions=False` lets a deliberate 500 render its
+    page instead of surfacing in the caller."""
     tmp = Path(tempfile.mkdtemp(prefix="prep-parity-"))
     db_path = tmp / "parity.sqlite"
     saved_env = _set_env(
@@ -221,7 +223,10 @@ def scratch_app(*, seed: int = 20260314) -> Iterator[Harness]:
 
         try:
             with TestClient(
-                app_mod.app, base_url="https://parity.example.test", follow_redirects=False
+                app_mod.app,
+                base_url="https://parity.example.test",
+                follow_redirects=False,
+                raise_server_exceptions=raise_server_exceptions,
             ) as client:
                 yield Harness(client=client, db_path=db_path, clock=clock, tmp=tmp)
         finally:

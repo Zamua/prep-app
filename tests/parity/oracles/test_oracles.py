@@ -34,6 +34,7 @@ from tests.parity.oracles import grading as grading_mod
 from tests.parity.oracles import markdown as markdown_mod
 from tests.parity.oracles import merge as merge_mod
 from tests.parity.oracles import offline as offline_mod
+from tests.parity.oracles import pages as pages_mod
 from tests.parity.oracles import render_templates as html_mod
 from tests.parity.oracles.contexts import DIFF_CARD_STATES, DIFF_FIELDS, all_contexts
 
@@ -45,6 +46,7 @@ EXTRACTORS = {
     "offline": offline_mod,
     "contracts": contracts_mod,
     "html": html_mod,
+    "pages": pages_mod,
 }
 
 TEMPLATES = REPO_ROOT / "templates"

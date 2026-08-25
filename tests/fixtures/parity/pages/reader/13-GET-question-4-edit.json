@@ -1,0 +1,70 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "distributed-systems": "Distributed Systems",
+   "scratch": "Scratch",
+   "world-capitals": "World Capitals",
+   "world-history": "World History Trivia"
+  },
+  "deck_name": "world-capitals",
+  "error": null,
+  "form": {
+   "answer": "def capital(code, table):\n    return table.get(code)\n",
+   "answer_regex": "",
+   "choices": "",
+   "language": "python",
+   "prompt": "Return the capital for a country code from `table`, or `None` when unknown.",
+   "rubric": "- Uses dict.get\n- Returns None on a miss",
+   "skeleton": "def capital(code, table):\n    ...\n",
+   "topic": "python",
+   "type": "code"
+  },
+  "notif_unseen_count": 2,
+  "q": {
+   "answer": "def capital(code, table):\n    return table.get(code)\n",
+   "answer_regex": null,
+   "choices": null,
+   "created_at": "2026-03-14T15:00:00+00:00",
+   "deck_id": 1,
+   "explanation": null,
+   "id": 4,
+   "language": "python",
+   "prompt": "Return the capital for a country code from `table`, or `None` when unknown.",
+   "rubric": "- Uses dict.get\n- Returns None on a miss",
+   "skeleton": "def capital(code, table):\n    ...\n",
+   "suspended": false,
+   "topic": "python",
+   "type": "code",
+   "user_id": "parity@example.com"
+  },
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "active_byok_provider": null,
+   "created_at": "2026-03-14T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": null,
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "notification_prefs": "{\"mode\": \"off\", \"digest_hour\": 9, \"tz\": \"America/New_York\", \"threshold\": 3, \"quiet_hours_enabled\": false, \"quiet_start_hour\": 22, \"quiet_end_hour\": 8, \"last_digest_date\": null, \"last_when_ready_at\": null}",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  }
+ },
+ "headers": {
+  "content-type": "text/html; charset=utf-8"
+ },
+ "method": "GET",
+ "path": "/question/4/edit",
+ "sets": [],
+ "status": 200,
+ "template": "question_edit.html"
+}

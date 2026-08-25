@@ -110,3 +110,42 @@ def pin_clock(at: datetime = PARITY_NOW) -> Iterator[ClockPin]:
         from prep.infrastructure import clock
 
         clock.reset_clock()
+
+
+def to_jsonable(value: object, path: str = "$", *, deck_display: dict[str, str] | None = None):
+    """A template context as plain JSON: scalars, dicts and lists pass
+    through; pydantic models, dataclasses, `SimpleNamespace` and
+    `sqlite3.Row` become dicts; the top-level `request` is dropped;
+    a callable `deck_display` becomes the `{slug: display}` map it
+    would answer. Anything else raises naming its path, so a new
+    shape is a decision rather than a silent `str()`."""
+    import sqlite3
+    from dataclasses import asdict, is_dataclass
+    from types import SimpleNamespace
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if path == "$" and key == "request":
+                continue
+            if key == "deck_display" and callable(item):
+                out[key] = dict(deck_display or {})
+                continue
+            out[str(key)] = to_jsonable(item, f"{path}.{key}", deck_display=deck_display)
+        return out
+    if isinstance(value, (list, tuple)):
+        return [
+            to_jsonable(item, f"{path}[{i}]", deck_display=deck_display)
+            for i, item in enumerate(value)
+        ]
+    if hasattr(value, "model_dump"):
+        return to_jsonable(value.model_dump(), path, deck_display=deck_display)
+    if is_dataclass(value) and not isinstance(value, type):
+        return to_jsonable(asdict(value), path, deck_display=deck_display)
+    if isinstance(value, SimpleNamespace):
+        return to_jsonable(vars(value), path, deck_display=deck_display)
+    if isinstance(value, sqlite3.Row):
+        return to_jsonable(dict(value), path, deck_display=deck_display)
+    raise TypeError(f"{path}: cannot serialize {type(value).__name__}")

@@ -1,0 +1,27 @@
+{
+ "context": {
+  "agent_available": false,
+  "auth_provider": "tailscale",
+  "blurb": "Sorry — that's on our end. The error has been logged.",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {},
+  "headline": "Something broke.",
+  "notif_unseen_count": 0,
+  "path": "/_parity/raise",
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "status_code": 500,
+  "user": null
+ },
+ "headers": {
+  "content-type": "text/html; charset=utf-8"
+ },
+ "method": "GET",
+ "path": "/_parity/raise",
+ "sets": [],
+ "status": 500,
+ "template": "error.html"
+}

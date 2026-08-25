@@ -1,0 +1,13 @@
+{
+ "body": "",
+ "headers": {
+  "content-type": "",
+  "location": "/deck/world-capitals"
+ },
+ "method": "POST",
+ "path": "/deck/world-capitals/pin",
+ "sets": [
+  "pinned"
+ ],
+ "status": 303
+}

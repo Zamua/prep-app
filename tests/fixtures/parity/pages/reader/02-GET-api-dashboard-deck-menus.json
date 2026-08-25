@@ -1,0 +1,78 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "distributed-systems": "Distributed Systems",
+   "scratch": "Scratch",
+   "world-capitals": "World Capitals",
+   "world-history": "World History Trivia"
+  },
+  "menu_decks": [
+   {
+    "deck_type": "srs",
+    "display_name": "Distributed Systems",
+    "due": 1,
+    "id": 2,
+    "name": "distributed-systems",
+    "pinned": true,
+    "total": 3
+   },
+   {
+    "deck_type": "srs",
+    "display_name": "Scratch",
+    "due": 0,
+    "id": 3,
+    "name": "scratch",
+    "pinned": false,
+    "total": 0
+   },
+   {
+    "deck_type": "srs",
+    "display_name": "World Capitals",
+    "due": 3,
+    "id": 1,
+    "name": "world-capitals",
+    "pinned": false,
+    "total": 6
+   },
+   {
+    "deck_type": "trivia",
+    "display_name": "World History Trivia",
+    "due": 0,
+    "id": 4,
+    "name": "world-history",
+    "pinned": false,
+    "total": 3
+   }
+  ],
+  "notif_unseen_count": 2,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": {
+   "active_byok_provider": null,
+   "created_at": "2026-03-14T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": null,
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "notification_prefs": "{\"mode\": \"off\", \"digest_hour\": 9, \"tz\": \"America/New_York\", \"threshold\": 3, \"quiet_hours_enabled\": false, \"quiet_start_hour\": 22, \"quiet_end_hour\": 8, \"last_digest_date\": null, \"last_when_ready_at\": null}",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  }
+ },
+ "headers": {
+  "content-type": "text/html; charset=utf-8"
+ },
+ "method": "GET",
+ "path": "/api/dashboard/deck-menus",
+ "sets": [],
+ "status": 200,
+ "template": "partials/deck_menus.html"
+}

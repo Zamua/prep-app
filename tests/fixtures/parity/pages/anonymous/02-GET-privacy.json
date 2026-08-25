@@ -1,0 +1,23 @@
+{
+ "context": {
+  "agent_available": false,
+  "auth_provider": "tailscale",
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {},
+  "notif_unseen_count": 0,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "user": null
+ },
+ "headers": {
+  "content-type": "text/html; charset=utf-8"
+ },
+ "method": "GET",
+ "path": "/privacy",
+ "sets": [],
+ "status": 200,
+ "template": "privacy.html"
+}

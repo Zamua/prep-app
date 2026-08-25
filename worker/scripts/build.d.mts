@@ -1,0 +1,15 @@
+export declare const WORKER: string;
+export declare const REPO: string;
+export declare const BUILD: string;
+export declare const DIST_ASSETS: string;
+export declare const STATIC: string;
+export declare const TEMPLATES: string;
+export declare function walk(dir: string): string[];
+export declare function precompileTemplates(templatesDir: string, outDir: string): number;
+export declare function bakeIcons(iconsDir: string, outDir: string): number;
+export declare function precacheTree(staticDir: string): { css: string[]; js: string[] };
+export declare function bakeServiceWorker(staticDir: string, outDir: string): { css: string[]; js: string[] };
+export declare function bakeBuildInfo(raw: string | undefined, outDir: string): string;
+export declare function copyStatic(staticDir: string, distAssetsDir: string): number;
+export declare function bundleRenderFixtures(entry: string, outDir: string): Promise<void>;
+export declare function typecheck(): void;

@@ -1,0 +1,118 @@
+{
+ "context": {
+  "agent_available": true,
+  "auth_provider": "tailscale",
+  "byok_error": null,
+  "byok_flash": null,
+  "byok_sections": [
+   {
+    "info": {
+     "console_url": "https://docs.claude.com/en/docs/agent-sdk/auth#claude-app-tokens",
+     "default_model": "claude-sonnet-4-6",
+     "key_prefixes": [
+      "sk-ant-oat01-"
+     ],
+     "label": "Claude subscription",
+     "provider": "claude-subscription",
+     "short_label": "claude-sub"
+    },
+    "is_active": false,
+    "metadata": null,
+    "provider": "claude-subscription"
+   },
+   {
+    "info": {
+     "console_url": "https://console.anthropic.com/settings/keys",
+     "default_model": "claude-sonnet-4-6",
+     "key_prefixes": [
+      "sk-ant-api03-"
+     ],
+     "label": "Anthropic",
+     "provider": "anthropic-api",
+     "short_label": "anthropic"
+    },
+    "is_active": true,
+    "metadata": {
+     "created_at": "2026-03-14T15:00:00+00:00",
+     "key_prefix": "sk-ant-api03-p…tyAA",
+     "last_used_at": null,
+     "provider": "anthropic-api",
+     "user_id": 0
+    },
+    "provider": "anthropic-api"
+   },
+   {
+    "info": {
+     "console_url": "https://platform.openai.com/api-keys",
+     "default_model": "gpt-5-mini",
+     "key_prefixes": [
+      "sk-"
+     ],
+     "label": "OpenAI",
+     "provider": "openai-api",
+     "short_label": "openai"
+    },
+    "is_active": false,
+    "metadata": null,
+    "provider": "openai-api"
+   },
+   {
+    "info": {
+     "console_url": "https://openrouter.ai/keys",
+     "default_model": "anthropic/claude-sonnet-4.5",
+     "key_prefixes": [
+      "sk-or-v1-"
+     ],
+     "label": "OpenRouter",
+     "provider": "openrouter-api",
+     "short_label": "openrouter"
+    },
+    "is_active": false,
+    "metadata": null,
+    "provider": "openrouter-api"
+   }
+  ],
+  "clerk_frontend_api_host": null,
+  "clerk_publishable_key": null,
+  "deck_display": {
+   "distributed-systems": "Distributed Systems",
+   "scratch": "Scratch",
+   "world-capitals": "World Capitals",
+   "world-history": "World History Trivia"
+  },
+  "error": null,
+  "flash": null,
+  "free_tier_configured": true,
+  "notif_unseen_count": 2,
+  "sign_in_url": "",
+  "sign_out_url": "",
+  "sign_up_url": "",
+  "static_css_mtime": "ce11d0000000",
+  "status": {
+   "kind": "unconfigured",
+   "logged_in": false,
+   "reason": "no CLAUDE_CODE_OAUTH_TOKEN — paste a `claude setup-token` value"
+  },
+  "user": {
+   "active_byok_provider": null,
+   "created_at": "2026-03-14T15:00:00+00:00",
+   "desired_retention": null,
+   "display_name": "Parity",
+   "editor_input_mode": null,
+   "email": "parity@example.com",
+   "is_anonymous": 0,
+   "last_seen_at": "2026-03-14T15:00:00+00:00",
+   "notification_prefs": "{\"mode\": \"off\", \"digest_hour\": 9, \"tz\": \"America/New_York\", \"threshold\": 3, \"quiet_hours_enabled\": false, \"quiet_start_hour\": 22, \"quiet_end_hour\": 8, \"last_digest_date\": null, \"last_when_ready_at\": null}",
+   "profile_pic_url": null,
+   "tailscale_login": "parity@example.com"
+  }
+ },
+ "headers": {
+  "content-type": "text/html; charset=utf-8"
+ },
+ "method": "GET",
+ "path": "/settings/agent",
+ "sets": [],
+ "status": 200,
+ "template": "settings_agent.html"
+}
