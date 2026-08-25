@@ -290,11 +290,25 @@ so it is written as a saga with a marker, in this order:
    with numbered suffixes then random bytes; enforce the target's caps).
 3. `DirectoryCell` writes the audit row (`previous_ids` comes from here)
    and marks the merge done.
-4. The anonymous cell writes its own **tombstone** and `deleteAll`s the
-   rest. Every anonymous-cell activation checks its tombstone before
-   serving, so a stale cookie naming a merged or reaped id cannot
-   resurrect an empty account, and no per-request directory read is
-   needed. The reaper uses the same tombstone.
+4. The anonymous cell writes its own **tombstone**, `deleteAll`s the
+   rest, then scrubs (below). Every anonymous-cell activation checks its
+   tombstone before serving, so a stale cookie naming a merged or reaped
+   id cannot resurrect an empty account, and no per-request directory
+   read is needed. The reaper uses the same tombstone.
+
+**Deletion is three steps, not one (spike 4).** `deleteAll()` empties the
+cell, but SQLite's freed pages are re-uploaded in every later ltx
+snapshot, so the deleted row bodies stay readable in the bucket
+(decoded from the snapshots: 1,997 of 2,000 rows still present after a
+wipe). Account deletion, the reaper and the merge therefore do:
+`deleteAll()` in its own RPC; a **zero-fill scrub** in a separate RPC
+(create a table, write `zeroblob` pages to the former size, drop it),
+after which the next snapshot holds no row bodies; then an
+operator-side `mc rm` of the `cells/<class>:<hash>/` prefix from the
+nightly job, because epochs and `own.json` are never reclaimed by
+celld. Never combine `deleteAll` with a large write in one RPC: the
+output gate rejects it with `DurabilityUnproven` and rolls the whole
+RPC back; small writes are fine, and every step is retry-safe.
 
 ---
 
@@ -316,15 +330,22 @@ and tag before the first deploy, as always.
 issuer, publishable key, JWKS), with the house deny-list rule: a value
 that is a secret or an internal address never enters it.
 
-**Secrets have no house path into a cell yet.** prep needs six:
+**Secrets, settled by spike 1 (5.1).** prep needs six:
 `PREP_KEY_ENCRYPTION_SECRET`, `PREP_ANON_COOKIE_SECRET`,
 `CLERK_SECRET_KEY` (account deletion calls Clerk), the webhook secret,
-the free-tier API key, the VAPID private key. celld's accepted config has
-no secrets key, and no fleet app carries an application secret today.
-Spike 5.1 answers whether celld exposes process env or a deploy-time
-secrets file; if neither, the design is a sealed `vars` file generated
-at deploy from a k8s Secret and never committed. Phases 3 and 6 cannot
-start without the answer.
+the free-tier API key, the VAPID private key. celld reads
+`CELLD_VAR_<KEY>=value` from the node's process environment and
+`CELLD_VARS_FILE=<dotenv path>`, both visible to the entry worker and
+every cell, overriding wrangler `vars` (precedence `CELLD_VAR_` > file >
+wrangler). Plain process env is not visible to cells and `celld deploy`
+cannot bake a node-side value into a bundle (verified: a deploy run
+with the secrets set produced a byte-identical bundle). So the fleet
+manifest mounts the k8s `prep-secrets` Secret as `envFrom` with the
+`CELLD_VAR_` prefix. Constraints: values are single-line (the dotenv
+parser strips quotes, does not unescape, and a JSON file silently
+yields nothing); every cell class sees every var, so there is no
+per-class least privilege. The house rule for the other apps: this is
+the first fleet app carrying application secrets.
 
 ---
 
@@ -431,10 +452,41 @@ Each phase runs as the usual dispatch: a spec agent, implementation
 agents split by bounded context, a test agent, an adversarial review,
 then the gates. A phase is done when its gates are green on staging.
 
-### 5.1 Phase 0b, the runtime spikes (before the taxonomy is committed)
+### 5.1 Phase 0b, the runtime spikes: DONE 2026-08-25, all six pass
 
-Each has a pass / fail criterion and a fallback. All are cheap; none can
-be skipped, because the taxonomy and the secrets design depend on them.
+Run against a local celld node and a scratch bucket, then independently
+re-run by a second agent that tried to refute each pass (code on branch
+`spikes/celld-0b`, report in the branch's `worker/spikes/`). Results,
+with what each changed in this plan:
+
+1. Secrets: PASS via `CELLD_VAR_*` / `CELLD_VARS_FILE` (section 3).
+2. Long fetch: PASS at 75s; the only limit is celld's outbound fetch
+   timeout, 120s by default, raised with `CELLD_FETCH_TIMEOUT_S`. The
+   fleet manifest sets it above the longest generation call.
+3. `sql.js`: PASS through the module-import path with the browser glue
+   (`sql-wasm-browser.js`; the node glue dies on `node:fs` because celld
+   exposes `process.versions.node`), a 658 KB `.wasm` sidecar, no
+   runtime compilation (verified with the WebAssembly constructors
+   stubbed to throw). Cold cell 22 ms, warm 3 ms.
+4. Deletion: PASS on semantics, and the bucket keeps deleted pages
+   readable; the three-step deletion in 2.6 is the consequence.
+5. nunjucks: PASS; 38 of 49 templates precompile unchanged, 11 need
+   syntax edits for Jinja-isms (slices, tuple unpacking, a trailing
+   comma, a dict of tuples, `namespace()`), all already in the 2.3 shim
+   table. Bundle 455 KB unminified; cold render 1 ms, warm tens of
+   microseconds. `tojson` must return a `SafeString` or autoescape
+   corrupts the dashboard payload.
+6. Cross-cell idempotent write under `kill -9`: PASS, exactly one row
+   per key after retry, kills before and after the write. Cells are
+   unreachable for 6-8 s after a node restart (lease TTL); the runners
+   treat that as a retryable error.
+
+One more fact for the taxonomy: module-level state is per isolate and
+shared by every cell of the worker on a node (the precompiled template
+environment served three cells from one instance). Fine for caches and
+compiled templates, never for per-cell state.
+
+The original criteria, kept for the record:
 
 1. **Secrets delivery**: does a cell see process env, or does `celld
    deploy` accept a secrets file? Fail -> the sealed-`vars`-at-deploy
@@ -554,13 +606,16 @@ critical path is 0b -> 0 -> 1 -> 3 -> 6; phases 2 and 4 overlap it.
 5. **The cell taxonomy is permanent.** Closed by the spikes preceding
    it and an adversarial review of the four classes before the first
    deploy.
-6. **Secrets delivery unknown.** Spike 1; phases 3 and 6 wait on it.
+6. **Secrets delivery.** Closed by spike 1 (section 3).
 7. **MinIO conditional writes.** Upstream says the community edition
    lacks what celld needs; the fleet runs one replica per app, where a
    two-owner race cannot occur. prep inherits that posture; scaling any
    fleet to two nodes is a separate decision.
-8. **75s synchronous LLM call inside a request.** Spike 2.
-9. **`sql.js` in the isolate.** Spike 3.
+8. **75s synchronous LLM call inside a request.** Closed by spike 2;
+   the fleet sets `CELLD_FETCH_TIMEOUT_S`.
+9. **`sql.js` in the isolate.** Closed by spike 3.
+13. **Deleted data lingers in the bucket** (spike 4). Closed by the
+    three-step deletion in 2.6 and the nightly prefix removal.
 10. **PAT format change.** Announced through Clerk email; the one path
     that cannot be byte-compatible.
 11. **Rollback loses the cutover window's writes.** The window is short
