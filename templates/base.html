@@ -8,9 +8,12 @@
   {%- set root = request.scope.get('root_path','') -%}
   {%- set env_label = 'staging' if 'staging' in root else '' -%}
   <title>{% if env_label %}[{{ env_label }}] {% endif %}{% block title %}prep{% endblock %}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  {# Self-hosted web fonts (static/css/fonts.css, files under
+     static/fonts/): the same bytes from every server. Its own link
+     rather than an @import in index.css, so the offline shell, which
+     shares index.css and must not depend on a font fetch, stays
+     font-free. #}
+  <link rel="stylesheet" href="{{ root }}/static/css/v{{ static_css_mtime|default(0) }}/fonts.css">
   {# Single CSS entry point. static/css/index.css declares the
      @layer order and @imports the rest. Versioned PATH (not query)
      because iOS Safari treats `?v=` query busts inconsistently —
