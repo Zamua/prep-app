@@ -137,7 +137,7 @@ def test_naive_datetime_is_coerced_to_utc():
 def test_seed_step_0_is_fresh():
     """Brand-new cards (step 0) get the same state a fresh insert
     would — FSRS initializes on the first review."""
-    state = seed_state_from_ladder_step(0)
+    state = seed_state_from_ladder_step(0, now=datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc))
     assert state.stability is None
     assert state.difficulty is None
 

@@ -17,6 +17,7 @@ import pytest
 from prep.auth import anon_cookie, reaper
 from prep.auth.merge import POLICY
 from prep.auth.repo import UserRepo
+from prep.infrastructure import clock
 from prep.infrastructure import db as infra_db
 from prep.infrastructure.db import cursor
 from tests.auth.test_merge import count_for, seed_all_tables, user_exists
@@ -178,17 +179,11 @@ def _boundary_row(user_id: str) -> tuple[str, datetime]:
     exactly the instant the cutoff names."""
     boundary = NOW - timedelta(days=reaper.IDLE_DAYS)
 
-    class _FrozenClock:
-        @staticmethod
-        def now(tz=None):
-            return boundary
-
-    original = infra_db.datetime
-    infra_db.datetime = _FrozenClock
+    clock.set_clock(clock.FixedClock(boundary))
     try:
         written = infra_db.now()
     finally:
-        infra_db.datetime = original
+        clock.reset_clock()
     seed_user(user_id, last_seen=written)
     return written, boundary
 

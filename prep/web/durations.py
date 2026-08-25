@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta, timezone
 
+from prep.infrastructure import clock
+
 # Sentinel timestamp meaning "effectively forever" — far enough in the
 # future that we don't have to special-case None vs forever throughout
 # the read path. Lexicographic ISO compares still work, the scheduler
@@ -72,7 +74,7 @@ def parse_until(
     Custom: integer 1-999, unit ∈ {hours, days, weeks}. Anything else
     is a DurationError.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or clock.now()
     preset = (preset or "").strip().lower() or None
     if preset:
         if preset == "forever":

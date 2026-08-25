@@ -153,24 +153,22 @@ def _scheduler_for(retention: float) -> _FsrsScheduler:
 def schedule_review(
     state: CardSRSState,
     verdict: Verdict,
-    now: datetime | None = None,
+    *,
+    now: datetime,
     desired_retention: float | None = None,
 ) -> ScheduledReview:
     """Pure scheduler call. State + verdict + now → new state.
 
-    `now` defaults to UTC-now but tests pass an explicit instant for
-    reproducibility. The library wants timezone-aware datetimes; we
-    coerce naive inputs to UTC rather than failing — easier for
-    callers, no foot-gun.
+    `now` is the caller's instant: the domain reads no clock. The
+    library wants timezone-aware datetimes; naive inputs are coerced
+    to UTC rather than rejected.
 
     `desired_retention` defaults to the FSRS paper / Anki convention
     of 0.90. Per-user values flow in from prep/auth/repo.py via the
     study repo's record(). Clamped to [MIN, MAX] to keep the
     scheduler well-behaved.
     """
-    if now is None:
-        now = datetime.now(timezone.utc)
-    elif now.tzinfo is None:
+    if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
 
     retention = desired_retention if desired_retention is not None else DEFAULT_DESIRED_RETENTION
@@ -237,7 +235,7 @@ def step_for_stability(stability: float | None) -> int:
     return 5
 
 
-def seed_state_from_ladder_step(step: int, now: datetime | None = None) -> CardSRSState:
+def seed_state_from_ladder_step(step: int, *, now: datetime) -> CardSRSState:
     """Migration helper: produce a starting FSRS state for a card
     that's currently sitting at ladder `step`.
 
@@ -255,8 +253,6 @@ def seed_state_from_ladder_step(step: int, now: datetime | None = None) -> CardS
     """
     if step <= 0:
         return CardSRSState.fresh()
-    if now is None:
-        now = datetime.now(timezone.utc)
     stability_by_step = {1: 1.0, 2: 3.0, 3: 7.0, 4: 14.0, 5: 30.0}
     return CardSRSState(
         stability=stability_by_step.get(step, 30.0),

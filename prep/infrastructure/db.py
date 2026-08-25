@@ -19,8 +19,9 @@ from __future__ import annotations
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
+
+from prep.infrastructure import clock
 
 # PREP_DB_PATH lets a deploy point at a per-environment data.sqlite
 # living outside the immutable image (e.g. mounted volume at /data).
@@ -57,11 +58,9 @@ def cursor():
 def now() -> str:
     """ISO-8601 UTC timestamp used everywhere we write a TEXT column.
 
-    Lives here (rather than in domain) because almost every write goes
-    through it, and it's a thin wrapper over the stdlib clock —
-    fundamentally an infrastructure concern (do not inject 'wall clock'
-    as a domain dependency unless you have a real reason)."""
-    return datetime.now(timezone.utc).isoformat()
+    Delegates to the process clock so `PREP_FAKE_NOW` pins every
+    write; domain code takes `now` as an argument instead."""
+    return clock.now_iso()
 
 
 def init() -> None:

@@ -17,7 +17,7 @@ item alongside its idempotency pin.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 
 from pydantic import ValidationError
 
@@ -26,6 +26,7 @@ from prep.decks.entities import NewQuestion, QuestionType
 from prep.decks.repo import DeckRepo
 from prep.domain import grading
 from prep.domain.srs import Verdict
+from prep.infrastructure import clock
 from prep.offline.entities import (
     SyncCardResult,
     SyncNewCard,
@@ -67,7 +68,7 @@ def sync_batch(
     back in request order, keyed by client_id."""
     repo = repo or SyncRepo()
     deck_repo = deck_repo or DeckRepo()
-    server_now = datetime.now(timezone.utc)
+    server_now = clock.now()
 
     # Cards first: reviews later in this batch may reference an
     # offline-authored card by card_client_id, and the protocol

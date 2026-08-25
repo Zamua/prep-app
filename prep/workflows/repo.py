@@ -21,8 +21,9 @@ workflow reaches a terminal state.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
+from prep.infrastructure import clock
 from prep.infrastructure.db import cursor, now
 from prep.workflows.entities import ActiveWorkflow, WorkflowType
 
@@ -159,7 +160,7 @@ class ActiveWorkflowsRepo:
         Within each bucket, newest-first by `started_at` (so the most
         recently kicked-off workflow appears at the top of its group).
         """
-        cutoff_dt = datetime.now(timezone.utc) - timedelta(seconds=recent_terminal_window_seconds)
+        cutoff_dt = clock.now() - timedelta(seconds=recent_terminal_window_seconds)
         cutoff_iso = cutoff_dt.isoformat()
         # LEFT JOIN decks so we can populate deck_display_name on the
         # entity — the popover row label uses display_name when set
@@ -201,7 +202,7 @@ class ActiveWorkflowsRepo:
         """Delete terminal rows older than the window. Returns the row
         count deleted (mostly useful for tests). Safe to call on every
         badge fetch — it's a single indexed DELETE, cheap at our scale."""
-        cutoff_dt = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+        cutoff_dt = clock.now() - timedelta(seconds=window_seconds)
         cutoff_iso = cutoff_dt.isoformat()
         with cursor() as c:
             cur = c.execute(

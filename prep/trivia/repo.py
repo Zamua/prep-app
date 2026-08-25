@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import random
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Optional
 
+from prep.infrastructure import clock
 from prep.infrastructure.db import cursor
 from prep.trivia.entities import (
     ActiveTriviaSession,
@@ -198,7 +199,7 @@ class TriviaQueueRepo:
                 """,
                 (deck_id,),
             ).fetchone()
-            now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            now_iso = clock.now_iso(timespec="seconds")
             c.execute(
                 """
                 UPDATE trivia_queue
@@ -487,7 +488,7 @@ _ACTIVE_TIMEOUT = timedelta(days=7)
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return clock.now_iso(timespec="seconds")
 
 
 class TriviaSessionsRepo:
@@ -525,7 +526,7 @@ class TriviaSessionsRepo:
         Snoozed sessions (snoozed_until in the future) are filtered
         out — they re-appear once the timestamp passes, no scheduler
         tick needed."""
-        threshold = (datetime.now(timezone.utc) - _ACTIVE_TIMEOUT).isoformat(timespec="seconds")
+        threshold = (clock.now() - _ACTIVE_TIMEOUT).isoformat(timespec="seconds")
         now_iso = _now_iso()
         with cursor() as c:
             c.execute(

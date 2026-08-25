@@ -31,9 +31,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Protocol
 
+from prep.infrastructure import clock
 from prep.workflows.entities import (
     ActiveWorkflow,
     WorkflowType,
@@ -294,7 +295,7 @@ async def reconcile_active_workflows(
     one row doesn't abort the rest of the tick.
 
     Returns a `ReconcileSummary` for the scheduler to log."""
-    _ = now or datetime.now(timezone.utc)  # reserved for future "stuck workflow" detection
+    _ = now or clock.now()
     rows = workflows_repo.list_non_terminal()
 
     checked = 0

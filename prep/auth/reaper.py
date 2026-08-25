@@ -18,9 +18,10 @@ cookie, missing user" stays a rare path rather than a routine one.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from prep.auth.merge import POLICY
+from prep.infrastructure import clock
 from prep.infrastructure.db import cursor
 
 log = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ def reap_idle_anonymous(now_utc: datetime | None = None) -> int:
 
     One transaction per account, so request traffic interleaves
     between accounts instead of waiting out the whole batch."""
-    cutoff = cutoff_for(now_utc or datetime.now(timezone.utc))
+    cutoff = cutoff_for(now_utc or clock.now())
     with cursor() as c:
         candidates = [
             row["tailscale_login"]

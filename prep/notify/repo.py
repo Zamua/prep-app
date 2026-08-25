@@ -14,9 +14,8 @@ notify scheduler is the only caller.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from prep.auth.repo import UserRepo
+from prep.infrastructure import clock
 from prep.infrastructure.db import cursor, now
 from prep.notify.entities import (
     NotificationLogEntry,
@@ -115,7 +114,7 @@ class NotificationLogRepo:
         """Insert one row, return its id. Called from send_to_user
         regardless of push delivery success/failure — the user might
         still want to see what was *attempted*."""
-        sent_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        sent_at = clock.now_iso(timespec="seconds")
         with cursor() as c:
             cur = c.execute(
                 """INSERT INTO notifications_log
@@ -152,7 +151,7 @@ class NotificationLogRepo:
     def mark_all_seen(self, user_id: str) -> None:
         """Call when the user opens /notify/log — clears the unread
         badge for every previously-unseen entry."""
-        seen_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        seen_at = clock.now_iso(timespec="seconds")
         with cursor() as c:
             c.execute(
                 "UPDATE notifications_log SET seen_at = ? WHERE user_id = ? AND seen_at IS NULL",

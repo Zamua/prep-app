@@ -34,6 +34,7 @@ from prep.auth.anon_cookie import ID_BYTES, external_id_from_bytes
 from prep.auth.limits import refuse_over_row_cap
 from prep.auth.providers.anon import ANON_DISPLAY_NAME
 from prep.decks.entities import SLUG_ALPHABET, SLUG_LENGTH
+from prep.infrastructure import clock
 from prep.infrastructure.db import cursor, now
 
 # The global per-minute cap's window is fixed: it defines what "per
@@ -165,7 +166,7 @@ def check_and_reserve(
     `user_id` is the account the spend is charged to, or None when the
     request has no account yet: the one that mints it is back-stamped
     by `resolve`."""
-    at = at or datetime.now(timezone.utc)
+    at = at or clock.now()
     burst_limit = _env_int(_ENV_BURST_LIMIT, DEFAULT_BURST_LIMIT)
     burst_window_s = _env_int(_ENV_BURST_WINDOW_S, DEFAULT_BURST_WINDOW_S)
     burst_cutoff = (at - timedelta(seconds=burst_window_s)).isoformat()

@@ -23,7 +23,6 @@ import base64
 import hmac
 import logging
 import os
-import time
 from dataclasses import dataclass
 from functools import lru_cache
 from hashlib import sha256
@@ -34,6 +33,7 @@ from fastapi import Request
 from starlette.responses import Response
 
 from prep.byok.crypto import MasterKeyError, load_master_from_env
+from prep.infrastructure import clock
 
 log = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ def mint_cookie(external_id: str, *, issued_at: int | None = None) -> str:
     secret = cookie_secret()
     if secret is None:
         raise AnonCookieDisabled("no anonymous cookie secret; anonymous accounts are off")
-    iat = int(issued_at if issued_at is not None else time.time())
+    iat = int(issued_at if issued_at is not None else clock.unix())
     payload = f"{COOKIE_VERSION}.{_b64e(_id_bytes(external_id))}.{iat}"
     return f"{payload}.{_sign(secret, payload)}"
 
@@ -183,7 +183,7 @@ def verify_cookie(raw: str | None, *, now: int | None = None) -> AnonCookie | No
     expected = _sign(secret, f"{version}.{id_part}.{iat_part}")
     if not hmac.compare_digest(expected.encode("ascii"), sig.encode("ascii")):
         return None
-    ts = int(now if now is not None else time.time())
+    ts = int(now if now is not None else clock.unix())
     if iat > ts + FUTURE_SKEW_SECONDS or iat < ts - MAX_AGE_SECONDS:
         return None
     return AnonCookie(external_id=external_id_from_bytes(id_raw), issued_at=iat)
@@ -193,7 +193,7 @@ def needs_refresh(cookie: AnonCookie, *, now: int | None = None) -> bool:
     """True once the signed `iat` is old enough to re-mint. Re-issuing
     Max-Age alone does not roll the window: `iat` is inside the signed
     value, so the same value always expires on the same day."""
-    ts = int(now if now is not None else time.time())
+    ts = int(now if now is not None else clock.unix())
     return ts - cookie.issued_at > REFRESH_AFTER_SECONDS
 
 

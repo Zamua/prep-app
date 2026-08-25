@@ -59,7 +59,6 @@ so post-import edits don't affect history fidelity.
 from __future__ import annotations
 
 import csv
-import datetime
 import io
 import json
 import re
@@ -69,6 +68,7 @@ from dataclasses import dataclass
 from prep.decks.entities import NewQuestion, Question, QuestionType
 from prep.decks.io import CSV_COLUMNS, _question_to_row, _questions_for_export
 from prep.decks.repo import DeckRepo, QuestionRepo
+from prep.infrastructure import clock
 
 FORMAT_VERSION = 1
 
@@ -121,9 +121,7 @@ def _build_meta(deck_repo: DeckRepo, user_id: str, deck_id: int) -> dict:
 
     return {
         "format_version": FORMAT_VERSION,
-        "exported_at": datetime.datetime.now(datetime.timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z"),
+        "exported_at": clock.now_iso().replace("+00:00", "Z"),
         "deck": {
             "name": name,
             "deck_type": deck_type.value,

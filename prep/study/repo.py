@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from prep.domain.srs import CardSRSState, Verdict, schedule_review
+from prep.infrastructure import clock
 from prep.infrastructure.db import cursor, now
 from prep.study.entities import (
     CardState,
@@ -184,8 +185,8 @@ class SessionRepo:
         Snoozed sessions (snoozed_until in the future) are filtered
         out — they re-appear automatically once the timestamp passes,
         no scheduler tick needed."""
-        now_iso = datetime.now(timezone.utc).isoformat()
-        abandon_before = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        now_iso = clock.now_iso()
+        abandon_before = (clock.now() - timedelta(days=7)).isoformat()
         with cursor() as c:
             c.execute(
                 "UPDATE study_sessions SET status = 'abandoned' "
@@ -224,7 +225,7 @@ class SessionRepo:
         """Sessions snoozed into the future, ordered by wake time
         (soonest first). Reuses the RecentSession shape so the index
         template can render both lists with the same partial."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = clock.now_iso()
         with cursor() as c:
             rows = c.execute(
                 """
@@ -558,7 +559,7 @@ class ReviewRepo:
             verdict = Verdict(result)
         except ValueError as e:
             raise ValueError(f"unknown result: {result}") from e
-        ts = datetime.now(timezone.utc)
+        ts = clock.now()
         with cursor() as c:
             owner = c.execute("SELECT user_id FROM questions WHERE id = ?", (qid,)).fetchone()
             if not owner or owner["user_id"] != user_id:
@@ -836,7 +837,7 @@ class ReviewRepo:
             return None
         if due.tzinfo is None:
             due = due.replace(tzinfo=timezone.utc)
-        seconds = (due - datetime.now(timezone.utc)).total_seconds()
+        seconds = (due - clock.now()).total_seconds()
         return max(1, math.ceil(seconds / 60))
 
     def due_questions(self, user_id: str, deck_id: int, limit: int = 3) -> list[dict]:

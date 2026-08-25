@@ -44,6 +44,7 @@ from prep.auth.anon_cookie import emit_cookie_updates as emit_anon_cookie_update
 from prep.auth.routes import router as auth_router
 from prep.decks.routes import router as decks_router
 from prep.dev import preview as dev_preview
+from prep.infrastructure import clock
 from prep.instant.routes import router as instant_router
 from prep.notify.routes import router as notify_router
 from prep.offline.routes import router as offline_router
@@ -162,7 +163,7 @@ def _relative_time(iso_ts: str | None) -> str:
         return iso_ts
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    now = datetime.now(timezone.utc)
+    now = clock.now()
     secs = int((now - dt).total_seconds())
     if secs < 0:
         return "in the future"
@@ -206,7 +207,7 @@ def _wakes_in(iso_ts: str | None) -> str:
         return ""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    secs = int((dt - datetime.now(timezone.utc)).total_seconds())
+    secs = int((dt - clock.now()).total_seconds())
     if secs <= 0:
         return ""
     # ~5 year cap before we collapse to "forever". Below that we render

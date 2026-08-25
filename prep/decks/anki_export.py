@@ -52,13 +52,13 @@ import json
 import logging
 import sqlite3
 import tempfile
-import time
 import zipfile
 from pathlib import Path
 
 from prep.decks.entities import Question, QuestionType
 from prep.decks.io import _questions_for_export
 from prep.decks.repo import DeckRepo
+from prep.infrastructure import clock
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ def _col_payload(deck_name: str, now_ms: int) -> dict[str, str]:
             "timeToday": [0, 0],
             "collapsed": False,
             "browserCollapsed": False,
-            "desc": f"Exported from prep on {time.strftime('%Y-%m-%d')}",
+            "desc": f"Exported from prep on {clock.now().strftime('%Y-%m-%d')}",
             "dyn": 0,
             "conf": 1,
             "extendNew": 10,
@@ -338,7 +338,7 @@ def deck_to_apkg(user_id: str, deck_id: int, deck_name: str) -> bytes:
     in-memory by path, then reads the bytes back and cleans up.
     """
     questions = _questions_for_export(user_id, deck_id)
-    now_ms = int(time.time() * 1000)
+    now_ms = int(clock.unix() * 1000)
     now_s = now_ms // 1000
 
     sqlite_tf = tempfile.NamedTemporaryFile(suffix=".anki21", delete=False)

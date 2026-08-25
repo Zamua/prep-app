@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 from prep.auth.reaper import reap_idle_anonymous as _reap_idle_anonymous
 from prep.auth.repo import UserRepo
 from prep.decks.repo import DeckRepo
+from prep.infrastructure import clock
 from prep.notify.push import send_to_user
 from prep.notify.repo import PushSubsRepo
 from prep.study.repo import ReviewRepo
@@ -91,7 +92,7 @@ def _should_send_when_ready(prefs: dict, due_total: int, now_utc: datetime) -> b
 async def _tick() -> None:
     """One scheduler iteration — evaluate every subscribed user and fire
     where appropriate."""
-    now_utc = datetime.now(timezone.utc)
+    now_utc = clock.now()
     # Guarded separately from the per-user body below: building the
     # repos and listing the subscribers is itself fallible, and an
     # escape from here would cancel the trivia tick and the reaper too.
