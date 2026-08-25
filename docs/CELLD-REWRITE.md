@@ -67,7 +67,9 @@ production path (a fake identity provider stays, for local e2e; see
 5.1), the deploy-wide `claude-agent-sdk` subscription token (gated off
 on every Clerk deploy already), the Prometheus threadpool gauges (no
 threadpool exists), the Go worker + Temporal devserver + goreman + the
-container.
+Python container. "Full native celld" has exactly one exception, the
+`prep-agent` sidecar below, and it exists because it is the only
+sanctioned way for users to spend their Claude plans.
 
 **Decision 7.4: the per-user `claude_subscription` BYOK provider.** It
 is live in Clerk mode today, listed first in the settings UI, and it
@@ -82,11 +84,20 @@ subscription token is not an option: the token is scoped by Anthropic's
 docs to Claude Code and the surfaces that wrap it, and the policy
 forbids embedding subscription OAuth in third-party apps.
 
-**Decided 2026-08-25: drop the subscription provider; BYOK stays as API
-keys** (`anthropic_api`, `openai_api`, `openrouter_api`, all native
-`fetch` adapters that exist today). Migration: the users holding a
-subscription row are told in the settings page to paste an Anthropic
-API key; their ciphertext rows are deleted at cutover.
+**Decided 2026-08-25 (revised the same day after checking Anthropic's
+pages): keep the subscription provider, through a TypeScript Agent SDK
+sidecar.** Anthropic's help center states that third-party apps which
+authenticate with the user's subscription through the Agent SDK draw
+from the plan's usage limits, and the June 15 notice confirms that
+surface is unchanged; the SDK runs the real Claude Code harness, which
+is the telemetry reason the raw-OAuth ban was given. The `setup-token`
+is rejected by the Messages API and the consumer terms forbid raw OAuth
+reuse, so the SDK is the only sanctioned path. The `@anthropic-ai/
+claude-agent-sdk` package is TypeScript but spawns Claude Code, so it
+needs Node and the CLI: one small sidecar Deployment (`prep-agent`,
+~50 MiB) behind `AgentPort` over HTTP with the internal token, the one
+component of the rewrite that is not a cell. Users keep their tokens;
+nothing is re-pasted. API keys stay as the alternative providers.
 
 ---
 
@@ -261,7 +272,7 @@ steps leaves a reserved slot that expires, never an orphan user.
 | anonymous account | HMAC-SHA256 cookie, HKDF from the master key | identical bytes via WebCrypto; refresh / clear as a response wrapper | existing cookies keep working across cutover |
 | BYOK secrets | AES-256-GCM, `base64(nonce||ct||tag)` | identical via WebCrypto | existing rows decrypt with the same master key |
 | PAT | global `token_hash` index | subject embedded: `prep_pat_<b64u(sub)>.<b64u(secret)>`, hash in the owner's cell (kcal). The user id is not a secret; it is in every deep link already | existing tokens reissued; users told through Clerk's email |
-| AI | OpenAI-compat, Anthropic, free tier | the same three as `fetch` adapters behind `AgentPort` | same prompts, same parsers, the 5-card cap |
+| AI | OpenAI-compat, Anthropic, free tier, Claude subscription via the Python Agent SDK | the first three as `fetch` adapters; the subscription path through the `prep-agent` Node sidecar (TypeScript Agent SDK) over HTTP, all behind `AgentPort` | same prompts, same parsers, the 5-card cap |
 | push | `pywebpush` + `py_vapid` | a WebCrypto web-push adapter (VAPID JWT + aes128gcm) | the PEM VAPID key converted to JWK once at migration |
 | markdown | mistune, with a 200-line client twin | ONE implementation: the client `markdown.js` promoted to the shared renderer, its 9 documented divergences closed against the 60 fixtures | the 60 fixtures pass server-side; the client keeps passing them |
 | FSRS | `py-fsrs` 6.3.2 | `ts-fsrs` (FSRS-6) behind `domain/fsrs`, patched or vendored until fixture-equal | 4.2; risk 1; decision 7.5 |
@@ -572,8 +583,8 @@ critical path is 0b -> 0 -> 1 -> 3 -> 6; phases 2 and 4 overlap it.
 2. Settled: in-repo `worker/` (3), approved 2026-08-25.
 3. Settled: PATs are reissued in the new format; one token exists and
    its holder is told directly.
-4. Settled: drop the `claude_subscription` provider, BYOK stays as API
-   keys (1.3).
+4. Settled: keep the `claude_subscription` provider through a
+   TypeScript Agent SDK sidecar; API keys stay as alternatives (1.3).
 5. Settled: FSRS fuzz stays on (`ts-fsrs` fuzz; the oracle checks the
    unfuzzed math exactly and the fuzz distributionally).
 6. Settled: the debug endpoints (`/_debug/auth`, `/debug/session`) are
