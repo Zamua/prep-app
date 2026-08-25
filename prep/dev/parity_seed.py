@@ -55,10 +55,16 @@ class SeedRequest(BaseModel):
 
 def wipe_user(user: str) -> None:
     with cursor() as c:
-        for table, columns in discover_user_scoped_tables(c).items():
+        tables = discover_user_scoped_tables(c)
+        for table, columns in tables.items():
             for column in columns:
                 c.execute(f'DELETE FROM "{table}" WHERE "{column}" = ?', (user,))
         c.execute("DELETE FROM users WHERE tailscale_login = ?", (user,))
+        # Dropping the AUTOINCREMENT counters restarts ids at max(rowid)+1, so
+        # a re-seed on the same server hands out the ids the first seed did
+        # and a golden shot of a card number holds on any target.
+        for table in tables:
+            c.execute("DELETE FROM sqlite_sequence WHERE name = ?", (table,))
 
 
 def create_user(user: str) -> None:
