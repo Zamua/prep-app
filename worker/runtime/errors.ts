@@ -1,6 +1,7 @@
 // The error pages, ported from prep/web/errors.py: the copy verbatim, the
 // detail folded into the blurb when it adds something.
 import type { Renderer } from '../app/ports.js';
+import { appBase } from './appBase.js';
 
 export const ERROR_COPY: Record<number, readonly [string, string]> = {
   400: ['Bad request.', "Something in that URL didn't quite parse."],
@@ -23,9 +24,11 @@ const FALLBACK_COPY: readonly [string, string] = [
   'An unexpected error happened. The team has been notified.',
 ];
 
-/** The nine context-processor names for a page rendered outside a cell. */
-export function anonymousContext(buildToken: string): Record<string, unknown> {
+/** The nine context-processor names for a page rendered outside a cell,
+ * plus the request origin every Python context carried as `request`. */
+export function anonymousContext(buildToken: string, appBase: string): Record<string, unknown> {
   return {
+    app_base: appBase,
     user: null,
     agent_available: false,
     auth_provider: 'tailscale',
@@ -56,9 +59,10 @@ export function errorPage(
   renderer: Renderer,
   buildToken: string,
   status: number,
-  path: string,
+  request: Request,
   detail?: string,
 ): Response {
-  const context = { ...anonymousContext(buildToken), ...errorContext(status, path, detail) };
+  const path = new URL(request.url).pathname;
+  const context = { ...anonymousContext(buildToken, appBase(request)), ...errorContext(status, path, detail) };
   return htmlResponse(renderer.render('error.html', context), status);
 }

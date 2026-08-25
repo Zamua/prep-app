@@ -14,8 +14,10 @@
 #   SKIP_DEPLOY=1      restart the node without redeploying
 #
 # The scratch MinIO is the docker container `celld-scratch-minio` on
-# 127.0.0.1:9010 (root user scratchadmin); it is started when exited and the
-# bucket is created when missing. State lives under /private/tmp/prep-dev-state.
+# 127.0.0.1:9010; it is started when exited and the bucket is created when
+# missing. Its root credential arrives as AWS_ACCESS_KEY_ID and
+# AWS_SECRET_ACCESS_KEY; nothing here defaults them. State lives under
+# /private/tmp/prep-dev-state.
 set -euo pipefail
 
 WORKER="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,8 +26,6 @@ CONFIG="${PREP_RUN_CONFIG:-$WORKER/wrangler.dev.jsonc}"
 ENDPOINT="${PREP_DEV_S3_ENDPOINT:-http://127.0.0.1:9010}"
 BUCKET="${PREP_DEV_S3_BUCKET:-prep-dev}"
 MINIO_CONTAINER="${PREP_DEV_MINIO_CONTAINER:-celld-scratch-minio}"
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-scratchadmin}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-scratchpass123}"
 export AWS_REGION="${AWS_REGION:-us-east-1}"
 export CELLD_ESBUILD="${CELLD_ESBUILD:-$WORKER/node_modules/.bin/esbuild}"
 
@@ -62,6 +62,11 @@ if [ "${1:-}" = "stop" ]; then
   echo "==> node stopped"
   exit 0
 fi
+
+# The scratch MinIO root credential comes from the environment; no default.
+: "${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID to the scratch MinIO root user}"
+: "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY to the scratch MinIO root password}"
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 
 ensure_minio() {
   if [ "$(docker inspect -f '{{.State.Running}}' "$MINIO_CONTAINER" 2>/dev/null)" != "true" ]; then

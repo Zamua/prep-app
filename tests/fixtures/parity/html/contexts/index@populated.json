@@ -13,6 +13,7 @@
    }
   ],
   "agent_available": true,
+  "app_base": "https://parity.example.test",
   "auth_provider": "tailscale",
   "clerk_frontend_api_host": null,
   "clerk_publishable_key": null,

@@ -1,6 +1,7 @@
 {
  "context": {
   "agent_available": true,
+  "app_base": "https://parity.example.test",
   "auth_provider": "tailscale",
   "byok_error": null,
   "byok_flash": null,

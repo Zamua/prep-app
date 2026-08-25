@@ -1,6 +1,7 @@
 {
  "context": {
   "agent_available": true,
+  "app_base": "https://parity.example.test",
   "auth_provider": "tailscale",
   "blurb": "More requests than the service can take at the moment.",
   "clerk_frontend_api_host": null,

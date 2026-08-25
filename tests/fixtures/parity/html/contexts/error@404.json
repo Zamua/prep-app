@@ -1,6 +1,7 @@
 {
  "context": {
   "agent_available": true,
+  "app_base": "https://parity.example.test",
   "auth_provider": "tailscale",
   "blurb": "We couldn't find what you were looking for. Maybe a typo, or the link is stale.",
   "clerk_frontend_api_host": null,

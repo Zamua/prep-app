@@ -1,6 +1,7 @@
 {
  "context": {
   "agent_available": true,
+  "app_base": "https://parity.example.test",
   "auth_provider": "clerk",
   "byok_error": null,
   "byok_flash": null,

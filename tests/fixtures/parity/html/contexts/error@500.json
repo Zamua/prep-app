@@ -1,6 +1,7 @@
 {
  "context": {
   "agent_available": true,
+  "app_base": "https://parity.example.test",
   "auth_provider": "tailscale",
   "blurb": "Sorry — that's on our end. The error has been logged.",
   "clerk_frontend_api_host": null,

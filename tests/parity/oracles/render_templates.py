@@ -7,9 +7,9 @@ supplied explicitly and a fake `request` carrying an empty
 `root_path`, so no server and no database are involved.
 
 Beside every golden, `contexts/<stem>@<name>.json` holds the same
-context as JSON (`to_jsonable`), so another renderer can produce its
-candidate from exactly the input the golden came from; the fake
-`request` is the one thing it re-injects itself.
+context as JSON (`to_jsonable`) plus `app_base`, the origin the fake
+`request` carries, so another renderer produces its candidate from
+exactly the input the golden came from and injects nothing itself.
 """
 
 from __future__ import annotations
@@ -60,12 +60,19 @@ def _plain(value):
     return value
 
 
+def app_base() -> str:
+    """The request origin as a plain field: what the worker supplies from
+    the request where Jinja read `request.url`."""
+    url = fake_request().url
+    return f"{url.scheme}://{url.netloc}"
+
+
 def context_json(entry: Ctx) -> str:
     context = _plain(base_context(**entry.base) | entry.context)
     return dump_json(
         {
             "template": entry.template,
-            "context": to_jsonable(context, deck_display=DECK_DISPLAY),
+            "context": to_jsonable(context, deck_display=DECK_DISPLAY) | {"app_base": app_base()},
         }
     )
 

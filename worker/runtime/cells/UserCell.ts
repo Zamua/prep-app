@@ -3,6 +3,7 @@
 // eviction mid-flow loses nothing.
 import { DurableObject } from 'cloudflare:workers';
 import { derive } from '../../app/viewmodels/derive.js';
+import { appBase } from '../appBase.js';
 import { compose } from '../compose.js';
 import type { Env } from '../env.js';
 import { errorPage } from '../errors.js';
@@ -29,13 +30,13 @@ export class UserCell extends DurableObject<Env> {
     const url = new URL(request.url);
     const state = (await this.ctx.storage.get<ParityState>(STATE_KEY)) ?? null;
     const page = state && c.pages.resolve(state.profile, request.method, url.pathname, state.flags);
-    if (!state || !page) return errorPage(c.renderer, c.buildToken, 404, url.pathname, 'Not Found');
+    if (!state || !page) return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
 
     const headers: Record<string, string> = {};
     if (page.headers['content-type']) headers['content-type'] = page.headers['content-type'];
     if (page.headers.location) headers.location = page.headers.location;
     const body = page.template
-      ? c.renderer.render(page.template, derive(page.template, page.context ?? {}))
+      ? c.renderer.render(page.template, derive(page.template, { ...(page.context ?? {}), app_base: appBase(request) }))
       : (page.body ?? '');
     const response = new Response(body, { status: page.status, headers });
 

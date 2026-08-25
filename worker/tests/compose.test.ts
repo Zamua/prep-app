@@ -2,11 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { compose, composeWith, cookieHooks, noCacheHtml } from '../runtime/compose.js';
 import { fakeEnv, IDENTIFIED, req } from './helpers.js';
 
+/** A prod-shaped env: no pin of any kind. */
+const PROD = { PREP_ENV: 'prod', PREP_PARITY_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined };
+
 describe('compose', () => {
-  it('refuses parity on prod', () => {
-    expect(() => compose(fakeEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: '1' }))).toThrow(
-      'refusing the fake identity provider on prod',
-    );
+  it.each([
+    ['parity on prod', { ...PROD, PREP_PARITY_MODE: '1' }, 'PREP_PARITY_MODE'],
+    ['parity with no PREP_ENV at all', { ...PROD, PREP_ENV: undefined as unknown as string, PREP_PARITY_MODE: '1' }, 'PREP_PARITY_MODE'],
+    ['a frozen clock on prod', { ...PROD, PREP_FAKE_NOW: '2026-03-14T15:00:00Z' }, 'PREP_FAKE_NOW'],
+    ['a pinned placeholder under a misspelt env', { ...PROD, PREP_ENV: 'production', PREP_PLACEHOLDER_INDEX: '0' }, 'PREP_PLACEHOLDER_INDEX'],
+  ])('refuses %s', (_name, overrides, pin) => {
+    expect(() => compose(fakeEnv(overrides))).toThrow(new RegExp(`^refusing .*${pin}.* outside dev and staging`));
+  });
+
+  it('composes prod without pins, on the system clock', () => {
+    const c = compose(fakeEnv(PROD));
+    expect(c.parity).toBe(false);
+    expect(Math.abs(c.clock.now().getTime() - Date.now())).toBeLessThan(5_000);
   });
 
   it('composes the fake provider under parity on staging', async () => {
@@ -20,7 +32,7 @@ describe('compose', () => {
   });
 
   it('has no identity provider without parity', async () => {
-    const c = compose(fakeEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: undefined }));
+    const c = compose(fakeEnv(PROD));
     expect(c.parity).toBe(false);
     expect(await c.identity.identify(req('/', { headers: IDENTIFIED }))).toBeNull();
   });

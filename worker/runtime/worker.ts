@@ -1,5 +1,6 @@
 // Entry worker: a translation layer. Unauthenticated pages render here; an
 // identified request is forwarded to its UserCell.
+import { appBase } from './appBase.js';
 import { compose, cookieHooks, noCacheHtml, type Composition } from './compose.js';
 import type { Env } from './env.js';
 import { anonymousContext, errorPage, htmlResponse } from './errors.js';
@@ -25,9 +26,9 @@ interface SeedApi {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    // Liveness is independent of storage: a wedged process should restart, a
-    // storage blip should not restart every node.
-    if (url.pathname === '/healthz' || url.pathname === '/readyz') return new Response('ok');
+    // Liveness is independent of storage and configuration: a wedged process
+    // should restart, a storage blip should not restart every node.
+    if (url.pathname === '/healthz') return new Response('ok');
     let c: Composition;
     try {
       c = compose(env);
@@ -35,33 +36,38 @@ export default {
       console.error(`compose failed: ${e instanceof Error ? e.message : e}`);
       return new Response('service misconfigured', { status: 500 });
     }
+    // Readiness composes: a misconfigured worker must not take traffic.
+    if (url.pathname === '/readyz') return new Response('ok');
     try {
       const res = await route(request, url, env, c);
       return cookieHooks(request, noCacheHtml(res));
     } catch (e) {
       console.error(`unhandled exception on ${request.method} ${url.pathname}: ${e instanceof Error ? (e.stack ?? e.message) : e}`);
-      return noCacheHtml(errorPage(c.renderer, c.buildToken, 500, url.pathname));
+      return noCacheHtml(errorPage(c.renderer, c.buildToken, 500, request));
     }
   },
 };
 
 async function route(request: Request, url: URL, env: Env, c: Composition): Promise<Response> {
   const path = url.pathname;
+  const base = appBase(request);
   const page = (template: string, extra: Record<string, unknown> = {}, status = 200) =>
-    htmlResponse(c.renderer.render(template, { ...anonymousContext(c.buildToken), ...extra }), status);
+    htmlResponse(c.renderer.render(template, { ...anonymousContext(c.buildToken, base), ...extra }), status);
+  const readOnly = request.method === 'GET' || request.method === 'HEAD';
+  const methodNotAllowed = () => errorPage(c.renderer, c.buildToken, 405, request, 'Method Not Allowed');
 
   const asset = await serveStatic(request, env, c.buildToken);
   if (asset) return asset;
   const pwa = servePwa(url, c.buildToken);
   if (pwa) return pwa;
-  if (path === '/offline') return page('offline.html', { build: offlineBuild(url, c.buildToken) });
-  if (path === '/privacy') return page('privacy.html');
+  if (path === '/offline') return readOnly ? page('offline.html', { build: offlineBuild(url, c.buildToken) }) : methodNotAllowed();
+  if (path === '/privacy') return readOnly ? page('privacy.html') : methodNotAllowed();
 
   if (c.parity) {
     if (request.method === 'GET' && path === '/_parity/raise') {
       return url.searchParams.get('status') === '429'
-        ? errorPage(c.renderer, c.buildToken, 429, path, 'parity: deliberate throttle')
-        : errorPage(c.renderer, c.buildToken, 500, path);
+        ? errorPage(c.renderer, c.buildToken, 429, request, 'parity: deliberate throttle')
+        : errorPage(c.renderer, c.buildToken, 500, request);
     }
     if (request.method === 'GET' && path === '/_parity/reauth') return page('reauth.html');
     if (request.method === 'GET' && path === '/_parity/sign-out') {
@@ -75,15 +81,15 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
   const headers = new Headers(request.headers);
   headers.delete(SUBJECT_HEADER);
   headers.delete(DISPLAY_NAME_HEADER);
-  const clean = new Request(request, { headers });
-
-  const who = await c.identity.identify(clean);
+  // Identification reads headers only. The body is a one-shot stream, so
+  // the request is rebuilt exactly once, below, for the cell.
+  const who = await c.identity.identify(new Request(request.url, { method: request.method, headers }));
   if (!who) {
     if (request.method === 'GET' && path === '/') {
       const landing = c.pages.resolve('anonymous', 'GET', '/', []);
       if (landing?.template) return page(landing.template, landing.context ?? {}, landing.status);
     }
-    return errorPage(c.renderer, c.buildToken, 404, path, 'Not Found');
+    return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
   }
   headers.set(SUBJECT_HEADER, who.subject);
   headers.set(DISPLAY_NAME_HEADER, encodeURIComponent(who.displayName));

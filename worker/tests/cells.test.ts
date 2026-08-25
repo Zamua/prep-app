@@ -39,13 +39,19 @@ describe('UserCell', () => {
     expect(renderer.calls[0]?.context.user).toBeNull();
   });
 
-  it('renders the recorded page with the recorded context', async () => {
+  it('renders the recorded page with the recorded context plus the request origin', async () => {
     await cell.seed('reader');
     const res = await cell.fetch(req('/'));
     const want = corpusPage('reader', '01-GET-root');
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe(want.headers['content-type']);
-    expect(renderer.calls).toEqual([{ template: 'index.html', context: want.context }]);
+    expect(renderer.calls).toEqual([{ template: 'index.html', context: { ...want.context, app_base: 'https://parity.example.test' } }]);
+  });
+
+  it('takes the origin from the forwarded scheme when the ingress ends TLS', async () => {
+    await cell.seed('reader');
+    await cell.fetch(new Request('http://cell.internal:8080/settings/api', { headers: { 'x-forwarded-proto': 'https' } }));
+    expect(renderer.calls[0]?.context.app_base).toBe('https://cell.internal:8080');
   });
 
   it('answers a partial by its own template', async () => {

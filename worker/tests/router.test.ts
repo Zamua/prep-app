@@ -35,24 +35,31 @@ beforeEach(() => {
 
 const call = (path: string, init: RequestInit = {}) => worker.fetch(req(path, init), env);
 
-/** The router's context for a page equals what Python passed. */
+/** The router's context for a page equals what Python passed, plus the
+ * request origin Python read from `request` itself. */
 function expectCorpus(file: string, index = 0) {
   const want = corpusPage('anonymous', file);
-  expect(renderer.calls[index]).toEqual({ template: want.template, context: want.context });
+  expect(renderer.calls[index]).toEqual({ template: want.template, context: { ...want.context, app_base: 'https://parity.example.test' } });
 }
 
-describe('liveness', () => {
-  it('answers without composing', async () => {
-    const broken = fakeEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: '1' });
-    for (const path of ['/healthz', '/readyz']) {
-      const res = await worker.fetch(req(path), broken);
-      expect(res.status).toBe(200);
-      expect(await res.text()).toBe('ok');
-    }
+describe('liveness and readiness', () => {
+  const broken = () => fakeEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: '1' });
+
+  it('liveness answers without composing', async () => {
+    const res = await worker.fetch(req('/healthz'), broken());
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+  });
+
+  it('readiness composes first', async () => {
+    expect((await worker.fetch(req('/readyz'), broken())).status).toBe(500);
+    const res = await call('/readyz');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
   });
 
   it('reports a misconfigured composition as a 500', async () => {
-    const res = await worker.fetch(req('/privacy'), fakeEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: '1' }));
+    const res = await worker.fetch(req('/privacy'), broken());
     expect(res.status).toBe(500);
   });
 });
@@ -63,6 +70,21 @@ describe('unauthenticated pages', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-cache');
     expectCorpus('02-GET-privacy');
+  });
+
+  it('answer GET and HEAD only, as the Python routes do', async () => {
+    expect((await call('/privacy', { method: 'HEAD' })).status).toBe(200);
+    for (const [path, method] of [
+      ['/privacy', 'POST'],
+      ['/offline', 'PUT'],
+    ] as const) {
+      const res = await call(path, { method });
+      expect(res.status, `${method} ${path}`).toBe(405);
+      const last = renderer.calls.at(-1);
+      expect(last?.template).toBe('error.html');
+      expect(last?.context.status_code).toBe(405);
+      expect(last?.context.blurb).toContain('(Method Not Allowed)');
+    }
   });
 
   it('/offline echoes an accepted build only', async () => {
@@ -159,6 +181,29 @@ describe('identified requests', () => {
     expect(res.status).toBe(200);
   });
 
+  it('hand the cell the body intact', async () => {
+    const seen: unknown[] = [];
+    const cellEnv = fakeEnv({
+      USER: namespaceOf(() => ({
+        fetch: async (request: Request) => {
+          seen.push((await request.formData()).get('api_key'));
+          return new Response('ok');
+        },
+      })),
+    });
+    composeWith(cellEnv, { renderer });
+    const res = await worker.fetch(
+      req('/settings/agent/byok/anthropic-api/connect', {
+        method: 'POST',
+        headers: { ...IDENTIFIED, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ api_key: 'sk-parity' }).toString(),
+      }),
+      cellEnv,
+    );
+    expect(res.status).toBe(200);
+    expect(seen).toEqual(['sk-parity']);
+  });
+
   it('render the 500 page when the cell throws', async () => {
     const boom = fakeEnv({
       USER: namespaceOf(() => ({
@@ -193,7 +238,10 @@ describe('router and cell together', () => {
     const res = await worker.fetch(req('/', { headers: IDENTIFIED }), live);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-cache');
-    expect(renderer.calls.at(-1)).toEqual({ template: 'index.html', context: corpusPage('empty', '01-GET-root').context });
+    expect(renderer.calls.at(-1)).toEqual({
+      template: 'index.html',
+      context: { ...corpusPage('empty', '01-GET-root').context, app_base: 'https://parity.example.test' },
+    });
     const bad = await worker.fetch(
       req('/_parity/seed', {
         method: 'POST',

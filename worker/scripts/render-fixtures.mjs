@@ -9,10 +9,6 @@ import { createRenderer } from "../runtime/adapters/nunjucks/index.ts";
 
 const PARITY_NOW = "2026-03-14T15:00:00Z";
 
-// What the Python golden renderer injects as the request (tests/parity/
-// oracles/contexts.py `fake_request`); only settings_api reads it.
-const FAKE_REQUEST = { url: { scheme: "https", netloc: "parity.example.test", path: "/" } };
-
 function walk(dir) {
   const out = [];
   (function visit(d) {
@@ -31,7 +27,7 @@ export function renderAll(contextsDir, outDir) {
   let n = 0;
   for (const rel of walk(contextsDir)) {
     const entry = JSON.parse(readFileSync(join(contextsDir, rel), "utf8"));
-    const context = derive(entry.template, { ...entry.context, request: FAKE_REQUEST });
+    const context = derive(entry.template, entry.context);
     const html = renderer.render(entry.template, context);
     const target = join(outDir, rel.replace(/\.json$/, ".html"));
     mkdirSync(dirname(target), { recursive: true });

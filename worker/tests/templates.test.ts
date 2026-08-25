@@ -35,7 +35,9 @@ function walk(dir: string, suffix: string): string[] {
   return out.sort();
 }
 
-const FAKE_REQUEST = { url: { scheme: "https", netloc: "parity.example.test", path: "/" } };
+// Python-only syntax and the Python request object; a template that still
+// reads either renders `undefined` silently under nunjucks.
+const SMELLS = ["request.", "request.scope", " in (", ".items()", ".update(", ".get(", "namespace(", "selectattr", "rejectattr", "[:"];
 
 describe("the ported templates", () => {
   it("all 49 precompile for nunjucks-slim", () => {
@@ -48,7 +50,7 @@ describe("the ported templates", () => {
   it("carry no Python-only syntax", () => {
     for (const rel of walk(TEMPLATES, ".html")) {
       const src = readFileSync(join(TEMPLATES, rel), "utf8").replace(/\{#[\s\S]*?#\}/g, "");
-      for (const smell of ["request.scope", " in (", ".items()", ".update(", "namespace(", "selectattr", "rejectattr", "[:"]) {
+      for (const smell of SMELLS) {
         expect(src.includes(smell), `${rel} still contains ${smell}`).toBe(false);
       }
       expect(/\b(True|False|None)\b/.test(src), `${rel} still contains a Python literal`).toBe(false);
@@ -65,10 +67,19 @@ describe("the renderer", () => {
     expect(files.length).toBeGreaterThan(100);
     for (const rel of files) {
       const entry = JSON.parse(readFileSync(join(CONTEXTS, rel), "utf8")) as { template: string; context: Record<string, unknown> };
-      const context = derive(entry.template, { ...entry.context, request: FAKE_REQUEST });
+      const context = derive(entry.template, entry.context);
       const html = renderer.render(entry.template, context);
       expect(html.length, rel).toBeGreaterThan(0);
     }
+  });
+
+  it("hands the created-token dialog the absolute app root", () => {
+    const html = makeRenderer("/prep").render(
+      "settings_api.html",
+      baseContext({ tokens: [], created_plaintext: "prep_pat_parity", flash: null, app_base: "https://prep.example.test" }),
+    );
+    expect(html).toContain('data-app-base="https://prep.example.test/prep"');
+    expect(html).not.toContain("undefined");
   });
 
   it("merges root into the context and prefixes every app URL with it", () => {
@@ -154,7 +165,7 @@ function baseContext(overrides: Record<string, unknown>): Record<string, unknown
     clerk_frontend_api_host: null,
     notif_unseen_count: 0,
     deck_display: { capitals: "World Capitals" },
-    request: FAKE_REQUEST,
+    app_base: "https://parity.example.test",
     ...overrides,
   };
 }

@@ -21,12 +21,27 @@ export interface Composition {
 
 const compositions = new WeakMap<Env, Composition>();
 
+/** The parity pins: the fake identity provider (a trusted header, an open
+ * door anywhere real), the frozen clock and the fixed landing placeholder.
+ * Only the two parity hosts may carry any of them; an unknown or missing
+ * PREP_ENV is refused rather than trusted. */
+const PIN = /^PREP_(PARITY|FAKE|PLACEHOLDER)/;
+const PARITY_HOSTS = new Set(['dev', 'staging']);
+
+function refusePinsOutsideParityHosts(env: Env): void {
+  if (PARITY_HOSTS.has(env.PREP_ENV)) return;
+  const vars = env as unknown as Record<string, unknown>;
+  const pins = Object.keys(vars).filter((k) => PIN.test(k) && vars[k] != null);
+  if (pins.length) {
+    throw new Error(`refusing ${pins.join(', ')} outside dev and staging (PREP_ENV=${JSON.stringify(env.PREP_ENV ?? null)})`);
+  }
+}
+
 export function compose(env: Env): Composition {
   const memo = compositions.get(env);
   if (memo) return memo;
+  refusePinsOutsideParityHosts(env);
   const parity = env.PREP_PARITY_MODE === '1';
-  // The fake provider trusts a header; on prod that would be an open door.
-  if (parity && env.PREP_ENV === 'prod') throw new Error('refusing the fake identity provider on prod');
   const clock = clockFromEnv(env);
   const composition: Composition = {
     clock,

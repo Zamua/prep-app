@@ -153,14 +153,10 @@
         lands gets access to your account until you revoke.
       </span>
     </span>
-    {# Build the absolute base URL server-side so the JS doesn't have
-       to derive it from window.location (which lands on the POST
-       endpoint /settings/api/tokens, not the app root). request.base_url
-       is the host root; we append root_path so deploys under /prep/ or
-       /prep-staging/ get the right prefix. #}
-    {%- set _scheme = request.url.scheme -%}
-    {%- set _host = request.url.netloc -%}
-    {%- set _app_base = _scheme ~ '://' ~ _host ~ _root -%}
+    {# The absolute app root, built server-side: window.location would
+       name the POST endpoint, not the root. app_base is the request
+       origin; the mount prefix follows so a deploy under /prep/ keeps it. #}
+    {%- set _app_base = app_base ~ _root -%}
     <button type="button" class="btn btn-quiet btn-tiny" id="new-token-copy-prompt"
             data-app-base="{{ _app_base }}">
       Copy setup prompt
