@@ -14,6 +14,7 @@ alongside.
 
 from __future__ import annotations
 
+import os
 import random
 
 from fastapi import APIRouter, Depends, Request
@@ -51,6 +52,16 @@ TOPIC_PLACEHOLDERS = (
     "Cloud types and what weather they signal",
     "Big-O notation with examples from sorting algorithms",
 )
+
+# Pins the pick for the parity gate; unset means random.
+ENV_PLACEHOLDER_INDEX = "PREP_PLACEHOLDER_INDEX"
+
+
+def _topic_placeholder() -> str:
+    raw = os.environ.get(ENV_PLACEHOLDER_INDEX, "").strip()
+    if raw:
+        return TOPIC_PLACEHOLDERS[int(raw) % len(TOPIC_PLACEHOLDERS)]
+    return random.choice(TOPIC_PLACEHOLDERS)
 
 
 @router.get("/healthz", include_in_schema=False)
@@ -201,7 +212,7 @@ def index(
                 "user": None,
                 "sign_in_url": urls.sign_in,
                 "instant_enabled": free_tier_configured(),
-                "topic_placeholder": random.choice(TOPIC_PLACEHOLDERS),
+                "topic_placeholder": _topic_placeholder(),
             },
         )
     uid = user["tailscale_login"]

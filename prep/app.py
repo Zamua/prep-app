@@ -29,6 +29,7 @@ from pathlib import Path
 
 import mistune
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from markupsafe import Markup
 
@@ -55,6 +56,8 @@ from prep.web import errors as _errors_mod
 from prep.web.dashboard import router as dashboard_router
 from prep.web.index import router as index_router
 from prep.web.legal import router as legal_router
+from prep.web.parity import parity_mode, strip_cross_origin_tags
+from prep.web.parity import router as parity_router
 from prep.web.pwa import router as pwa_router
 from prep.web.templates import is_accepted_version_token, templates
 from prep.workflows.routes import router as workflows_router
@@ -124,7 +127,15 @@ def _warn_on_unusable_master_key() -> None:
         )
 
 
+def _warn_on_parity_mode() -> None:
+    """Parity mode drops ClerkJS from every page; a deploy carrying
+    the flag would sign nobody in."""
+    if parity_mode():
+        _log.warning("PREP_PARITY_MODE=1: ClerkJS and the vendor doc scripts are off")
+
+
 _warn_on_unusable_master_key()
+_warn_on_parity_mode()
 
 # Markdown rendering for prompts + free-form fields. mistune escapes
 # raw HTML by default; input is already trusted (we generated it
@@ -274,9 +285,10 @@ app = FastAPI(
     # uses `redoc@next` which Chromium blocks via Opaque Response
     # Blocking on prepcards.app (the jsdelivr response Content-Type
     # for the @next tag confuses ORB). We mount our own /redoc below
-    # pinned to a stable version. /docs (Swagger UI) keeps the
-    # FastAPI default since its CDN bundle is well-behaved.
+    # pinned to a stable version. /docs is mounted below too, the
+    # FastAPI default shell, so parity mode can strip its CDN tags.
     redoc_url=None,
+    docs_url=None,
     title="prep",
     description=(
         "Self-hosted spaced-repetition flashcards.\n\n"
@@ -330,6 +342,45 @@ async def _no_cache_html(request, call_next):
     return response
 
 
+def _vendor_shell(request: Request, response: HTMLResponse) -> HTMLResponse:
+    """Under parity mode the doc shells lose every cross-origin script
+    and stylesheet; the gate compares the empty shells."""
+    if not parity_mode():
+        return response
+    body = response.body.decode(response.charset)
+    host = request.headers.get("host", "")
+    return HTMLResponse(strip_cross_origin_tags(body, host), status_code=response.status_code)
+
+
+@app.get("/docs", include_in_schema=False)
+def custom_docs(request: Request):
+    """FastAPI's own Swagger UI shell, mounted by hand so it passes
+    through `_vendor_shell`."""
+    from fastapi.openapi.docs import get_swagger_ui_html
+
+    root = request.scope.get("root_path", "").rstrip("/")
+    oauth2_redirect_url = app.swagger_ui_oauth2_redirect_url
+    if oauth2_redirect_url:
+        oauth2_redirect_url = root + oauth2_redirect_url
+    return _vendor_shell(
+        request,
+        get_swagger_ui_html(
+            openapi_url=root + app.openapi_url,
+            title=f"{app.title} - Swagger UI",
+            oauth2_redirect_url=oauth2_redirect_url,
+            init_oauth=app.swagger_ui_init_oauth,
+            swagger_ui_parameters=app.swagger_ui_parameters,
+        ),
+    )
+
+
+@app.get(app.swagger_ui_oauth2_redirect_url, include_in_schema=False)
+def custom_docs_oauth2_redirect():
+    from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
+
+    return get_swagger_ui_oauth2_redirect_html()
+
+
 @app.get("/redoc", include_in_schema=False)
 def custom_redoc(request: Request):
     """Replacement for FastAPI's auto-mounted /redoc.
@@ -346,10 +397,13 @@ def custom_redoc(request: Request):
 
     root = request.scope.get("root_path", "")
     openapi_url = f"{root}{app.openapi_url}"
-    return get_redoc_html(
-        openapi_url=openapi_url,
-        title=f"{app.title} - ReDoc",
-        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js",
+    return _vendor_shell(
+        request,
+        get_redoc_html(
+            openapi_url=openapi_url,
+            title=f"{app.title} - ReDoc",
+            redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js",
+        ),
     )
 
 
@@ -505,6 +559,9 @@ if os.environ.get("CLERK_WEBHOOK_SECRET"):
 # never expose /dev/preview/*.
 if os.environ.get("PREP_DEV") == "1":
     dev_preview.register(app, templates)
+
+if parity_mode():
+    app.include_router(parity_router)
 
 
 # ---- Boot logging ---------------------------------------------------------

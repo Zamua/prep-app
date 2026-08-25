@@ -145,3 +145,39 @@ def test_install_nudge_renders_for_signed_in_users(client, initialized_db, authe
     body = client.get("/", headers=authed_headers).text
     assert "pwa-install-root" in body
     assert "colophon-install" in body
+
+
+# ---- the seeded placeholder ------------------------------------------------
+
+
+def test_placeholder_index_picks_that_entry(monkeypatch):
+    from prep.web.index import TOPIC_PLACEHOLDERS, _topic_placeholder
+
+    monkeypatch.setenv("PREP_PLACEHOLDER_INDEX", "0")
+    assert _topic_placeholder() == TOPIC_PLACEHOLDERS[0] == "Phases of the moon"
+    monkeypatch.setenv("PREP_PLACEHOLDER_INDEX", "3")
+    assert _topic_placeholder() == TOPIC_PLACEHOLDERS[3]
+
+
+def test_placeholder_index_wraps(monkeypatch):
+    from prep.web.index import TOPIC_PLACEHOLDERS, _topic_placeholder
+
+    monkeypatch.setenv("PREP_PLACEHOLDER_INDEX", str(len(TOPIC_PLACEHOLDERS)))
+    assert _topic_placeholder() == TOPIC_PLACEHOLDERS[0]
+
+
+def test_placeholder_unset_stays_random(monkeypatch):
+    from prep.web.index import TOPIC_PLACEHOLDERS, _topic_placeholder
+
+    monkeypatch.delenv("PREP_PLACEHOLDER_INDEX", raising=False)
+    picks = {_topic_placeholder() for _ in range(200)}
+    assert len(picks) > 1
+    assert picks <= set(TOPIC_PLACEHOLDERS)
+
+
+def test_seeded_placeholder_renders_on_the_landing(
+    client, initialized_db, visitor_provider, free_tier, monkeypatch
+):
+    monkeypatch.setenv("PREP_PLACEHOLDER_INDEX", "3")
+    body = client.get("/").text
+    assert "SQL joins: inner, left, right, full, with examples" in body

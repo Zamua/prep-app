@@ -198,12 +198,16 @@ def _clerk_bootstrap_context(request: Request) -> dict:
     background; without it, an idle tab's POST would 401 and bounce
     through Clerk sign-in, losing form data.
 
-    Returns Nones on Tailscale-mode deploys; base.html's `{% if %}`
-    guard then renders nothing.
+    Returns Nones on Tailscale-mode deploys and under parity mode;
+    base.html's `{% if %}` guard then renders nothing.
     """
     import base64
     import os
 
+    from prep.web.parity import parity_mode
+
+    if parity_mode():
+        return {"clerk_publishable_key": None, "clerk_frontend_api_host": None}
     if (os.environ.get("PREP_AUTH_MODE") or "").strip() != "clerk":
         return {"clerk_publishable_key": None, "clerk_frontend_api_host": None}
     pk = (os.environ.get("CLERK_PUBLISHABLE_KEY") or "").strip()
