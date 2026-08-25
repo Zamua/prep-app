@@ -112,5 +112,6 @@ def test_dockerfile_ships_the_font_files():
     """The image copies static/ by subdirectory, so a new subdirectory
     is invisible to prod until named here. fonts.css points at
     static/fonts; the image must carry it."""
-    dockerfile = (REPO_ROOT / "docker" / "Dockerfile.prep").read_text()
+    repo_root = Path(__file__).resolve().parents[2]
+    dockerfile = (repo_root / "docker" / "Dockerfile.prep").read_text()
     assert "COPY static/fonts/ ./static/fonts/" in dockerfile
