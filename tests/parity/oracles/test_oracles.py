@@ -130,6 +130,13 @@ def scrub_volatile(pairs: list[dict]) -> list[dict]:
                 value = container[key]
                 if isinstance(value, str):
                     container[key] = re.sub(regex, VOLATILE_MARK, value)
+                # An id is an integer on the wire; a rule that matches the
+                # whole of it masks it the same way, which is how a per-cell
+                # block id compares with the single sequence Python numbers
+                # every user's rows from.
+                elif isinstance(value, int) and not isinstance(value, bool):
+                    if re.search(regex, str(value)):
+                        container[key] = VOLATILE_MARK
     return pairs
 
 

@@ -13,7 +13,9 @@ Standalone:
 
 In-process: `LLMStub(...)`, or the `llm_stub` session fixture.
 Control endpoints (POST unless noted) under `/_control/`: `hold`,
-`release`, `GET held`, `latency` `{"ms"}`, `reset`, `GET requests`.
+`release`, `GET held`, `latency` `{"ms"}`, `reset`, `GET requests`,
+`canned` `{"content"}` (the answer served for any request with no
+fixture, `null` to clear).
 """
 
 from __future__ import annotations
@@ -155,6 +157,7 @@ class _State:
         self.held: list[str] = []
         self.latency_ms = 0
         self.requests: list[str] = []
+        self.canned: str | None = None
 
     def hold(self) -> None:
         with self.lock:
@@ -171,6 +174,7 @@ class _State:
         with self.lock:
             self.latency_ms = 0
             self.requests.clear()
+            self.canned = None
 
 
 class LLMStubServer(ThreadingHTTPServer):
@@ -252,6 +256,14 @@ class _Handler(BaseHTTPRequestHandler):
             with state.lock:
                 state.latency_ms = ms
             self._send_json(200, {"ms": ms})
+        elif self.path == "/_control/canned":
+            content = body.get("content") if isinstance(body, dict) else None
+            if content is not None and not isinstance(content, str):
+                self._send_json(400, {"error": "canned needs a string content, or null"})
+                return
+            with state.lock:
+                state.canned = content
+            self._send_json(200, {"canned": content is not None})
         elif self.path == "/_control/reset":
             state.reset()
             self._send_json(200, {"reset": True})
@@ -287,6 +299,14 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json(500, {"error": str(e)})
             return
         if text is None:
+            with state.lock:
+                canned = state.canned
+            # A caller that pins the answer is standing in for the agent
+            # itself, the way the in-process recording's fake did; nothing
+            # is written to the fixture set.
+            if canned is not None:
+                self._send_json(200, canned_completion(canned, body))
+                return
             if not (state.record and state.upstream):
                 note_missing(state.fixtures, key, body)
                 self._send_json(404, {"error": f"no fixture for {key}"})
@@ -303,6 +323,25 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 # ---- clients ----------------------------------------------------------------
+
+
+def canned_completion(content: str, body: object) -> dict:
+    """One chat-completions answer carrying `content`, in the shape the
+    OpenAI-compatible clients parse."""
+    model = body.get("model") if isinstance(body, dict) else None
+    return {
+        "id": "parity-canned",
+        "object": "chat.completion",
+        "model": model or "parity-model",
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": content},
+            }
+        ],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+    }
 
 
 class StubControl:
@@ -334,6 +373,9 @@ class StubControl:
 
     def latency(self, ms: float) -> None:
         self._call("POST", "/_control/latency", {"ms": ms})
+
+    def canned(self, content: str | None) -> None:
+        self._call("POST", "/_control/canned", {"content": content})
 
     def reset(self) -> None:
         self._call("POST", "/_control/reset")

@@ -9,6 +9,7 @@ import type {
   FixturePages,
   Hasher,
   IdentityProvider,
+  LedgerReset,
   Limiter,
   Random,
   Renderer,
@@ -112,7 +113,7 @@ export interface Composition {
   userRepos(storage: CellStorage, clock: Clock): UserRepos;
   sessionIds(storage: CellStorage): SessionIds;
   directoryRepo(storage: CellStorage): Sync<Directory>;
-  limiterRepo(storage: CellStorage): Sync<Limiter>;
+  limiterRepo(storage: CellStorage): Sync<Limiter> & LedgerReset;
   /** Re-seeds the parity generators; a no-op outside parity. */
   resetRandom(): void;
   /** Each cell class's migrations, idempotent, version written last. */

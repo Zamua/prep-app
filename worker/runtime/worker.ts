@@ -54,6 +54,11 @@ interface SeedApi {
   seed(profile: string, user: string, at: string | null): Promise<Record<string, unknown>>;
 }
 
+/** The global ledger's own reset, which the seed drives. */
+interface LimiterSeedApi {
+  wipe(): Promise<void>;
+}
+
 /** What the response owes the anonymous cookie, decided before any handler. */
 interface Outcome {
   response: Response;
@@ -343,6 +348,31 @@ async function routeByToken(request: Request, headers: Headers, env: Env, c: Com
   return response;
 }
 
+/**
+ * The anonymous accounts a previous run minted. They belong to no profile,
+ * and the seeded generator hands out the same ids again, so leaving them
+ * makes the next run's mint land in a cell that already holds its deck.
+ * Wiped rather than destroyed: a tombstone would refuse the id forever.
+ */
+async function clearAnonymous(c: Composition): Promise<void> {
+  for (let page = 1; page <= ANONYMOUS_PAGES; page++) {
+    const users = await c.directory.listAnonymous(null, ANONYMOUS_PAGE);
+    if (users.length === 0) return;
+    for (const user of users) {
+      const cell = c.userCells.cell(user.id) as unknown as SeedApi;
+      // Two RPCs, as the profile seed is: the wipe takes the schema with it,
+      // and the empty seed puts it back so the id is usable again.
+      await cell.wipe(ANONYMOUS_PROFILE);
+      await cell.seed(ANONYMOUS_PROFILE, user.id, null);
+      await c.directory.remove(user.id);
+    }
+  }
+}
+
+const ANONYMOUS_PROFILE = 'anonymous';
+const ANONYMOUS_PAGE = 100;
+const ANONYMOUS_PAGES = 20;
+
 async function seed(request: Request, env: Env, c: Composition): Promise<Response> {
   if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
   if (request.headers.get(INTERNAL_TOKEN_HEADER) !== c.internalToken) {
@@ -359,6 +389,15 @@ async function seed(request: Request, env: Env, c: Composition): Promise<Respons
   }
   const stub = env.USER.get(env.USER.idFromName(body.user)) as unknown as SeedApi;
   try {
+    // The instant ledger is global and durable, and the parity clock never
+    // advances, so one run's spend would refuse the next run's first
+    // generation. It leaves with the data it was recorded against.
+    await (c.limiter as unknown as LimiterSeedApi).wipe();
+    await clearAnonymous(c);
+    // The entry worker draws the anonymous id and the instant slug from its
+    // own isolate's generator, which no cell's reset reaches: without this
+    // the ids a run mints depend on how many the runs before it did.
+    c.resetRandom();
     // Two RPCs: the wipe cannot share a call with the rows it makes room for.
     await stub.wipe(body.profile);
     return Response.json(await stub.seed(body.profile, body.user, request.headers.get(PARITY_NOW_HEADER)));

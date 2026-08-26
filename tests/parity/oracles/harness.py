@@ -17,6 +17,7 @@ import json
 import os
 import random
 import tempfile
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -139,7 +140,13 @@ class Harness:
 def describe_response(response) -> dict:
     content_type = response.headers.get("content-type", "")
     body: Any
-    if "application/json" in content_type:
+    # A JSON content-type with no body at all: the fetch runtime forbids a
+    # body on a 204, where Python's `JSONResponse(None, 204)` writes `null`.
+    # Both project to no value, which is the comparable part.
+    if "application/json" in content_type and not response.content:
+        body = None
+        text = None
+    elif "application/json" in content_type:
         body = response.json()
         text = None
     else:
@@ -298,6 +305,11 @@ def _default(value: Any) -> Any:
 # ---- a remote target -------------------------------------------------------
 
 
+SEED_ATTEMPTS = 4
+INTERNAL_TOKEN_HEADER = "x-internal-token"
+PARITY_HOST = "parity.example.test"
+
+
 class RemoteClockPin:
     """`clock.set(at)` for a remote server: the instant travels as the
     `X-Parity-Now` header on every later call."""
@@ -327,16 +339,35 @@ class RemoteHarness:
         return {**Harness.headers(login, name), "X-Internal-Token": self.token}
 
     def seed(self, user: str, profile: str) -> dict:
-        response = self.client.post(
-            "/_parity/seed",
-            json={"user": user, "profile": profile},
-            headers={"X-Internal-Token": self.token, **self._clock_header()},
-        )
-        response.raise_for_status()
-        return response.json()
+        """Re-seed, retrying a 5xx. The wipe drops the replication
+        bookkeeping a cell-backed target keeps, so a durability proof can
+        time out and restart the cell with the write never landed, which
+        the runtime documents as retryable. A 4xx is the request's own
+        fault and is raised on the first answer."""
+        for attempt in range(1, SEED_ATTEMPTS + 1):
+            response = self.client.post(
+                "/_parity/seed",
+                json={"user": user, "profile": profile},
+                headers={"X-Internal-Token": self.token, **self._clock_header()},
+                timeout=60.0,
+            )
+            if response.status_code == 200:
+                return response.json()
+            if response.status_code < 500 or attempt == SEED_ATTEMPTS:
+                response.raise_for_status()
+            time.sleep(attempt)
+        raise AssertionError("unreachable")
 
     def _clock_header(self) -> dict[str, str]:
-        return {"X-Parity-Now": self.clock.at.isoformat().replace("+00:00", "Z")}
+        """The request clock, plus the origin the recording was made at. A
+        target reached at 127.0.0.1 over http would otherwise build a
+        different `app_base` into its pages and read the recorded `Origin`
+        as cross-site, neither of which is a difference in the app."""
+        return {
+            "X-Parity-Now": self.clock.at.isoformat().replace("+00:00", "Z"),
+            "X-Forwarded-Proto": "https",
+            "Host": PARITY_HOST,
+        }
 
     def call(
         self,
@@ -350,8 +381,10 @@ class RemoteHarness:
         content: bytes | str | None = None,
         note: str | None = None,
     ) -> Any:
-        sent = {**(headers or {})}
-        kwargs: dict[str, Any] = {"headers": {**sent, **self._clock_header()}}
+        # The seed credential is how this target admits the fake identity, not
+        # part of any contract, and a recorded artefact must not carry it.
+        sent = {k: v for k, v in (headers or {}).items() if k.lower() != INTERNAL_TOKEN_HEADER}
+        kwargs: dict[str, Any] = {"headers": {**(headers or {}), **self._clock_header()}}
         if json_body is not None:
             kwargs["json"] = json_body
         if data is not None:

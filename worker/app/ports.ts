@@ -508,6 +508,13 @@ export interface Limiter {
   reassign(fromId: string, toId: string): Promise<number>;
 }
 
+/** The parity seed's reset of the global instant ledger. Not part of
+ * serving: a durable limiter cell would otherwise carry one run's spend
+ * into the next against a clock that never advances. */
+export interface LedgerReset {
+  wipe(): void;
+}
+
 export interface Precheck {
   exists: boolean;
   isAnonymous: boolean;

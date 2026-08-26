@@ -73,6 +73,12 @@ VOLATILE: tuple[tuple[str, str, str], ...] = (
     ("cookie-*", "response.json.decks.*.id", r"^\d+$"),
     ("cookie-*", "response.json.cards.*.deck_id", r"^\d+$"),
     ("cookie-*", "response.json.cards.*.question_id", r"^\d+$"),
+    # The anonymous account itself, and the slug of the deck it was minted
+    # with. Both are random; only one seeded generator per process makes them
+    # repeat, and the entry worker and the cell that names them do not share
+    # an isolate, so nothing outside this recording can reproduce them.
+    ("cookie-*", "response.json.user.id", r"^anon:[0-9a-f]{32}$"),
+    ("cookie-*", "response.json.decks.*.name", r"^[a-z0-9]{8}$"),
     ("v1-decks-create", "response.json.id", r"^\d+$"),
     ("v1-deck-import-csv", "response.json.deck_id", r"^\d+$"),
     ("mcp-call-prep_create_deck", _TOOL_TEXT, r'"id": \d+'),
@@ -82,6 +88,12 @@ VOLATILE: tuple[tuple[str, str, str], ...] = (
     ("mcp-call-prep_update_card", _TOOL_TEXT, r'"id": \d+'),
     ("mcp-call-prep_suspend_card", _TOOL_TEXT, r'"id": \d+'),
     ("mcp-call-prep_delete_card", _TOOL_TEXT, r'"deleted_id": \d+'),
+    # The four card tools name the row `prep_add_card` created, whose id the
+    # rule above already treats as volatile; the request carries it back.
+    ("mcp-call-prep_get_card", "request.json.params.arguments.card_id", r"^\d+$"),
+    ("mcp-call-prep_update_card", "request.json.params.arguments.card_id", r"^\d+$"),
+    ("mcp-call-prep_suspend_card", "request.json.params.arguments.card_id", r"^\d+$"),
+    ("mcp-call-prep_delete_card", "request.json.params.arguments.card_id", r"^\d+$"),
 )
 
 INSTANT_DECK = json.dumps(
@@ -827,10 +839,7 @@ def record_api_and_mcp(h: Harness, H: dict) -> None:
         headers=B,
         json_body=_tool("prep_export_deck_apkg", {"name": "mcp-renamed"}),
     )
-    apkg_b64 = json.loads(h.recorded[-1]["response"]["json"]["result"]["content"][0]["text"])[
-        "apkg_base64"
-    ]
-    base64.b64decode(apkg_b64)
+    apkg_b64 = _exported_apkg(h.recorded[-1])
     h.call(
         "mcp-call-prep_import_apkg",
         "POST",
@@ -867,6 +876,21 @@ def record_api_and_mcp(h: Harness, H: dict) -> None:
         json_body=_tool("prep_delete_deck", {"name": "mcp-renamed"}),
     )
     h.call("v1-decks-list-after", "GET", "/api/v1/decks", headers=B)
+
+
+def _exported_apkg(pair: dict) -> str:
+    """The bytes the export tool just produced, for the import that follows.
+    A target without the `.apkg` codec answers a tool error instead; the
+    import is still issued, with nothing to import, so the pair exists and
+    records its own refusal."""
+    text = pair["response"]["json"]["result"]["content"][0]["text"]
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        return ""
+    apkg_b64 = payload["apkg_base64"]
+    base64.b64decode(apkg_b64)
+    return apkg_b64
 
 
 def _walk_routes(routes):
@@ -908,11 +932,21 @@ def covered_routes(app, pairs: list[dict]) -> tuple[list[dict], list[dict]]:
     return listed, missing
 
 
-def extract() -> dict[str, str]:
-    with scratch_app() as h:
-        from prep.dev.parity_seed import seed
+def reference_app():
+    """The route list the coverage assertion reads is a property of the
+    Python app, whatever target recorded the pairs."""
+    from prep.app import app
 
-        ids = seed(PARITY_USER, "reader")
+    return app
+
+
+def extract(harness=None) -> dict[str, str]:
+    """Record every pair against a target. The default target is the
+    reference app in this process; `remote_app(base_url, token)` records
+    the same calls against a running server, which is how another
+    implementation is held to this corpus."""
+    with harness if harness is not None else scratch_app() as h:
+        ids = h.seed(PARITY_USER, "reader")
         H = {**h.headers(), **JSON}
         record_dashboard(h, H)
         record_offline(h, H, ids)
@@ -925,7 +959,7 @@ def extract() -> dict[str, str]:
         h.call("redoc-shell", "GET", "/redoc", note="vendor bundle stripped under the flag")
         h.call("workflow-badge-unauthenticated", "GET", "/api/active-workflows-badge", headers=JSON)
         pairs = jsonable(h.recorded)
-        listed, missing = covered_routes(h.client.app, pairs)
+        listed, missing = covered_routes(reference_app(), pairs)
     assert not missing, f"routes with no recorded pair: {missing}"
     names = [p["name"] for p in pairs]
     assert len(names) == len(set(names)), "pair names must be unique"

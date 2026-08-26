@@ -1,12 +1,12 @@
 // The instant-generation ledger and its windows. RPC only.
 import { DurableObject } from 'cloudflare:workers';
-import type { Limiter, ReserveResult, Sync } from '../../app/ports.js';
+import type { LedgerReset, Limiter, ReserveResult, Sync } from '../../app/ports.js';
 import { compose } from '../compose.js';
 import type { Env } from '../env.js';
 import type { CellStorage } from '../storage.js';
 
 export class InstantLimiterCell extends DurableObject<Env> implements Limiter {
-  private readonly repo: Sync<Limiter>;
+  private readonly repo: Sync<Limiter> & LedgerReset;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -28,6 +28,12 @@ export class InstantLimiterCell extends DurableObject<Env> implements Limiter {
 
   async reassign(fromId: string, toId: string): Promise<number> {
     return this.repo.reassign(fromId, toId);
+  }
+
+  /** Parity only, from `POST /_parity/seed`: the ledger is global, so a
+   * run's spend has to leave with the data it was recorded against. */
+  async wipe(): Promise<void> {
+    this.repo.wipe();
   }
 
   async fetch(_request: Request): Promise<Response> {
