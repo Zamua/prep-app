@@ -3,10 +3,14 @@
 import { matchRegex, validateRegexUpdate } from '../../domain/grading/index.js';
 import { classifyGrading, gradeAnswer, looksLikeParaphrase } from '../../domain/triviaGrading.js';
 import type { Question } from '../entities.js';
-import { AgentUnavailable, type AgentPort } from '../ports.js';
+import { AgentBusy, AgentUnavailable, type AgentPort } from '../ports.js';
 
 /** Shared-tier contention, not a broken grader: its fallback line says so. */
-export class AgentBusy extends AgentUnavailable {}
+export { AgentBusy };
+
+/** Python's `_GRADE_TIMEOUT_S`: a grader that has not answered by now loses
+ * to the string match, which is instant. */
+export const GRADE_TIMEOUT_MS = 12_000;
 
 export interface Verdict {
   correct: boolean;
@@ -92,7 +96,7 @@ export async function aiGrade(
 
   let out: string;
   try {
-    out = await agent.complete({ system: '', user: text });
+    out = await agent.complete({ system: '', user: text, signal: AbortSignal.timeout(GRADE_TIMEOUT_MS) });
   } catch (e) {
     if (!(e instanceof AgentUnavailable)) throw e;
     const feedback =

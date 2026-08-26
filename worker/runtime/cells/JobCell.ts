@@ -258,7 +258,10 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
         at: isoUtc(this.now()),
       });
     }
-    const ctx: LlmStepContext = { ...info, site: 'job', agent: this.c.agent, signal: AbortSignal.timeout(this.c.jobLlmTimeoutMs) };
+    // The owner's credential is read here, once for this step: a key revoked
+    // between two steps stops the second one.
+    const agent = this.c.agentFor(() => this.c.userCellsDirect.cell(state.job.owner).agentConfig(), { timeoutMs: this.c.jobLlmTimeoutMs });
+    const ctx: LlmStepContext = { ...info, site: 'job', agent, signal: AbortSignal.timeout(this.c.jobLlmTimeoutMs) };
     return this.c.stepRegistry.get(node.name)(ctx);
   }
 

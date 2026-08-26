@@ -2,6 +2,7 @@
 // isolate. Cross-cutting wrappers live here and are applied by the router,
 // never inside a handler. Cells get their repositories through it too.
 import type {
+  AgentConfig,
   AgentPort,
   Cipher,
   Clock,
@@ -35,14 +36,15 @@ import type { CookieVerdict } from '../app/auth/resolve.js';
 import { deleteCookieHeader, HmacSigner, mintCookie, resolveCookieSecret, setCookieHeader } from './adapters/anonCookie.js';
 import { AesGcmCipher, loadMasterKey, MasterKeyError } from './adapters/byokCrypto.js';
 import { AlarmLedgerRunner } from './adapters/alarmLedgerRunner.js';
+import { NO_FUNDING } from '../app/agent/funding.js';
 import { StubWorkflowRunner } from './adapters/runnerStub.js';
 import { namespaceDirectory, namespaceJobs, namespaceLimiter, namespaceUserCells, NO_RETRY } from './adapters/cells.js';
 import { PROBE_GRAPHS, registerProbe } from './adapters/jobProbe.js';
 import { ClerkConfigError, ClerkProvider, ClerkVerifier, clerkConfig, frontendApiHost, type ClerkConfig } from './adapters/clerk.js';
 import { clockFromEnv, FixedClock, parseFakeNow } from './adapters/clock.js';
-import { UnavailableAgent } from './adapters/agentStub.js';
 import { FakeIdentityProvider, NoIdentityProvider } from './adapters/fakeIdentity.js';
-import { FreeTierAgent, freeTierConfig } from './adapters/freeTier.js';
+import { FreeTierAgent, freeTierConfig, INSTANT_MAX_OUTPUT_TOKENS } from './adapters/agents/freeTier.js';
+import { RefusingAgent, SelectedAgent, type SelectDeps } from './adapters/agents/select.js';
 import { NoWebPush, WebCryptoWebPush } from './adapters/webpush.js';
 import { OpenRouterOAuth } from './adapters/openrouter.js';
 import { SvixVerifier } from './adapters/svix.js';
@@ -102,8 +104,12 @@ export interface Composition {
   webhooks: WebhookVerifier | null;
   pat: PatIssuer;
   openRouter: OpenRouterAuth;
-  /** The deploy's shared tier when configured, else the refusing stub. */
+  /** The instant endpoint's agent: the shared tier at its own output cap,
+   * else the refusing stub. Every other caller selects per owner. */
   agent: AgentPort;
+  /** The port a cell holds for one owner: the credential is resolved per
+   * call, so a revoked key stops the call after it. */
+  agentFor(load: () => AgentConfig | Promise<AgentConfig>, opts?: { timeoutMs?: number }): AgentPort;
   /** One runner per calling cell: `status` reads that cell's `job_progress`,
    * and a status write lands through that cell's repositories and push. */
   runner(ctx: { owner: string; repos: UserRepos }): WorkflowRunner;
@@ -282,7 +288,9 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
   const clock = clockFromEnv(env);
   const webRandom = new WebCryptoRandom();
   const clerk = clerkOrNull(env, clock);
-  const freeTier = freeTierConfig(env);
+  const freeTier = freeTierConfig(env, { warn });
+  const instantTier = freeTierConfig(env, { maxTokens: INSTANT_MAX_OUTPUT_TOKENS, warn });
+  const selectDeps: SelectDeps = { env, cipher: cipherOrNull(env, webRandom, warn), warn };
   let signerOnce: Promise<Signer | null> | null = null;
   const composition: Composition = {
     clock,
@@ -291,7 +299,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
       signerOnce ??= resolveCookieSecret(env, warn).then((secret) => (secret ? new HmacSigner(secret) : null));
       return signerOnce;
     },
-    cipher: cipherOrNull(env, webRandom, warn),
+    cipher: selectDeps.cipher,
     clerk: clerk?.provider ?? null,
     clerkConfig: clerk?.config ?? null,
     webhooks: (env.CLERK_WEBHOOK_SECRET ?? '').trim() ? new SvixVerifier((env.CLERK_WEBHOOK_SECRET ?? '').trim()) : null,
@@ -300,7 +308,8 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
       new WebCryptoHasher(),
     ),
     openRouter: new OpenRouterOAuth(webRandom),
-    agent: freeTier ? new FreeTierAgent(freeTier) : new UnavailableAgent(),
+    agent: instantTier ? new FreeTierAgent(instantTier, warn) : new RefusingAgent(NO_FUNDING),
+    agentFor: (load, opts = {}) => new SelectedAgent(load, { ...selectDeps, timeoutMs: opts.timeoutMs ?? selectDeps.timeoutMs }),
     // A deploy with no JOB binding has jobs off: every start refuses, and
     // the use cases take the branch Python takes when nothing funds one.
     runner: (ctx) =>

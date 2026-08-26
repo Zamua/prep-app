@@ -456,16 +456,43 @@ export interface WebPush {
 
 export class AgentUnavailable extends Error {}
 
+/** Shared, deploy-funded capacity is saturated. Not the caller's fault and
+ * not their budget: the remedy is to retry, or bring a key. */
+export class AgentBusy extends AgentUnavailable {}
+
+/** A shared-capacity call that timed out in transport. Unlike the other busy
+ * shapes the request WAS issued, so a caller metering upstream spend counts
+ * it as spent. */
+export class AgentTimeout extends AgentBusy {}
+
+/** The credential's own quota or credit pool is gone; only its owner can
+ * refill it. */
+export class AgentBudgetExhausted extends AgentUnavailable {}
+
 export interface AgentRequest {
   system: string;
   user: string;
   maxTokens?: number;
+  /** The caller's deadline; the adapter aborts on the earlier of it and its
+   * own transport timeout. */
+  signal?: AbortSignal;
 }
 
 /** Throws `AgentUnavailable` when no provider can answer. */
 export interface AgentPort {
   complete(request: AgentRequest): Promise<string>;
 }
+
+/** Which credential funds one owner's call, resolved from their rows alone.
+ * The ciphertext travels, never the key: the caller decrypts in its own
+ * isolate with the same master key. */
+export type AgentConfig =
+  | { tier: 'byok'; provider: string; ciphertext: string }
+  | { tier: 'free' }
+  | { tier: 'none'; reason: string };
+
+/** What `funding_tier_for_user` answers, minus the retired subscription. */
+export type FundingTier = 'byok' | 'free' | 'none';
 
 export class RunnerUnavailable extends Error {}
 
@@ -678,6 +705,9 @@ export interface UserCellRpc {
     at: string;
   }): Promise<InstantDeckResult>;
   lastSeenAt(): Promise<string | null>;
+  /** Which credential funds this owner's next LLM step. Read once per step,
+   * never cached: a revoked key must stop the step after it. */
+  agentConfig(): Promise<AgentConfig>;
   /** One transaction: `active_workflows`, `job_progress`, and Python's
    * `update_status` notification rules. Idempotent by `(jobId, transition)`. */
   jobStatus(write: JobStatusWrite): Promise<void>;

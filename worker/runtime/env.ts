@@ -15,6 +15,9 @@ export interface SecretVars {
   PREP_KEY_ENCRYPTION_SECRET?: string;
   PREP_VAPID_PRIVATE_KEY?: string;
   PREP_FREE_INFERENCE_API_KEY?: string;
+  /** JSON object merged into every shared-tier request body; a deploy knob
+   * for endpoint-specific switches, never the conversation or the cap. */
+  PREP_FREE_INFERENCE_EXTRA_BODY?: string;
 }
 
 /** Public deploy configuration for the shared tier and web push. */

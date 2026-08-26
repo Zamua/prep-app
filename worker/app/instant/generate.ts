@@ -10,7 +10,7 @@ import { validateRegexUpdate } from '../../domain/grading/index.js';
 import { buildPrompt, displayNameFor, extractCards, sanitizeTopic } from '../../domain/instant/index.js';
 import { RowCapReached } from '../../domain/limits.js';
 import { codePoints, isoUtc } from '../../domain/py.js';
-import { type AgentPort, type Clock, type Directory, type Limiter, type Random, type UserCells } from '../ports.js';
+import { AgentBusy, AgentTimeout, type AgentPort, type Clock, type Directory, type Limiter, type Random, type UserCells } from '../ports.js';
 
 export const ANON_DISPLAY_NAME = 'Guest';
 
@@ -27,8 +27,9 @@ const ERROR_COPY: Record<string, string> = {
   deck_limit: "You've reached the limit for a guest account. Create a free account to keep going.",
 };
 
-/** The upstream refused without spending: contention, not a bad deck. */
-export class InstantBusy extends Error {}
+/** The upstream refused without spending: contention, not a bad deck. One
+ * class with the taxonomy's, so the adapters raise a single busy signal. */
+export { AgentBusy as InstantBusy };
 
 export interface InstantDeps {
   clock: Clock;
@@ -90,7 +91,8 @@ export async function generateInstantDeck(deps: InstantDeps, req: InstantRequest
     const text = await deps.agent.complete({ system: '', user: buildPrompt(topic) });
     cards = extractCards(text, validateRegexUpdate);
   } catch (e) {
-    if (e instanceof InstantBusy) {
+    // A timeout is busy too, but the request went out: it spends.
+    if (e instanceof AgentBusy && !(e instanceof AgentTimeout)) {
       await resolve(deps, reservationId, 'failed_free', null, null);
       return refusal(429, 'busy');
     }

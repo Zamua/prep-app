@@ -3,8 +3,10 @@
 // their routes, an unmatched request replays the recorded Python page.
 import { DurableObject } from 'cloudflare:workers';
 import type { CellSnapshot, InstantCard, InstantDeckResult, Profile, ProfileClaims, TombstoneReason } from '../../app/entities.js';
-import type { CarriedPreferences, Clock, JobStatusWrite, JobStepRequest, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
+import type { AgentConfig, CarriedPreferences, Clock, JobStatusWrite, JobStepRequest, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
+import { agentConfig as agentConfigFor } from '../../app/agent/funding.js';
 import { deliverJobStatus } from '../../app/jobs/status.js';
+import { nextWakeAt, runWake } from '../../app/notify/wake.js';
 import type { StepOutput, WriteStepContext } from '../../app/jobs/registry.js';
 import { derive } from '../../app/viewmodels/derive.js';
 import { RowCapReached } from '../../domain/limits.js';
@@ -34,6 +36,7 @@ import {
   type Route,
 } from './router.js';
 import { apiRoutes } from './routes/api.js';
+import { jobRoutes } from './routes/jobs.js';
 import { pageRoutes } from './routes/pages.js';
 import { createUser, PROFILES, type Delta } from './seed/index.js';
 
@@ -55,6 +58,17 @@ export const NOT_AUTHENTICATED = 'not authenticated';
 
 const MS: Record<keyof Delta, number> = { days: 86_400_000, hours: 3_600_000, minutes: 60_000 };
 
+/** A wake is never asked for the past: a due-now alarm lands just after now. */
+const ALARM_FLOOR_MS = 1;
+/**
+ * The floor on an alarm-driven re-arm. A plan whose tasks all ran should move
+ * the wake forward on its own; when one throws it leaves its stamp unwritten
+ * and stays due, and this is what keeps that a retry rather than a hot loop.
+ */
+const FAILED_TASK_BACKOFF_MS = 60_000;
+/** The same floor for a plan that is somehow still due after a full pass. */
+const ALARM_MIN_GAP_MS = 1_000;
+
 export class UserCell extends DurableObject<Env> implements UserCellRpc {
   private readonly c: Composition;
   private readonly storage: CellStorage;
@@ -65,6 +79,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     this.storage = ctx.storage as unknown as CellStorage;
     void ctx.blockConcurrencyWhile(async () => {
       this.c.migrateUserCell(this.storage);
+      await this.ensureAlarm();
     });
   }
 
@@ -73,7 +88,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   }
 
   private routes(): readonly Route[] {
-    return [...pageRoutes, ...apiRoutes];
+    return [...pageRoutes, ...jobRoutes, ...apiRoutes];
   }
 
   /** Everything a handler needs beyond its repositories, from the one root. */
@@ -82,7 +97,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     return {
       random: c.randoms.tokens,
       hasher: c.hasher,
-      agent: c.agent,
+      agent: c.agentFor(() => agentConfigFor(repos, c.freeTierConfigured)),
       runner: c.runner({ owner: subject, repos }),
       cipher: c.cipher,
       openRouter: c.openRouter,
@@ -264,6 +279,12 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
   async lastSeenAt(): Promise<string | null> {
     return this.repos().prefs.get()?.last_seen_at ?? null;
+  }
+
+  /** Which credential funds this owner's next LLM step. The ciphertext
+   * travels; the job cell decrypts it in its own isolate. */
+  async agentConfig(): Promise<AgentConfig> {
+    return agentConfigFor(this.repos(), this.c.freeTierConfigured);
   }
 
   /** One transition from a job of this user. Idempotent by
