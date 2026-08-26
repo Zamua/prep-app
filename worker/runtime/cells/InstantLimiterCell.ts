@@ -26,6 +26,10 @@ export class InstantLimiterCell extends DurableObject<Env> implements Limiter {
     this.repo.resolve(id, outcome, cards, userId);
   }
 
+  async reassign(fromId: string, toId: string): Promise<number> {
+    return this.repo.reassign(fromId, toId);
+  }
+
   async fetch(_request: Request): Promise<Response> {
     return new Response('rpc only', { status: 501 });
   }

@@ -39,6 +39,31 @@ export const POLICY: readonly TableRule[] = [
   rule('api_tokens', 'user_id', DELETE),
 ];
 
+/**
+ * Row identity per reassigned table: what a resumed merge uses to recognise
+ * the rows an earlier attempt already moved, so the slug de-collision sees
+ * the same input twice and never chases a suffix it minted itself. Only
+ * tables whose ids come from a cell's id block appear; the client-keyed
+ * ledgers share a key space between accounts, so a matching key is no
+ * evidence the row came from the anonymous cell, and a table absent here
+ * keeps every row.
+ */
+export const ROW_KEYS: Readonly<Record<string, readonly string[]>> = {
+  decks: ['id'],
+  questions: ['id'],
+  study_sessions: ['id'],
+  trivia_sessions: ['id'],
+  notifications_log: ['id'],
+  active_workflows: ['workflow_id'],
+};
+
+/** The row's identity within `table`, or null when the table has none. */
+export function rowKey(table: string, row: Row): string | null {
+  const columns = ROW_KEYS[table];
+  if (!columns) return null;
+  return JSON.stringify(columns.map((c) => row[c] ?? null));
+}
+
 // The two `users` columns an anonymous user may have set; COPY-IF-NULL
 // onto the target. `desired_retention` already shaped the merged cards'
 // `next_due`, so it travels with them.

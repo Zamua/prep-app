@@ -108,6 +108,12 @@ export class FakeLimiter implements Limiter {
     const row = this.rows.find((r) => r.id === id);
     if (row) Object.assign(row, { outcome, cards, user_id: userId ?? row.user_id });
   }
+
+  async reassign(fromId: string, toId: string): Promise<number> {
+    const moving = this.rows.filter((r) => r.user_id === fromId);
+    for (const row of moving) row.user_id = toId;
+    return moving.length;
+  }
 }
 
 /** Real user cells over fake storage, keyed by id. */

@@ -58,6 +58,12 @@ export class SqlLimiterRepo {
     this.db.run('UPDATE instant_generations SET outcome = ?, cards = ?, user_id = COALESCE(?, user_id) WHERE id = ?', outcome, cards, userId, id);
   }
 
+  /** The merge's reassign rule over the ledger: the anonymous account's spend
+   * follows it onto the target, so signing in never hands out a fresh quota. */
+  reassign(fromId: string, toId: string): number {
+    return this.db.run('UPDATE instant_generations SET user_id = ? WHERE user_id = ?', toId, fromId);
+  }
+
   rows(): GenerationRow[] {
     return this.db.all<GenerationRow & Record<string, string | null>>('SELECT ip, created_at, outcome, user_id FROM instant_generations ORDER BY id');
   }
