@@ -4,6 +4,7 @@
 // a cell holds one user.
 import type { ScheduledReview } from '../domain/fsrs/index.js';
 import type { LedgerCommit, LedgerRows, StepOutput } from '../domain/jobs/ledger.js';
+import type { GradeCard, TransformCard, TransformDeck, TransformScope } from '../domain/jobs/snapshot.js';
 import type { Refusal } from '../domain/instant/limiter.js';
 import type { AccountRows } from '../domain/limits.js';
 import type {
@@ -162,6 +163,8 @@ export interface DeckRepo {
   /** Rows removed (0 or 1); the subtree cascades. */
   delete(name: string): number;
   listSummaries(): DeckSummary[];
+  /** Every deck for the reorganize prompt, by name, cards excluded. */
+  listForTransform(): Omit<TransformDeck, 'cards'>[];
   dueBreakdown(): [name: string, due: number][];
   createTrivia(name: string, opts: { topic: string; intervalMinutes: number; displayName?: string | null }): number;
   listTriviaDecks(): Deck[];
@@ -188,6 +191,11 @@ export interface QuestionRepo {
   get(qid: number): Question | null;
   moveToDeck(questionIds: readonly number[], destDeckId: number): number;
   listInDeck(deckId: number): DeckCard[];
+  /** One card as the transform prompt shows it; the Go loader took no
+   * suspended filter here, since the user named this card. */
+  cardForTransform(qid: number): TransformCard | null;
+  /** A deck's cards for the transform prompt: unsuspended, by id. */
+  cardsForTransform(deckId: number): TransformCard[];
   promptsInDeck(deckId: number): string[];
   setSuspended(qid: number, suspended: boolean): void;
   delete(qid: number): boolean;
@@ -503,13 +511,20 @@ export interface PlanGenerateInput {
   maxCards?: number;
 }
 
+/** The snapshot fields are not optional: an LLM step has no repositories, so
+ * a start that omits them shows the model an empty library. */
 export interface TransformJobInput {
-  scope: 'card' | 'deck' | 'reorganize';
+  scope: TransformScope;
   targetId: number;
   prompt: string;
   /** Null for reorganize, which spans decks. */
-  deckName?: string | null;
-  deckContextPrompt?: string;
+  deckName: string | null;
+  /** The owning deck's standing description, '' when it has none. */
+  deckContextPrompt: string;
+  /** The card (card scope) or the deck's unsuspended cards (deck scope). */
+  cards: TransformCard[];
+  /** Every deck with its cards; reorganize only, empty otherwise. */
+  decks: TransformDeck[];
 }
 
 export interface TriviaGenerateInput {
@@ -525,6 +540,8 @@ export interface GradeAnswerInput {
   userAnswer: string;
   idk: boolean;
   sessionId?: string;
+  /** The question as the prompt shows it, read before the job starts. */
+  card: GradeCard;
 }
 
 /** One entry per job kind; `JobKind` is its key set, so a kind added without

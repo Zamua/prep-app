@@ -8,6 +8,7 @@
 import { grade, GradingError, UnsupportedQuestionType } from '../../domain/grading/index.js';
 import { JsonDecodeError } from '../../domain/grading/pyjson.js';
 import { deviceLabelFromUa } from '../../domain/study/device.js';
+import { gradeCard } from '../../domain/jobs/snapshot.js';
 import { DurationError, parseUntil } from '../durations.js';
 import type { CardState, Question, StudySession } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
@@ -238,6 +239,7 @@ async function submit(
         userAnswer,
         idk,
         sessionId: s ? s.id : '',
+        card: gradeCard({ type: q.type, prompt: q.prompt, answer: q.answer, rubric: q.rubric ?? '' }),
       });
       wid = started.workflowId;
       if (s !== null) repos.sessions.setGrading(s.id, q.id, wid, body.version as number);

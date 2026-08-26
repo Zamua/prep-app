@@ -13,6 +13,7 @@ import { RunnerUnavailable, type Random, type UserRepos, type WorkflowRunner } f
 import { parseQuestionForm, questionFormFromEntity } from './questionForm.js';
 import { RETENTION_PRESETS, pyFloat } from '../settings/srs.js';
 import { addQuestion, setNotificationsEnabled, splitDeck, SplitRejected } from './service.js';
+import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
 import { MAX_CONTEXT_PROMPT_CHARS, MAX_TOPIC_PROMPT_CHARS, uniqueSlug, validateDisplayName } from './validation.js';
 
 export const DECK_NOT_FOUND = 'deck not found';
@@ -357,7 +358,14 @@ export async function questionImprove(repos: UserRepos, req: PageRequest, deps: 
   if (!agentAvailable(repos, deps.freeTierConfigured)) throw new AppError(403, NO_FUNDING);
   const deckName = repos.decks.findName(q.deck_id);
   try {
-    const { workflowId } = await deps.runner.start('Transform', { scope: 'card', targetId: qid, prompt, deckName });
+    const { workflowId } = await deps.runner.start('Transform', {
+      scope: 'card',
+      targetId: qid,
+      prompt,
+      deckName,
+      deckContextPrompt: deckContextFor(repos, q.deck_id),
+      ...transformSnapshot(repos, 'card', qid),
+    });
     repos.jobs.register({
       workflowId,
       workflowType: 'transform',

@@ -9,41 +9,30 @@
 import { coerceVerdict, gradeResult, truncate, MODEL_ANSWER_SUMMARY_CHARS, type GradeAnswerResult, type SrsState, type Verdict } from '../../domain/jobs/progress.js';
 import { llmStep, type StepOutput, type WriteStepContext } from './registry.js';
 import { parseJsonObject } from './plan.js';
+import { gradeCard, type GradeCard } from '../../domain/jobs/snapshot.js';
+import type { GradeAnswerInput } from '../ports.js';
+
+export type { GradeCard };
 
 export const NO_RUBRIC = '(no explicit rubric — judge against the model answer)';
 export const IDK_FEEDBACK = "Marked as 'I don't know' — see again soon.";
 /** How much of the raw reply a non-JSON verdict quotes back to the user. */
 export const RAW_QUOTE_CHARS = 200;
 
-/** The question as the grade step needs it: what the route reads out of the
- * owner's cell before starting the job. */
-export interface GradeCard {
-  type: string;
-  prompt: string;
-  answer: string;
-  rubric: string;
-}
-
-export interface GradeJobInput {
-  questionId: number;
-  userAnswer: string;
-  idk: boolean;
-  card: GradeCard;
-}
-
 export class MissingCard extends Error {}
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-export function gradeJobInput(input: Readonly<Record<string, unknown>>): GradeJobInput {
+export function gradeJobInput(input: Readonly<Record<string, unknown>>): GradeAnswerInput {
   const raw = input['card'];
   if (typeof raw !== 'object' || raw === null) throw new MissingCard('grade job input carries no card');
-  const card = raw as Record<string, unknown>;
   return {
     questionId: Number(input['questionId'] ?? 0),
+    deckName: str(input['deckName']),
     userAnswer: str(input['userAnswer']),
     idk: input['idk'] === true,
-    card: { type: str(card['type']), prompt: str(card['prompt']), answer: str(card['answer']), rubric: str(card['rubric']) },
+    sessionId: str(input['sessionId']),
+    card: gradeCard(raw as Record<string, unknown>),
   };
 }
 

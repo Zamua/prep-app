@@ -296,9 +296,12 @@ describe('the three transform starts', () => {
     const res = await h.post('/deck/distributed-systems/transform', { prompt: '  split the raft cards  ' });
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe('/transform/transform-deck-2-0123456789');
-    expect(h.runner.starts).toEqual([
-      { kind: 'Transform', input: { scope: 'deck', targetId: h.repos.decks.findId('distributed-systems'), prompt: 'split the raft cards', deckName: 'distributed-systems' } },
+    expect(h.runner.starts).toMatchObject([
+      { kind: 'Transform', input: { scope: 'deck', targetId: h.repos.decks.findId('distributed-systems'), prompt: 'split the raft cards', deckName: 'distributed-systems', decks: [] } },
     ]);
+    // The snapshot itself is pinned in tests/jobs/startInput.test.ts; here it
+    // only has to be there, since an empty one still renders a happy 303.
+    expect((h.runner.starts[0]!.input['cards'] as unknown[]).length).toBeGreaterThan(0);
   });
 
   it('refuses an empty prompt and reports a start that could not book a job', async () => {
@@ -317,7 +320,8 @@ describe('the three transform starts', () => {
   it('starts a reorganize with no deck and no target', async () => {
     const res = await h.post('/reorganize', { prompt: 'merge the small decks' });
     expect(res.status).toBe(303);
-    expect(h.runner.starts[0]!.input).toEqual({ scope: 'reorganize', targetId: 0, prompt: 'merge the small decks', deckName: null });
+    expect(h.runner.starts[0]!.input).toMatchObject({ scope: 'reorganize', targetId: 0, prompt: 'merge the small decks', deckName: null, cards: [] });
+    expect((h.runner.starts[0]!.input['decks'] as unknown[]).length).toBeGreaterThan(0);
   });
 
   it('re-renders its own form when nothing funds a reorganize, where the other two throw', async () => {

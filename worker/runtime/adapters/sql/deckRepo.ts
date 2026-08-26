@@ -2,6 +2,7 @@
 import type { Clock, DeckRepo } from '../../../app/ports.js';
 import { DeckNameTaken } from '../../../app/ports.js';
 import type { Deck, DeckMeta, DeckSummary, DeckType, TriviaSourceMeta } from '../../../app/entities.js';
+import { transformDeck, type TransformDeck } from '../../../domain/jobs/snapshot.js';
 import { refuseOverRowCap } from './caps.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow } from './time.js';
@@ -133,6 +134,20 @@ export class SqlDeckRepo implements DeckRepo {
 
   delete(name: string): number {
     return this.db.run('DELETE FROM decks WHERE name = ?', name);
+  }
+
+  listForTransform(): Omit<TransformDeck, 'cards'>[] {
+    return this.db
+      .all(
+        `SELECT id, name, COALESCE(deck_type, 'srs') AS deck_type,
+                COALESCE(context_prompt, '') AS topic,
+                COALESCE(notification_interval_minutes, 0) AS interval_minutes
+           FROM decks ORDER BY name`,
+      )
+      .map((r) => {
+        const { cards: _cards, ...deck } = transformDeck(r, []);
+        return deck;
+      });
   }
 
   listSummaries(): DeckSummary[] {

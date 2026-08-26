@@ -3,6 +3,7 @@
 import type { Clock, QuestionRepo } from '../../../app/ports.js';
 import { QuestionNotFound } from '../../../app/ports.js';
 import type { DeckCard, NewQuestion, Question, QuestionType } from '../../../app/entities.js';
+import { transformCard, type TransformCard } from '../../../domain/jobs/snapshot.js';
 import { pyJsonDumps } from '../../../domain/py.js';
 import { refuseOverRowCap } from './caps.js';
 import { Db, type CellStorage, type Row } from './storage.js';
@@ -36,6 +37,16 @@ export function rowToQuestion(r: Row): Question {
     answer_regex: (r['answer_regex'] as string | null) ?? null,
   };
 }
+
+/** The Go `cardForTransform` projection, column for column. */
+const TRANSFORM_COLUMNS = `SELECT id AS question_id, type, COALESCE(topic, '') AS topic, prompt, choices,
+                answer, COALESCE(rubric, '') AS rubric, COALESCE(skeleton, '') AS skeleton,
+                COALESCE(language, '') AS language, COALESCE(explanation, '') AS explanation,
+                COALESCE(answer_regex, '') AS answer_regex
+           FROM questions`;
+
+/** `choices` reaches the snapshot decoded, the way Go unmarshalled it. */
+const rowFields = (r: Row): Record<string, unknown> => ({ ...r, choices: decodeChoices(r['choices']) ?? [] });
 
 function rowToDeckCard(r: Row): DeckCard {
   return {
@@ -164,6 +175,15 @@ export class SqlQuestionRepo implements QuestionRepo {
         deckId,
       )
       .map(rowToDeckCard);
+  }
+
+  cardForTransform(qid: number): TransformCard | null {
+    const row = this.db.first(`${TRANSFORM_COLUMNS} WHERE id = ?`, qid);
+    return row ? transformCard(rowFields(row)) : null;
+  }
+
+  cardsForTransform(deckId: number): TransformCard[] {
+    return this.db.all(`${TRANSFORM_COLUMNS} WHERE deck_id = ? AND COALESCE(suspended, 0) = 0 ORDER BY id`, deckId).map((r) => transformCard(rowFields(r)));
   }
 
   promptsInDeck(deckId: number): string[] {

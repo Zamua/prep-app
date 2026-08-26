@@ -7,9 +7,8 @@
 // the agent and no repositories, so the snapshot travels in the job input,
 // which also pins what the user reviewed to what the model was shown.
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
-import type { UserRepos } from '../ports.js';
+import type { TransformJobInput, UserRepos } from '../ports.js';
 import {
-  cardFields,
   coerceTransformPlan,
   emptyTransformResult,
   transformApplied,
@@ -21,55 +20,27 @@ import {
 } from '../../domain/jobs/progress.js';
 import { llmStep, type StepOutput, type WriteStepContext } from './registry.js';
 import { parseJsonObject, toNewQuestion } from './plan.js';
+import { SCOPES, transformCard, transformDeck, type TransformCard, type TransformDeck, type TransformScope } from '../../domain/jobs/snapshot.js';
 
-export const SCOPES = ['card', 'deck', 'reorganize'] as const;
-export type TransformScope = (typeof SCOPES)[number];
+export { SCOPES, type TransformCard, type TransformDeck, type TransformScope };
 
 export const DEFAULT_TRIVIA_INTERVAL_MINUTES = 30;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-/** One card as the prompt shows it: the Go `cardForTransform` field order,
- * which is what the model reads back when it answers with modifications. */
-export interface TransformCard extends GeneratedCard {
-  question_id: number;
-}
-
-export interface TransformDeck {
-  id: number;
-  name: string;
-  deck_type: string;
-  topic?: string;
-  interval_minutes?: number;
-  cards: TransformCard[];
-}
-
-export interface TransformJobInput {
-  scope: TransformScope;
-  targetId: number;
-  prompt: string;
-  deckContextPrompt: string;
-  /** The card (card scope) or the deck's cards (deck scope). */
-  cards: TransformCard[];
-  /** Every deck with its cards; reorganize only. */
-  decks: TransformDeck[];
-}
-
 export class BadTransformInput extends Error {}
 
-const asCard = (raw: unknown): TransformCard => {
-  const dict = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  return { question_id: Number(dict['question_id'] ?? 0), ...cardFields(dict) };
-};
+const asDict = (raw: unknown): Record<string, unknown> => (typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {});
+
+const asCard = (raw: unknown): TransformCard => transformCard(asDict(raw));
 
 const asDeck = (raw: unknown): TransformDeck => {
-  const dict = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  const deck: TransformDeck = { id: Number(dict['id'] ?? 0), name: str(dict['name']), deck_type: str(dict['deck_type']) || 'srs', cards: (Array.isArray(dict['cards']) ? dict['cards'] : []).map(asCard) };
-  if (str(dict['topic'])) deck.topic = str(dict['topic']);
-  if (Number(dict['interval_minutes'] ?? 0)) deck.interval_minutes = Number(dict['interval_minutes']);
-  return deck;
+  const dict = asDict(raw);
+  return transformDeck(dict, (Array.isArray(dict['cards']) ? dict['cards'] : []).map(asCard));
 };
 
+/** Re-reads the persisted input on every activation, so a step decides from
+ * the rows and never from a value held across a crash. */
 export function transformJobInput(input: Readonly<Record<string, unknown>>): TransformJobInput {
   const scope = str(input['scope']) as TransformScope;
   if (!SCOPES.includes(scope)) throw new BadTransformInput(`unknown scope: ${JSON.stringify(str(input['scope']))}`);
@@ -78,10 +49,28 @@ export function transformJobInput(input: Readonly<Record<string, unknown>>): Tra
     scope,
     targetId: Number(input['targetId'] ?? 0),
     prompt: str(input['prompt']),
+    deckName: typeof input['deckName'] === 'string' ? input['deckName'] : null,
     deckContextPrompt: str(input['deckContextPrompt']),
     cards: (Array.isArray(input['cards']) ? input['cards'] : []).map(asCard),
     decks: (Array.isArray(input['decks']) ? input['decks'] : []).map(asDeck),
   };
+}
+
+/** The picture the compute step is shown, read in the owner's cell before the
+ * job starts. The queries are the Go loaders': one named card, a deck's
+ * unsuspended cards by id, or the whole library by deck name. */
+export function transformSnapshot(repos: UserRepos, scope: TransformScope, targetId: number): Pick<TransformJobInput, 'cards' | 'decks'> {
+  if (scope === 'reorganize') return { cards: [], decks: repos.decks.listForTransform().map((d) => transformDeck(d, repos.questions.cardsForTransform(d.id))) };
+  if (scope === 'deck') return { cards: repos.questions.cardsForTransform(targetId), decks: [] };
+  const card = repos.questions.cardForTransform(targetId);
+  return { cards: card ? [card] : [], decks: [] };
+}
+
+/** The owning deck's standing description, '' when it has none: Python's
+ * `_resolve_deck_context_prompt`. */
+export function deckContextFor(repos: UserRepos, deckId: number): string {
+  const name = repos.decks.findName(deckId);
+  return name === null ? '' : (repos.decks.getContextPrompt(name) ?? '');
 }
 
 // ---- prompts ----------------------------------------------------------------

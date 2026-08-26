@@ -11,6 +11,7 @@ import type { UserRepos, WorkflowRunner } from '../ports.js';
 import { pyStrip } from '../../domain/py.js';
 import { flatten, gone } from '../jobs/view.js';
 import { NO_FUNDING, pyInt } from './pages.js';
+import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
 
 
 export const TRANSFORM_PARTIAL = 'partials/transform_progress.html';
@@ -225,7 +226,14 @@ export async function deckTransform(repos: UserRepos, req: PageRequest, deps: Tr
   const deckId = repos.decks.getOrCreate(name);
   if (!agentAvailable(repos, deps.freeTierConfigured)) throw new AppError(403, NO_FUNDING);
   try {
-    const { workflowId } = await deps.runner.start('Transform', { scope: 'deck', targetId: deckId, prompt, deckName: name });
+    const { workflowId } = await deps.runner.start('Transform', {
+      scope: 'deck',
+      targetId: deckId,
+      prompt,
+      deckName: name,
+      deckContextPrompt: deckContextFor(repos, deckId),
+      ...transformSnapshot(repos, 'deck', deckId),
+    });
     return redirect(`/transform/${workflowId}`);
   } catch (e) {
     throw new AppError(500, `failed to start transform: ${message(e)}`);
@@ -254,7 +262,16 @@ export async function reorganizeSubmit(repos: UserRepos, req: PageRequest, deps:
   // own form with the refusal rather than throwing the error page.
   if (!agentAvailable(repos, deps.freeTierConfigured)) return reorganizePage(repos, { prompt, error: NO_FUNDING, status: 403 });
   try {
-    const { workflowId } = await deps.runner.start('Transform', { scope: 'reorganize', targetId: 0, prompt, deckName: null });
+    const { workflowId } = await deps.runner.start('Transform', {
+      scope: 'reorganize',
+      targetId: 0,
+      prompt,
+      deckName: null,
+      // Cross-deck: each deck's JSON carries its own topic, so no single
+      // deck's context applies.
+      deckContextPrompt: '',
+      ...transformSnapshot(repos, 'reorganize', 0),
+    });
     return redirect(`/transform/${workflowId}`);
   } catch (e) {
     throw new AppError(500, `failed to start reorganize: ${message(e)}`);
