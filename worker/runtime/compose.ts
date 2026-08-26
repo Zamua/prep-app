@@ -42,7 +42,7 @@ import { StubWorkflowRunner } from './adapters/runnerStub.js';
 import { namespaceDirectory, namespaceJobs, namespaceLimiter, namespaceUserCells, NO_RETRY } from './adapters/cells.js';
 import { PROBE_GRAPHS, registerProbe } from './adapters/jobProbe.js';
 import { ClerkConfigError, ClerkProvider, ClerkVerifier, clerkConfig, frontendApiHost, type ClerkConfig } from './adapters/clerk.js';
-import { clockFromEnv, FixedClock, parseFakeNow } from './adapters/clock.js';
+import { clockFromEnv, FixedClock, parseFakeNow, SystemClock } from './adapters/clock.js';
 import { FakeIdentityProvider, NoIdentityProvider } from './adapters/fakeIdentity.js';
 import { FreeTierAgent, freeTierConfig, INSTANT_MAX_OUTPUT_TOKENS } from './adapters/agents/freeTier.js';
 import { RefusingAgent, SelectedAgent, type SelectDeps } from './adapters/agents/select.js';
@@ -94,6 +94,9 @@ export interface Randoms {
 
 export interface Composition {
   clock: Clock;
+  /** Wall time, which a pin never touches. A durable timer fires against the
+   * node's own clock, so a wake is derived on `clock` and armed on this one. */
+  wallClock: Clock;
   identity: IdentityProvider;
   /** Null when no signing secret resolves: anonymous accounts are off. */
   signer(): Promise<Signer | null>;
@@ -313,6 +316,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
   let signerOnce: Promise<Signer | null> | null = null;
   const composition: Composition = {
     clock,
+    wallClock: new SystemClock(),
     identity: parity ? new FakeIdentityProvider(env.PREP_INTERNAL_TOKEN ?? '') : (clerk?.provider ?? new NoIdentityProvider()),
     signer: () => {
       signerOnce ??= resolveCookieSecret(env, warn).then((secret) => (secret ? new HmacSigner(secret) : null));

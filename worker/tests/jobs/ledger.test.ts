@@ -7,7 +7,7 @@ import type { StepGraph } from '../../domain/jobs/graph.js';
 import { DurabilityUnproven, MAX_DELIVERY_ATTEMPTS, MAX_REFUSALS } from '../../domain/jobs/refusal.js';
 import { isoUtc } from '../../domain/py.js';
 import { jobHarness, seedOwner, type JobHarness } from './harness.js';
-import { USER } from '../repos/setup.js';
+import { MutableClock, USER } from '../repos/setup.js';
 
 const RETRY = { attempts: 3, initialMs: 1_000, coefficient: 2, capMs: 30_000 };
 const ONCE = { attempts: 1, initialMs: 2_000, coefficient: 2, capMs: 30_000 };
@@ -155,6 +155,15 @@ describe('start', () => {
     const calls = register(h);
     await startDemo(h);
     expect(calls.llm).toEqual([]);
+  });
+
+  it('arms the wake on wall time, so a pinned clock cannot hand two steps the same instant', async () => {
+    const wall = new MutableClock(new Date('2026-08-26T12:00:00Z'));
+    const pinned = jobHarness({ graphs: GRAPHS, wallClock: wall });
+    seedOwner(pinned);
+    register(pinned);
+    const id = await startDemo(pinned);
+    expect(pinned.jobStorage(id).alarmAt).toBe(wall.now().getTime() + 1);
   });
 });
 

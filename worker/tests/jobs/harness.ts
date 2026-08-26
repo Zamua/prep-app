@@ -3,7 +3,7 @@
 // clock, the step handlers and the graphs are the test's.
 import { StepRegistry } from '../../app/jobs/registry.js';
 import type { PushSubscription } from '../../app/entities.js';
-import type { AgentPort, JobStatusWrite, JobTransition, PushOutcome, UserCellRpc, UserCells, UserRepos, WorkflowRunner } from '../../app/ports.js';
+import type { AgentPort, Clock, JobStatusWrite, JobTransition, PushOutcome, UserCellRpc, UserCells, UserRepos, WorkflowRunner } from '../../app/ports.js';
 import type { StepGraph } from '../../domain/jobs/graph.js';
 import { AlarmLedgerRunner } from '../../runtime/adapters/alarmLedgerRunner.js';
 import { SeededRandom } from '../../runtime/adapters/random.js';
@@ -53,7 +53,7 @@ export interface JobHarness {
   settleThrough(ms: number): Promise<number>;
 }
 
-export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; agent?: AgentPort; at?: Date } = { graphs: {} }): JobHarness {
+export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; agent?: AgentPort; at?: Date; wallClock?: Clock } = { graphs: {} }): JobHarness {
   const clock = new MutableClock(opts.at ?? PARITY_NOW);
   const bus = new AlarmBus(clock);
   const registry = new StepRegistry();
@@ -129,6 +129,9 @@ export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; 
 
   const c = composeWith(env, {
     clock,
+    // The bus fires against this clock, so it is what wall time is here
+    // unless a test is about the two coming apart.
+    wallClock: opts.wallClock ?? clock,
     stepRegistry: registry,
     jobGraphs: opts.graphs,
     userCellsDirect: direct,

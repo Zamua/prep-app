@@ -487,18 +487,26 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     return this.c.clock.now();
   }
 
-  /** Derived from the rows and nothing else, at the end of every RPC and in
-   * the constructor. A fired alarm with nothing due is a no-op. */
+  /**
+   * Derived from the rows and nothing else, at the end of every RPC and in
+   * the constructor. A fired alarm with nothing due is a no-op.
+   *
+   * A wake is a wall-clock delay, so the derived instant is armed as the
+   * distance it sits ahead of the job's own clock. The runtime does not
+   * deliver one instant twice, and a job's derived wake is the same instant
+   * at every step of it, so arming that instant directly would leave the
+   * second step of any job waiting for a restart whenever the two clocks do
+   * not move together.
+   */
   private async ensureAlarm(): Promise<void> {
     const rows = this.ledger.read();
     const at = rows ? deriveAlarm(this.stateOf(rows)) : null;
-    const current = await this.storage.getAlarm();
     if (at === null) {
-      if (current !== null) await this.storage.deleteAlarm();
+      if ((await this.storage.getAlarm()) !== null) await this.storage.deleteAlarm();
       return;
     }
-    const target = Math.max(new Date(at).getTime(), this.now().getTime() + ALARM_FLOOR_MS);
-    if (current !== target) await this.storage.setAlarm(target);
+    const delay = Math.max(new Date(at).getTime() - this.now().getTime(), ALARM_FLOOR_MS);
+    await this.storage.setAlarm(this.c.wallClock.now().getTime() + delay);
   }
 }
 
