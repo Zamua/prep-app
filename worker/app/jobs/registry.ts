@@ -5,7 +5,7 @@
 // holds the agent and nothing else; `write` in the owner's cell, which holds
 // the repositories. A gate has no handler at all - the runner resolves it
 // from the ledger.
-import type { StepGraph, StepKind } from '../../domain/jobs/graph.js';
+import type { StepGraph } from '../../domain/jobs/graph.js';
 import type { StepOutput } from '../../domain/jobs/ledger.js';
 import type { AgentPort, Clock, UserRepos } from '../ports.js';
 
@@ -86,8 +86,6 @@ const sited =
 /** Narrows once at registration so a handler body is not full of guards. */
 export const llmStep = sited<LlmStepContext>('job');
 export const writeStep = sited<WriteStepContext>('owner');
-
-export const SITE_OF: Readonly<Record<StepKind, StepContext['site'] | null>> = { llm: 'job', write: 'owner', gate: null };
 
 /** Node names with no handler. Empty is the invariant the app boots on. */
 export function unregisteredSteps(graphs: Readonly<Record<string, StepGraph>>, registry: StepRegistry): string[] {

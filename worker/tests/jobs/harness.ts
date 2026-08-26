@@ -53,7 +53,7 @@ export interface JobHarness {
   settleThrough(ms: number): Promise<number>;
 }
 
-export function jobHarness(opts: { graphs: Record<string, StepGraph>; agent?: AgentPort; at?: Date } = { graphs: {} }): JobHarness {
+export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; agent?: AgentPort; at?: Date } = { graphs: {} }): JobHarness {
   const clock = new MutableClock(opts.at ?? PARITY_NOW);
   const bus = new AlarmBus(clock);
   const registry = new StepRegistry();

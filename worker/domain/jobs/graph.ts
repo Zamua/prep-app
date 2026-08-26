@@ -122,6 +122,9 @@ export function validateGraph(graph: StepGraph): void {
     throw new MalformedGraph(`${graph.kind}: ${msg}`);
   };
   if (graph.nodes.length === 0) bad('has no nodes');
+  // One deadline column, written once: a second gate would inherit the
+  // first's deadline rather than opening its own.
+  if (graph.nodes.filter((n) => n.kind === 'gate').length > 1) bad('declares more than one gate');
   const seen = new Set<string>();
   graph.nodes.forEach((node, i) => {
     if (i === 0 && node.kind === 'gate') bad('opens on a gate');

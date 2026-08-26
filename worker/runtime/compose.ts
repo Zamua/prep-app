@@ -35,6 +35,7 @@ import type { CookieVerdict } from '../app/auth/resolve.js';
 import { deleteCookieHeader, HmacSigner, mintCookie, resolveCookieSecret, setCookieHeader } from './adapters/anonCookie.js';
 import { AesGcmCipher, loadMasterKey, MasterKeyError } from './adapters/byokCrypto.js';
 import { AlarmLedgerRunner } from './adapters/alarmLedgerRunner.js';
+import { StubWorkflowRunner } from './adapters/runnerStub.js';
 import { namespaceDirectory, namespaceJobs, namespaceLimiter, namespaceUserCells, NO_RETRY } from './adapters/cells.js';
 import { PROBE_GRAPHS, registerProbe } from './adapters/jobProbe.js';
 import { ClerkConfigError, ClerkProvider, ClerkVerifier, clerkConfig, frontendApiHost, type ClerkConfig } from './adapters/clerk.js';
@@ -300,14 +301,18 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     ),
     openRouter: new OpenRouterOAuth(webRandom),
     agent: freeTier ? new FreeTierAgent(freeTier) : new UnavailableAgent(),
+    // A deploy with no JOB binding has jobs off: every start refuses, and
+    // the use cases take the branch Python takes when nothing funds one.
     runner: (ctx) =>
-      new AlarmLedgerRunner({
-        jobs: composition.jobCells,
-        notify: { repos: ctx.repos, webPush: composition.webPush, vapidPublicKey: composition.vapidPublicKey },
-        owner: ctx.owner,
-        random: composition.randoms.tokens,
-        clock,
-      }),
+      env.JOB === undefined
+        ? new StubWorkflowRunner()
+        : new AlarmLedgerRunner({
+            jobs: composition.jobCells,
+            notify: { repos: ctx.repos, webPush: composition.webPush, vapidPublicKey: composition.vapidPublicKey },
+            owner: ctx.owner,
+            random: composition.randoms.tokens,
+            clock,
+          }),
     jobCells: namespaceJobs(env.JOB),
     jobGraphs: parity ? { ...JOB_GRAPHS, ...PROBE_GRAPHS } : { ...JOB_GRAPHS },
     stepRegistry: stepRegistryFor(parity),

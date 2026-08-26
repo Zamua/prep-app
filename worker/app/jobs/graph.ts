@@ -2,6 +2,11 @@
 // workflow's shape is reviewable as a table rather than as control flow.
 // Retry values are the Go worker's RetryPolicy values, transcribed.
 import type { RetryPolicy, StepGraph } from '../../domain/jobs/graph.js';
+import type { JobKind } from '../ports.js';
+
+// One definition, in the port; re-exported here so a graph and its key set
+// arrive from the same import.
+export type { JobKind };
 
 /** No retry on an LLM call: re-running a long prompt hides the real failure
  * for another long prompt, so the error reaches the user instead. */
@@ -11,8 +16,6 @@ const TRIVIA_WRITE: RetryPolicy = { attempts: 3, initialMs: 500, coefficient: 2,
 const RECORD: RetryPolicy = { attempts: 5, initialMs: 1_000, coefficient: 2, capMs: 30_000 };
 
 const HOUR = 3_600_000;
-
-export type JobKind = 'PlanGenerate' | 'Transform' | 'TriviaGenerate' | 'GradeAnswer';
 
 export const PLAN_GRAPH: StepGraph = {
   kind: 'PlanGenerate',

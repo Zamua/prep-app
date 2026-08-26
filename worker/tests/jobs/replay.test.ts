@@ -73,7 +73,7 @@ const START: Record<JobKind, { id: string; input: Record<string, unknown>; accep
  * activation. Activation 0 is the start RPC itself.
  */
 async function run(kind: JobKind, opts: { killAfter?: number; killInStep?: string } = {}): Promise<Run> {
-  const h = jobHarness({ graphs: JOB_GRAPHS as Record<string, JobKind extends never ? never : (typeof JOB_GRAPHS)[JobKind]> });
+  const h = jobHarness({ graphs: JOB_GRAPHS });
   seedOwner(h, USER, { push: false });
   const calls = { llm: [] as string[], write: [] as string[] };
   register(h, calls, opts.killInStep ? { key: opts.killInStep } : null);
@@ -192,7 +192,7 @@ describe('a kill at every step boundary', () => {
 
 describe('the named kill points', () => {
   it('gate entry: the deadline survives a restart and the gate still waits', async () => {
-    const h = jobHarness({ graphs: JOB_GRAPHS as Record<string, (typeof JOB_GRAPHS)['PlanGenerate']> });
+    const h = jobHarness({ graphs: JOB_GRAPHS });
     seedOwner(h, USER, { push: false });
     register(h, { llm: [], write: [] }, null);
     const id = 'plan-capitals-0000000009';
@@ -217,7 +217,7 @@ describe('the named kill points', () => {
   });
 
   it('signal persisted, not run: the restart picks the event up from the rows', async () => {
-    const h = jobHarness({ graphs: JOB_GRAPHS as Record<string, (typeof JOB_GRAPHS)['PlanGenerate']> });
+    const h = jobHarness({ graphs: JOB_GRAPHS });
     seedOwner(h, USER, { push: false });
     const calls = { llm: [] as string[], write: [] as string[] };
     register(h, calls, null);
@@ -243,7 +243,7 @@ describe('the named kill points', () => {
   });
 
   it('deadline fire: a cold cell rejects with no request at all', async () => {
-    const h = jobHarness({ graphs: JOB_GRAPHS as Record<string, (typeof JOB_GRAPHS)['Transform']> });
+    const h = jobHarness({ graphs: JOB_GRAPHS });
     seedOwner(h, USER, { push: false });
     register(h, { llm: [], write: [] }, null);
     const id = 'transform-deck-1-0000000011';
