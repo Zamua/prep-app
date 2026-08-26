@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from tests.parity.harness.capture import SwapWaiter
 from tests.parity.harness.registry import FlowCtx
 
@@ -57,14 +59,27 @@ def click_and_wait(ctx: FlowCtx, selector: str, then: str) -> None:
 
 def wait_for_snapshot(ctx: FlowCtx, *, cards: int, timeout_ms: int = 20_000) -> None:
     """Block until the offline snapshot has an owner and at least
-    `cards` cards in IndexedDB."""
+    `cards` cards in IndexedDB.
+
+    Polled from here rather than through `wait_for_function`, which reports
+    an async predicate satisfied before its promise resolves and so waits
+    for nothing: the flow would navigate away mid-write and render an empty
+    shell. Only a target slow enough to lose the race shows it.
+    """
     page = ctx.page
-    page.wait_for_function(
-        "async () => { const f = " + _IDB_META_GET + "; return (await f('owner')) !== null; }",
-        timeout=timeout_ms,
-    )
-    page.wait_for_function(
-        "async (n) => { const f = " + _IDB_COUNT + "; return (await f('cards')) >= n; }",
-        arg=cards,
-        timeout=timeout_ms,
-    )
+    deadline = time.monotonic() + timeout_ms / 1000
+    owner, count = None, 0
+    while True:
+        owner = page.evaluate(
+            "async () => { const f = " + _IDB_META_GET + "; return await f('owner'); }"
+        )
+        count = page.evaluate(
+            "async (s) => { const f = " + _IDB_COUNT + "; return await f(s); }", "cards"
+        )
+        if owner is not None and count >= cards:
+            return
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"offline snapshot not ready: owner={owner!r}, cards={count} < {cards}"
+            )
+        page.wait_for_timeout(100)
