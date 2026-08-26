@@ -26,6 +26,7 @@ import type {
   WorkflowRunner,
 } from '../app/ports.js';
 import { JOB_GRAPHS } from '../app/jobs/graph.js';
+import { registerWorkflowSteps } from '../app/jobs/index.js';
 import { StepRegistry } from '../app/jobs/registry.js';
 import type { StepGraph } from '../domain/jobs/graph.js';
 import type { AuthUrls } from '../app/pageContext.js';
@@ -263,10 +264,11 @@ function webPushOf(env: Env, clock: Clock, warn: (msg: string) => void): WebPush
 /**
  * The handlers, registered once per isolate: module-level state is shared by
  * every cell of a node, which is right for code and wrong for anything
- * per-cell. Lane B's workflows register here.
+ * per-cell. The probe graphs only exist under parity mode.
  */
 function stepRegistryFor(parity: boolean): StepRegistry {
   const registry = new StepRegistry();
+  registerWorkflowSteps(registry);
   if (parity) registerProbe(registry);
   return registry;
 }
