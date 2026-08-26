@@ -252,12 +252,12 @@
   },
   {
    "expected": "<table>\n<thead>\n<tr>\n  <th>a</th>\n  <th>b</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n  <td>1</td>\n  <td>2</td>\n</tr>\n</tbody>\n</table>\n",
-   "id": "table-divergence",
+   "id": "table-pipe",
    "input": "| a | b |\n|---|---|\n| 1 | 2 |"
   },
   {
    "expected": "<p><a href=\"#harmful-link\">click</a></p>\n",
-   "id": "xss-js-link-divergence",
+   "id": "xss-js-link",
    "input": "[click](javascript:alert(1))"
   },
   {
@@ -267,38 +267,128 @@
   },
   {
    "expected": "<p><img src=\"https://x.png\" alt=\"alt\" /></p>\n",
-   "id": "image-as-link-divergence",
+   "id": "image-basic",
    "input": "![alt](https://x.png)"
   },
   {
    "expected": "<h2>Head</h2>\n",
-   "id": "setext-h2-divergence",
+   "id": "setext-h2",
    "input": "Head\n-----"
   },
   {
    "expected": "<p>*not em*</p>\n",
-   "id": "backslash-escape-divergence",
+   "id": "backslash-escape",
    "input": "\\*not em\\*"
   },
   {
    "expected": "<ul>\n<li>a<ul>\n<li>b</li>\n</ul>\n</li>\n<li>c</li>\n</ul>\n",
-   "id": "nested-list-flattens-divergence",
+   "id": "nested-list",
    "input": "- a\n  - b\n- c"
   },
   {
    "expected": "<ul>\n<li>item\ncontinued</li>\n</ul>\n",
-   "id": "list-continuation-divergence",
+   "id": "list-continuation",
    "input": "- item\n  continued"
   },
   {
    "expected": "<blockquote>\n<p>a\nb</p>\n</blockquote>\n",
-   "id": "lazy-quote-continuation-divergence",
+   "id": "lazy-quote-continuation",
    "input": "> a\nb"
   },
   {
    "expected": "<p><a href=\"https://a.com/%60code%60\">x</a></p>\n",
-   "id": "code-span-in-link-url-divergence",
+   "id": "code-span-in-link-url",
    "input": "[x](https://a.com/`code`)"
+  },
+  {
+   "expected": "<table>\n<thead>\n<tr>\n  <th style=\"text-align:left\">left</th>\n  <th style=\"text-align:center\">center</th>\n  <th style=\"text-align:right\">right</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n  <td style=\"text-align:left\">a</td>\n  <td style=\"text-align:center\">b</td>\n  <td style=\"text-align:right\">c</td>\n</tr>\n</tbody>\n</table>\n",
+   "id": "table-aligned",
+   "input": "| left | center | right |\n|:-----|:------:|------:|\n| a | b | c |"
+  },
+  {
+   "expected": "<ul>\n<li><p>one</p>\n</li>\n<li><p>two</p>\n</li>\n<li><p>three</p>\n</li>\n</ul>\n",
+   "id": "list-loose",
+   "input": "- one\n\n- two\n\n- three"
+  },
+  {
+   "expected": "<p>Setup:</p>\n<pre><code>x = 1\ny = 2</code></pre>\n<p>What is x + y?</p>\n",
+   "id": "indented-code",
+   "input": "Setup:\n\n    x = 1\n    y = 2\n\nWhat is x + y?"
+  },
+  {
+   "expected": "<p>Write to <a href=\"mailto:help@example.com\">support</a> first.</p>\n",
+   "id": "link-mailto",
+   "input": "Write to [support](mailto:help@example.com) first."
+  },
+  {
+   "expected": "<p>Type `ls` to list files.</p>\n",
+   "id": "escaped-backtick",
+   "input": "Type \\`ls\\` to list files."
+  },
+  {
+   "expected": "<p><img src=\"data:image/png;base64,iVBORw0KGgo=\" alt=\"dot\" /></p>\n",
+   "id": "image-data-png",
+   "input": "![dot](data:image/png;base64,iVBORw0KGgo=)"
+  },
+  {
+   "expected": "<p>See <a href=\"https://example.com/docs?a=1&amp;b=2\">https://example.com/docs?a=1&amp;b=2</a> for details.</p>\n",
+   "id": "autolink",
+   "input": "See <https://example.com/docs?a=1&b=2> for details."
+  },
+  {
+   "expected": "<p>Contact <a href=\"mailto:ops@example.com\">ops@example.com</a> now.</p>\n",
+   "id": "autolink-email",
+   "input": "Contact <ops@example.com> now."
+  },
+  {
+   "expected": "<p><a href=\"https://example.com\" title=\"The spec\">spec</a> explains it.</p>\n",
+   "id": "link-title",
+   "input": "[spec](https://example.com \"The spec\") explains it."
+  },
+  {
+   "expected": "<p>Read <a href=\"https://example.com/rfc\" title=\"RFC\">the RFC</a> carefully.</p>\n",
+   "id": "reference-link",
+   "input": "Read [the RFC][rfc] carefully.\n\n[rfc]: https://example.com/rfc \"RFC\""
+  },
+  {
+   "expected": "<p><a href=\"https://example.com/?a=1&amp;b=2&amp;copy\">q</a></p>\n",
+   "id": "entity-in-url",
+   "input": "[q](https://example.com/?a=1&amp;b=2&copy)"
+  },
+  {
+   "expected": "<p>&lt;div class=&quot;box&quot;&gt;\n**not bold**\n&lt;/div&gt;</p>\n<p>After.</p>\n",
+   "id": "block-html-escaped",
+   "input": "<div class=\"box\">\n**not bold**\n</div>\n\nAfter."
+  },
+  {
+   "expected": "<p><strong>bold <em>and italic</em> inside</strong> plus <em>italic <strong>and bold</strong> inside</em></p>\n",
+   "id": "nested-emphasis",
+   "input": "**bold *and italic* inside** plus *italic **and bold** inside*"
+  },
+  {
+   "expected": "<blockquote>\n<p>Steps:</p>\n<ul>\n<li>one</li>\n<li>two</li>\n</ul>\n</blockquote>\n",
+   "id": "blockquote-list",
+   "input": "> Steps:\n> - one\n> - two"
+  },
+  {
+   "expected": "<ol>\n<li><p>first</p>\n<p>details</p>\n</li>\n<li><p>second</p>\n</li>\n</ol>\n",
+   "id": "ordered-nested-loose",
+   "input": "1. first\n\n   details\n\n2. second"
+  },
+  {
+   "expected": "<table>\n<thead>\n<tr>\n  <th>term</th>\n  <th>note</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n  <td><code>fsync</code></td>\n  <td><strong>flushes</strong> to disk</td>\n</tr>\n</tbody>\n</table>\n",
+   "id": "table-inline",
+   "input": "| term | note |\n|---|---|\n| `fsync` | **flushes** to disk |"
+  },
+  {
+   "expected": "<p>line one<br />\nline two</p>\n",
+   "id": "hard-break-backslash",
+   "input": "line one\\\nline two"
+  },
+  {
+   "expected": "<p>before</p>\n<hr />\n<p>after</p>\n",
+   "id": "thematic-break-stars",
+   "input": "before\n\n* * *\n\nafter"
   }
  ]
 }

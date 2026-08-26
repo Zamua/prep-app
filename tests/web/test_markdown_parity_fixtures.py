@@ -1,23 +1,19 @@
 """Python side of the card-prompt markdown parity pin.
 
-The offline app ports the templates' | markdown filter to JS
-(static/js/study/markdown.js) so offline card prompts render the same
-markup the online pages get from mistune. Both sides run the SAME
-fixture file in tests/fixtures/markdown/, so the port and the Python
-truth cannot drift apart silently: this module pins the REAL
-registered Jinja filter (prep/app.py's mistune config) to the
-fixture's `expected` strings; the browser suite
-(tests/e2e/test_markdown_parity.py) pins markdownHTML() to the same
-cases, honoring `js_expected` where the twin deliberately diverges.
+The card-prompt renderer is one TypeScript module (worker/domain/markdown)
+whose browser twin static/js/study/markdown.js is generated from it, so
+offline card prompts render the same markup the online pages get from
+mistune. This module pins the REAL registered Jinja filter (prep/app.py's
+mistune config) to the fixture's `expected` strings; the same cases form
+the tests/fixtures/parity/markdown corpus the TypeScript side is held
+byte-equal to, and the browser suite (tests/e2e/test_markdown_parity.py)
+runs the twin on them.
 
-Fixture case shape: {"id": ..., "input": ..., "expected": ...
-[, "js_expected": ..., "note": ...]}. `expected` is always the exact
-mistune output. `js_expected` marks a documented JS-side divergence
-(tables and non-http(s) link schemes stay literal text there) and
-must carry a `note`.
+Fixture case shape: {"id": ..., "input": ..., "expected": ...}.
+`expected` is always the exact mistune output.
 
-Set PREP_REGEN_MARKDOWN_FIXTURES=1 to rewrite every `expected` from
-the live filter before asserting (for intentional mistune upgrades).
+Set PREP_REGEN_MARKDOWN_FIXTURES=1 to rewrite every `expected` from the
+live filter before asserting (for intentional mistune upgrades).
 """
 
 from __future__ import annotations
@@ -85,13 +81,11 @@ def test_fixture_counts_and_unique_ids() -> None:
     assert all(isinstance(c["input"], str) and isinstance(c["expected"], str) for c in CASES)
 
 
-def test_divergences_are_documented_and_real() -> None:
-    """Every js_expected must differ from expected (a matching
-    override would silently mask drift) and must explain itself."""
+def test_no_case_carries_a_js_divergence() -> None:
+    """The twin renders every case to `expected`; a per-side override
+    would mask drift."""
     for case in CASES:
-        if "js_expected" in case:
-            assert case["js_expected"] != case["expected"], case["id"]
-            assert case.get("note"), case["id"]
+        assert "js_expected" not in case, case["id"]
 
 
 def test_xss_cases_pin_escaping() -> None:
