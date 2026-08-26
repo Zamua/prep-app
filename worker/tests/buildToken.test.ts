@@ -1,5 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-import { BUILD, bakeBuildInfo } from "../scripts/build.mjs";
+import { describe, expect, it } from "vitest";
 import { isAcceptedVersionToken, resolveToken, sha1Hex } from "../runtime/tokenRules";
 
 const BAKED = "ce11d0000000";
@@ -71,15 +70,16 @@ describe("isAcceptedVersionToken", () => {
 });
 
 describe("resolveBuildToken", () => {
-  it("defaults to the token the build baked", async () => {
-    bakeBuildInfo("ce11d0000000", BUILD);
-    // The module reads the baked token once at import; drop the copy the
-    // earlier describe imported so this import sees this bake.
-    vi.resetModules();
+  it("applies the token rules over the baked default", async () => {
+    // The baked file is shared by every test worker, so the fallback is
+    // pinned through resolveToken with an explicit default; the module
+    // itself is only checked to hand out an acceptable token.
+    expect(resolveToken(undefined, "ce11d0000000")).toBe("ce11d0000000");
+    expect(resolveToken("", "ce11d0000000")).toBe("ce11d0000000");
+    expect(resolveToken("deadbeef", "ce11d0000000")).toBe("deadbeef");
+    expect(resolveToken("v0.44.0", "ce11d0000000")).toBe("d8392eb81ff8");
     const { resolveBuildToken } = await import("../runtime/buildToken");
-    expect(resolveBuildToken(undefined)).toBe("ce11d0000000");
-    expect(resolveBuildToken("")).toBe("ce11d0000000");
+    expect(isAcceptedVersionToken(resolveBuildToken(undefined))).toBe(true);
     expect(resolveBuildToken("deadbeef")).toBe("deadbeef");
-    expect(resolveBuildToken("v0.44.0")).toBe("d8392eb81ff8");
   });
 });

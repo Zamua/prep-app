@@ -99,7 +99,7 @@ async ({prefix, prompt}) => {
     threw,
     hasPrompt: Boolean(promptEl),
     blockquotes: promptEl ? promptEl.querySelectorAll("blockquote").length : -1,
-    textStart: promptEl ? promptEl.textContent.slice(0, 4) : null,
+    textStart: promptEl ? promptEl.textContent.trim().slice(0, 4) : null,
   };
   host.remove();
   return result;
