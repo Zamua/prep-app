@@ -5,11 +5,11 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from tests.parity.harness.constants import (
-    PARITY_INTERNAL_TOKEN,
     PARITY_NOW,
     PARITY_TZ,
     PARITY_USER,
     PARITY_USER_NAME,
+    internal_token,
 )
 
 IOS_UA = (
@@ -91,7 +91,7 @@ def new_context(
                         # The TypeScript server trusts the identity headers
                         # only beside this token (docs/CELLD-REWRITE.md 7.0);
                         # the Python server ignores it.
-                        "x-internal-token": PARITY_INTERNAL_TOKEN,
+                        "x-internal-token": internal_token(),
                     }
                 )
             else:

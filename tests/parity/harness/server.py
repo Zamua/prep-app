@@ -18,10 +18,10 @@ from tests.parity.harness.constants import (
     PARITY_INTERNAL_TOKEN,
     PARITY_NOW_ISO,
     REPO_ROOT,
+    internal_token,
 )
 
 BASE_URL_ENV = "PARITY_BASE_URL"
-INTERNAL_TOKEN_ENV = "PARITY_INTERNAL_TOKEN"
 
 
 SEED_ATTEMPTS = 4
@@ -35,7 +35,7 @@ def seed(base_url: str, user: str, profile: str, *, token: str | None = None) ->
     which the runtime documents as retryable. A 4xx is the request's own
     fault and is raised on the first answer.
     """
-    token = token or os.environ.get(INTERNAL_TOKEN_ENV) or PARITY_INTERNAL_TOKEN
+    token = internal_token(token)
     for attempt in range(1, SEED_ATTEMPTS + 1):
         r = httpx.post(
             f"{base_url}/_parity/seed",

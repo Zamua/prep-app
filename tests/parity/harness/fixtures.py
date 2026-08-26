@@ -10,9 +10,9 @@ import pytest
 
 from tests.parity.harness import browser as browser_pin
 from tests.parity.harness import registry, runner
+from tests.parity.harness.constants import INTERNAL_TOKEN_ENV
 from tests.parity.harness.server import (
     BASE_URL_ENV,
-    INTERNAL_TOKEN_ENV,
     LocalParityServer,
     ParityTarget,
 )
