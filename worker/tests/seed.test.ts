@@ -13,7 +13,10 @@ function seeded(profile: string) {
   composeWith(env, { renderer: spyRenderer() });
   const state = fakeCellState();
   const cell = new UserCell(state, env);
-  return { env, state, cell, seed: cell.wipe(profile).then(() => cell.seed(profile, USER, null)) };
+  // The constructor arms the alarm off the migrated rows; `wipe` drops them.
+  // The real runtime orders those, so the fake waits before driving the cell.
+  const seed = state.ready().then(() => cell.wipe(profile)).then(() => cell.seed(profile, USER, null));
+  return { env, state, cell, seed };
 }
 
 describe('the parity seed profiles', () => {

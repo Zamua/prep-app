@@ -116,11 +116,25 @@ export class FakeCellStorage implements CellStorage {
   }
 }
 
+export type FakeCellState = DurableObjectState & {
+  fake: FakeCellStorage;
+  /** The constructor's `blockConcurrencyWhile` work. The real runtime lets no
+   * request reach the cell until it settles; the fake cannot gate a call it
+   * does not mediate, so a test that drives the cell immediately awaits this. */
+  ready(): Promise<void>;
+};
+
 /** A DurableObjectState over the fake storage. */
-export function fakeCellState(storage: FakeCellStorage = new FakeCellStorage()): DurableObjectState & { fake: FakeCellStorage } {
+export function fakeCellState(storage: FakeCellStorage = new FakeCellStorage()): FakeCellState {
+  const pending: Promise<unknown>[] = [];
   return {
     fake: storage,
     storage,
-    blockConcurrencyWhile: <T>(fn: () => Promise<T>) => fn(),
-  } as unknown as DurableObjectState & { fake: FakeCellStorage };
+    blockConcurrencyWhile: <T>(fn: () => Promise<T>): Promise<T> => {
+      const p = fn();
+      pending.push(p);
+      return p;
+    },
+    ready: () => Promise.all(pending).then(() => undefined),
+  } as unknown as FakeCellState;
 }
