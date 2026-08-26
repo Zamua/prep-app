@@ -4,6 +4,7 @@
 import { MAX_DESIRED_RETENTION, MIN_DESIRED_RETENTION } from '../../domain/fsrs/index.js';
 import { pyRepr } from '../../domain/grading/pyrepr.js';
 import { pyStrip } from '../../domain/py.js';
+import { deckToCsv } from '../api/deckIo.js';
 import type { Question } from '../entities.js';
 import { AppError, badRequest, notFound } from '../errors.js';
 import { agentAvailable } from '../pageContext.js';
@@ -206,6 +207,22 @@ export function deckExportHub(repos: UserRepos, req: PageRequest): PageResult {
   const name = req.params['name']!;
   const id = deckId(repos, name);
   return page('deck_export.html', { deck_name: name, deck_type: repos.decks.getType(id) ?? 'srs' });
+}
+
+/** The hub's CSV button. `no-store`: a download taken right after adding a
+ * card has to see the new row. */
+export function deckExportCsv(repos: UserRepos, req: PageRequest): PageResult {
+  const name = req.params['name']!;
+  const id = deckId(repos, name);
+  return {
+    text: deckToCsv(repos, id),
+    status: 200,
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="${name}.csv"`,
+      'cache-control': 'no-store',
+    },
+  };
 }
 
 function splitContext(repos: UserRepos, name: string, id: number, form: { new_name: string; new_topic: string; selected_ids: number[] }, error: string | null) {

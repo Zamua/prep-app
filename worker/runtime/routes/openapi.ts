@@ -1,11 +1,14 @@
-// The unauthenticated JSON surface the entry worker answers before any
-// identity is resolved: the recorded OpenAPI document, FastAPI's two doc
-// shells, and the VAPID public key a browser needs to subscribe.
+// The unauthenticated surface the entry worker answers before any identity
+// is resolved: the recorded OpenAPI document, FastAPI's doc shells and its
+// OAuth2 redirect, /llms.txt, and the VAPID public key a browser needs to
+// subscribe.
 //
 // The shells are FastAPI's own markup, line for line, with the vendor tags
 // stripped under parity so the pixel harness never reaches a CDN. The
 // indentation of a stripped line survives, as it does in Python.
 import doc from '../openapi.json';
+import { llmsTxt } from './legal.js';
+import { OAUTH2_REDIRECT_HTML } from './oauth2Redirect.js';
 
 export const OPENAPI_DOCUMENT: Record<string, unknown> = doc as Record<string, unknown>;
 
@@ -105,7 +108,11 @@ export function servePublic(request: Request, url: URL, env: PublicRouteEnv): Re
   if (request.method !== 'GET') return null;
   if (url.pathname === '/openapi.json') return Response.json(OPENAPI_DOCUMENT);
   if (url.pathname === '/docs') return new Response(swaggerShell(env.parity), { headers: { 'content-type': HTML } });
+  // Named by the shell's `oauth2RedirectUrl`, so it must exist or Swagger's
+  // authorize flow dead-ends on a 404.
+  if (url.pathname === '/docs/oauth2-redirect') return new Response(OAUTH2_REDIRECT_HTML, { headers: { 'content-type': HTML } });
   if (url.pathname === '/redoc') return new Response(redocShell(env.parity), { headers: { 'content-type': HTML } });
+  if (url.pathname === '/llms.txt') return llmsTxt();
   // Unauthenticated by design: the PWA subscribe handshake does not
   // reliably carry the identity headers.
   if (url.pathname === '/notify/vapid-public-key') return Response.json({ key: env.vapidPublicKey });

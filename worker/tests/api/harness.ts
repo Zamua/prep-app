@@ -153,7 +153,9 @@ export async function record(res: Response): Promise<Recorded> {
     // is '' and never null; collapsing it loses a 303's empty body.
     text: isJson ? null : raw,
     location: res.headers.get('location'),
-    setCookie: res.headers.getAll ? res.headers.getAll('set-cookie') : [res.headers.get('set-cookie')].filter((v): v is string => v !== null),
+    // `get('set-cookie')` comma-joins a sequence, so two cookies would record
+    // as one malformed value; `getSetCookie` keeps them apart.
+    setCookie: res.headers.getSetCookie(),
   };
 }
 

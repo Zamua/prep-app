@@ -16,9 +16,20 @@ const INSTANT_DECK = JSON.stringify([
 ]);
 
 
-/** `.apkg` codecs land in phase 5; the third pair reads the deck the
- * import would have created. */
-const PHASE_5 = new Set(['mcp-call-prep_export_deck_apkg', 'mcp-call-prep_import_apkg', 'v1-decks-list-after']);
+/** `.apkg` codecs land in phase 5. */
+const PHASE_5 = new Set(['mcp-call-prep_export_deck_apkg', 'mcp-call-prep_import_apkg']);
+
+/** The deck the deferred `prep_import_apkg` would have created. The list pair
+ * that follows it still replays: the recorded list minus that one deck is the
+ * whole of what this phase owns, and it is the only assertion that a CSV
+ * import lands in the deck list. */
+const APKG_DECK = 'mcp-restored';
+
+function withoutApkgDeck(name: string, json: unknown): unknown {
+  if (name !== 'v1-decks-list-after') return json;
+  const body = json as { decks: { name: string }[] };
+  return { ...body, decks: body.decks.filter((d) => d.name !== APKG_DECK) };
+}
 
 /** The instant each pair was recorded at, which the corpus states in its
  * notes rather than a header: the refresh window is reached by moving the
@@ -102,7 +113,7 @@ beforeAll(async () => {
       pair,
       expected: comparable(pair.name, {
         status: pair.response.status,
-        json: pair.response.json,
+        json: withoutApkgDeck(pair.name, pair.response.json),
         text: pair.response.text,
         location: pair.response.location,
         setCookie: pair.response.set_cookie,
@@ -123,6 +134,6 @@ describe('the contracts corpus replays against the TypeScript app', () => {
 
   it('covers every pair the phase owns', () => {
     expect(replayed.length).toBe(corpus.pairs.length - PHASE_5.size);
-    expect(replayed.length).toBe(127);
+    expect(replayed.length).toBe(128);
   });
 });

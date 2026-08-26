@@ -51,10 +51,6 @@ export function savePrefs(deps: NotifyDeps, body: unknown): ApiResult {
   return json({ ok: true, prefs });
 }
 
-export function vapidPublicKey(deps: { vapidPublicKey: string }): ApiResult {
-  return json({ key: deps.vapidPublicKey });
-}
-
 export function subscribe(deps: NotifyDeps, body: unknown): ApiResult {
   if (typeof body !== 'object' || body === null || Array.isArray(body) || !('endpoint' in (body as object))) {
     return detail(400, 'bad subscription payload');

@@ -86,6 +86,17 @@ export function renderAgentSettings(repos: UserRepos, freeTierConfigured: boolea
   );
 }
 
+/**
+ * The two POSTs of the retired subscription panel, which the page still
+ * carries. Both refuse: a deploy-wide token would fund every signup's AI from
+ * one credit pool, and there is no stored token left for a disconnect to
+ * remove. `byok_error`, not `error`, because the panel that renders `error` is
+ * collapsed on a multi-user deploy.
+ */
+export function subscriptionRefusal(repos: UserRepos, freeTierConfigured: boolean): PageResult {
+  return renderAgentSettings(repos, freeTierConfigured, { byok_error: SUBSCRIPTION_RETIRED, status: 403 });
+}
+
 /** The slug names a provider we still offer, or a stored retired row.
  * Anything else 404s rather than telling a prober what exists. */
 function parseProvider(slug: string, repos: UserRepos): ProviderInfo {
