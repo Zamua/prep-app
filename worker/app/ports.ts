@@ -51,13 +51,40 @@ export interface Clock {
   now(): Date;
 }
 
+/** Where a subject came from; the cell's gates branch on it. */
+export type IdentityKind = 'clerk' | 'fake' | 'anon' | 'pat';
+
 export interface Identity {
   subject: string;
-  displayName: string;
+  kind: IdentityKind;
+  displayName: string | null;
+  email: string | null;
+  profilePicUrl: string | null;
+}
+
+/** `null` for any flow a provider does not have; the template hides it. */
+export interface SignInUrls {
+  sign_in: string | null;
+  sign_up: string | null;
+  sign_out: string | null;
+  account: string | null;
 }
 
 export interface IdentityProvider {
+  readonly name: string;
+  /** Never throws: a credential that fails verification is an unauthenticated request. */
   identify(request: Request): Promise<Identity | null>;
+  /** The browser holds evidence of a session these credentials no longer prove. */
+  hasDormantSession(request: Request): boolean;
+  urls(): SignInUrls;
+}
+
+/** Why a signed webhook was not accepted; the route maps it to a status. */
+export type WebhookFailure = 'no_secret' | 'missing_headers' | 'bad_timestamp' | 'bad_signature';
+
+export interface WebhookVerifier {
+  /** null when the request is authentic. */
+  verify(request: Request, body: string, now: Date): Promise<WebhookFailure | null>;
 }
 
 export interface Renderer {
@@ -470,12 +497,21 @@ export type ReserveResult = { reservation: Reservation } | { refusal: Refusal };
 export interface Limiter {
   reserve(req: { ip: string; topicChars: number; userId: string | null; userIsAnonymous: boolean | null; at: string }): Promise<ReserveResult>;
   resolve(id: number, outcome: 'ok' | 'failed_spent' | 'failed_free', cards: number | null, userId: string | null): Promise<void>;
+  /** The merge's reassign rule over the ledger this cell owns, not a user
+   * cell's; returns the rows moved. */
+  reassign(fromId: string, toId: string): Promise<number>;
 }
 
 export interface Precheck {
   exists: boolean;
   isAnonymous: boolean;
   tombstoned: TombstoneReason | null;
+}
+
+/** The two profile columns an anonymous account may have set. */
+export interface CarriedPreferences {
+  desired_retention: number | null;
+  editor_input_mode: string | null;
 }
 
 /** The RPC surface of one user cell as another cell or the router sees it. */
@@ -485,6 +521,8 @@ export interface UserCellRpc {
   upsert(id: string, claims: ProfileClaims, at: string, idx?: number): Promise<Profile>;
   dump(): Promise<CellSnapshot>;
   importRows(snapshot: CellSnapshot): Promise<Record<string, number>>;
+  /** COPY-IF-NULL of the merge's carried profile columns; counts what moved. */
+  carryPreferences(carried: CarriedPreferences): Promise<Record<string, number>>;
   destroy(reason: TombstoneReason, at: string): Promise<void>;
   scrub(at: string): Promise<void>;
   createInstantDeck(input: {

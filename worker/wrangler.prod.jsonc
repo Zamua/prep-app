@@ -16,5 +16,14 @@
     { "tag": "v1", "new_sqlite_classes": ["UserCell", "DirectoryCell", "InstantLimiterCell", "JobCell"] }
   ],
   "assets": { "directory": "dist/assets", "binding": "ASSETS", "run_worker_first": true },
-  "vars": { "PREP_ENV": "prod" }
+  "vars": {
+    "PREP_ENV": "prod",
+    // Clerk's public configuration. The secret key, the webhook secret and
+    // every other credential arrive as CELLD_VAR_*, never from this file.
+    "CLERK_ISSUER": "https://clerk.prepcards.app",
+    "CLERK_JWKS_URL": "https://clerk.prepcards.app/.well-known/jwks.json",
+    "CLERK_ACCOUNTS_URL": "https://accounts.prepcards.app",
+    "CLERK_AUTHORIZED_PARTIES": "https://prepcards.app",
+    "CLERK_PUBLISHABLE_KEY": ""
+  }
 }

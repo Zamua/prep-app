@@ -1,13 +1,36 @@
-// Entry worker: a translation layer. Unauthenticated pages render here; an
-// identified request is forwarded to its UserCell.
+// Entry worker: a translation layer. Unauthenticated pages render here, the
+// provider flows and the Clerk webhook live here, and an identified request
+// is forwarded to its UserCell with the identity asserted in headers.
 import { appBase } from './appBase.js';
-import { compose, cookieHooks, noCacheHtml, NOW_HEADER, PARITY_NOW_HEADER, type Composition } from './compose.js';
+import { ANON_COOKIE_HEADER, clockFor, compose, cookieHooks, noCacheHtml, NOW_HEADER, PARITY_NOW_HEADER, type Composition } from './compose.js';
 import type { Env } from './env.js';
 import { anonymousContext, errorPage, htmlResponse } from './errors.js';
 import { serveStatic } from './assets.js';
 import { offlineBuild, servePwa } from './sw.js';
-import { UnknownProfile } from './cells/UserCell.js';
-import { DISPLAY_NAME_HEADER, IDENTITY_HEADERS, SUBJECT_HEADER } from './cells/router.js';
+import { NOT_AUTHENTICATED, UnknownProfile } from './cells/UserCell.js';
+import {
+  DISPLAY_NAME_HEADER,
+  EMAIL_HEADER,
+  IDENTITY_HEADERS,
+  KIND_HEADER,
+  matchRoute,
+  PAT_HASH_HEADER,
+  PICTURE_HEADER,
+  SUBJECT_HEADER,
+  wantsJson,
+} from './cells/router.js';
+import { pageRoutes } from './cells/routes/pages.js';
+import { apiRoutes } from './cells/routes/api.js';
+import { resolveIdentity, type CookieVerdict, type Resolution } from '../app/auth/resolve.js';
+import { hexFrom, mergeAnonymous } from '../app/auth/mergeSaga.js';
+import type { Identity } from '../app/ports.js';
+import { COOKIE_NAME } from '../domain/anonCookie.js';
+import { parseCookieHeader } from '../domain/cookies.js';
+import { bearerValue, parseToken, TOKEN_PREFIX, BAD_TOKEN } from '../domain/pat.js';
+import { isoUtc } from '../domain/py.js';
+import { clerkWebhook } from './webhooks.js';
+import { serveInstant } from './routes/instant.js';
+import { servePublic } from './routes/openapi.js';
 
 export { UserCell } from './cells/UserCell.js';
 export { DirectoryCell } from './cells/DirectoryCell.js';
@@ -18,9 +41,22 @@ export { JobCell } from './cells/JobCell.js';
  * header value is a byte string. */
 export { SUBJECT_HEADER, DISPLAY_NAME_HEADER };
 export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
+/** The shell's escape hatch: it sets this and reloads when recovery fails,
+ * so the landing page is reachable and the reauth loop cannot close. */
+export const REAUTH_FALLBACK_COOKIE = 'prep_reauth_fallback';
+
+/** Bearer-only surfaces: with no token there is no cell to route to, so the
+ * refusal is the entry worker's rather than a 404 from nowhere. */
+const PAT_ONLY = (path: string): boolean => path.startsWith('/api/v1/') || path === '/api/v1' || path === '/mcp';
 
 interface SeedApi {
   seed(profile: string, user: string, at: string | null): Promise<Record<string, unknown>>;
+}
+
+/** What the response owes the anonymous cookie, decided before any handler. */
+interface Outcome {
+  response: Response;
+  cookie: CookieVerdict;
 }
 
 export default {
@@ -38,42 +74,52 @@ export default {
     }
     // Readiness composes: a misconfigured worker must not take traffic.
     if (url.pathname === '/readyz') return new Response('ok');
+    let cookie: CookieVerdict = { kind: 'none' };
     try {
-      const res = await route(request, url, env, c);
-      return cookieHooks(request, noCacheHtml(res));
+      const outcome = await route(request, url, env, c);
+      cookie = outcome.cookie;
+      return await cookieHooks(c, request, cookie, noCacheHtml(outcome.response));
     } catch (e) {
       console.error(`unhandled exception on ${request.method} ${url.pathname}: ${e instanceof Error ? (e.stack ?? e.message) : e}`);
-      return noCacheHtml(errorPage(c.renderer, c.buildToken, 500, request));
+      return await cookieHooks(c, request, cookie, noCacheHtml(errorPage(c.renderer, c.buildToken, 500, request)));
     }
   },
 };
 
-async function route(request: Request, url: URL, env: Env, c: Composition): Promise<Response> {
+const plain = (response: Response): Outcome => ({ response, cookie: { kind: 'none' } });
+
+async function route(request: Request, url: URL, env: Env, c: Composition): Promise<Outcome> {
   const path = url.pathname;
   const base = appBase(request);
   const page = (template: string, extra: Record<string, unknown> = {}, status = 200) =>
-    htmlResponse(c.renderer.render(template, { ...anonymousContext(c.buildToken, base), ...extra }), status);
+    htmlResponse(c.renderer.render(template, { ...anonymousContext(c.buildToken, base, c.authUrls), ...extra }), status);
   const readOnly = request.method === 'GET' || request.method === 'HEAD';
   const methodNotAllowed = () => errorPage(c.renderer, c.buildToken, 405, request, 'Method Not Allowed');
 
   const asset = await serveStatic(request, env, c.buildToken);
-  if (asset) return asset;
+  if (asset) return plain(asset);
   const pwa = servePwa(url, c.buildToken);
-  if (pwa) return pwa;
-  if (path === '/offline') return readOnly ? page('offline.html', { build: offlineBuild(url, c.buildToken) }) : methodNotAllowed();
-  if (path === '/privacy') return readOnly ? page('privacy.html') : methodNotAllowed();
+  if (pwa) return plain(pwa);
+  if (path === '/offline') return plain(readOnly ? page('offline.html', { build: offlineBuild(url, c.buildToken) }) : methodNotAllowed());
+  if (path === '/privacy') return plain(readOnly ? page('privacy.html') : methodNotAllowed());
+  const publicApi = servePublic(request, url, { parity: c.parity, vapidPublicKey: c.vapidPublicKey });
+  if (publicApi) return plain(publicApi);
+  // Signed by svix, not by any user credential, so it precedes identification.
+  if (path === '/webhooks/clerk') return plain(request.method === 'POST' ? await clerkWebhook(request, c) : methodNotAllowed());
 
   if (c.parity) {
     if (request.method === 'GET' && path === '/_parity/raise') {
-      return url.searchParams.get('status') === '429'
-        ? errorPage(c.renderer, c.buildToken, 429, request, 'parity: deliberate throttle')
-        : errorPage(c.renderer, c.buildToken, 500, request);
+      return plain(
+        url.searchParams.get('status') === '429'
+          ? errorPage(c.renderer, c.buildToken, 429, request, 'parity: deliberate throttle')
+          : errorPage(c.renderer, c.buildToken, 500, request),
+      );
     }
-    if (request.method === 'GET' && path === '/_parity/reauth') return page('reauth.html');
+    if (request.method === 'GET' && path === '/_parity/reauth') return plain(page('reauth.html'));
     if (request.method === 'GET' && path === '/_parity/sign-out') {
-      return page('sign_out_interstitial.html', { redirect_url: '/' });
+      return plain(page('sign_out_interstitial.html', { redirect_url: '/' }));
     }
-    if (request.method === 'POST' && path === '/_parity/seed') return seed(request, env, c);
+    if (request.method === 'POST' && path === '/_parity/seed') return plain(await seed(request, env, c));
   }
 
   // Inbound copies of the identity headers are stripped before anything
@@ -83,20 +129,210 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
   for (const name of IDENTITY_HEADERS) headers.delete(name);
   const parityNow = c.parity ? request.headers.get(PARITY_NOW_HEADER) : null;
   if (parityNow) headers.set(NOW_HEADER, parityNow);
+  const clock = clockFor(c, new Request(request.url, { headers }));
+
+  // A personal access token names its owner, so it routes without any
+  // provider and without a directory read.
+  if (PAT_ONLY(path) || isPatBearer(request)) return plain(await routeByToken(request, headers, env, c));
+
+  const cookies = parseCookieHeader(request.headers.get('cookie'));
   // Identification reads headers only. The body is a one-shot stream, so
   // the request is rebuilt exactly once, below, for the cell.
-  const who = await c.identity.identify(new Request(request.url, { method: request.method, headers }));
-  if (!who) {
-    if (request.method === 'GET' && path === '/') {
-      const landing = c.pages.resolve('anonymous', 'GET', '/', []);
-      if (landing?.template) return page(landing.template, landing.context ?? {}, landing.status);
-    }
-    return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
+  const resolution = await resolveIdentity(new Request(request.url, { method: request.method, headers }), {
+    provider: c.identity,
+    signer: await c.signer(),
+    nowUnix: Math.floor(clock.now().getTime() / 1000),
+    cookieValue: cookies[COOKIE_NAME] ?? null,
+  });
+
+  const flows = await providerFlows(request, url, c, resolution, cookies, page);
+  if (flows) return flows;
+
+  if (path === '/api/instant/generate') {
+    if (request.method !== 'POST') return plain(methodNotAllowed());
+    return { response: await instantGenerate(request, env, c, resolution), cookie: resolution.cookie };
   }
-  headers.set(SUBJECT_HEADER, who.subject);
-  headers.set(DISPLAY_NAME_HEADER, encodeURIComponent(who.displayName));
-  const stub = env.USER.get(env.USER.idFromName(who.subject));
-  return stub.fetch(new Request(request, { headers }));
+
+  if (!resolution.identity) return visitorResponse(request, url, c, resolution, cookies, page);
+
+  let cookie = resolution.cookie;
+  if (resolution.merge) cookie = await runMerge(c, resolution.identity, resolution.merge, clock.now(), cookie);
+
+  headers.set(SUBJECT_HEADER, resolution.identity.subject);
+  headers.set(KIND_HEADER, resolution.identity.kind);
+  if (resolution.identity.displayName) headers.set(DISPLAY_NAME_HEADER, encodeURIComponent(resolution.identity.displayName));
+  if (resolution.identity.email) headers.set(EMAIL_HEADER, encodeURIComponent(resolution.identity.email));
+  if (resolution.identity.profilePicUrl) headers.set(PICTURE_HEADER, encodeURIComponent(resolution.identity.profilePicUrl));
+  const stub = env.USER.get(env.USER.idFromName(resolution.identity.subject));
+  const response = await stub.fetch(new Request(request, { headers }));
+  return { response: await onTombstone(response, request, c, resolution.identity), cookie };
+}
+
+/** The one endpoint a visitor may spend on: the limiter, the directory and
+ * the mint are the entry worker's because a visitor has no cell yet. */
+async function instantGenerate(request: Request, env: Env, c: Composition, resolution: Resolution): Promise<Response> {
+  const identity = resolution.identity;
+  return serveInstant(
+    request,
+    {
+      clock: clockFor(c, request),
+      random: c.randoms.instant,
+      limiter: c.limiter,
+      directory: c.directory,
+      cells: c.userCells,
+      agent: c.freeTierConfigured ? c.agent : null,
+      anonymousEnabled: (await c.signer()) !== null,
+      PREP_CLIENT_IP_HEADER: env.PREP_CLIENT_IP_HEADER,
+    },
+    { userId: identity?.subject ?? null, userIsAnonymous: identity ? identity.kind === 'anon' : null },
+  );
+}
+
+// ---- provider flows -------------------------------------------------------
+
+type PageFn = (template: string, extra?: Record<string, unknown>, status?: number) => Response;
+
+/**
+ * Whether the browser says this request came from our own pages. Guards the
+ * two responses that clear `prep_anon`: for an anonymous account the cookie
+ * is the only credential, and SameSite=Lax stops it riding a cross-site
+ * request but not the response's delete from applying. Every browser that
+ * would honour that delete sends `Sec-Fetch-Site`, so its absence means a
+ * non-browser caller and is judged by `Origin` instead.
+ */
+export function sameOrigin(request: Request): boolean {
+  const site = request.headers.get('sec-fetch-site');
+  if (site !== null) return site === 'same-origin' || site === 'none';
+  const origin = request.headers.get('origin');
+  if (origin === null) return true;
+  return origin.split('//').slice(-1)[0] === (request.headers.get('host') ?? '');
+}
+
+async function providerFlows(
+  request: Request,
+  url: URL,
+  c: Composition,
+  resolution: Resolution,
+  cookies: Record<string, string>,
+  page: PageFn,
+): Promise<Outcome | null> {
+  const urls = c.identity.urls();
+  if (url.pathname === '/sign-in') {
+    if (request.method !== 'GET') return plain(errorPage(c.renderer, c.buildToken, 405, request, 'Method Not Allowed'));
+    if (!urls.sign_in) return plain(errorPage(c.renderer, c.buildToken, 404, request, 'this deploy has no in-app sign-in flow'));
+    return { response: new Response(null, { status: 303, headers: { location: urls.sign_in } }), cookie: resolution.cookie };
+  }
+  if (url.pathname === '/sign-out') {
+    if (request.method !== 'GET') return plain(errorPage(c.renderer, c.buildToken, 405, request, 'Method Not Allowed'));
+    if (!urls.sign_out) return plain(errorPage(c.renderer, c.buildToken, 404, request, 'this deploy has no in-app sign-out flow'));
+    // ClerkJS owns session revocation: it clears cookies across the apex and
+    // Clerk's own host and broadcasts to other tabs, and the hosted
+    // `/sign-out` URL is not a page. The anonymous cookie goes too, or the
+    // browser resolves straight back into the pre-signup account.
+    const response =
+      c.identity.name === 'clerk'
+        ? page('sign_out_interstitial.html', { redirect_url: '/' })
+        : new Response(null, { status: 303, headers: { location: urls.sign_out } });
+    if (sameOrigin(request)) response.headers.set(ANON_COOKIE_HEADER, 'clear');
+    return { response, cookie: resolution.cookie };
+  }
+  if (url.pathname === '/forget-device') {
+    if (request.method !== 'POST') return plain(errorPage(c.renderer, c.buildToken, 405, request, 'Method Not Allowed'));
+    if (!sameOrigin(request)) return plain(errorPage(c.renderer, c.buildToken, 403, request, 'cross-site request'));
+    // Deletes nothing: the account and its decks survive and age out on the
+    // reaper's schedule. A request with no cookie is a no-op that still
+    // lands on the landing page.
+    const response = new Response(null, { status: 303, headers: { location: '/' } });
+    response.headers.set(ANON_COOKIE_HEADER, 'clear');
+    return { response, cookie: resolution.cookie };
+  }
+  return null;
+}
+
+/** No identity: the landing page, the session-restoring shell, or a refusal. */
+function visitorResponse(request: Request, url: URL, c: Composition, resolution: Resolution, cookies: Record<string, string>, page: PageFn): Outcome {
+  const cookie = resolution.cookie;
+  if (request.method === 'GET' && url.pathname === '/') {
+    // A returning user whose short-lived token expired must not be flashed
+    // the marketing page: the shell recovers the session and reloads.
+    if (resolution.dormant && cookies[REAUTH_FALLBACK_COOKIE] !== '1') return { response: page('reauth.html'), cookie };
+    const landing = c.pages.resolve('anonymous', 'GET', '/', []);
+    if (landing?.template) return { response: page(landing.template, landing.context ?? {}, landing.status), cookie };
+  }
+  // A route that exists but needs an identity is 401; anything else never
+  // existed, and saying so is not a signal worth withholding.
+  if (!matchRoute([...pageRoutes, ...apiRoutes], request.method, url.pathname)) {
+    return { response: errorPage(c.renderer, c.buildToken, 404, request, 'Not Found'), cookie };
+  }
+  if (wantsJson(request)) return { response: Response.json({ detail: NOT_AUTHENTICATED }, { status: 401 }), cookie };
+  const signIn = c.identity.urls().sign_in;
+  if (signIn) return { response: new Response(null, { status: 303, headers: { location: signIn } }), cookie };
+  return { response: errorPage(c.renderer, c.buildToken, 401, request, NOT_AUTHENTICATED), cookie };
+}
+
+/** A tombstoned cell answers 410; the browser is told what that means. */
+async function onTombstone(response: Response, request: Request, c: Composition, identity: Identity): Promise<Response> {
+  if (response.status !== 410 || !response.headers.has('x-prep-tombstoned')) return response;
+  if (identity.kind !== 'anon') return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
+  const out = wantsJson(request)
+    ? Response.json({ detail: NOT_AUTHENTICATED }, { status: 401 })
+    : errorPage(c.renderer, c.buildToken, 401, request, NOT_AUTHENTICATED);
+  out.headers.set(ANON_COOKIE_HEADER, 'clear');
+  return out;
+}
+
+/**
+ * The merge, after the target's row exists and never failing the request.
+ * Every route reaches this, so an uncaught exception here would turn every
+ * authenticated request carrying an anonymous cookie into a 500; a tripped
+ * guard keeps the cookie and retries on the next one.
+ */
+async function runMerge(c: Composition, identity: Identity, anonId: string, now: Date, fallback: CookieVerdict): Promise<CookieVerdict> {
+  try {
+    const at = isoUtc(now);
+    const { idx } = await c.directory.register(identity.subject, false, at);
+    await c.userCells
+      .cell(identity.subject)
+      .upsert(identity.subject, { email: identity.email, displayName: identity.displayName, profilePicUrl: identity.profilePicUrl }, at, idx);
+    const result = await mergeAnonymous(anonId, identity.subject, {
+      cells: c.userCells,
+      directory: c.directory,
+      limiter: c.limiter,
+      clock: { now: () => now },
+      randomHex: hexFrom(c.randoms.merge),
+    });
+    return result.resolved ? { kind: 'stale' } : fallback;
+  } catch (e) {
+    console.error(`anon merge failed: anon=${anonId}: ${e instanceof Error ? e.message : e}`);
+    return fallback;
+  }
+}
+
+// ---- personal access tokens ----------------------------------------------
+
+function isPatBearer(request: Request): boolean {
+  const value = bearerValue(request.headers.get('authorization'));
+  return 'token' in value && value.token.trim().startsWith(TOKEN_PREFIX);
+}
+
+/**
+ * Python's `bearer_user`, split across the hop: the refusals that need no
+ * storage answer here, and the hash is checked by the owner's own cell.
+ */
+async function routeByToken(request: Request, headers: Headers, env: Env, c: Composition): Promise<Response> {
+  const value = bearerValue(request.headers.get('authorization'));
+  if ('refusal' in value) return Response.json({ detail: value.refusal }, { status: 401 });
+  const parsed = parseToken(value.token);
+  if (!parsed) return Response.json({ detail: BAD_TOKEN }, { status: 401 });
+  headers.set(SUBJECT_HEADER, parsed.subject);
+  headers.set(KIND_HEADER, 'pat');
+  headers.set(PAT_HASH_HEADER, await c.hasher.sha256Hex(value.token.trim()));
+  const stub = env.USER.get(env.USER.idFromName(parsed.subject));
+  const response = await stub.fetch(new Request(request, { headers }));
+  if (response.status === 410 && response.headers.has('x-prep-tombstoned')) {
+    return Response.json({ detail: BAD_TOKEN }, { status: 401 });
+  }
+  return response;
 }
 
 async function seed(request: Request, env: Env, c: Composition): Promise<Response> {

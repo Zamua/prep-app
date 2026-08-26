@@ -17,6 +17,7 @@ import type {
   Sync,
   UserCells,
   UserRepos,
+  WebhookVerifier,
   WebPush,
   WorkflowRunner,
 } from '../app/ports.js';
@@ -36,6 +37,7 @@ import { FreeTierAgent, freeTierConfig } from './adapters/freeTier.js';
 import { StubWorkflowRunner } from './adapters/runnerStub.js';
 import { NoWebPush, WebCryptoWebPush } from './adapters/webpush.js';
 import { OpenRouterOAuth } from './adapters/openrouter.js';
+import { SvixVerifier } from './adapters/svix.js';
 import { PatIssuer } from './adapters/pat.js';
 import { fixturePagesFromBuild } from './adapters/fixturePages.js';
 import { WebCryptoHasher } from './adapters/hash.js';
@@ -80,7 +82,8 @@ export interface Composition {
   cipher: Cipher | null;
   clerk: ClerkProvider | null;
   clerkConfig: ClerkConfig | null;
-  webhookSecret: string;
+  /** Null without CLERK_WEBHOOK_SECRET: the receiver answers 503. */
+  webhooks: WebhookVerifier | null;
   pat: PatIssuer;
   openRouter: OpenRouterAuth;
   /** The deploy's shared tier when configured, else the refusing stub. */
@@ -236,7 +239,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     cipher: cipherOrNull(env, webRandom, warn),
     clerk: clerk?.provider ?? null,
     clerkConfig: clerk?.config ?? null,
-    webhookSecret: (env.CLERK_WEBHOOK_SECRET ?? '').trim(),
+    webhooks: (env.CLERK_WEBHOOK_SECRET ?? '').trim() ? new SvixVerifier((env.CLERK_WEBHOOK_SECRET ?? '').trim()) : null,
     pat: new PatIssuer(
       { bytes: (n) => composition.randoms.tokens.bytes(n), choice: (seq) => composition.randoms.tokens.choice(seq) },
       new WebCryptoHasher(),

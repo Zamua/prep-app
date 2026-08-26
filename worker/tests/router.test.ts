@@ -3,6 +3,9 @@ import worker, { DISPLAY_NAME_HEADER, SUBJECT_HEADER, UserCell } from '../runtim
 import { composeWith } from '../runtime/compose.js';
 import type { Env } from '../runtime/env.js';
 import { corpusPage, fakeEnv, fakeState, IDENTIFIED, namespaceOf, req, spyRenderer } from './helpers.js';
+import { EMAIL_HEADER, KIND_HEADER, PAT_HASH_HEADER, PICTURE_HEADER } from '../runtime/cells/router.js';
+import { assembleToken } from '../domain/pat.js';
+import { WebCryptoHasher } from '../runtime/adapters/hash.js';
 
 interface Forwarded {
   request: Request;
@@ -251,5 +254,147 @@ describe('router and cell together', () => {
       live,
     );
     expect(bad.status).toBe(400);
+  });
+});
+
+describe('the fake provider is gated on the internal token', () => {
+  it('ignores the tailscale headers without it, which is a visitor', async () => {
+    const res = await call('/', { headers: { 'tailscale-user-login': 'parity@example.com' } });
+    expect(res.status).toBe(200);
+    expect(renderer.calls.at(-1)?.template).toBe('landing.html');
+    expect(forwarded).toEqual([]);
+  });
+
+  it('ignores a wrong token the same way', async () => {
+    await call('/', { headers: { ...IDENTIFIED, 'x-internal-token': 'not-the-token' } });
+    expect(forwarded).toEqual([]);
+  });
+
+  it('forwards the claims it does read', async () => {
+    await call('/', { headers: { ...IDENTIFIED, 'tailscale-user-profile-pic': 'https://img.test/p.png' } });
+    const sent = forwarded[0]!.request.headers;
+    expect(sent.get(KIND_HEADER)).toBe('fake');
+    expect(decodeURIComponent(sent.get(EMAIL_HEADER)!)).toBe('parity@example.com');
+    expect(decodeURIComponent(sent.get(PICTURE_HEADER)!)).toBe('https://img.test/p.png');
+  });
+});
+
+describe('the provider flows', () => {
+  it('404 on this deploy, which has no in-app sign-in or sign-out', async () => {
+    expect((await call('/sign-in')).status).toBe(404);
+    expect((await call('/sign-out')).status).toBe(404);
+    expect(renderer.calls.at(-1)?.context.blurb).toContain('no in-app sign-out flow');
+  });
+
+  it('redirect and render the interstitial once a provider exposes them', async () => {
+    const clerkish = fakeEnv();
+    composeWith(clerkish, {
+      renderer,
+      identity: {
+        name: 'clerk',
+        identify: async () => null,
+        hasDormantSession: () => false,
+        urls: () => ({
+          sign_in: 'https://accounts.test/sign-in?redirect_url=x',
+          sign_up: null,
+          sign_out: 'https://accounts.test/sign-out',
+          account: null,
+        }),
+      },
+    });
+    const signIn = await worker.fetch(req('/sign-in'), clerkish);
+    expect(signIn.status).toBe(303);
+    expect(signIn.headers.get('location')).toBe('https://accounts.test/sign-in?redirect_url=x');
+    const signOut = await worker.fetch(req('/sign-out'), clerkish);
+    expect(signOut.status).toBe(200);
+    expect(renderer.calls.at(-1)?.template).toBe('sign_out_interstitial.html');
+    expect(renderer.calls.at(-1)?.context.redirect_url).toBe('/');
+    // Provider sign-out leaves the anonymous cookie, so the app clears it.
+    expect(signOut.headers.get('set-cookie')).toMatch(/^prep_anon=""; expires=/);
+  });
+
+  it('forget-device redirects home and drops the cookie', async () => {
+    const res = await call('/forget-device', { method: 'POST' });
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('/');
+    expect(res.headers.get('set-cookie')).toMatch(/^prep_anon=""; expires=/);
+  });
+
+  it('refuses forget-device from another site, where the confirm never ran', async () => {
+    const res = await call('/forget-device', { method: 'POST', headers: { 'sec-fetch-site': 'cross-site' } });
+    expect(res.status).toBe(403);
+    expect(res.headers.get('set-cookie')).toBeNull();
+    const byOrigin = await call('/forget-device', { method: 'POST', headers: { origin: 'https://evil.test', host: 'parity.example.test' } });
+    expect(byOrigin.status).toBe(403);
+  });
+
+  it('answers 405 on the wrong method', async () => {
+    expect((await call('/forget-device')).status).toBe(405);
+    expect((await call('/sign-in', { method: 'POST' })).status).toBe(405);
+  });
+});
+
+describe('a dormant provider session', () => {
+  const dormantEnv = (uat: string) => {
+    const e = fakeEnv();
+    composeWith(e, {
+      renderer,
+      identity: {
+        name: 'clerk',
+        identify: async () => null,
+        hasDormantSession: (request: Request) => (request.headers.get('cookie') ?? '').includes(`__client_uat=${uat}`),
+        urls: () => ({ sign_in: 'https://accounts.test/sign-in', sign_up: null, sign_out: null, account: null }),
+      },
+    });
+    return e;
+  };
+
+  it('renders the session-restoring shell instead of the landing page', async () => {
+    const e = dormantEnv('1771000000');
+    const res = await worker.fetch(req('/', { headers: { cookie: '__client_uat=1771000000' } }), e);
+    expect(res.status).toBe(200);
+    expect(renderer.calls.at(-1)?.template).toBe('reauth.html');
+  });
+
+  it('falls through to the landing page once the shell gives up', async () => {
+    const e = dormantEnv('1771000000');
+    await worker.fetch(req('/', { headers: { cookie: '__client_uat=1771000000; prep_reauth_fallback=1' } }), e);
+    expect(renderer.calls.at(-1)?.template).toBe('landing.html');
+  });
+
+  it('never consults the anonymous cookie while it is dormant', async () => {
+    const e = dormantEnv('1771000000');
+    const res = await worker.fetch(req('/', { headers: { cookie: '__client_uat=1771000000; prep_anon=garbage' } }), e);
+    // A stale-cookie delete here would destroy the account behind the value.
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+});
+
+describe('a bearer token', () => {
+  it('routes to the owner named in the token, with its hash', async () => {
+    const token = assembleToken('parity@example.com', new Uint8Array(32).fill(9));
+    const res = await call('/api/v1/decks', { headers: { authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(200);
+    expect(forwarded[0]?.name).toBe('parity@example.com');
+    const sent = forwarded[0]!.request.headers;
+    expect(sent.get(KIND_HEADER)).toBe('pat');
+    expect(sent.get(PAT_HASH_HEADER)).toBe(await new WebCryptoHasher().sha256Hex(token));
+  });
+
+  it('answers the refusals Python answers, before any cell is reached', async () => {
+    expect(await (await call('/api/v1/decks')).json()).toEqual({ detail: 'missing Authorization header' });
+    expect(await (await call('/api/v1/decks', { headers: { authorization: 'Basic x' } })).json()).toEqual({
+      detail: "Authorization must be 'Bearer <token>'",
+    });
+    expect(await (await call('/api/v1/decks', { headers: { authorization: 'Bearer prep_pat_legacy' } })).json()).toEqual({
+      detail: 'invalid or revoked token',
+    });
+    expect(forwarded).toEqual([]);
+  });
+
+  it('is not consulted on a page route, where the cookie rules', async () => {
+    const token = assembleToken('parity@example.com', new Uint8Array(32));
+    await call('/deck/x', { headers: { ...IDENTIFIED, authorization: `Bearer ${token}` } });
+    expect(forwarded[0]?.request.headers.get(KIND_HEADER)).toBe('pat');
   });
 });

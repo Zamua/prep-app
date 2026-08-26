@@ -12,7 +12,15 @@ const PUBLIC_VARS = new Set([
   'PREP_BUILD_ID',
   'PREP_PLACEHOLDER_INDEX',
   'PREP_INTERNAL_TOKEN',
+  'CLERK_ISSUER',
+  'CLERK_JWKS_URL',
+  'CLERK_ACCOUNTS_URL',
+  'CLERK_AUTHORIZED_PARTIES',
+  'CLERK_PUBLISHABLE_KEY',
 ]);
+/** A secret in a deploy file is the mistake this file exists to catch. */
+const SECRET_NAME = /SECRET|TOKEN|KEY|PASSWORD/;
+const ALLOWED_KEY_NAMES = new Set(['PREP_INTERNAL_TOKEN', 'CLERK_PUBLISHABLE_KEY']);
 const DEV_ONLY = /^(PREP_PARITY|PREP_FAKE|PREP_INTERNAL|PREP_BUILD_ID)/;
 
 /** JSON with `//` comments; a `//` inside a string is not a comment. */
@@ -82,7 +90,19 @@ describe('the three wrangler files', () => {
     for (const env of ENVS) {
       for (const key of Object.keys(files[env].vars)) {
         expect(PUBLIC_VARS.has(key), `${env}: ${key} is not an allowed public var`).toBe(true);
+        const secretish = SECRET_NAME.test(key) && !ALLOWED_KEY_NAMES.has(key);
+        expect(secretish, `${env}: ${key} names a credential; it belongs in CELLD_VAR_*`).toBe(false);
       }
+    }
+  });
+
+  it('name Clerk the same way on staging and prod', () => {
+    for (const env of ['staging', 'prod'] as const) {
+      const vars = files[env].vars;
+      expect(vars.CLERK_JWKS_URL, env).toBe(`${vars.CLERK_ISSUER}/.well-known/jwks.json`);
+      // `urls()` redirects back to the first party, so the deploy's own
+      // origin has to lead the list or staging bounces onto prod.
+      expect((vars.CLERK_AUTHORIZED_PARTIES ?? '').split(',')[0], env).toMatch(/^https:\/\//);
     }
   });
 });

@@ -1,5 +1,6 @@
 // The error pages, ported from prep/web/errors.py: the copy verbatim, the
 // detail folded into the blurb when it adds something.
+import { NO_AUTH_URLS, type AuthUrls } from '../app/pageContext.js';
 import type { Renderer } from '../app/ports.js';
 import { appBase } from './appBase.js';
 
@@ -26,17 +27,17 @@ const FALLBACK_COPY: readonly [string, string] = [
 
 /** The nine context-processor names for a page rendered outside a cell,
  * plus the request origin every Python context carried as `request`. */
-export function anonymousContext(buildToken: string, appBase: string): Record<string, unknown> {
+export function anonymousContext(buildToken: string, appBase: string, urls: AuthUrls = NO_AUTH_URLS): Record<string, unknown> {
   return {
     app_base: appBase,
     user: null,
     agent_available: false,
-    auth_provider: 'tailscale',
-    sign_in_url: '',
-    sign_up_url: '',
-    sign_out_url: '',
-    clerk_publishable_key: null,
-    clerk_frontend_api_host: null,
+    auth_provider: urls.signIn ? 'clerk' : 'tailscale',
+    sign_in_url: urls.signIn,
+    sign_up_url: urls.signUp,
+    sign_out_url: urls.signOut,
+    clerk_publishable_key: urls.clerkPublishableKey,
+    clerk_frontend_api_host: urls.clerkFrontendApiHost,
     notif_unseen_count: 0,
     deck_display: {},
     static_css_mtime: buildToken,

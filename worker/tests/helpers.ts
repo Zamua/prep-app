@@ -81,12 +81,24 @@ export function fakeEnv(overrides: Partial<Env> = {}): Env {
     PREP_BUILD_ID: 'ce11d0000000',
     PREP_PLACEHOLDER_INDEX: '0',
     PREP_INTERNAL_TOKEN: 'parity-internal-token',
+    // The parity harness's own values (tests/parity/oracles/harness.py):
+    // the corpora were recorded with a free tier configured.
+    PREP_KEY_ENCRYPTION_SECRET: '11'.repeat(32),
+    PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:9/v1',
+    PREP_FREE_INFERENCE_API_KEY: 'parity-free-tier-key',
+    PREP_FREE_INFERENCE_MODEL: 'parity-model',
     ...overrides,
   };
   return env;
 }
 
-export const IDENTIFIED = { 'tailscale-user-login': 'parity@example.com', 'tailscale-user-name': 'Parity' };
+/** What the parity harness sends: the fake provider only trusts the
+ * tailscale headers when the internal token rides along (decision 7.0). */
+export const IDENTIFIED = {
+  'tailscale-user-login': 'parity@example.com',
+  'tailscale-user-name': 'Parity',
+  'x-internal-token': 'parity-internal-token',
+};
 
 export function req(path: string, init: RequestInit = {}): Request {
   return new Request(`https://parity.example.test${path}`, init);
