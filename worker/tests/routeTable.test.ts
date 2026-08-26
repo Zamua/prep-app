@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { apiRoutes } from '../runtime/cells/routes/api.js';
 import { pageRoutes } from '../runtime/cells/routes/pages.js';
 import { servePublic } from '../runtime/routes/openapi.js';
+import { ENTRY_ROUTES } from '../runtime/routes/metrics.js';
 import { jobRoutes } from '../runtime/cells/routes/jobs.js';
 import { pythonJson } from './pyoracle.js';
 
@@ -55,38 +56,20 @@ print(json.dumps(sorted(rows)))
 type Key = string;
 const key = (method: string, pattern: string): Key => `${method} ${pattern}`;
 
-/** Answered before any identity is resolved, so no cell and no gate. */
-const ENTRY_WORKER: readonly Key[] = [
-  'GET /healthz',
-  'GET /openapi.json',
-  'GET /docs',
-  'GET /docs/oauth2-redirect',
-  'GET /redoc',
-  'GET /llms.txt',
-  'GET /privacy',
-  'GET /offline',
-  'GET /manifest.json',
-  'GET /sw.js',
-  'GET /sign-in',
-  'GET /sign-out',
-  'POST /forget-device',
-  'POST /api/instant/generate',
-  'GET /notify/vapid-public-key',
-  'GET /static/css/v{build}/{path:path}',
-  'GET /static/js/v{build}/{path:path}',
-];
+/**
+ * Answered before any identity is resolved, so no cell and no gate. Read
+ * from the metrics label table, which needs the same inventory: an entry
+ * route missing there labels as `<unmatched>`, and one invented there fails
+ * the assertion below that every key is a route the reference serves.
+ */
+const ENTRY_WORKER: readonly Key[] = ENTRY_ROUTES.map(([method, pattern]) => key(method, pattern));
 
-/** Every route the phase does not own, with the phase that does (PHASE-3 G). */
+/** The two the rewrite defers past phase 5 (decision 7.6). */
+const DEBUG_ONLY: readonly Key[] = ['GET /_debug/auth', 'GET /debug/session'];
+
+/** Every route the phase does not own, with the phase that does (PHASE-3 G).
+ * Phase 5 empties it down to these two. */
 const OUT_OF_SCOPE: Record<Key, string> = {
-  'GET /metrics': 'phase 5',
-  'GET /decks/import-anki': 'phase 5',
-  'POST /decks/import-anki': 'phase 5',
-  'GET /decks/import-csv': 'phase 5',
-  'POST /decks/import-csv': 'phase 5',
-  'GET /decks/import-prepdeck': 'phase 5',
-  'POST /decks/import-prepdeck': 'phase 5',
-  'GET /deck/{name}/export.apkg': 'phase 5',
-  'GET /deck/{name}/export.prepdeck': 'phase 5',
   'GET /_debug/auth': 'decision 7.6',
   'GET /debug/session': 'decision 7.6',
 };
@@ -162,6 +145,10 @@ describe('the cell route table against the Python inventory', () => {
     expect(phase4.filter((k) => !cell.has(k))).toEqual([]);
     expect(Object.keys(REMOVED).filter((k) => cell.has(k))).toEqual([]);
     expect([...cell.keys()].filter((k) => k in REMOVED)).toEqual([]);
+  });
+
+  it('ends the phase with only the two decision-7.6 routes out of scope', () => {
+    expect(Object.keys(OUT_OF_SCOPE).sort()).toEqual([...DEBUG_ONLY].sort());
   });
 
   it('answers the public routes it claims', () => {

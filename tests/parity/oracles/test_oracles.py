@@ -33,6 +33,7 @@ from tests.parity.oracles import fsrs as fsrs_mod
 from tests.parity.oracles import grading as grading_mod
 from tests.parity.oracles import markdown as markdown_mod
 from tests.parity.oracles import merge as merge_mod
+from tests.parity.oracles import metrics as metrics_mod
 from tests.parity.oracles import offline as offline_mod
 from tests.parity.oracles import pages as pages_mod
 from tests.parity.oracles import render_templates as html_mod
@@ -43,6 +44,7 @@ EXTRACTORS = {
     "grading": grading_mod,
     "markdown": markdown_mod,
     "merge": merge_mod,
+    "metrics": metrics_mod,
     "offline": offline_mod,
     "contracts": contracts_mod,
     "html": html_mod,

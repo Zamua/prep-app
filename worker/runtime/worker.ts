@@ -32,6 +32,7 @@ import { bearerValue, parseToken, TOKEN_PREFIX, BAD_TOKEN } from '../domain/pat.
 import { isoUtc } from '../domain/py.js';
 import { clerkWebhook } from './webhooks.js';
 import { serveInstant } from './routes/instant.js';
+import { observe, serveMetrics } from './routes/metrics.js';
 import { servePublic } from './routes/openapi.js';
 import { serveParityJobs } from './routes/parityJobs.js';
 
@@ -77,44 +78,64 @@ interface Outcome {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    // Liveness is independent of storage and configuration: a wedged process
-    // should restart, a storage blip should not restart every node.
-    if (url.pathname === '/healthz') return new Response('ok');
-    let c: Composition;
+    // Before composition, so a node that cannot configure itself still
+    // reports, and outside the timing below, so the scraper is not most of
+    // what the histogram holds.
+    const scrape = serveMetrics(request, url);
+    if (scrape) return scrape;
+    // The runtime clock advances on I/O, so a request that does none records
+    // as zero. Everything reaching storage or a cell is timed.
+    const started = Date.now();
+    let observed: Response | undefined;
     try {
-      c = compose(env);
-    } catch (e) {
-      console.error(`compose failed: ${e instanceof Error ? e.message : e}`);
-      return new Response('service misconfigured', { status: 500 });
-    }
-    // Readiness composes: a misconfigured worker must not take traffic.
-    if (url.pathname === '/readyz') return new Response('ok');
-    let cookie: CookieVerdict = { kind: 'none' };
-    try {
-      // A refusal is the runtime declining the work, not the work failing:
-      // nothing was half-written, so the request is safe to run again. A
-      // single-replica fleet answers one during a lease renewal or a
-      // durability wait, and without this the user reads a 500 for a write
-      // that never happened. Bounded, and only for a refusal.
-      let outcome: Awaited<ReturnType<typeof route>> | undefined;
-      for (let attempt = 0; ; attempt++) {
-        try {
-          outcome = await route(request, url, env, c);
-          break;
-        } catch (err) {
-          if (!isRefusal(err) || attempt >= 2) throw err;
-          console.error(`retrying ${request.method} ${url.pathname} after a refusal: ${err instanceof Error ? err.message : err}`);
-          await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
-        }
-      }
-      cookie = outcome!.cookie;
-      return await cookieHooks(c, request, cookie, noCacheHtml(outcome!.response));
-    } catch (e) {
-      console.error(`unhandled exception on ${request.method} ${url.pathname}: ${e instanceof Error ? (e.stack ?? e.message) : e}`);
-      return await cookieHooks(c, request, cookie, noCacheHtml(errorPage(c.renderer, c.buildToken, 500, request)));
+      observed = await handle(request, url, env);
+      return observed;
+    } finally {
+      // A thrown request is a 500, the way the reference middleware records
+      // the response it never got.
+      observe(request.method, url.pathname, observed?.status ?? 500, (Date.now() - started) / 1000);
     }
   },
 };
+
+async function handle(request: Request, url: URL, env: Env): Promise<Response> {
+  // Liveness is independent of storage and configuration: a wedged process
+  // should restart, a storage blip should not restart every node.
+  if (url.pathname === '/healthz') return new Response('ok');
+  let c: Composition;
+  try {
+    c = compose(env);
+  } catch (e) {
+    console.error(`compose failed: ${e instanceof Error ? e.message : e}`);
+    return new Response('service misconfigured', { status: 500 });
+  }
+  // Readiness composes: a misconfigured worker must not take traffic.
+  if (url.pathname === '/readyz') return new Response('ok');
+  let cookie: CookieVerdict = { kind: 'none' };
+  try {
+    // A refusal is the runtime declining the work, not the work failing:
+    // nothing was half-written, so the request is safe to run again. A
+    // single-replica fleet answers one during a lease renewal or a
+    // durability wait, and without this the user reads a 500 for a write
+    // that never happened. Bounded, and only for a refusal.
+    let outcome: Awaited<ReturnType<typeof route>> | undefined;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        outcome = await route(request, url, env, c);
+        break;
+      } catch (err) {
+        if (!isRefusal(err) || attempt >= 2) throw err;
+        console.error(`retrying ${request.method} ${url.pathname} after a refusal: ${err instanceof Error ? err.message : err}`);
+        await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+      }
+    }
+    cookie = outcome!.cookie;
+    return await cookieHooks(c, request, cookie, noCacheHtml(outcome!.response));
+  } catch (e) {
+    console.error(`unhandled exception on ${request.method} ${url.pathname}: ${e instanceof Error ? (e.stack ?? e.message) : e}`);
+    return await cookieHooks(c, request, cookie, noCacheHtml(errorPage(c.renderer, c.buildToken, 500, request)));
+  }
+}
 
 const plain = (response: Response): Outcome => ({ response, cookie: { kind: 'none' } });
 
