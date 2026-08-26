@@ -435,3 +435,16 @@ describe('the post-restart window', () => {
     expect(insert['status']).toBe('skipped');
   });
 });
+
+describe('the parity reset', () => {
+  it('empties the ledger, so a run that mints the same id starts over', async () => {
+    register(h);
+    const id = await startDemo(h);
+    await h.settle();
+    await h.jobCell(id).wipe();
+    expect(await h.peek(id)).toBeNull();
+    expect(h.jobStorage(id).alarmAt).toBeNull();
+    await startDemo(h);
+    expect(h.ledger(id).outbox.map((o) => o['status'])).toEqual(['planning']);
+  });
+});

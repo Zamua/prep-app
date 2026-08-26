@@ -16,10 +16,15 @@ let env: Env;
 let renderer: ReturnType<typeof spyRenderer>;
 let forwarded: Forwarded[];
 let seeded: { name: string; profile: string }[];
+/** The rows the owner's dump names, which is where the seed finds its jobs. */
+let jobRows: Record<string, Record<string, unknown>[]>;
+let jobsWiped: string[];
 
 beforeEach(() => {
   forwarded = [];
   seeded = [];
+  jobRows = {};
+  jobsWiped = [];
   env = fakeEnv({
     USER: namespaceOf((name) => ({
       fetch: async (request: Request) => {
@@ -33,6 +38,10 @@ beforeEach(() => {
         seeded.push({ name, profile });
         return { user: name, profile };
       },
+      dump: async () => ({ profile: null, tables: jobRows }),
+    })),
+    JOB: namespaceOf((name) => ({
+      wipe: async () => void jobsWiped.push(name),
     })),
   });
   renderer = spyRenderer();
@@ -144,6 +153,17 @@ describe('the parity routes', () => {
       { name: 'parity@example.com', profile: 'wipe:reader' },
       { name: 'parity@example.com', profile: 'reader' },
     ]);
+  });
+
+  it('seed empties the job cells the owner still names, once each', async () => {
+    jobRows = {
+      active_workflows: [{ workflow_id: 'plan-a' }, { workflow_id: 'grade-b' }],
+      job_progress: [{ workflow_id: 'grade-b' }],
+    };
+    const body = JSON.stringify({ user: 'parity@example.com', profile: 'workflows' });
+    const ok = await call('/_parity/seed', { method: 'POST', body, headers: { 'x-internal-token': 'parity-internal-token' } });
+    expect(ok.status).toBe(200);
+    expect(jobsWiped).toEqual(['plan-a', 'grade-b']);
   });
 
   it('seed fails closed without a configured token', async () => {

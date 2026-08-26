@@ -126,6 +126,19 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     return last ? { status: last.status, progress: { ...last.payload }, transition: last.transition } : EMPTY;
   }
 
+  /**
+   * The parity seed's reset, driven only from `/_parity/seed`. A run mints
+   * the ids the run before it did, so without this a `start` lands on a cell
+   * that already holds a finished ledger and answers with that run's outcome
+   * instead of doing the work again. The schema goes back immediately: the
+   * constructor that would rebuild it does not run again in this isolate.
+   */
+  async wipe(): Promise<void> {
+    await this.storage.deleteAll();
+    this.c.migrateJobCell(this.storage);
+    await this.ensureAlarm();
+  }
+
   /** The internal drive kick. The public router never reaches a JobCell. */
   override async fetch(_request: Request): Promise<Response> {
     return Response.json(await this.drive());

@@ -23,6 +23,7 @@ import { pageRoutes } from './cells/routes/pages.js';
 import { apiRoutes } from './cells/routes/api.js';
 import { resolveIdentity, type CookieVerdict, type Resolution } from '../app/auth/resolve.js';
 import { hexFrom, mergeAnonymous } from '../app/auth/mergeSaga.js';
+import type { CellSnapshot } from '../app/entities.js';
 import type { Identity } from '../app/ports.js';
 import { COOKIE_NAME } from '../domain/anonCookie.js';
 import { parseCookieHeader } from '../domain/cookies.js';
@@ -53,10 +54,16 @@ const PAT_ONLY = (path: string): boolean => path.startsWith('/api/v1/') || path 
 interface SeedApi {
   wipe(profile: string): Promise<void>;
   seed(profile: string, user: string, at: string | null): Promise<Record<string, unknown>>;
+  dump(): Promise<CellSnapshot>;
 }
 
 /** The global ledger's own reset, which the seed drives. */
 interface LimiterSeedApi {
+  wipe(): Promise<void>;
+}
+
+/** One job cell's reset, which the seed drives. */
+interface JobSeedApi {
   wipe(): Promise<void>;
 }
 
@@ -373,6 +380,26 @@ async function clearAnonymous(c: Composition): Promise<void> {
   }
 }
 
+/**
+ * The job cells a previous run started. Their ids come from the same seeded
+ * generator, so the next run addresses the same cells, and a cell holding a
+ * finished ledger answers `start` with that run's outcome instead of doing
+ * the work again. Read before the owner's wipe, which takes the rows naming
+ * them.
+ */
+async function clearJobs(stub: SeedApi, c: Composition): Promise<void> {
+  const snapshot = await stub.dump();
+  const ids = new Set<string>();
+  for (const table of JOB_TABLES) {
+    for (const row of snapshot.tables[table] ?? []) {
+      const id = row['workflow_id'];
+      if (typeof id === 'string') ids.add(id);
+    }
+  }
+  for (const id of ids) await (c.jobCells.cell(id) as unknown as JobSeedApi).wipe();
+}
+
+const JOB_TABLES = ['active_workflows', 'job_progress'] as const;
 const ANONYMOUS_PROFILE = 'anonymous';
 const ANONYMOUS_PAGE = 100;
 const ANONYMOUS_PAGES = 20;
@@ -402,6 +429,7 @@ async function seed(request: Request, env: Env, c: Composition): Promise<Respons
     // own isolate's generator, which no cell's reset reaches: without this
     // the ids a run mints depend on how many the runs before it did.
     c.resetRandom();
+    await clearJobs(stub, c);
     // Two RPCs: the wipe cannot share a call with the rows it makes room for.
     await stub.wipe(body.profile);
     return Response.json(await stub.seed(body.profile, body.user, request.headers.get(PARITY_NOW_HEADER)));
