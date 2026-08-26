@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -22,12 +23,31 @@ func openDB(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// WAL + busy timeout — defensive against concurrent writers.
-	if _, err := db.Exec(`
-		PRAGMA journal_mode=WAL;
-		PRAGMA busy_timeout=5000;
-		PRAGMA foreign_keys=ON;
-	`); err != nil {
+	// One connection per handle: a pragma is set on whichever connection
+	// runs it, so a pooled second connection would carry no busy timeout
+	// and fail instantly against the app's writes.
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// journal_mode is a whole-database property: it takes an exclusive
+	// lock and answers SQLITE_BUSY without consulting the busy handler
+	// whenever another connection is open, so setting it unconditionally
+	// fails every time the app happens to be serving a request. Only the
+	// first open of a fresh file has to set it.
+	var mode string
+	if err := db.QueryRow("PRAGMA journal_mode").Scan(&mode); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if !strings.EqualFold(mode, "wal") {
+		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		db.Close()
 		return nil, err
 	}

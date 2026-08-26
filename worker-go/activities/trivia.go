@@ -143,7 +143,7 @@ func (a *Activities) InsertTriviaCard(ctx context.Context, in shared.InsertTrivi
 // ---- helpers ----------------------------------------------------------
 
 func loadExistingTriviaPrompts(dbPath string, deckID int) ([]string, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := openDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
@@ -168,14 +168,11 @@ func loadExistingTriviaPrompts(dbPath string, deckID int) ([]string, error) {
 }
 
 func insertTriviaCard(dbPath, userID string, deckID int, topic, prompt, answer, explanation string) (shared.InsertTriviaCardResult, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := openDB(dbPath)
 	if err != nil {
 		return shared.InsertTriviaCardResult{}, fmt.Errorf("open db: %w", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return shared.InsertTriviaCardResult{}, err
-	}
 
 	tx, err := db.Begin()
 	if err != nil {
