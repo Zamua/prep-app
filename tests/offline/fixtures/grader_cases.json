@@ -596,11 +596,10 @@
         },
         "PARIS"
       ],
-      "expected": null,
-      "expected_py": {
+      "expected": {
         "verdict": "right"
       },
-      "note": "deliberate divergence: bare inline flags are invalid JS regex syntax; Python compiles them, the offline grader falls to self-verdict"
+      "note": "a leading (?i) or (?s) group names a flag both engines already have on; the port drops it instead of refusing the pattern"
     },
     {
       "id": "code-null",
