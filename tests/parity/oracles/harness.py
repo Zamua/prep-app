@@ -90,6 +90,12 @@ class Harness:
     def headers(login: str = PARITY_USER, name: str = PARITY_USER_NAME) -> dict[str, str]:
         return {"Tailscale-User-Login": login, "Tailscale-User-Name": name}
 
+    def seed(self, user: str, profile: str) -> dict:
+        """Wipe `user` and insert the named profile, in process."""
+        from prep.dev.parity_seed import seed
+
+        return seed(user, profile)
+
     def call(
         self,
         name: str,
@@ -287,3 +293,96 @@ def _default(value: Any) -> Any:
     if isinstance(value, bytes):
         return base64.b64encode(value).decode("ascii")
     return str(value)
+
+
+# ---- a remote target -------------------------------------------------------
+
+
+class RemoteClockPin:
+    """`clock.set(at)` for a remote server: the instant travels as the
+    `X-Parity-Now` header on every later call."""
+
+    def __init__(self, at):
+        self.at = at
+
+    def set(self, at) -> None:
+        self.at = at
+
+    def unix(self) -> int:
+        return int(self.at.timestamp())
+
+
+@dataclass
+class RemoteHarness:
+    """The `Harness` surface over HTTP against a TypeScript server: seeds
+    through `POST /_parity/seed`, sends the internal token and the
+    request clock, never follows redirects."""
+
+    client: Any
+    token: str
+    clock: RemoteClockPin
+    recorded: list[dict] = field(default_factory=list)
+
+    def headers(self, login: str = PARITY_USER, name: str = PARITY_USER_NAME) -> dict[str, str]:
+        return {**Harness.headers(login, name), "X-Internal-Token": self.token}
+
+    def seed(self, user: str, profile: str) -> dict:
+        response = self.client.post(
+            "/_parity/seed",
+            json={"user": user, "profile": profile},
+            headers={"X-Internal-Token": self.token, **self._clock_header()},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _clock_header(self) -> dict[str, str]:
+        return {"X-Parity-Now": self.clock.at.isoformat().replace("+00:00", "Z")}
+
+    def call(
+        self,
+        name: str,
+        method: str,
+        path: str,
+        *,
+        headers: dict | None = None,
+        json_body: Any = None,
+        data: Any = None,
+        content: bytes | str | None = None,
+        note: str | None = None,
+    ) -> Any:
+        sent = {**(headers or {})}
+        kwargs: dict[str, Any] = {"headers": {**sent, **self._clock_header()}}
+        if json_body is not None:
+            kwargs["json"] = json_body
+        if data is not None:
+            kwargs["data"] = data
+        if content is not None:
+            kwargs["content"] = content
+        response = self.client.request(method, path, **kwargs)
+        self.recorded.append(
+            {
+                "name": name,
+                "note": note,
+                "request": {
+                    "method": method,
+                    "path": path,
+                    "headers": sent,
+                    "json": json_body,
+                    "form": data,
+                    "text": content.decode() if isinstance(content, bytes) else content,
+                },
+                "response": describe_response(response),
+            }
+        )
+        return response
+
+
+@contextlib.contextmanager
+def remote_app(base_url: str, token: str = PARITY_INTERNAL_TOKEN) -> Iterator[RemoteHarness]:
+    """The harness against a running parity server at `base_url`."""
+    import httpx
+
+    from tests.parity.harness.constants import PARITY_NOW
+
+    with httpx.Client(base_url=base_url, follow_redirects=False, timeout=30.0) as client:
+        yield RemoteHarness(client=client, token=token, clock=RemoteClockPin(PARITY_NOW))

@@ -82,3 +82,48 @@ export function parseIso(s: string): Date {
   }
   return new Date(utc - offsetMin * 60_000);
 }
+
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+function pyJsonString(s: string): string {
+  let out = '"';
+  for (const ch of s) {
+    const cp = ch.codePointAt(0)!;
+    if (ch === '"') out += '\\"';
+    else if (ch === '\\') out += '\\\\';
+    else if (ch === '\n') out += '\\n';
+    else if (ch === '\r') out += '\\r';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\b') out += '\\b';
+    else if (ch === '\f') out += '\\f';
+    else if (cp < 0x20 || cp > 0x7e) {
+      // ensure_ascii: one \uXXXX per UTF-16 unit, so astral code points become a pair.
+      for (const unit of ch) out += `\\u${unit.charCodeAt(0).toString(16).padStart(4, '0')}`;
+      if (cp > 0xffff) {
+        out = out.slice(0, -12);
+        const hi = 0xd800 + ((cp - 0x10000) >> 10);
+        const lo = 0xdc00 + ((cp - 0x10000) & 0x3ff);
+        out += `\\u${hi.toString(16)}\\u${lo.toString(16)}`;
+      }
+    } else out += ch;
+  }
+  return out + '"';
+}
+
+/**
+ * `json.dumps(value)` with CPython's defaults: `, ` and `: ` separators,
+ * ASCII escapes, insertion-ordered keys. Integral numbers print as ints.
+ */
+export function pyJsonDumps(value: JsonValue): string {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return value > 0 ? 'Infinity' : value < 0 ? '-Infinity' : 'NaN';
+    return Number.isInteger(value) ? String(value) : String(value);
+  }
+  if (typeof value === 'string') return pyJsonString(value);
+  if (Array.isArray(value)) return `[${value.map(pyJsonDumps).join(', ')}]`;
+  return `{${Object.entries(value)
+    .map(([k, v]) => `${pyJsonString(k)}: ${pyJsonDumps(v)}`)
+    .join(', ')}}`;
+}

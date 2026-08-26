@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Renderer } from '../app/ports.js';
+import { DirectoryCell } from '../runtime/cells/DirectoryCell.js';
+import { InstantLimiterCell } from '../runtime/cells/InstantLimiterCell.js';
 import type { Env } from '../runtime/env.js';
+import { fakeCellState } from './fakes/sqlStorage.js';
 
 export const ROOT = new URL('..', import.meta.url).pathname;
 export const CORPUS = join(ROOT, '..', 'tests', 'fixtures', 'parity', 'pages');
@@ -32,16 +35,9 @@ export function spyRenderer(): Renderer & { calls: Rendered[] } {
   };
 }
 
+/** A cell state over fake SQL storage and KV. */
 export function fakeState(): DurableObjectState {
-  const kv = new Map<string, unknown>();
-  const storage = {
-    get: async (key: string) => kv.get(key),
-    put: async (key: string, value: unknown) => {
-      kv.set(key, structuredClone(value));
-    },
-    delete: async (key: string) => kv.delete(key),
-  };
-  return { storage } as unknown as DurableObjectState;
+  return fakeCellState();
 }
 
 /** A namespace whose stubs are made on first `get` per name. */
@@ -67,11 +63,16 @@ export const unreachable = (): DurableObjectNamespace =>
     },
   }));
 
+/** A namespace of real cells over fake storage, one per name. */
+export function cellNamespace(make: (state: DurableObjectState, env: Env) => object, env: () => Env): DurableObjectNamespace {
+  return namespaceOf(() => make(fakeCellState(), env()));
+}
+
 export function fakeEnv(overrides: Partial<Env> = {}): Env {
-  return {
+  const env: Env = {
     USER: unreachable(),
-    DIRECTORY: unreachable(),
-    INSTANT_LIMITER: unreachable(),
+    DIRECTORY: cellNamespace((state, e) => new DirectoryCell(state, e), () => env),
+    INSTANT_LIMITER: cellNamespace((state, e) => new InstantLimiterCell(state, e), () => env),
     JOB: unreachable(),
     ASSETS: { fetch: async () => new Response('asset') } as unknown as Fetcher,
     PREP_ENV: 'dev',
@@ -82,6 +83,7 @@ export function fakeEnv(overrides: Partial<Env> = {}): Env {
     PREP_INTERNAL_TOKEN: 'parity-internal-token',
     ...overrides,
   };
+  return env;
 }
 
 export const IDENTIFIED = { 'tailscale-user-login': 'parity@example.com', 'tailscale-user-name': 'Parity' };

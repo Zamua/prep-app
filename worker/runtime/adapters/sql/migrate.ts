@@ -1,0 +1,67 @@
+// Versioned, idempotent migrations for each cell class. Every step is
+// re-runnable (IF NOT EXISTS, column checks) and the version is written
+// last, so a step that fails mid-way replays on the next activation.
+import { AUTOINCREMENT_TABLES, DIRECTORY_SCHEMA, LIMITER_SCHEMA, USER_SCHEMA } from './schema.js';
+import { Db, type Sql } from './storage.js';
+
+export interface Migration {
+  version: number;
+  apply(db: Db): void;
+}
+
+export const USER_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(USER_SCHEMA) }];
+export const DIRECTORY_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(DIRECTORY_SCHEMA) }];
+export const LIMITER_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(LIMITER_SCHEMA) }];
+
+/** 0 when the version table does not exist yet (a fresh or wiped cell). */
+export function currentVersion(db: Db): number {
+  const table = db.first("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'");
+  if (!table) return 0;
+  const row = db.first<{ version: number }>('SELECT version FROM schema_version LIMIT 1');
+  return row ? Number(row.version) : 0;
+}
+
+/** Applies every migration above the stored version; returns the version now stored. */
+export function migrate(sql: Sql, migrations: readonly Migration[]): number {
+  const db = new Db(sql);
+  try {
+    db.script('PRAGMA foreign_keys = ON');
+  } catch {
+    // A runtime that owns the pragma refuses it; foreign keys are then its default.
+  }
+  let version = currentVersion(db);
+  for (const m of migrations) {
+    if (m.version <= version) continue;
+    m.apply(db);
+    if (db.run('UPDATE schema_version SET version = ?', m.version) === 0) {
+      db.run('INSERT INTO schema_version (version) VALUES (?)', m.version);
+    }
+    version = m.version;
+  }
+  return version;
+}
+
+export const ID_BLOCK = 2 ** 32;
+
+/**
+ * Seeds every autoincrement counter to the start of the cell's id block so
+ * ids are unique across cells. Block 0 (idx 0) is the parity seed's and the
+ * migration importer's; a counter already past its block start is left.
+ */
+export function seedSequences(sql: Sql, idx: number): void {
+  const db = new Db(sql);
+  const base = idx * ID_BLOCK;
+  for (const table of AUTOINCREMENT_TABLES) {
+    const row = db.first<{ seq: number }>('SELECT seq FROM sqlite_sequence WHERE name = ?', table);
+    if (row === null) {
+      db.run('INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)', table, base);
+    } else if (Number(row.seq) < base) {
+      db.run('UPDATE sqlite_sequence SET seq = ? WHERE name = ?', base, table);
+    }
+  }
+}
+
+/** Drops every counter so ids restart at 1: the parity seed pins block 0. */
+export function resetSequences(sql: Sql): void {
+  new Db(sql).run('DELETE FROM sqlite_sequence');
+}

@@ -1,12 +1,13 @@
 // Entry worker: a translation layer. Unauthenticated pages render here; an
 // identified request is forwarded to its UserCell.
 import { appBase } from './appBase.js';
-import { compose, cookieHooks, noCacheHtml, type Composition } from './compose.js';
+import { compose, cookieHooks, noCacheHtml, NOW_HEADER, PARITY_NOW_HEADER, type Composition } from './compose.js';
 import type { Env } from './env.js';
 import { anonymousContext, errorPage, htmlResponse } from './errors.js';
 import { serveStatic } from './assets.js';
 import { offlineBuild, servePwa } from './sw.js';
 import { UnknownProfile } from './cells/UserCell.js';
+import { DISPLAY_NAME_HEADER, IDENTITY_HEADERS, SUBJECT_HEADER } from './cells/router.js';
 
 export { UserCell } from './cells/UserCell.js';
 export { DirectoryCell } from './cells/DirectoryCell.js';
@@ -15,12 +16,11 @@ export { JobCell } from './cells/JobCell.js';
 
 /** The identity a cell receives; the display name is URI-encoded because a
  * header value is a byte string. */
-export const SUBJECT_HEADER = 'x-prep-subject';
-export const DISPLAY_NAME_HEADER = 'x-prep-display-name';
+export { SUBJECT_HEADER, DISPLAY_NAME_HEADER };
 export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
 
 interface SeedApi {
-  seed(profile: string): Promise<Record<string, unknown>>;
+  seed(profile: string, user: string, at: string | null): Promise<Record<string, unknown>>;
 }
 
 export default {
@@ -77,10 +77,12 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
   }
 
   // Inbound copies of the identity headers are stripped before anything
-  // reads them: only the router may assert an identity to a cell.
+  // reads them: only the router may assert an identity to a cell. Under
+  // parity the request clock travels the same way.
   const headers = new Headers(request.headers);
-  headers.delete(SUBJECT_HEADER);
-  headers.delete(DISPLAY_NAME_HEADER);
+  for (const name of IDENTITY_HEADERS) headers.delete(name);
+  const parityNow = c.parity ? request.headers.get(PARITY_NOW_HEADER) : null;
+  if (parityNow) headers.set(NOW_HEADER, parityNow);
   // Identification reads headers only. The body is a one-shot stream, so
   // the request is rebuilt exactly once, below, for the cell.
   const who = await c.identity.identify(new Request(request.url, { method: request.method, headers }));
@@ -113,7 +115,7 @@ async function seed(request: Request, env: Env, c: Composition): Promise<Respons
   }
   const stub = env.USER.get(env.USER.idFromName(body.user)) as unknown as SeedApi;
   try {
-    return Response.json(await stub.seed(body.profile));
+    return Response.json(await stub.seed(body.profile, body.user, request.headers.get(PARITY_NOW_HEADER)));
   } catch (e) {
     if (e instanceof UnknownProfile) return Response.json({ detail: e.message }, { status: 400 });
     throw e;
