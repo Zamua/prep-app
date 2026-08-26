@@ -212,9 +212,15 @@ function cipherOrNull(env: Env, random: Random, warn: (msg: string) => void): Ci
 
 /** The real sender once both VAPID halves are set; a deploy without them
  * keeps working, minus delivery. */
-function webPushOf(env: Env, clock: Clock): WebPush {
+function webPushOf(env: Env, clock: Clock, warn: (msg: string) => void): WebPush {
   const publicKey = (env.PREP_VAPID_PUBLIC_KEY ?? '').trim();
   const privateKey = (env.PREP_VAPID_PRIVATE_KEY ?? '').trim();
+  // Half a key pair is the shape a deploy lands in when only one of the two
+  // reaches it, and the browser's subscribe handshake reads the public one
+  // from an endpoint that answers an empty string either way.
+  if (Boolean(publicKey) !== Boolean(privateKey)) {
+    warn(`web push is disabled: PREP_VAPID_${publicKey ? 'PRIVATE' : 'PUBLIC'}_KEY is not set.`);
+  }
   if (!publicKey || !privateKey) return new NoWebPush();
   const subject = (env.PREP_VAPID_SUB ?? '').trim() || DEFAULT_VAPID_SUB;
   return new WebCryptoWebPush({ publicKey, privateKey, subject }, () => clock.now());
@@ -248,7 +254,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     openRouter: new OpenRouterOAuth(webRandom),
     agent: freeTier ? new FreeTierAgent(freeTier) : new UnavailableAgent(),
     runner: new StubWorkflowRunner(),
-    webPush: webPushOf(env, clock),
+    webPush: webPushOf(env, clock, warn),
     freeTierConfigured: freeTier !== null,
     vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
     authUrls: authUrlsOf(clerk?.provider ?? null),

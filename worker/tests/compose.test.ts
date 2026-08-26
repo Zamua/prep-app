@@ -15,6 +15,17 @@ describe('compose', () => {
     expect(() => compose(fakeEnv(overrides))).toThrow(new RegExp(`^refusing .*${pin}.* outside dev and staging`));
   });
 
+  // The subscribe handshake reads the public key from an endpoint that
+  // answers an empty string when it is unset, so nothing else would say so.
+  it('says so when only half the VAPID pair reached the deploy', () => {
+    const said: string[] = [];
+    compose(fakeEnv({ ...PROD, PREP_VAPID_PRIVATE_KEY: 'k', PREP_VAPID_PUBLIC_KEY: undefined }), (m) => said.push(m));
+    expect(said.join(' ')).toContain('PREP_VAPID_PUBLIC_KEY');
+    const both: string[] = [];
+    compose(fakeEnv({ ...PROD, PREP_VAPID_PRIVATE_KEY: undefined, PREP_VAPID_PUBLIC_KEY: undefined }), (m) => both.push(m));
+    expect(both.join(' ')).not.toContain('PREP_VAPID');
+  });
+
   it('composes prod without pins, on the system clock', () => {
     const c = compose(fakeEnv(PROD));
     expect(c.parity).toBe(false);
