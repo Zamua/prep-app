@@ -23,6 +23,9 @@
     "PREP_FAKE_NOW": "2026-03-14T15:00:00Z",
     "PREP_BUILD_ID": "ce11d0000000",
     "PREP_PLACEHOLDER_INDEX": "0",
-    "PREP_INTERNAL_TOKEN": "parity-internal-token"
+    "PREP_INTERNAL_TOKEN": "parity-internal-token",
+    // The corpus is recorded from an app whose scheduler does not tick
+    // during it; a pinned clock makes every schedule read as due at once.
+    "PREP_PARITY_NO_PERIODIC": "1"
   }
 }

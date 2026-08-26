@@ -132,6 +132,8 @@ export interface Composition {
   pages: FixturePages;
   buildToken: string;
   parity: boolean;
+  /** False only on a parity target replaying the corpus; see `periodicWork`. */
+  periodicWork: boolean;
   internalToken: string;
   authProvider: string;
   randoms: Randoms;
@@ -245,6 +247,18 @@ function cipherOrNull(env: Env, random: Random, warn: (msg: string) => void): Ci
   }
 }
 
+/**
+ * Whether the per-user alarm runs its tasks. Off only while a parity target
+ * replays the corpus: that target pins the clock, so every schedule reads as
+ * due at once and the digest, refill and trivia notifications would land in
+ * the middle of a recorded page. Honoured under parity mode alone, so no
+ * deploy can turn its own scheduler off. The alarm keeps its own gate in
+ * tests/alarms.test.ts, which does not set this.
+ */
+function periodicWorkEnabled(env: Env, parity: boolean): boolean {
+  return !(parity && env.PREP_PARITY_NO_PERIODIC === '1');
+}
+
 /** The real sender once both VAPID halves are set; a deploy without them
  * keeps working, minus delivery. */
 function webPushOf(env: Env, clock: Clock, warn: (msg: string) => void): WebPush {
@@ -337,6 +351,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     pages: fixturePagesFromBuild(),
     buildToken: resolveBuildToken(env.PREP_BUILD_ID),
     parity,
+    periodicWork: periodicWorkEnabled(env, parity),
     internalToken: env.PREP_INTERNAL_TOKEN ?? '',
     authProvider: parity ? 'tailscale' : 'clerk',
     randoms: parity ? seededRandoms() : { instant: webRandom, merge: webRandom, tokens: webRandom },

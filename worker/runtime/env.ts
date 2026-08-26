@@ -43,6 +43,8 @@ export interface Env extends InstantLimitEnv, ClerkVars, SecretVars, PublicServi
   /** Parity pins (docs/PARITY-GATE.md section 0): dev and the staging parity
    * host only; the composition root refuses them on prod. */
   PREP_PARITY_MODE?: string;
+  /** '1' silences the per-user alarm; honoured under parity mode only. */
+  PREP_PARITY_NO_PERIODIC?: string;
   PREP_FAKE_NOW?: string;
   PREP_BUILD_ID?: string;
   PREP_PLACEHOLDER_INDEX?: string;

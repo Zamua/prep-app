@@ -38,14 +38,54 @@ PID_FILE="$STATE_DIR/node.pid"
 NODE_LOG="$STATE_DIR/node.log"
 mkdir -p "$STATE_DIR" "$STATE_DIR/watch"
 
+# Local-only worker vars, via `CELLD_VAR_*` so no key material enters the
+# deploy config. Both are needed by the parity corpus: it records a BYOK
+# connect (which refuses 503 without a master key) and reads the VAPID public
+# key back from /notify/vapid-public-key.
+b64u() { base64 | tr -d '\n' | tr '+/' '-_' | tr -d '='; }
+
+# The local test value from tests/e2e/conftest.py, not a credential.
+export CELLD_VAR_PREP_KEY_ENCRYPTION_SECRET="${PREP_DEV_KEY_ENCRYPTION_SECRET:-abababababababababababababababababababababababababababababababab}"
+
+# A throwaway P-256 pair, generated once per state dir. SEC1 DER for this
+# curve is a fixed 121 bytes: a 7-byte prefix, the 32-byte scalar, then the
+# 65-byte uncompressed point last.
+VAPID_FILE="$STATE_DIR/vapid.env"
+if [ ! -f "$VAPID_FILE" ]; then
+  der="$STATE_DIR/vapid.der"
+  openssl ecparam -name prime256v1 -genkey -noout -outform DER > "$der"
+  {
+    echo "PREP_VAPID_PRIVATE_KEY=$(dd if="$der" bs=1 skip=7 count=32 2>/dev/null | b64u)"
+    echo "PREP_VAPID_PUBLIC_KEY=$(tail -c 65 "$der" | b64u)"
+  } > "$VAPID_FILE"
+  rm -f "$der"
+fi
+# shellcheck disable=SC1090
+. "$VAPID_FILE"
+export CELLD_VAR_PREP_VAPID_PRIVATE_KEY="$PREP_VAPID_PRIVATE_KEY"
+export CELLD_VAR_PREP_VAPID_PUBLIC_KEY="$PREP_VAPID_PUBLIC_KEY"
+
+# The free tier, pointed at the parity LLM stub, so a local target is funded
+# the way the recorded corpus was. Start the stub with
+# `python -m tests.parity.llm_stub --port 8089`.
+export CELLD_VAR_PREP_FREE_INFERENCE_BASE_URL="${PREP_DEV_LLM_BASE_URL:-http://127.0.0.1:8089/v1}"
+export CELLD_VAR_PREP_FREE_INFERENCE_API_KEY="parity-free-tier-key"
+export CELLD_VAR_PREP_FREE_INFERENCE_MODEL="parity-model"
+
 # Only the node this script started is ever killed: the port is shared
 # territory on a dev box, and a stranger listening there is reported, not
 # shot.
 stop_node() {
   if [ -f "$PID_FILE" ]; then
-    kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    pid="$(cat "$PID_FILE")"
+    kill "$pid" 2>/dev/null || true
     rm -f "$PID_FILE"
-    sleep 1
+    # celld closes its listener on the way down, and the next start refuses a
+    # held port; wait for the release rather than racing it.
+    for _ in $(seq 1 30); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 1
+    done
   fi
 }
 

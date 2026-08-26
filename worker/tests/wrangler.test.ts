@@ -9,6 +9,7 @@ const CELLS = ['UserCell', 'DirectoryCell', 'InstantLimiterCell', 'JobCell'];
 const PUBLIC_VARS = new Set([
   'PREP_ENV',
   'PREP_PARITY_MODE',
+  'PREP_PARITY_NO_PERIODIC',
   'PREP_FAKE_NOW',
   'PREP_BUILD_ID',
   'PREP_PLACEHOLDER_INDEX',

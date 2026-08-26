@@ -419,7 +419,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   private async ensureAlarm(stillDue = ALARM_FLOOR_MS): Promise<void> {
     const repos = this.repos();
     const current = await this.storage.getAlarm();
-    const wake = repos.tombstone.get() ? null : nextWakeAt(repos, this.c.clock);
+    const wake = repos.tombstone.get() || !this.c.periodicWork ? null : nextWakeAt(repos, this.c.clock);
     if (wake === null) {
       if (current !== null) await this.storage.deleteAlarm();
       return;
