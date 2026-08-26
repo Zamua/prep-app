@@ -65,4 +65,38 @@ describe('the parity seed profiles', () => {
     expect(state.fake.rows('study_session_answers')).toEqual([{ session_id: ids.session_id, question_id: ids.questions['warmup'], answered_at: '2026-03-14T14:56:00+00:00', result: 'right', workflow_id: null }]);
     expect(state.fake.rows('cards').find((c) => c['question_id'] === ids.questions['warmup'])).toMatchObject({ step: 1, next_due: '2026-03-15T15:00:00+00:00', last_review: '2026-03-14T14:56:00+00:00' });
   });
+
+  it('workflows: the two SRS decks, the trivia deck and a session on a free-text card', async () => {
+    const { state, seed } = seeded('workflows');
+    const ids = (await seed) as {
+      decks: Record<string, { id: number; slug: string; display: string }>;
+      questions: { srs_a: Record<string, number>; srs_b: Record<string, number> };
+      session_id: string;
+    };
+    expect(ids.decks).toEqual({
+      srs_a: { id: 1, slug: 'algorithms', display: 'Algorithms' },
+      srs_b: { id: 2, slug: 'databases', display: 'Databases' },
+      trivia: { id: 3, slug: 'systems-trivia', display: 'Systems Trivia' },
+    });
+    expect(Object.keys(ids.questions.srs_a)).toEqual(['complexity', 'traversal', 'binary_search', 'annotated', 'retired', 'duplicate']);
+    expect(Object.keys(ids.questions.srs_b)).toEqual(['acid', 'btree', 'wal']);
+    // The transform flows address cards by id, so the order the profile
+    // inserts them in is part of the contract.
+    expect(Object.values(ids.questions.srs_a)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(Object.values(ids.questions.srs_b)).toEqual([7, 8, 9]);
+    const cards = Object.fromEntries(state.fake.rows('cards').map((r) => [r['question_id'], r]));
+    expect(cards[ids.questions.srs_a['complexity']!]).toMatchObject({ step: 0, next_due: '2026-03-14T10:00:00+00:00' });
+    expect(cards[ids.questions.srs_a['binary_search']!]).toMatchObject({ step: 2, next_due: '2026-03-14T12:00:00+00:00', last_review: '2026-03-11T15:00:00+00:00' });
+    const annotated = state.fake.rows('questions').find((q) => q['id'] === ids.questions.srs_a['annotated']);
+    expect(annotated).toMatchObject({ answer_regex: '(?i)merge', explanation: 'Merge sort keeps equal keys in input order; heapsort does not.' });
+    expect(state.fake.rows('decks')[2]).toMatchObject({ name: 'systems-trivia', deck_type: 'trivia', notification_interval_minutes: 1440 });
+    expect(state.fake.rows('study_sessions')[0]).toMatchObject({
+      id: ids.session_id,
+      deck_id: 1,
+      current_question_id: ids.questions.srs_a['complexity'],
+      last_active: '2026-03-14T14:58:00+00:00',
+      created_at: '2026-03-14T14:54:00+00:00',
+    });
+    expect(state.fake.rows('active_workflows')).toEqual([]);
+  });
 });

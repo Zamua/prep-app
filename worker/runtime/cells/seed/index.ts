@@ -4,6 +4,7 @@ import type { Hasher, UserRepos } from '../../../app/ports.js';
 import { profileEmpty } from './empty.js';
 import { profileReader } from './reader.js';
 import { profileStudy } from './study.js';
+import { profileWorkflows } from './workflows.js';
 
 export const PARITY_TZ = 'America/New_York';
 export const PARITY_DISPLAY_NAME = 'Parity';
@@ -29,6 +30,7 @@ export const PROFILES: Record<string, SeedProfile> = {
   empty: profileEmpty,
   reader: profileReader,
   study: profileStudy,
+  workflows: profileWorkflows,
 };
 
 /** The user row as `create_user` writes it: upserted with the parity name and timezone. */

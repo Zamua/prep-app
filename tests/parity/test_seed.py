@@ -25,3 +25,35 @@ def test_reseed_hands_out_the_same_ids(initialized_db):
     first.pop("sessions")
     second.pop("sessions")
     assert second == first
+
+
+def test_workflows_pins_the_ids_the_job_flows_address(initialized_db):
+    """The phase-4 flows author transform plans against these ids, so the
+    profile's insertion order is part of its contract."""
+    with pin_clock():
+        ids = seed(PARITY_USER, "workflows")
+    assert ids["decks"] == {
+        "srs_a": {"id": 1, "slug": "algorithms", "display": "Algorithms"},
+        "srs_b": {"id": 2, "slug": "databases", "display": "Databases"},
+        "trivia": {"id": 3, "slug": "systems-trivia", "display": "Systems Trivia"},
+    }
+    assert ids["questions"]["srs_a"] == {
+        "complexity": 1,
+        "traversal": 2,
+        "binary_search": 3,
+        "annotated": 4,
+        "retired": 5,
+        "duplicate": 6,
+    }
+    assert ids["questions"]["srs_b"] == {"acid": 7, "btree": 8, "wal": 9}
+    with cursor() as c:
+        due = dict(
+            c.execute(
+                "SELECT question_id, next_due FROM cards WHERE question_id IN (1, 3)"
+            ).fetchall()
+        )
+        session = c.execute("SELECT * FROM study_sessions").fetchone()
+    assert due[1] == "2026-03-14T10:00:00+00:00"
+    assert due[3] == "2026-03-14T12:00:00+00:00"
+    assert session["deck_id"] == 1
+    assert session["last_active"] == "2026-03-14T14:58:00+00:00"
