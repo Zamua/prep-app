@@ -1,4 +1,34 @@
-export interface Env extends InstantLimitEnv {
+/** Clerk's public configuration; a deploy file may carry all of these. */
+export interface ClerkVars {
+  CLERK_ISSUER?: string;
+  CLERK_JWKS_URL?: string;
+  CLERK_AUTHORIZED_PARTIES?: string;
+  CLERK_ACCOUNTS_URL?: string;
+  CLERK_PUBLISHABLE_KEY?: string;
+}
+
+/** Secrets, delivered as `CELLD_VAR_*`; never in a deploy file. */
+export interface SecretVars {
+  CLERK_SECRET_KEY?: string;
+  CLERK_WEBHOOK_SECRET?: string;
+  PREP_ANON_COOKIE_SECRET?: string;
+  PREP_KEY_ENCRYPTION_SECRET?: string;
+  PREP_VAPID_PRIVATE_KEY?: string;
+  PREP_FREE_INFERENCE_API_KEY?: string;
+}
+
+/** Public deploy configuration for the shared tier and web push. */
+export interface PublicServiceVars {
+  PREP_FREE_INFERENCE_BASE_URL?: string;
+  PREP_FREE_INFERENCE_MODEL?: string;
+  PREP_VAPID_PUBLIC_KEY?: string;
+  PREP_VAPID_SUB?: string;
+  /** Which ingress header names the client IP; `x-forwarded-for-last` reads the last entry. */
+  PREP_CLIENT_IP_HEADER?: string;
+  CELLD_FETCH_TIMEOUT_S?: string;
+}
+
+export interface Env extends InstantLimitEnv, ClerkVars, SecretVars, PublicServiceVars {
   USER: DurableObjectNamespace;
   DIRECTORY: DurableObjectNamespace;
   INSTANT_LIMITER: DurableObjectNamespace;

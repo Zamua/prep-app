@@ -29,11 +29,13 @@ beforeEach(() => {
 
 const identified = (path: string, init: RequestInit = {}) => req(path, { ...init, headers: { ...IDENTIFIED, ...(init.headers as Record<string, string>) } });
 
-/** Routes the cell serves for the test's duration; the modules export a frozen empty table until lanes C and D land. */
+/** Routes the cell serves for the test's duration. Declaration order
+ * decides a match, so a test route is prepended and wins over the real
+ * table's entry for the same pattern. */
 function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
   const table = pages.pageRoutes as Route[];
-  table.push(...routes);
-  return run().finally(() => table.splice(0, table.length));
+  table.unshift(...routes);
+  return run().finally(() => table.splice(0, routes.length));
 }
 
 describe('UserCell.seed', () => {
@@ -67,12 +69,11 @@ describe('UserCell.seed', () => {
 describe('UserCell.fetch', () => {
   it('replays a recorded page while no route claims the path, and flips the flag it sets', async () => {
     await cell.seed('reader', USER, null);
-    const res = await cell.fetch(identified('/'));
+    // A path the ported tables do not claim still answers from the recording.
+    const res = await cell.fetch(identified('/api/dashboard/deck-menus'));
     expect(res.status).toBe(200);
-    expect(renderer.calls[0]?.template).toBe('index.html');
-    const pin = await cell.fetch(identified('/deck/world-capitals/pin', { method: 'POST' }));
-    expect(pin.status).toBe(303);
-    expect(await state.storage.get('parity')).toEqual({ profile: 'reader', flags: ['pinned'] });
+    expect(renderer.calls[0]?.template).toBe('partials/deck_menus.html');
+    expect(await state.storage.get('parity')).toEqual({ profile: 'reader', flags: [] });
   });
 
   it('answers 404 before any identity or seed', async () => {

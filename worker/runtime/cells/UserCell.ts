@@ -3,26 +3,31 @@
 // their routes, an unmatched request replays the recorded Python page.
 import { DurableObject } from 'cloudflare:workers';
 import type { CellSnapshot, InstantCard, InstantDeckResult, Profile, ProfileClaims, TombstoneReason } from '../../app/entities.js';
-import type { Clock, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
+import type { CarriedPreferences, Clock, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
 import { derive } from '../../app/viewmodels/derive.js';
 import { RowCapReached } from '../../domain/limits.js';
+import { BAD_TOKEN, NO_USER } from '../../domain/pat.js';
+import { carryPreferences, type Row } from '../../domain/merge.js';
 import { appBase } from '../appBase.js';
-import { clockFor, compose, type Composition } from '../compose.js';
+import { ANON_COOKIE_HEADER, clockFor, compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { errorPage } from '../errors.js';
 import type { CellStorage } from '../storage.js';
 import { isoUtc } from '../../domain/py.js';
-import { pageContext } from './context.js';
+import { pageContext } from '../../app/pageContext.js';
 import {
   applyGate,
   capRefusal,
   gateRefusal,
   identityFrom,
   matchRoute,
+  PAT_HASH_HEADER,
   SignInRequired,
   TokenRequired,
   toResponse,
+  wantsJson,
   type CellIdentity,
+  type CellPorts,
   type Handled,
   type Route,
 } from './router.js';
@@ -43,6 +48,8 @@ const ANONYMOUS_PROFILE = 'anonymous';
 export class UnknownProfile extends Error {}
 
 export const TOMBSTONED_HEADER = 'x-prep-tombstoned';
+/** FastAPI's detail for an unauthenticated request. */
+export const NOT_AUTHENTICATED = 'not authenticated';
 
 const MS: Record<keyof Delta, number> = { days: 86_400_000, hours: 3_600_000, minutes: 60_000 };
 
@@ -67,6 +74,26 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     return [...pageRoutes, ...apiRoutes];
   }
 
+  /** Everything a handler needs beyond its repositories, from the one root. */
+  private ports(request: Request, subject: string): CellPorts {
+    const c = this.c;
+    return {
+      random: c.randoms.tokens,
+      hasher: c.hasher,
+      agent: c.agent,
+      runner: c.runner,
+      cipher: c.cipher,
+      openRouter: c.openRouter,
+      webPush: c.webPush,
+      authProvider: c.authProvider,
+      authUrls: c.authUrls,
+      freeTierConfigured: c.freeTierConfigured,
+      vapidPublicKey: c.vapidPublicKey,
+      appBase: appBase(request),
+      previousIds: () => c.directory.previousIds(subject),
+    };
+  }
+
   // ---- requests -------------------------------------------------------------
 
   async fetch(request: Request): Promise<Response> {
@@ -79,6 +106,8 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     const url = new URL(request.url);
     const identity = identityFrom(request);
     if (!identity) return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
+    const credential = this.checkCredential(identity, request, repos);
+    if (credential) return credential;
 
     const match = matchRoute(this.routes(), request.method, url.pathname);
     if (!match) return this.replayFixture(request, url);
@@ -92,14 +121,49 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
     let handled: Handled;
     try {
-      handled = await match.route.handler({ request, url, params: match.params, identity, repos, clock });
+      handled = await match.route.handler({ request, url, params: match.params, identity, repos, clock, ports: this.ports(request, identity.subject) });
     } catch (e) {
       if (e instanceof RowCapReached) return capRefusal(e, request, (status, detail) => errorPage(c.renderer, c.buildToken, status, request, detail));
       if (e instanceof SignInRequired || e instanceof TokenRequired) return gateRefusal(e, request);
       throw e;
     }
-    const base = pageContext(repos, { buildToken: c.buildToken, appBase: appBase(request), authProvider: c.authProvider });
+    const base = pageContext(repos, {
+      buildToken: c.buildToken,
+      appBase: appBase(request),
+      authProvider: c.authProvider,
+      freeTierConfigured: c.freeTierConfigured,
+      urls: c.authUrls,
+    });
     return toResponse(handled, (template, context) => c.renderer.render(template, derive(template, { ...base, ...context })));
+  }
+
+  /**
+   * What the entry worker could only assert. A token proves nothing until
+   * its hash matches a row here, and a cookie naming an id whose row is gone
+   * (reaped, or no longer flagged anonymous) is a dead credential: honouring
+   * the cookie alone would turn a cleared flag into an unrestricted session
+   * for whoever still holds it.
+   */
+  private checkCredential(identity: CellIdentity, request: Request, repos: UserRepos): Response | null {
+    if (identity.kind === 'pat') {
+      const hash = request.headers.get(PAT_HASH_HEADER);
+      if (!hash || !repos.tokens.lookup(hash)) return Response.json({ detail: BAD_TOKEN }, { status: 401 });
+      if (repos.prefs.get() === null) return Response.json({ detail: NO_USER }, { status: 401 });
+      return null;
+    }
+    if (identity.kind !== 'anon') return null;
+    const profile = repos.prefs.get();
+    if (profile !== null && profile.is_anonymous) return null;
+    return this.notAuthenticated(request);
+  }
+
+  /** 401 plus the ask to forget the cookie that named this cell. */
+  private notAuthenticated(request: Request): Response {
+    const res = wantsJson(request)
+      ? Response.json({ detail: NOT_AUTHENTICATED }, { status: 401 })
+      : errorPage(this.c.renderer, this.c.buildToken, 401, request, NOT_AUTHENTICATED);
+    res.headers.set(ANON_COOKIE_HEADER, 'clear');
+    return res;
   }
 
   /** `last_seen_at`: an upsert for a provider identity, a touch otherwise. */
@@ -196,6 +260,19 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
   async importRows(snapshot: CellSnapshot): Promise<Record<string, number>> {
     return this.repos().export.importRows(snapshot, { idempotentBy: 'id' });
+  }
+
+  /** The COPY-IF-NULL carry, decided by the domain against this cell's own
+   * row: a column the target already chose is never overwritten, so a repeat
+   * moves nothing and counts nothing. */
+  async carryPreferences(carried: CarriedPreferences): Promise<Record<string, number>> {
+    const repos = this.repos();
+    const target = repos.prefs.get();
+    if (!target) return {};
+    const { row, counts } = carryPreferences(carried as unknown as Row, target as unknown as Row);
+    if (counts['users.desired_retention']) repos.prefs.setDesiredRetention(row['desired_retention'] as number | null);
+    if (counts['users.editor_input_mode']) repos.prefs.setEditorInputMode(String(row['editor_input_mode']));
+    return counts;
   }
 
   async createInstantDeck(input: {

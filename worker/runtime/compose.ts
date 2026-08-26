@@ -2,6 +2,8 @@
 // isolate. Cross-cutting wrappers live here and are applied by the router,
 // never inside a handler. Cells get their repositories through it too.
 import type {
+  AgentPort,
+  Cipher,
   Clock,
   Directory,
   FixturePages,
@@ -11,15 +13,30 @@ import type {
   Random,
   Renderer,
   SessionIds,
+  Signer,
   Sync,
   UserCells,
   UserRepos,
+  WebPush,
+  WorkflowRunner,
 } from '../app/ports.js';
+import type { AuthUrls } from '../app/pageContext.js';
+import type { OpenRouterAuth } from '../app/settings/openrouter.js';
 import type { Fuzz } from '../domain/fsrs/index.js';
 import { DEFAULT_LIMITS, type Limits } from '../domain/instant/limiter.js';
+import type { CookieVerdict } from '../app/auth/resolve.js';
+import { deleteCookieHeader, HmacSigner, mintCookie, resolveCookieSecret, setCookieHeader } from './adapters/anonCookie.js';
+import { AesGcmCipher, loadMasterKey, MasterKeyError } from './adapters/byokCrypto.js';
 import { namespaceDirectory, namespaceLimiter, namespaceUserCells } from './adapters/cells.js';
+import { ClerkConfigError, ClerkProvider, ClerkVerifier, clerkConfig, frontendApiHost, type ClerkConfig } from './adapters/clerk.js';
 import { clockFromEnv, FixedClock, parseFakeNow } from './adapters/clock.js';
+import { UnavailableAgent } from './adapters/agentStub.js';
 import { FakeIdentityProvider, NoIdentityProvider } from './adapters/fakeIdentity.js';
+import { FreeTierAgent, freeTierConfig } from './adapters/freeTier.js';
+import { StubWorkflowRunner } from './adapters/runnerStub.js';
+import { NoWebPush, WebCryptoWebPush } from './adapters/webpush.js';
+import { OpenRouterOAuth } from './adapters/openrouter.js';
+import { PatIssuer } from './adapters/pat.js';
 import { fixturePagesFromBuild } from './adapters/fixturePages.js';
 import { WebCryptoHasher } from './adapters/hash.js';
 import { createRenderer } from './adapters/nunjucks/index.js';
@@ -41,6 +58,8 @@ import type { Env, InstantLimitEnv } from './env.js';
 
 /** The seed of the parity harness (tests/parity/oracles/harness.py). */
 export const PARITY_SEED = 20260314;
+/** The IANA `sub` claim a push service contacts about operational issues. */
+export const DEFAULT_VAPID_SUB = 'mailto:noreply@example.com';
 export const NOW_HEADER = 'x-prep-now';
 export const PARITY_NOW_HEADER = 'x-parity-now';
 const SESSION_COUNTER_KEY = 'parity_session_counter';
@@ -55,6 +74,25 @@ export interface Randoms {
 export interface Composition {
   clock: Clock;
   identity: IdentityProvider;
+  /** Null when no signing secret resolves: anonymous accounts are off. */
+  signer(): Promise<Signer | null>;
+  /** Null without a master key: the BYOK surfaces answer 503. */
+  cipher: Cipher | null;
+  clerk: ClerkProvider | null;
+  clerkConfig: ClerkConfig | null;
+  webhookSecret: string;
+  pat: PatIssuer;
+  openRouter: OpenRouterAuth;
+  /** The deploy's shared tier when configured, else the refusing stub. */
+  agent: AgentPort;
+  /** Phase 4 lands the durable runner; until then every start refuses. */
+  runner: WorkflowRunner;
+  webPush: WebPush;
+  /** Whether the shared tier would actually serve, not whether vars exist. */
+  freeTierConfigured: boolean;
+  vapidPublicKey: string;
+  /** What a page embeds for the sign-in chrome and the ClerkJS bootstrap. */
+  authUrls: AuthUrls;
   renderer: Renderer;
   pages: FixturePages;
   buildToken: string;
@@ -125,16 +163,91 @@ function seededRandoms(): Randoms {
   return { instant: new SeededRandom(PARITY_SEED), merge: new SeededRandom(PARITY_SEED + 1), tokens: new SeededRandom(PARITY_SEED + 2) };
 }
 
-export function compose(env: Env): Composition {
+/** Empty strings, not nulls: the templates test truthiness on these. */
+function authUrlsOf(clerk: ClerkProvider | null): AuthUrls {
+  if (!clerk) return { signIn: '', signUp: '', signOut: '', clerkPublishableKey: null, clerkFrontendApiHost: null };
+  const urls = clerk.urls();
+  return {
+    signIn: urls.sign_in ?? '',
+    signUp: urls.sign_up ?? '',
+    signOut: urls.sign_out ?? '',
+    clerkPublishableKey: clerk.publishableKey || null,
+    clerkFrontendApiHost: frontendApiHost(clerk.publishableKey),
+  };
+}
+
+/** Clerk only outside parity, and only when its five vars are all set: a
+ * half-configured provider must not silently become "nobody is signed in". */
+function clerkOrNull(env: Env, clock: Clock): { provider: ClerkProvider; config: ClerkConfig } | null {
+  if (env.PREP_PARITY_MODE === '1') return null;
+  if (!(env.CLERK_ISSUER ?? '').trim()) return null;
+  let config: ClerkConfig;
+  try {
+    config = clerkConfig(env);
+  } catch (e) {
+    if (e instanceof ClerkConfigError) throw e;
+    throw e;
+  }
+  return { provider: new ClerkProvider(config, new ClerkVerifier(config, clock)), config };
+}
+
+/** The master key, or null with the reason logged: a deploy without one
+ * keeps working, minus BYOK and minus anonymous accounts. */
+function cipherOrNull(env: Env, random: Random, warn: (msg: string) => void): Cipher | null {
+  if (!(env.PREP_KEY_ENCRYPTION_SECRET ?? '').trim()) return null;
+  try {
+    return new AesGcmCipher(loadMasterKey(env), random);
+  } catch (e) {
+    if (e instanceof MasterKeyError) {
+      warn(`${e.message} BYOK is disabled.`);
+      return null;
+    }
+    throw e;
+  }
+}
+
+/** The real sender once both VAPID halves are set; a deploy without them
+ * keeps working, minus delivery. */
+function webPushOf(env: Env, clock: Clock): WebPush {
+  const publicKey = (env.PREP_VAPID_PUBLIC_KEY ?? '').trim();
+  const privateKey = (env.PREP_VAPID_PRIVATE_KEY ?? '').trim();
+  if (!publicKey || !privateKey) return new NoWebPush();
+  const subject = (env.PREP_VAPID_SUB ?? '').trim() || DEFAULT_VAPID_SUB;
+  return new WebCryptoWebPush({ publicKey, privateKey, subject }, () => clock.now());
+}
+
+export function compose(env: Env, warn: (msg: string) => void = console.warn): Composition {
   const memo = compositions.get(env);
   if (memo) return memo;
   refusePinsOutsideParityHosts(env);
   const parity = env.PREP_PARITY_MODE === '1';
   const clock = clockFromEnv(env);
   const webRandom = new WebCryptoRandom();
+  const clerk = clerkOrNull(env, clock);
+  const freeTier = freeTierConfig(env);
+  let signerOnce: Promise<Signer | null> | null = null;
   const composition: Composition = {
     clock,
-    identity: parity ? new FakeIdentityProvider() : new NoIdentityProvider(),
+    identity: parity ? new FakeIdentityProvider(env.PREP_INTERNAL_TOKEN ?? '') : (clerk?.provider ?? new NoIdentityProvider()),
+    signer: () => {
+      signerOnce ??= resolveCookieSecret(env, warn).then((secret) => (secret ? new HmacSigner(secret) : null));
+      return signerOnce;
+    },
+    cipher: cipherOrNull(env, webRandom, warn),
+    clerk: clerk?.provider ?? null,
+    clerkConfig: clerk?.config ?? null,
+    webhookSecret: (env.CLERK_WEBHOOK_SECRET ?? '').trim(),
+    pat: new PatIssuer(
+      { bytes: (n) => composition.randoms.tokens.bytes(n), choice: (seq) => composition.randoms.tokens.choice(seq) },
+      new WebCryptoHasher(),
+    ),
+    openRouter: new OpenRouterOAuth(webRandom),
+    agent: freeTier ? new FreeTierAgent(freeTier) : new UnavailableAgent(),
+    runner: new StubWorkflowRunner(),
+    webPush: webPushOf(env, clock),
+    freeTierConfigured: freeTier !== null,
+    vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
+    authUrls: authUrlsOf(clerk?.provider ?? null),
     renderer: createRenderer({ clock, root: '' }),
     pages: fixturePagesFromBuild(),
     buildToken: resolveBuildToken(env.PREP_BUILD_ID),
@@ -188,10 +301,38 @@ export function noCacheHtml(res: Response): Response {
   return out;
 }
 
-/** The response-path hook the anonymous cookie takes in phase 3; the
- * identity function until then. */
-export function cookieHooks(_req: Request, res: Response): Response {
-  return res;
+/** The header a handler sets to ask for a cookie it could not write itself:
+ * `mint=<id>` for a freshly created account, `clear` to forget one. */
+export const ANON_COOKIE_HEADER = 'x-prep-anon-cookie';
+
+/**
+ * What `resolve` could only record, applied on the way out: it has no
+ * response. Runs for every response, not just HTML, or a JSON request never
+ * clears a dead cookie and never refreshes a live one.
+ *
+ * Precedence is Python's. A `mint` supersedes both pending updates: the new
+ * value is the account the response just handed out, and a stale-cookie
+ * delete emitted afterwards would erase it. A `clear` from forget-device,
+ * sign-out or a tombstoned cell wins over a refresh for the same reason.
+ */
+export async function cookieHooks(c: Composition, request: Request, verdict: CookieVerdict, res: Response): Promise<Response> {
+  const asked = res.headers.get(ANON_COOKIE_HEADER);
+  const secure = new URL(request.url).protocol === 'https:' || (request.headers.get('x-forwarded-proto') ?? '').split(',')[0]?.trim() === 'https';
+  const now = clockFor(c, request).now();
+  const signer = await c.signer();
+  let header: string | null = null;
+  if (asked?.startsWith('mint=') && signer) {
+    header = setCookieHeader(await mintCookie(signer, asked.slice('mint='.length), Math.floor(now.getTime() / 1000)), secure);
+  } else if (asked === 'clear' || verdict.kind === 'stale') {
+    header = deleteCookieHeader(now, secure);
+  } else if (verdict.kind === 'refresh' && signer) {
+    header = setCookieHeader(await mintCookie(signer, verdict.externalId, Math.floor(now.getTime() / 1000)), secure);
+  }
+  if (header === null && asked === null) return res;
+  const out = new Response(res.body, res);
+  out.headers.delete(ANON_COOKIE_HEADER);
+  if (header !== null) out.headers.append('set-cookie', header);
+  return out;
 }
 
 /** The composition with some ports replaced, memoized for `env`: how a test

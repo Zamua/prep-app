@@ -2,7 +2,9 @@
 // identity gates, and the handler result shapes turned into responses.
 // Handlers live in cells/routes; the identity arrives in the headers the
 // entry worker sets after stripping any inbound copy.
-import type { Clock, UserRepos } from '../../app/ports.js';
+import type { AgentPort, Cipher, Clock, Hasher, IdentityKind, Random, UserRepos, WebPush, WorkflowRunner } from '../../app/ports.js';
+import type { AuthUrls } from '../../app/pageContext.js';
+import type { OpenRouterAuth } from '../../app/settings/openrouter.js';
 import { RowCapReached } from '../../domain/limits.js';
 
 export const SUBJECT_HEADER = 'x-prep-subject';
@@ -10,11 +12,21 @@ export const DISPLAY_NAME_HEADER = 'x-prep-display-name';
 export const KIND_HEADER = 'x-prep-kind';
 export const EMAIL_HEADER = 'x-prep-email';
 export const PICTURE_HEADER = 'x-prep-picture';
+/** SHA-256 of the presented token; the owner's cell matches it against `api_tokens`. */
+export const PAT_HASH_HEADER = 'x-prep-pat-hash';
 /** The request clock under parity, ISO; absent outside it. */
 export const NOW_HEADER = 'x-prep-now';
-export const IDENTITY_HEADERS = [SUBJECT_HEADER, DISPLAY_NAME_HEADER, KIND_HEADER, EMAIL_HEADER, PICTURE_HEADER, NOW_HEADER] as const;
+export const IDENTITY_HEADERS = [
+  SUBJECT_HEADER,
+  DISPLAY_NAME_HEADER,
+  KIND_HEADER,
+  EMAIL_HEADER,
+  PICTURE_HEADER,
+  PAT_HASH_HEADER,
+  NOW_HEADER,
+] as const;
 
-export type IdentityKind = 'clerk' | 'fake' | 'anon' | 'pat';
+export type { IdentityKind };
 
 export interface CellIdentity {
   subject: string;
@@ -45,6 +57,28 @@ export interface CellRequest {
   identity: CellIdentity;
   repos: UserRepos;
   clock: Clock;
+  ports: CellPorts;
+}
+
+/** What a handler needs beyond its repositories, resolved once at the
+ * composition root and handed down so no handler names an adapter. */
+export interface CellPorts {
+  random: Random;
+  hasher: Hasher;
+  agent: AgentPort;
+  runner: WorkflowRunner;
+  /** Null without a master key: the BYOK surfaces answer 503. */
+  cipher: Cipher | null;
+  openRouter: OpenRouterAuth;
+  webPush: WebPush;
+  authProvider: string;
+  authUrls: AuthUrls;
+  /** The deploy serves a shared tier, so AI works without a stored key. */
+  freeTierConfigured: boolean;
+  vapidPublicKey: string;
+  appBase: string;
+  /** The accounts merged into this one, for the offline snapshot's `previous_ids`. */
+  previousIds(): Promise<string[]>;
 }
 
 export type Handled =
@@ -114,9 +148,22 @@ export function applyGate(gate: Gate, identity: CellIdentity): void {
 
 export const HTML = 'text/html; charset=utf-8';
 
-/** JSON when the client asks for it; HTML otherwise, as Python's handlers decide. */
+/** The `/notify/*` endpoints whose clients parse JSON on the error path too.
+ * Suffixes, not equality, so a deck named `test` under `/trivia/session/` is
+ * not one of them. */
+const JSON_ENDPOINT_SUFFIXES = ['/notify/subscribe', '/notify/unsubscribe', '/notify/test', '/notify/prefs', '/notify/vapid-public-key'];
+
+/** Python's `_wants_json`: an Accept naming JSON and not HTML, or one of the
+ * JSON endpoints whatever the browser asked for. */
+export function wantsJson(request: Request): boolean {
+  const accept = request.headers.get('accept') ?? '';
+  if (accept.includes('application/json') && !accept.includes('text/html')) return true;
+  const path = new URL(request.url).pathname;
+  return JSON_ENDPOINT_SUFFIXES.some((s) => path.endsWith(s));
+}
+
 export function wantsHtml(request: Request): boolean {
-  return !(request.headers.get('accept') ?? '').includes('application/json');
+  return !wantsJson(request);
 }
 
 export function toResponse(handled: Handled, render: (template: string, context: Record<string, unknown>) => string): Response {
