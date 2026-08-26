@@ -3,7 +3,9 @@
 // their routes, an unmatched request replays the recorded Python page.
 import { DurableObject } from 'cloudflare:workers';
 import type { CellSnapshot, InstantCard, InstantDeckResult, Profile, ProfileClaims, TombstoneReason } from '../../app/entities.js';
-import type { CarriedPreferences, Clock, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
+import type { CarriedPreferences, Clock, JobStatusWrite, JobStepRequest, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
+import { deliverJobStatus } from '../../app/jobs/status.js';
+import type { StepOutput, WriteStepContext } from '../../app/jobs/registry.js';
 import { derive } from '../../app/viewmodels/derive.js';
 import { RowCapReached } from '../../domain/limits.js';
 import { BAD_TOKEN, NO_USER } from '../../domain/pat.js';
@@ -75,13 +77,13 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   }
 
   /** Everything a handler needs beyond its repositories, from the one root. */
-  private ports(request: Request, subject: string): CellPorts {
+  private ports(request: Request, subject: string, repos: UserRepos): CellPorts {
     const c = this.c;
     return {
       random: c.randoms.tokens,
       hasher: c.hasher,
       agent: c.agent,
-      runner: c.runner,
+      runner: c.runner({ owner: subject, repos }),
       cipher: c.cipher,
       openRouter: c.openRouter,
       webPush: c.webPush,
@@ -121,7 +123,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
     let handled: Handled;
     try {
-      handled = await match.route.handler({ request, url, params: match.params, identity, repos, clock, ports: this.ports(request, identity.subject) });
+      handled = await match.route.handler({ request, url, params: match.params, identity, repos, clock, ports: this.ports(request, identity.subject, repos) });
     } catch (e) {
       if (e instanceof RowCapReached) return capRefusal(e, request, (status, detail) => errorPage(c.renderer, c.buildToken, status, request, detail));
       if (e instanceof SignInRequired || e instanceof TokenRequired) return gateRefusal(e, request);
@@ -262,6 +264,36 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
   async lastSeenAt(): Promise<string | null> {
     return this.repos().prefs.get()?.last_seen_at ?? null;
+  }
+
+  /** One transition from a job of this user. Idempotent by
+   * `(jobId, transition)`, so a re-delivered write is dropped before any side
+   * effect and a duplicate push is impossible. */
+  async jobStatus(write: JobStatusWrite): Promise<void> {
+    await deliverJobStatus({ repos: this.repos(), webPush: this.c.webPush, vapidPublicKey: this.c.vapidPublicKey }, write);
+  }
+
+  /** A job's write step, run here rather than in the JobCell: the
+   * repositories and the idempotency ledgers are here, so a step row and a
+   * data row cannot disagree. */
+  async applyJobStep(step: JobStepRequest): Promise<StepOutput> {
+    const repos = this.repos(fixedClock(step.at));
+    const ctx: WriteStepContext = {
+      site: 'owner',
+      jobId: step.jobId,
+      kind: step.jobKind,
+      owner: repos.prefs.get()?.tailscale_login ?? '',
+      stepKey: step.stepKey,
+      name: step.name,
+      idx: step.idx,
+      item: step.item,
+      input: step.input,
+      outputs: step.outputs,
+      itemInput: step.itemInput,
+      clock: fixedClock(step.at),
+      repos,
+    };
+    return this.c.stepRegistry.get(step.name)(ctx);
   }
 
   async dump(): Promise<CellSnapshot> {

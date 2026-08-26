@@ -24,6 +24,7 @@ export const DATA_TABLES = [
   'byok_credentials',
   'api_tokens',
   'active_workflows',
+  'job_progress',
 ] as const;
 export type DataTable = (typeof DATA_TABLES)[number];
 
@@ -222,6 +223,13 @@ CREATE TABLE IF NOT EXISTS active_workflows (
 );
 CREATE INDEX IF NOT EXISTS idx_active_workflows_terminal ON active_workflows(terminal_at);
 
+CREATE TABLE IF NOT EXISTS job_progress (
+  workflow_id TEXT PRIMARY KEY,
+  payload     TEXT NOT NULL,
+  transition  INTEGER NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tombstone (
   reason       TEXT NOT NULL,
   at           TEXT NOT NULL,
@@ -288,6 +296,72 @@ CREATE TABLE IF NOT EXISTS instant_generations (
 CREATE INDEX IF NOT EXISTS idx_instant_generations_ip_created ON instant_generations (ip, created_at);
 CREATE INDEX IF NOT EXISTS idx_instant_generations_created ON instant_generations (created_at);
 CREATE INDEX IF NOT EXISTS idx_instant_generations_user_created ON instant_generations (user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS schema_version (
+  version INTEGER NOT NULL
+);
+`;
+
+/**
+ * One job's cell: the step ledger. `steps` is the idempotency ledger, one row
+ * per unit of work; `events` is the signal inbox; `outbox` is the status
+ * write, one row per transition. `job.cursor` is the node the next activation
+ * resumes at, and `job.state` is written, never inferred.
+ */
+export const JOB_SCHEMA = `
+CREATE TABLE IF NOT EXISTS job (
+  id            TEXT PRIMARY KEY,
+  kind          TEXT NOT NULL,
+  owner         TEXT NOT NULL,
+  input         TEXT NOT NULL,
+  state         TEXT NOT NULL,
+  cursor        INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  deadline_at   TEXT,
+  deadline_kind TEXT,
+  terminal_at   TEXT,
+  terminal_status TEXT,
+  error         TEXT,
+  transition    INTEGER NOT NULL DEFAULT 0,
+  url_path      TEXT NOT NULL DEFAULT '',
+  workflow_type TEXT NOT NULL DEFAULT '',
+  deck_id       INTEGER,
+  deck_name     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS steps (
+  step_key        TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  idx             INTEGER NOT NULL,
+  item            INTEGER NOT NULL DEFAULT 0,
+  status          TEXT NOT NULL,
+  attempt         INTEGER NOT NULL DEFAULT 0,
+  refusals        INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT,
+  output          TEXT,
+  error           TEXT,
+  started_at      TEXT,
+  finished_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_steps_idx ON steps(idx, item);
+
+CREATE TABLE IF NOT EXISTS events (
+  seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  payload     TEXT,
+  at          TEXT NOT NULL,
+  consumed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS outbox (
+  transition      INTEGER PRIMARY KEY,
+  status          TEXT NOT NULL,
+  payload         TEXT NOT NULL,
+  at              TEXT NOT NULL,
+  delivered_at    TEXT,
+  attempt         INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT
+);
 
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL

@@ -7,10 +7,13 @@ import { buildMessage, DEFAULT_PROVIDER, providerUrls, quoteAll } from '../../ap
 import { RunnerUnavailable, type WorkflowRunner } from '../../app/ports.js';
 import { cell, PARITY_NOW } from '../repos/setup.js';
 
+const IDLE = { signal: async () => null, status: async () => null, terminate: async () => {} };
+
 const refusing: WorkflowRunner = {
   start: async () => {
-    throw new RunnerUnavailable('no runner in phase 3');
+    throw new RunnerUnavailable('jobs are off on this deploy');
   },
+  ...IDLE,
 };
 
 function deps(opts: { agentAvailable?: boolean; runner?: WorkflowRunner } = {}): study.StudyDeps {
@@ -100,6 +103,7 @@ describe('a free-text submission', () => {
         started.push(type);
         return { workflowId: 'grade-capitals-q1-abcdef' };
       },
+      ...IDLE,
     };
     const d = deps({ agentAvailable: true, runner });
     const deck = d.repos.decks.create('capitals');

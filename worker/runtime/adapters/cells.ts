@@ -1,7 +1,7 @@
 // The global cells and the user cells as ports over their namespace
 // stubs. A cell is unreachable for a few seconds after a node restart, so
 // idempotent calls retry with backoff; the one non-idempotent call does not.
-import type { Directory, Limiter, UserCellRpc, UserCells } from '../../app/ports.js';
+import type { Directory, JobCellRpc, JobCells, Limiter, UserCellRpc, UserCells } from '../../app/ports.js';
 import { RowCapReached } from '../../domain/limits.js';
 
 export const GLOBAL = 'global';
@@ -15,6 +15,15 @@ export interface RetryPolicy {
 /** Five tries over roughly eight seconds: the restart window measured in spike 6. */
 export const DEFAULT_RETRY: RetryPolicy = { attempts: 5, baseMs: 250, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
 
+/** No inline retry: for a caller that already retries through persisted rows.
+ * Sleeping inside the RPC there would hold the cell for seconds and repeat
+ * work the ledger is about to schedule anyway. */
+export const NO_RETRY: RetryPolicy = { attempts: 1, baseMs: 0, sleep: async () => {} };
+
+/** The class behind this binding has no such method: a deploy mismatch, not
+ * a cell out of reach. */
+export class NoRpcMethod extends TypeError {}
+
 /**
  * A decision the cell reached, not a cell that could not be reached. Calling
  * again repeats the decision, so the caller would pay the whole backoff for
@@ -23,7 +32,7 @@ export const DEFAULT_RETRY: RetryPolicy = { attempts: 5, baseMs: 250, sleep: (ms
  * costs a lost write.
  */
 function decided(e: unknown): boolean {
-  return e instanceof RowCapReached;
+  return e instanceof RowCapReached || e instanceof NoRpcMethod;
 }
 
 export async function retrying<T>(fn: () => Promise<T>, policy: RetryPolicy = DEFAULT_RETRY): Promise<T> {
@@ -50,7 +59,7 @@ function lazy<T extends object>(stub: () => object, policy: RetryPolicy, direct:
         const call = () => {
           const target = stub() as Record<string, unknown>;
           const method = target[name];
-          if (typeof method !== 'function') throw new TypeError(`no rpc method ${name}`);
+          if (typeof method !== 'function') throw new NoRpcMethod(`no rpc method ${name}`);
           return (method as (...a: unknown[]) => Promise<unknown>).apply(target, args);
         };
         return direct.has(name) ? call() : retrying(call, policy);
@@ -70,6 +79,15 @@ export function namespaceLimiter(ns: DurableObjectNamespace, policy: RetryPolicy
 }
 
 const NOT_IDEMPOTENT: ReadonlySet<string> = new Set(['createInstantDeck']);
+
+/** Every JobCell method is idempotent: a start re-inserts nothing, a signal
+ * resolves a gate that is already resolved into a no-op, and a terminate on a
+ * terminal job returns. So all of them retry through the restart window. */
+export function namespaceJobs(ns: DurableObjectNamespace, policy: RetryPolicy = DEFAULT_RETRY): JobCells {
+  return {
+    cell: (id: string) => lazy<JobCellRpc>(() => ns.get(ns.idFromName(id)), policy, NONE),
+  };
+}
 
 export function namespaceUserCells(ns: DurableObjectNamespace, policy: RetryPolicy = DEFAULT_RETRY): UserCells {
   return {

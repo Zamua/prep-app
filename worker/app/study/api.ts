@@ -233,11 +233,11 @@ async function submit(
     let wid: string;
     try {
       const started = await deps.runner.start('GradeAnswer', {
-        question_id: q.id,
-        deck_name: deckName,
-        user_answer: userAnswer,
+        questionId: q.id,
+        deckName,
+        userAnswer,
         idk,
-        session_id: s ? s.id : '',
+        sessionId: s ? s.id : '',
       });
       wid = started.workflowId;
       if (s !== null) repos.sessions.setGrading(s.id, q.id, wid, body.version as number);

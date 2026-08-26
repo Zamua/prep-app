@@ -1,7 +1,7 @@
 // Versioned, idempotent migrations for each cell class. Every step is
 // re-runnable (IF NOT EXISTS, column checks) and the version is written
 // last, so a step that fails mid-way replays on the next activation.
-import { AUTOINCREMENT_TABLES, DIRECTORY_SCHEMA, LIMITER_SCHEMA, USER_SCHEMA } from './schema.js';
+import { AUTOINCREMENT_TABLES, DIRECTORY_SCHEMA, JOB_SCHEMA, LIMITER_SCHEMA, USER_SCHEMA } from './schema.js';
 import { Db, type Sql } from './storage.js';
 
 export interface Migration {
@@ -9,7 +9,25 @@ export interface Migration {
   apply(db: Db): void;
 }
 
-export const USER_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(USER_SCHEMA) }];
+export const USER_MIGRATIONS: readonly Migration[] = [
+  { version: 1, apply: (db) => db.script(USER_SCHEMA) },
+  { version: 2, apply: addJobProgress },
+];
+
+/** The read model `WorkflowRunner.status` answers from, on cells created
+ * before the runner existed. */
+function addJobProgress(db: Db): void {
+  db.script(
+    `CREATE TABLE IF NOT EXISTS job_progress (
+  workflow_id TEXT PRIMARY KEY,
+  payload     TEXT NOT NULL,
+  transition  INTEGER NOT NULL,
+  updated_at  TEXT NOT NULL
+)`,
+  );
+}
+
+export const JOB_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(JOB_SCHEMA) }];
 export const DIRECTORY_MIGRATIONS: readonly Migration[] = [
   { version: 1, apply: (db) => db.script(DIRECTORY_SCHEMA) },
   { version: 2, apply: addMergeAttempts },

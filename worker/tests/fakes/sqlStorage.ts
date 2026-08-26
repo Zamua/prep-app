@@ -53,6 +53,8 @@ export class SqlStorageFake implements Sql {
 export class FakeCellStorage implements CellStorage {
   readonly sql: SqlStorageFake;
   private readonly kv = new Map<string, unknown>();
+  /** The scheduled wake, in epoch ms; a test drives it rather than waiting. */
+  alarmAt: number | null = null;
 
   constructor(readonly db: Database.Database = new Database(':memory:')) {
     db.pragma('foreign_keys = ON');
@@ -71,6 +73,7 @@ export class FakeCellStorage implements CellStorage {
     for (const { name } of tables) this.db.exec(`DROP TABLE IF EXISTS "${name}"`);
     this.db.pragma('foreign_keys = ON');
     this.kv.clear();
+    this.alarmAt = null;
   }
 
   async get<T = unknown>(key: string): Promise<T | undefined> {
@@ -83,6 +86,18 @@ export class FakeCellStorage implements CellStorage {
 
   async delete(key: string): Promise<boolean> {
     return this.kv.delete(key);
+  }
+
+  async getAlarm(): Promise<number | null> {
+    return this.alarmAt;
+  }
+
+  async setAlarm(scheduledTime: number | Date): Promise<void> {
+    this.alarmAt = typeof scheduledTime === 'number' ? scheduledTime : scheduledTime.getTime();
+  }
+
+  async deleteAlarm(): Promise<void> {
+    this.alarmAt = null;
   }
 
   /** Every row of a table, for assertions. */

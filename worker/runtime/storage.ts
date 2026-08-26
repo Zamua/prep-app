@@ -1,5 +1,5 @@
 // The slice of a cell's storage the runtime relies on: the SqlStorage
-// cursor API, the KV surface and the synchronous transaction.
+// cursor API, the KV surface, the synchronous transaction and the alarm.
 
 export type SqlValue = string | number | null | ArrayBuffer | Uint8Array;
 export type Row = Record<string, SqlValue>;
@@ -23,4 +23,10 @@ export interface CellStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
   delete(key: string): Promise<boolean>;
+  /** The one durable timer: it fires on an evicted cell and survives a node
+   * restart. Every schedule in the app is derived from rows and re-armed
+   * through these, never held in an isolate. */
+  getAlarm(): Promise<number | null>;
+  setAlarm(scheduledTime: number | Date): Promise<void>;
+  deleteAlarm(): Promise<void>;
 }

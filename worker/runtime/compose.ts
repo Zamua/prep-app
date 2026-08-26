@@ -9,6 +9,8 @@ import type {
   FixturePages,
   Hasher,
   IdentityProvider,
+  JobCells,
+  JobLedger,
   LedgerReset,
   Limiter,
   Random,
@@ -22,6 +24,9 @@ import type {
   WebPush,
   WorkflowRunner,
 } from '../app/ports.js';
+import { JOB_GRAPHS } from '../app/jobs/graph.js';
+import { StepRegistry } from '../app/jobs/registry.js';
+import type { StepGraph } from '../domain/jobs/graph.js';
 import type { AuthUrls } from '../app/pageContext.js';
 import type { OpenRouterAuth } from '../app/settings/openrouter.js';
 import type { Fuzz } from '../domain/fsrs/index.js';
@@ -29,13 +34,14 @@ import { DEFAULT_LIMITS, type Limits } from '../domain/instant/limiter.js';
 import type { CookieVerdict } from '../app/auth/resolve.js';
 import { deleteCookieHeader, HmacSigner, mintCookie, resolveCookieSecret, setCookieHeader } from './adapters/anonCookie.js';
 import { AesGcmCipher, loadMasterKey, MasterKeyError } from './adapters/byokCrypto.js';
-import { namespaceDirectory, namespaceLimiter, namespaceUserCells } from './adapters/cells.js';
+import { AlarmLedgerRunner } from './adapters/alarmLedgerRunner.js';
+import { namespaceDirectory, namespaceJobs, namespaceLimiter, namespaceUserCells, NO_RETRY } from './adapters/cells.js';
+import { PROBE_GRAPHS, registerProbe } from './adapters/jobProbe.js';
 import { ClerkConfigError, ClerkProvider, ClerkVerifier, clerkConfig, frontendApiHost, type ClerkConfig } from './adapters/clerk.js';
 import { clockFromEnv, FixedClock, parseFakeNow } from './adapters/clock.js';
 import { UnavailableAgent } from './adapters/agentStub.js';
 import { FakeIdentityProvider, NoIdentityProvider } from './adapters/fakeIdentity.js';
 import { FreeTierAgent, freeTierConfig } from './adapters/freeTier.js';
-import { StubWorkflowRunner } from './adapters/runnerStub.js';
 import { NoWebPush, WebCryptoWebPush } from './adapters/webpush.js';
 import { OpenRouterOAuth } from './adapters/openrouter.js';
 import { SvixVerifier } from './adapters/svix.js';
@@ -46,18 +52,26 @@ import { createRenderer } from './adapters/nunjucks/index.js';
 import { ParitySessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from './adapters/random.js';
 import {
   DIRECTORY_MIGRATIONS,
+  JOB_MIGRATIONS,
   LIMITER_MIGRATIONS,
   migrate,
   resetSequences,
   seedSequences,
   SqlDirectoryRepo,
+  SqlJobLedger,
   SqlLimiterRepo,
   USER_MIGRATIONS,
   userRepos,
 } from './adapters/sql/index.js';
 import type { CellStorage } from './storage.js';
 import { resolveBuildToken } from './buildToken.js';
-import type { Env, InstantLimitEnv } from './env.js';
+import type { Env, InstantLimitEnv, PublicServiceVars } from './env.js';
+
+/** celld's default outbound fetch timeout, in seconds. */
+const DEFAULT_FETCH_TIMEOUT_S = 120;
+const DEFAULT_JOB_LLM_TIMEOUT_S = 300;
+/** Room for the adapter to turn a refused fetch into a step failure. */
+const FETCH_HEADROOM_S = 5;
 
 /** The seed of the parity harness (tests/parity/oracles/harness.py). */
 export const PARITY_SEED = 20260314;
@@ -89,8 +103,17 @@ export interface Composition {
   openRouter: OpenRouterAuth;
   /** The deploy's shared tier when configured, else the refusing stub. */
   agent: AgentPort;
-  /** Phase 4 lands the durable runner; until then every start refuses. */
-  runner: WorkflowRunner;
+  /** One runner per calling cell: `status` reads that cell's `job_progress`,
+   * and a status write lands through that cell's repositories and push. */
+  runner(ctx: { owner: string; repos: UserRepos }): WorkflowRunner;
+  jobCells: JobCells;
+  /** The job kinds this deploy can run, by kind name. */
+  jobGraphs: Readonly<Record<string, StepGraph>>;
+  /** Where a step name resolves to its handler; lane B registers into it. */
+  stepRegistry: StepRegistry;
+  /** Ceiling on one LLM step, under the deploy's outbound fetch timeout. */
+  jobLlmTimeoutMs: number;
+  jobLedger(storage: CellStorage): JobLedger;
   webPush: WebPush;
   /** Whether the shared tier would actually serve, not whether vars exist. */
   freeTierConfigured: boolean;
@@ -110,6 +133,9 @@ export interface Composition {
   directory: Directory;
   limiter: Limiter;
   userCells: UserCells;
+  /** The same cells with no inline retry, for a caller whose retries are rows:
+   * the JobCell backs off through its ledger and its alarm instead. */
+  userCellsDirect: UserCells;
   userRepos(storage: CellStorage, clock: Clock): UserRepos;
   sessionIds(storage: CellStorage): SessionIds;
   directoryRepo(storage: CellStorage): Sync<Directory>;
@@ -120,6 +146,7 @@ export interface Composition {
   migrateUserCell(storage: CellStorage): number;
   migrateDirectory(storage: CellStorage): number;
   migrateLimiter(storage: CellStorage): number;
+  migrateJobCell(storage: CellStorage): number;
   /** The cell's autoincrement counters at `idx * 2^32`; block 0 restarts at 1. */
   seedIdBlock(storage: CellStorage, idx: number): void;
   resetIdBlock(storage: CellStorage): void;
@@ -226,6 +253,26 @@ function webPushOf(env: Env, clock: Clock, warn: (msg: string) => void): WebPush
   return new WebCryptoWebPush({ publicKey, privateKey, subject }, () => clock.now());
 }
 
+/**
+ * The handlers, registered once per isolate: module-level state is shared by
+ * every cell of a node, which is right for code and wrong for anything
+ * per-cell. Lane B's workflows register here.
+ */
+function stepRegistryFor(parity: boolean): StepRegistry {
+  const registry = new StepRegistry();
+  if (parity) registerProbe(registry);
+  return registry;
+}
+
+/** The Go worker allowed 30m per activity; a celld fetch is bounded by
+ * `CELLD_FETCH_TIMEOUT_S`, so a step gets the smaller of the two minus the
+ * adapter's headroom. A timeout is a step failure, not an extension. */
+export function jobLlmTimeoutMs(env: PublicServiceVars & { PREP_JOB_LLM_TIMEOUT_S?: string }): number {
+  const fetchCeiling = envInt(env.CELLD_FETCH_TIMEOUT_S, DEFAULT_FETCH_TIMEOUT_S);
+  const wanted = envInt(env.PREP_JOB_LLM_TIMEOUT_S, DEFAULT_JOB_LLM_TIMEOUT_S);
+  return Math.max(1, Math.min(wanted, fetchCeiling - FETCH_HEADROOM_S)) * 1000;
+}
+
 export function compose(env: Env, warn: (msg: string) => void = console.warn): Composition {
   const memo = compositions.get(env);
   if (memo) return memo;
@@ -253,7 +300,19 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     ),
     openRouter: new OpenRouterOAuth(webRandom),
     agent: freeTier ? new FreeTierAgent(freeTier) : new UnavailableAgent(),
-    runner: new StubWorkflowRunner(),
+    runner: (ctx) =>
+      new AlarmLedgerRunner({
+        jobs: composition.jobCells,
+        notify: { repos: ctx.repos, webPush: composition.webPush, vapidPublicKey: composition.vapidPublicKey },
+        owner: ctx.owner,
+        random: composition.randoms.tokens,
+        clock,
+      }),
+    jobCells: namespaceJobs(env.JOB),
+    jobGraphs: parity ? { ...JOB_GRAPHS, ...PROBE_GRAPHS } : { ...JOB_GRAPHS },
+    stepRegistry: stepRegistryFor(parity),
+    jobLlmTimeoutMs: jobLlmTimeoutMs(env),
+    jobLedger: (storage) => new SqlJobLedger(storage),
     webPush: webPushOf(env, clock, warn),
     freeTierConfigured: freeTier !== null,
     vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
@@ -271,6 +330,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     directory: namespaceDirectory(env.DIRECTORY),
     limiter: namespaceLimiter(env.INSTANT_LIMITER),
     userCells: namespaceUserCells(env.USER),
+    userCellsDirect: namespaceUserCells(env.USER, NO_RETRY),
     userRepos: (storage, requestClock) =>
       userRepos(storage, { clock: requestClock, sessionIds: composition.sessionIds(storage), random: composition.randoms.instant, fuzz: composition.fuzz }),
     sessionIds: (storage) =>
@@ -288,6 +348,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     migrateUserCell: (storage) => migrate(storage.sql, USER_MIGRATIONS),
     migrateDirectory: (storage) => migrate(storage.sql, DIRECTORY_MIGRATIONS),
     migrateLimiter: (storage) => migrate(storage.sql, LIMITER_MIGRATIONS),
+    migrateJobCell: (storage) => migrate(storage.sql, JOB_MIGRATIONS),
     seedIdBlock: (storage, idx) => seedSequences(storage.sql, idx),
     resetIdBlock: (storage) => resetSequences(storage.sql),
   };

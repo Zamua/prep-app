@@ -13,7 +13,7 @@ describe('migrate', () => {
     const before = db.all("SELECT name, sql FROM sqlite_master ORDER BY name");
     expect(migrate(storage.sql, USER_MIGRATIONS)).toBe(USER_MIGRATIONS.at(-1)!.version);
     expect(db.all("SELECT name, sql FROM sqlite_master ORDER BY name")).toEqual(before);
-    expect(db.all('SELECT version FROM schema_version')).toEqual([{ version: 1 }]);
+    expect(db.all('SELECT version FROM schema_version')).toEqual([{ version: USER_MIGRATIONS.at(-1)!.version }]);
   });
 
   it('applies only the steps above the stored version, each once', () => {
@@ -34,7 +34,7 @@ describe('migrate', () => {
     migrate(storage.sql, USER_MIGRATIONS);
     await storage.deleteAll();
     expect(currentVersion(new Db(storage.sql))).toBe(0);
-    expect(migrate(storage.sql, USER_MIGRATIONS)).toBe(1);
+    expect(migrate(storage.sql, USER_MIGRATIONS)).toBe(USER_MIGRATIONS.at(-1)!.version);
     expect(new Db(storage.sql).tables()).toContain('decks');
   });
 

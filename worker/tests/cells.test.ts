@@ -7,7 +7,7 @@ import { KIND_HEADER, NOW_HEADER, PAT_HASH_HEADER, SUBJECT_HEADER, type Route } 
 import { TOMBSTONED_HEADER, UnknownProfile, UserCell } from '../runtime/cells/UserCell.js';
 import * as pages from '../runtime/cells/routes/pages.js';
 import type { Env } from '../runtime/env.js';
-import { fakeCellState } from './fakes/sqlStorage.js';
+import { fakeCellState, FakeCellStorage } from './fakes/sqlStorage.js';
 import { corpusPage, fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
 
 const USER = 'parity@example.com';
@@ -238,8 +238,11 @@ describe('UserCell RPC', () => {
 });
 
 describe('the declared cells', () => {
-  it('JobCell answers 501 until its phase', async () => {
-    const res = await new JobCell(fakeState(), env).fetch(req('/'));
-    expect(res.status).toBe(501);
+  it('a JobCell with no job drives nothing and arms no alarm', async () => {
+    const storage = new FakeCellStorage();
+    const res = await new JobCell(fakeCellState(storage), env).fetch(req('/'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toBeNull();
+    expect(storage.alarmAt).toBeNull();
   });
 });

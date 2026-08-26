@@ -26,6 +26,8 @@ export interface PublicServiceVars {
   /** Which ingress header names the client IP; `x-forwarded-for-last` reads the last entry. */
   PREP_CLIENT_IP_HEADER?: string;
   CELLD_FETCH_TIMEOUT_S?: string;
+  /** Ceiling on one LLM step; capped by the fetch timeout above. */
+  PREP_JOB_LLM_TIMEOUT_S?: string;
 }
 
 export interface Env extends InstantLimitEnv, ClerkVars, SecretVars, PublicServiceVars {

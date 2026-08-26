@@ -8,6 +8,7 @@ import { SqlDeckRepo } from './deckRepo.js';
 import { SqlExportRepo, SqlTombstoneRepo } from './exportRepo.js';
 import { SqlIdempotencyRepo } from './idempotencyRepo.js';
 import { SqlInstantRepo } from './instantRepo.js';
+import { SqlJobProgressRepo } from './jobProgressRepo.js';
 import { SqlJobStatusRepo } from './jobStatusRepo.js';
 import { SqlNotifyRepo, SqlPushSubRepo } from './notifyRepo.js';
 import { SqlOfflineRepo } from './offlineRepo.js';
@@ -45,6 +46,7 @@ export function userRepos(storage: CellStorage, deps: RepoDeps): UserRepos {
     idempotency: new SqlIdempotencyRepo(storage, clock),
     prefs: new SqlPrefsRepo(storage, clock),
     jobs: new SqlJobStatusRepo(storage, clock),
+    jobProgress: new SqlJobProgressRepo(storage, clock),
     offline: new SqlOfflineRepo(storage, clock, decks, cards, deps.fuzz),
     export: new SqlExportRepo(storage),
     instant: new SqlInstantRepo(storage, clock, deps.random),
@@ -54,7 +56,8 @@ export function userRepos(storage: CellStorage, deps: RepoDeps): UserRepos {
   };
 }
 
-export { migrate, seedSequences, resetSequences, USER_MIGRATIONS, DIRECTORY_MIGRATIONS, LIMITER_MIGRATIONS } from './migrate.js';
+export { migrate, seedSequences, resetSequences, USER_MIGRATIONS, DIRECTORY_MIGRATIONS, JOB_MIGRATIONS, LIMITER_MIGRATIONS } from './migrate.js';
 export { SqlDirectoryRepo } from './directoryRepo.js';
+export { SqlJobLedger } from './jobLedgerRepo.js';
 export { SqlLimiterRepo } from './limiterRepo.js';
 export type { CellStorage } from './storage.js';

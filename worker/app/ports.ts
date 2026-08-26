@@ -3,6 +3,7 @@
 // mirror the Python repos method for method, the user parameter dropped:
 // a cell holds one user.
 import type { ScheduledReview } from '../domain/fsrs/index.js';
+import type { LedgerCommit, LedgerRows, StepOutput } from '../domain/jobs/ledger.js';
 import type { Refusal } from '../domain/instant/limiter.js';
 import type { AccountRows } from '../domain/limits.js';
 import type {
@@ -424,6 +425,7 @@ export interface UserRepos {
   idempotency: IdempotencyRepo;
   prefs: PrefsRepo;
   jobs: JobStatusRepo;
+  jobProgress: JobProgressRepo;
   offline: OfflineRepo;
   export: ExportRepo;
   instant: InstantRepo;
@@ -467,9 +469,138 @@ export interface AgentPort {
 
 export class RunnerUnavailable extends Error {}
 
+export interface PlanGenerateInput {
+  deckId: number;
+  deckName: string;
+  prompt: string;
+  maxCards?: number;
+}
+
+export interface TransformJobInput {
+  scope: 'card' | 'deck' | 'reorganize';
+  targetId: number;
+  prompt: string;
+  /** Null for reorganize, which spans decks. */
+  deckName?: string | null;
+  deckContextPrompt?: string;
+}
+
+export interface TriviaGenerateInput {
+  deckId: number;
+  deckName: string;
+  topic: string;
+  batchSize?: number;
+}
+
+export interface GradeAnswerInput {
+  questionId: number;
+  deckName: string;
+  userAnswer: string;
+  idk: boolean;
+  sessionId?: string;
+}
+
+/** One entry per job kind; `JobKind` is its key set, so a kind added without
+ * an input shape is a compile error rather than an untyped record. */
+export interface JobInputs {
+  PlanGenerate: PlanGenerateInput;
+  Transform: TransformJobInput;
+  TriviaGenerate: TriviaGenerateInput;
+  GradeAnswer: GradeAnswerInput;
+}
+
+export type JobKind = keyof JobInputs;
+export type JobInput = JobInputs[JobKind];
+
+/** What a partial renders: the status literal and the progress keys under it. */
+export interface JobStatus {
+  status: string;
+  progress: Record<string, unknown>;
+}
+
+/** A status with the transition that produced it: what a JobCell answers, so
+ * the caller can apply the write itself instead of waiting for the alarm. */
+export interface JobTransition extends JobStatus {
+  transition: number;
+}
+
 export interface WorkflowRunner {
-  /** Throws `RunnerUnavailable`. */
-  start(workflowType: string, input: Record<string, unknown>): Promise<{ workflowId: string }>;
+  /** Throws `RunnerUnavailable` on a deploy with jobs off. */
+  start<K extends JobKind>(kind: K, input: JobInputs[K]): Promise<{ workflowId: string }>;
+  /** The post-signal status, so a route renders the transient fragment
+   * without a second read. Null when no job owns the id. */
+  signal(id: string, event: { name: string; payload?: unknown }): Promise<JobStatus | null>;
+  /** Reads `job_progress` in the calling cell; null renders `gone`. */
+  status(id: string): Promise<JobStatus | null>;
+  terminate(id: string, reason: string): Promise<void>;
+}
+
+/** One transition, as the JobCell hands it to its owner. Idempotent by
+ * `(jobId, transition)`: a re-delivery whose number is not above the stored
+ * one is dropped before any side effect. */
+export interface JobStatusWrite {
+  jobId: string;
+  transition: number;
+  status: string;
+  progress: Record<string, unknown>;
+  urlPath: string;
+  /** The badge's `workflow_type`, as Python spells it. */
+  kind: string;
+  deckId: number | null;
+  deckName: string | null;
+}
+
+/** A write step, run in the owner's cell so it reaches the repositories and
+ * the idempotency ledgers directly. `stepKey` is the key it writes under. */
+export interface JobStepRequest {
+  jobId: string;
+  jobKind: string;
+  name: string;
+  stepKey: string;
+  idx: number;
+  item: number;
+  input: Record<string, unknown>;
+  outputs: Record<string, unknown>;
+  itemInput: unknown;
+  at: string;
+}
+
+/** One job cell's step ledger. Everything a decision rests on is read
+ * through `read`, and everything an activation concluded lands through one
+ * `commit`, so a crash leaves either the whole transition or none of it. */
+export interface JobLedger {
+  /** Null before `create`: an id nobody started. */
+  read(): LedgerRows | null;
+  /** False when the job already exists; a repeated start is not a new job. */
+  create(job: {
+    id: string;
+    kind: string;
+    owner: string;
+    input: Record<string, unknown>;
+    createdAt: string;
+    urlPath: string;
+    workflowType: string;
+    deckId: number | null;
+    deckName: string | null;
+  }): boolean;
+  /** The job's route and badge columns, carried so the status write can
+   * register the row without a second source. */
+  route(): { urlPath: string; workflowType: string; deckId: number | null; deckName: string | null };
+  appendEvent(event: { name: string; payload: unknown; at: string }): void;
+  commit(commit: LedgerCommit): void;
+  markDelivered(transition: number, at: string): void;
+  deferDelivery(transition: number, attempt: number, nextAt: string): void;
+}
+
+/** The `job_progress` read model: what `WorkflowRunner.status` answers from,
+ * written by the same transaction that moves `active_workflows`. */
+export interface JobProgressRepo {
+  get(workflowId: string): JobStatus | null;
+  /** The stored transition number, or null when no row exists. */
+  transitionOf(workflowId: string): number | null;
+  upsert(row: { workflowId: string; transition: number; status: string; progress: Record<string, unknown> }): void;
+  /** Rows whose workflow is gone from `active_workflows`; the per-user prune. */
+  pruneOrphans(): number;
 }
 
 // ---- the global cells, as the user cell and the router see them ------------
@@ -547,10 +678,40 @@ export interface UserCellRpc {
     at: string;
   }): Promise<InstantDeckResult>;
   lastSeenAt(): Promise<string | null>;
+  /** One transaction: `active_workflows`, `job_progress`, and Python's
+   * `update_status` notification rules. Idempotent by `(jobId, transition)`. */
+  jobStatus(write: JobStatusWrite): Promise<void>;
+  /** Runs a write step here, where the repositories and the idempotency
+   * ledgers are, so a step row and a data row cannot disagree. */
+  applyJobStep(step: JobStepRequest): Promise<StepOutput>;
 }
 
 export interface UserCells {
   cell(id: string): UserCellRpc;
+}
+
+/** The RPC surface of one job's cell. Every method is idempotent: a retry
+ * after an unreachable node repeats the decision, never the work. */
+export interface JobCellRpc {
+  start(job: {
+    id: string;
+    kind: string;
+    owner: string;
+    input: Record<string, unknown>;
+    urlPath: string;
+    workflowType: string;
+    deckId: number | null;
+    deckName: string | null;
+    at: string;
+  }): Promise<JobTransition>;
+  signal(event: { name: string; payload?: unknown; at: string }): Promise<JobTransition | null>;
+  terminate(reason: string, at: string): Promise<void>;
+  /** The current status without driving anything; null before `start`. */
+  peek(): Promise<JobTransition | null>;
+}
+
+export interface JobCells {
+  cell(id: string): JobCellRpc;
 }
 
 /** A port's methods with the RPC promise removed: the cell-local adapter shape. */
