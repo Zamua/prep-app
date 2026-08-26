@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { PKCE_COOKIE } from '../../app/settings/openrouter.js';
 import { pageRoutes } from '../../runtime/cells/routes/pages.js';
 import { matchRoute } from '../../runtime/cells/router.js';
-import { seeded } from './setup.js';
+import { seeded, USER } from './setup.js';
+
+/** The verifier as the start route writes it: the account is part of it. */
+const BOUND = `v.${encodeURIComponent(USER)}`;
 
 describe('the page route table', () => {
   it('matches every sub-resource before the deck and trivia catch-alls', () => {
@@ -23,8 +26,14 @@ describe('the page route table', () => {
     }
   });
 
-  it('gates every page on a signed-in identity', () => {
-    expect(pageRoutes.every((r) => r.gate === 'signedIn')).toBe(true);
+  // Which route carries which gate is checked route by route against the
+  // Python inventory in tests/routeTable.test.ts. Here: the split exists at
+  // all, because a table that is entirely `signedIn` refuses every anonymous
+  // account and takes the instant-start product with it.
+  it('keeps the signed-in gate to the surfaces that hold a credential', () => {
+    const signedIn = pageRoutes.filter((r) => r.gate === 'signedIn').map((r) => r.pattern);
+    expect(signedIn.every((p) => p.startsWith('/settings/') || p.startsWith('/notify'))).toBe(true);
+    expect(pageRoutes.filter((r) => r.gate === 'user').length).toBeGreaterThan(signedIn.length);
   });
 
   it('refuses an unmatched method rather than answering the GET', async () => {
@@ -71,7 +80,7 @@ describe('the OpenRouter hand-off', () => {
       startChallenge: async () => ({ verifier: 'v', challenge: 'c' }),
       exchange: async () => `sk-or-v1-${'z'.repeat(40)}9999`,
     };
-    const res = await h.get('/settings/agent/openrouter/callback?code=abc', { headers: { cookie: `${PKCE_COOKIE}=v` } });
+    const res = await h.get('/settings/agent/openrouter/callback?code=abc', { headers: { cookie: `${PKCE_COOKIE}=${BOUND}` } });
     expect(res.status).toBe(200);
     expect(h.rendered()?.context['byok_flash']).toBe('Your OpenRouter key is saved. AI features now use your account.');
     expect(h.state.fake.rows('byok_credentials')[0]).toMatchObject({ provider: 'openrouter-api', key_prefix: 'sk-or-v1-zzzzz…9999' });
@@ -86,7 +95,7 @@ describe('the OpenRouter hand-off', () => {
         throw new Error('HTTP 400');
       },
     };
-    const res = await h.get('/settings/agent/openrouter/callback?code=abc', { headers: { cookie: `${PKCE_COOKIE}=v` } });
+    const res = await h.get('/settings/agent/openrouter/callback?code=abc', { headers: { cookie: `${PKCE_COOKIE}=${BOUND}` } });
     expect(res.status).toBe(502);
     expect(String(h.rendered()?.context['byok_error'])).toContain('HTTP 400');
   });
