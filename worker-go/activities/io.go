@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -206,6 +207,19 @@ func nullable(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
+// PREP_FAKE_NOW freezes the clock so a parity capture is reproducible:
+// the app and this worker write the same timestamps into the same rows.
+// Read per call, not cached, because the parity harness sets it per run.
+// Unset, which is every deploy, means the system clock.
 func nowISO() string {
-	return time.Now().UTC().Format(time.RFC3339Nano)
+	return now().UTC().Format(time.RFC3339Nano)
+}
+
+func now() time.Time {
+	if raw := os.Getenv("PREP_FAKE_NOW"); raw != "" {
+		if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Now().UTC()
 }

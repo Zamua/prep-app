@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 from tests.e2e.conftest import _free_port
-from tests.parity.harness.constants import REPO_ROOT
+from tests.parity.harness.constants import PARITY_NOW_ISO, REPO_ROOT
 
 NAMESPACE = "prep"
 WORKER_BIN = REPO_ROOT / "worker-go" / "bin" / "worker"
@@ -57,9 +57,19 @@ def _wait_for_port(host: str, port: int, *, timeout_s: float, what: str) -> None
 
 
 def build_worker() -> Path:
-    """The Go worker binary, built if `make build` has not run."""
-    if WORKER_BIN.is_file():
+    """The Go worker binary, rebuilt whenever a source file is newer.
+    A stale binary silently captures goldens from the previous build,
+    which is invisible in the shot and only shows up as a diff much
+    later."""
+    if shutil.which("go") is None and WORKER_BIN.is_file():
         return WORKER_BIN
+    if WORKER_BIN.is_file():
+        newest = max(
+            (p.stat().st_mtime for p in (REPO_ROOT / "worker-go").rglob("*.go")),
+            default=0.0,
+        )
+        if WORKER_BIN.stat().st_mtime >= newest:
+            return WORKER_BIN
     if shutil.which("go") is None:
         raise MissingTool("go is not installed; the phase-4 flows need the Go worker")
     subprocess.run(
@@ -120,6 +130,10 @@ class JobsStack:
                 "PREP_DB_PATH": str(self.db_path),
                 "PREP_AGENT_URL": f"{app_base_url.rstrip('/')}/api/agent",
                 "PREP_INTERNAL_TOKEN": internal_token,
+                # The worker writes next_due and created_at into rows the
+                # goldens render, so it reads the same pinned clock the app
+                # does or a capture bakes in the day it ran.
+                "PREP_FAKE_NOW": PARITY_NOW_ISO,
             }
         )
         # A CLI on the box would otherwise be picked up as the agent and

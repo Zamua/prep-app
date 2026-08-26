@@ -11,7 +11,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { LlmStepContext, StepInfo } from '../../app/jobs/registry.js';
 import type { JobCellRpc, JobLedger, JobStatusWrite, JobTransition } from '../../app/ports.js';
-import { activeNodes, nodeAt, nodeOnError, type StepGraph, type StepNode } from '../../domain/jobs/graph.js';
+import { activeNodes, nodeAt, nodeOnError, type GateOutcome, type StepGraph, type StepNode } from '../../domain/jobs/graph.js';
 import {
   mergeProgress,
   type JobWrite,
@@ -68,6 +68,15 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     deckName: string | null;
     at: string;
   }): Promise<JobTransition> {
+    // A job id is unique for the life of a deploy, so an existing row for
+    // this id whose creation instant differs is a re-used id: the ledger
+    // belongs to a job that is gone. Answering from it would report the
+    // old job's outcome for a new one. Only a terminal ledger is reset,
+    // so a duplicate start of a live job still de-duplicates.
+    const prior = this.ledger.read();
+    if (prior && prior.job.id === job.id && prior.job.created_at !== job.at && prior.job.state === 'terminal') {
+      await this.wipe();
+    }
     const fresh = this.ledger.create({
       id: job.id,
       kind: job.kind,
@@ -134,6 +143,10 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
    * constructor that would rebuild it does not run again in this isolate.
    */
   async wipe(): Promise<void> {
+    // deleteAll drops the alarm's schema with everything else, so an alarm
+    // left armed fires against a cell that has no database and the dispatch
+    // errors forever. Clear it first, then re-derive from the empty ledger.
+    await this.storage.deleteAlarm();
     await this.storage.deleteAll();
     this.c.migrateJobCell(this.storage);
     await this.ensureAlarm();
@@ -356,7 +369,7 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
         job.deadline_at = isoUtc(new Date(now.getTime() + node.gate!.deadlineMs));
         job.deadline_kind = node.gate!.onDeadline;
       }
-      const t = this.transition(state, node.status, now, steps);
+      const t = this.transition(state, this.runningStatus(nodes, node, at, base), now, steps);
       return { materialize, job: { ...job, ...t.job }, outbox: t.outbox };
     }
   }
@@ -417,6 +430,20 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
       commit.job = { ...commit.job, cursor: target };
     }
     return commit;
+  }
+
+  /** The status a node reports while it runs. A node re-entered by a gate
+   * keeps that gate's transient for the whole round (Go writes
+   * `replanning` and leaves it until the call returns), so the user reads
+   * "Refining" rather than the first round's "Drafting". */
+  private runningStatus(nodes: readonly StepNode[], node: StepNode, at: number, item: number): string {
+    if (item === 0 || node.kind === 'gate') return node.status;
+    const gate = nodes.slice(at + 1).find((n) => n.kind === 'gate');
+    const outcomes: GateOutcome[] = Object.values(gate?.gate?.onEvent ?? {});
+    const rerun = outcomes.find(
+      (o) => typeof o.go === 'object' && (o.go as { rerun: string }).rerun === node.name,
+    );
+    return rerun?.transient ?? node.status;
   }
 
   /** The gate a failed re-run answers to: a non-fanout node re-entered at a

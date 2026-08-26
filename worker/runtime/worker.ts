@@ -1,6 +1,7 @@
 // Entry worker: a translation layer. Unauthenticated pages render here, the
 // provider flows and the Clerk webhook live here, and an identified request
 // is forwarded to its UserCell with the identity asserted in headers.
+import { isRefusal } from '../domain/jobs/refusal.js';
 import { appBase } from './appBase.js';
 import { ANON_COOKIE_HEADER, clockFor, compose, cookieHooks, noCacheHtml, NOW_HEADER, PARITY_NOW_HEADER, type Composition } from './compose.js';
 import type { Env } from './env.js';
@@ -90,9 +91,24 @@ export default {
     if (url.pathname === '/readyz') return new Response('ok');
     let cookie: CookieVerdict = { kind: 'none' };
     try {
-      const outcome = await route(request, url, env, c);
-      cookie = outcome.cookie;
-      return await cookieHooks(c, request, cookie, noCacheHtml(outcome.response));
+      // A refusal is the runtime declining the work, not the work failing:
+      // nothing was half-written, so the request is safe to run again. A
+      // single-replica fleet answers one during a lease renewal or a
+      // durability wait, and without this the user reads a 500 for a write
+      // that never happened. Bounded, and only for a refusal.
+      let outcome: Awaited<ReturnType<typeof route>> | undefined;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          outcome = await route(request, url, env, c);
+          break;
+        } catch (err) {
+          if (!isRefusal(err) || attempt >= 2) throw err;
+          console.error(`retrying ${request.method} ${url.pathname} after a refusal: ${err instanceof Error ? err.message : err}`);
+          await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+        }
+      }
+      cookie = outcome!.cookie;
+      return await cookieHooks(c, request, cookie, noCacheHtml(outcome!.response));
     } catch (e) {
       console.error(`unhandled exception on ${request.method} ${url.pathname}: ${e instanceof Error ? (e.stack ?? e.message) : e}`);
       return await cookieHooks(c, request, cookie, noCacheHtml(errorPage(c.renderer, c.buildToken, 500, request)));
