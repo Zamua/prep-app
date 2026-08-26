@@ -140,6 +140,16 @@ describe('the hook precedence', () => {
     expect((await cookieHooks(c, request, { kind: 'none' }, res)).headers.get('set-cookie')).toMatch(/Secure$/);
   });
 
+  it('mints on the instant the router resolved on, not the composition default', async () => {
+    // The hook sees the inbound request, which spells the parity clock
+    // `x-parity-now`; resolving a refresh on one clock and stamping it on
+    // another re-refreshes the cookie on every later request.
+    const advanced = PARITY_NOW + REFRESH_AFTER_SECONDS + 1;
+    const request = req('/', { headers: { 'x-parity-now': new Date(advanced * 1000).toISOString() } });
+    const out = await cookieHooks(c, request, { kind: 'refresh', externalId: 'anon:' + 'ab'.repeat(16) }, new Response(null));
+    expect(out.headers.get('set-cookie')!.split('.')[2]).toBe(String(advanced));
+  });
+
   it('cannot mint without a signing secret, so nothing is written', async () => {
     const bare = fakeEnv({ PREP_KEY_ENCRYPTION_SECRET: undefined });
     const off = composeWith(bare, { identity: new NoIdentityProvider() });

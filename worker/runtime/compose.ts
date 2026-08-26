@@ -288,10 +288,14 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
   return composition;
 }
 
-/** The clock a request runs on: the parity instant it carries, else the composition's. */
+/** The clock a request runs on: the parity instant it carries, else the
+ * composition's. Both spellings are read, because the entry worker's response
+ * hooks see the inbound request (`x-parity-now`) while a cell sees the
+ * forwarded one (`x-prep-now`); one clock per request either way. */
 export function clockFor(c: Composition, request: Request): Clock {
-  const raw = request.headers.get(NOW_HEADER);
-  if (!c.parity || !raw) return c.clock;
+  if (!c.parity) return c.clock;
+  const raw = request.headers.get(NOW_HEADER) ?? request.headers.get(PARITY_NOW_HEADER);
+  if (!raw) return c.clock;
   return new FixedClock(parseFakeNow(raw));
 }
 
