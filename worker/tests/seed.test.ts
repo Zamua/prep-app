@@ -13,7 +13,7 @@ function seeded(profile: string) {
   composeWith(env, { renderer: spyRenderer() });
   const state = fakeCellState();
   const cell = new UserCell(state, env);
-  return { env, state, cell, seed: cell.seed(profile, USER, null) };
+  return { env, state, cell, seed: cell.wipe(profile).then(() => cell.seed(profile, USER, null)) };
 }
 
 describe('the parity seed profiles', () => {

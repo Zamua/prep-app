@@ -26,6 +26,9 @@ beforeEach(() => {
         forwarded.push({ request, name });
         return new Response('from cell', { headers: { 'content-type': 'text/html; charset=utf-8' } });
       },
+      wipe: async (profile: string) => {
+        seeded.push({ name, profile: `wipe:${profile}` });
+      },
       seed: async (profile: string) => {
         seeded.push({ name, profile });
         return { user: name, profile };
@@ -136,7 +139,11 @@ describe('the parity routes', () => {
     const ok = await call('/_parity/seed', { method: 'POST', body, headers: { 'x-internal-token': 'parity-internal-token' } });
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ user: 'parity@example.com', profile: 'reader' });
-    expect(seeded).toEqual([{ name: 'parity@example.com', profile: 'reader' }]);
+    // The wipe is its own RPC and precedes the rows it makes room for.
+    expect(seeded).toEqual([
+      { name: 'parity@example.com', profile: 'wipe:reader' },
+      { name: 'parity@example.com', profile: 'reader' },
+    ]);
   });
 
   it('seed fails closed without a configured token', async () => {

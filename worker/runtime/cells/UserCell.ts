@@ -205,11 +205,21 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
   // ---- the parity seed --------------------------------------------------------
 
-  /** Wipes, re-migrates, pins block 0 and writes the profile; Python's seed JSON. */
+  /**
+   * Step one of a re-seed, alone in its RPC: `deleteAll` and a profile's rows
+   * in one call cannot both be proven durable, and the write is rejected.
+   * Validates first, so an unknown profile costs the cell nothing.
+   */
+  async wipe(profile: string): Promise<void> {
+    if (!PROFILES[profile] && profile !== ANONYMOUS_PROFILE) throw new UnknownProfile(`unknown profile ${JSON.stringify(profile)}`);
+    await this.storage.deleteAll();
+  }
+
+  /** Step two: the schema and the profile's rows on the cell `wipe` emptied;
+   * Python's seed JSON. */
   async seed(profile: string, user: string, at: string | null = null): Promise<Record<string, unknown>> {
     const build = PROFILES[profile];
     if (!build && profile !== ANONYMOUS_PROFILE) throw new UnknownProfile(`unknown profile ${JSON.stringify(profile)}`);
-    await this.storage.deleteAll();
     this.c.migrateUserCell(this.storage);
     this.c.resetIdBlock(this.storage);
     await this.storage.put(SESSION_COUNTER_KEY, 0);

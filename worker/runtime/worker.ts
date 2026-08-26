@@ -50,6 +50,7 @@ export const REAUTH_FALLBACK_COOKIE = 'prep_reauth_fallback';
 const PAT_ONLY = (path: string): boolean => path.startsWith('/api/v1/') || path === '/api/v1' || path === '/mcp';
 
 interface SeedApi {
+  wipe(profile: string): Promise<void>;
   seed(profile: string, user: string, at: string | null): Promise<Record<string, unknown>>;
 }
 
@@ -358,6 +359,8 @@ async function seed(request: Request, env: Env, c: Composition): Promise<Respons
   }
   const stub = env.USER.get(env.USER.idFromName(body.user)) as unknown as SeedApi;
   try {
+    // Two RPCs: the wipe cannot share a call with the rows it makes room for.
+    await stub.wipe(body.profile);
     return Response.json(await stub.seed(body.profile, body.user, request.headers.get(PARITY_NOW_HEADER)));
   } catch (e) {
     if (e instanceof UnknownProfile) return Response.json({ detail: e.message }, { status: 400 });

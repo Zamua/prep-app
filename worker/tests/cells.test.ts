@@ -31,6 +31,11 @@ beforeEach(() => {
 
 const identified = (path: string, init: RequestInit = {}) => req(path, { ...init, headers: { ...IDENTIFIED, ...(init.headers as Record<string, string>) } });
 
+/** The two RPCs `POST /_parity/seed` makes, in order: the wipe cannot share
+ * a call with the rows it makes room for. */
+const reseed = (target: UserCell, profile: string, at: string | null = null) =>
+  target.wipe(profile).then(() => target.seed(profile, USER, at));
+
 /** A live anonymous account, minted the way the instant path mints one. A
  * cell holding no anonymous profile refuses an anon identity outright, so a
  * gate can only be reached through a real one. */
@@ -52,27 +57,27 @@ function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
 
 describe('UserCell.seed', () => {
   it.each(['reader', 'empty', 'anonymous'])('reproduces the Python seed JSON for %s', async (profile) => {
-    const seed = await cell.seed(profile, USER, null);
+    const seed = await reseed(cell, profile);
     expect(seed).toEqual(JSON.parse(JSON.stringify(corpusPage(profile, 'seed'))));
   });
 
   it('refuses an unknown profile', async () => {
-    await expect(cell.seed('nope', USER, null)).rejects.toBeInstanceOf(UnknownProfile);
+    await expect(reseed(cell, 'nope')).rejects.toBeInstanceOf(UnknownProfile);
   });
 
   it('wipes, re-migrates, pins block 0 and registers idx 0 in the directory', async () => {
-    await cell.seed('reader', USER, null);
-    await cell.seed('reader', USER, null);
+    await reseed(cell, 'reader');
+    await reseed(cell, 'reader');
     expect(state.fake.rows('decks').map((d) => d['id'])).toEqual([1, 2, 3, 4]);
     expect(await c.directory.lookup(USER)).toMatchObject({ idx: 0, is_anonymous: false });
     expect(await state.storage.get('parity')).toEqual({ profile: 'reader', flags: [] });
     expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Parity', email: USER, id_base: 0 });
-    await cell.seed('anonymous', USER, null);
+    await reseed(cell, 'anonymous');
     expect(state.fake.rows('profile')).toEqual([]);
   });
 
   it('runs on the parity instant the router forwards', async () => {
-    const seed = await cell.seed('empty', USER, '2026-03-15T10:00:00Z');
+    const seed = await reseed(cell, 'empty', '2026-03-15T10:00:00Z');
     expect(seed['now']).toBe('2026-03-15T10:00:00+00:00');
     expect(state.fake.rows('profile')[0]?.['created_at']).toBe('2026-03-15T10:00:00+00:00');
   });
@@ -80,7 +85,7 @@ describe('UserCell.seed', () => {
 
 describe('UserCell.fetch', () => {
   it('replays a recorded page while no route claims the path, and flips the flag it sets', async () => {
-    await cell.seed('reader', USER, null);
+    await reseed(cell, 'reader');
     // A path the ported tables do not claim still answers from the recording.
     const res = await cell.fetch(identified('/api/dashboard/deck-menus'));
     expect(res.status).toBe(200);
@@ -96,7 +101,7 @@ describe('UserCell.fetch', () => {
   it('serves a route through the gate, the last_seen bump and the page context', async () => {
     const route: Route = { method: 'GET', pattern: '/deck/{name}', gate: 'signedIn', handler: ({ params, repos }) => ({ page: 'deck.html', context: { deck_name: params['name'], decks: repos.decks.listSummaries().length } }) };
     await withRoutes([route], async () => {
-      await cell.seed('reader', USER, null);
+      await reseed(cell, 'reader');
       const res = await cell.fetch(identified('/deck/world-capitals', { headers: { [NOW_HEADER]: '2026-03-14T16:00:00Z' } }));
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
@@ -114,7 +119,7 @@ describe('UserCell.fetch', () => {
       { method: 'GET', pattern: '/api/v1/decks', gate: 'pat', handler: () => ({ json: [] }) },
     ];
     await withRoutes(routes, async () => {
-      await cell.seed('reader', USER, null);
+      await reseed(cell, 'reader');
       const guest = await anonymousCell();
       const anon = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon' };
       const html = await guest.cell.fetch(req('/settings', { headers: anon }));
@@ -159,7 +164,7 @@ describe('UserCell.fetch', () => {
       { method: 'POST', pattern: '/cap', gate: 'user', handler: () => { throw new RowCapReached('guest account limit reached'); } },
     ];
     await withRoutes(routes, async () => {
-      await cell.seed('empty', USER, null);
+      await reseed(cell, 'empty');
       const j = await cell.fetch(identified('/j'));
       expect([j.status, await j.json()]).toEqual([201, { a: 1 }]);
       const r = await cell.fetch(identified('/r'));
@@ -201,7 +206,7 @@ describe('UserCell RPC', () => {
   });
 
   it('destroy then scrub: the tombstone survives the wipe and every request answers it', async () => {
-    await cell.seed('reader', USER, null);
+    await reseed(cell, 'reader');
     const before = state.fake.sql.databaseSize;
     await cell.destroy('merged', '2026-03-14T15:00:00+00:00');
     await cell.destroy('reaped', '2026-03-14T15:00:01+00:00');
