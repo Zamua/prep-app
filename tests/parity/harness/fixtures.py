@@ -17,11 +17,26 @@ from tests.parity.harness.server import (
     ParityTarget,
 )
 
+LLM_STUB_URL_ENV = "PARITY_LLM_STUB_URL"
+DEFAULT_LLM_STUB = "http://127.0.0.1:8089"
+
 
 @pytest.fixture(scope="session")
 def parity_llm():
-    from tests.parity.llm_stub import FIXTURES_DIR, LLMStub
+    """The stub the target under test answers from.
 
+    A remote target was pointed at its stub when it was deployed, so the
+    knobs a flow turns have to reach that process; an in-process stub
+    would leave the server calling the other one. `PARITY_LLM_STUB_URL`
+    names it, default the port `worker/scripts/run-node.sh` documents.
+    """
+    from tests.parity.llm_stub import FIXTURES_DIR, LLMStub, RemoteStub
+
+    remote = (os.environ.get(BASE_URL_ENV) or "").strip()
+    origin = (os.environ.get(LLM_STUB_URL_ENV) or "").strip()
+    if origin or remote:
+        yield RemoteStub(origin or DEFAULT_LLM_STUB)
+        return
     with LLMStub(FIXTURES_DIR) as stub:
         yield stub
 

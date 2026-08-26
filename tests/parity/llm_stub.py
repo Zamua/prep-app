@@ -461,6 +461,40 @@ class LLMStub:
         self.control.reset()
 
 
+class RemoteStub:
+    """A stub already running in another process, addressed by origin.
+
+    A target outside this process was pointed at its stub when it was
+    deployed, so a run against that target drives that stub instead of
+    starting a second one nobody calls. Only the knobs travel; the
+    fixture set is the remote process's.
+    """
+
+    def __init__(self, origin: str):
+        self.origin = origin.rstrip("/")
+        self.base_url = f"{self.origin}/v1"
+        self.control = StubControl(self.origin)
+
+    @property
+    def requests(self) -> list[str]:
+        return list(self.control.requests()["keys"])
+
+    def hold(self) -> None:
+        self.control.hold()
+
+    def release(self) -> None:
+        self.control.release()
+
+    def held(self) -> dict:
+        return self.control.held()
+
+    def latency(self, ms: float) -> None:
+        self.control.latency(ms)
+
+    def reset(self) -> None:
+        self.control.reset()
+
+
 @pytest.fixture(scope="session")
 def llm_stub():
     """The committed fixture set on an ephemeral port. `PARITY_LLM_RECORD=1`

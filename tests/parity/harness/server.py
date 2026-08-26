@@ -17,6 +17,7 @@ from tests.parity.harness.constants import (
     PARITY_BUILD_ID,
     PARITY_INTERNAL_TOKEN,
     PARITY_NOW_ISO,
+    PARITY_USER,
     REPO_ROOT,
     internal_token,
 )
@@ -75,14 +76,36 @@ def parity_env(
     return env
 
 
+class RemoteJobs:
+    """The `jobs` handle of a target that runs its own engine.
+
+    A flow reaches past the app for one screen only: the job whose record is
+    deleted mid-flight, which no route can ask for. There is no Temporal
+    server to delete an execution from here, so the target's own parity route
+    leaves its cells in the state that deletion left Python's rows in.
+    """
+
+    def __init__(self, target: ParityTarget):
+        self._target = target
+
+    def abandon_workflow(self, workflow_id: str, reason: str = "parity") -> None:
+        r = httpx.post(
+            f"{self._target.base_url}/_parity/job/abandon",
+            json={"id": workflow_id, "owner": PARITY_USER},
+            headers={"X-Internal-Token": internal_token(self._target.token)},
+            timeout=60.0,
+        )
+        if r.status_code != 200:
+            raise RuntimeError(f"abandon {workflow_id}: {r.status_code} {r.text[:300]}")
+
+
 class ParityTarget:
     """A base URL plus the seed call. Local instances own a uvicorn."""
 
     def __init__(self, base_url: str, *, token: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.token = token
-        # Set by the fixture when the run drives real jobs (phase 4).
-        self.jobs: object | None = None
+        self.jobs: object | None = RemoteJobs(self)
 
     def seed(self, user: str, profile: str) -> dict:
         return seed(self.base_url, user, profile, token=self.token)
@@ -95,6 +118,9 @@ class LocalParityServer(ParityTarget):
         self.extra_env = dict(extra_env or {})
         self.port = _free_port()
         super().__init__(f"http://127.0.0.1:{self.port}", token=PARITY_INTERNAL_TOKEN)
+        # A local target has no parity job route; the fixture hands it the
+        # Temporal stack it drives instead.
+        self.jobs = None
         self._proc: subprocess.Popen | None = None
 
     def start(self, timeout: float = 45.0) -> None:
