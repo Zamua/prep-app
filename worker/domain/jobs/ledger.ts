@@ -91,10 +91,22 @@ export interface LedgerCommit {
   /** Rows for the node the cursor moves to; written with the move. */
   materialize?: readonly NewStep[];
   job?: JobWrite;
-  /** Stamps every unconsumed event: a gate resolves them all at once, so a
-   * duplicated signal cannot resolve the same gate twice. */
-  consumeEventsAt?: string;
+  consumeEvents?: ConsumeEvents;
   outbox?: Omit<OutboxRow, 'delivered_at' | 'attempt' | 'next_attempt_at'>;
+}
+
+/**
+ * Which unconsumed events a commit stamps. A resolved gate stamps everything
+ * through the event it acted on plus every later repeat of that name, so a
+ * double-clicked signal cannot resolve a second gate while a genuinely
+ * different later signal still can. `throughSeq: null` stamps them all, which
+ * is what a terminal job does: nothing can resolve a gate any more.
+ */
+export interface ConsumeEvents {
+  at: string;
+  throughSeq: number | null;
+  /** The resolved event's name; later repeats of it are stamped too. */
+  name?: string;
 }
 
 /** What a step handler returns. */

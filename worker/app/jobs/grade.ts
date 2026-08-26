@@ -85,17 +85,20 @@ export const gradeStep = llmStep(async (ctx) => {
 
 /**
  * The review row and the FSRS advance, under the job id. The grading ledger is
- * checked first and written beside the row, so a redelivered step answers from
- * the state it already scheduled instead of reviewing the card twice.
+ * checked first and written beside the row in one transaction, so a
+ * redelivered step answers from the state it already scheduled instead of
+ * reviewing the card twice.
  */
 export const gradeRecord = async (ctx: WriteStepContext): Promise<StepOutput> => {
   const input = gradeJobInput(ctx.input);
   const verdict = coerceVerdict(ctx.outputs['grade'], input.card.answer);
-  let state: SrsState | null = ctx.repos.idempotency.findGrading(ctx.stepKey);
-  if (state === null) {
-    state = ctx.repos.reviews.record(input.questionId, verdict.result, input.userAnswer, verdict.feedback);
-    ctx.repos.idempotency.recordGrading(ctx.stepKey, input.questionId, state);
-  }
+  const state: SrsState = ctx.repos.tx.sync(() => {
+    const found = ctx.repos.idempotency.findGrading(ctx.stepKey);
+    if (found !== null) return found;
+    const scheduled = ctx.repos.reviews.record(input.questionId, verdict.result, input.userAnswer, verdict.feedback);
+    ctx.repos.idempotency.recordGrading(ctx.stepKey, input.questionId, scheduled);
+    return scheduled;
+  });
   const result: GradeAnswerResult = { question_id: input.questionId, user_answer: input.userAnswer, idk: input.idk, verdict, state };
   return { value: result, progress: gradeResult(result) };
 };

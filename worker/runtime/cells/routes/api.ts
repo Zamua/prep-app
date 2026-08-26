@@ -46,6 +46,7 @@ function studyDeps(req: CellRequest): study.StudyDeps {
     userAgent: req.request.headers.get('user-agent'),
     agentAvailable: agentAvailable(req.repos, req.ports.freeTierConfigured),
     runner: req.ports.runner,
+    freeTierConfigured: req.ports.freeTierConfigured,
   };
 }
 

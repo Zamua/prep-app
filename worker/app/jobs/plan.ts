@@ -299,17 +299,18 @@ export function resolveDeck(repos: UserRepos, input: Readonly<Record<string, unk
 
 /**
  * One card into the deck, under `<jobId>-insert-<i>`. The key is looked up
- * first and recorded beside the row, so a redelivered step finds the card it
- * already wrote instead of a second copy.
+ * first and recorded beside the row in one transaction, so a card can never
+ * exist without the key that stops a redelivery writing it twice.
  */
 export const planInsert = async (ctx: WriteStepContext): Promise<StepOutput> => {
   const card = coerceCard(ctx.itemInput);
-  const deckId = resolveDeck(ctx.repos, ctx.input);
-  let qid = ctx.repos.idempotency.findQuestion(ctx.stepKey);
-  if (qid === null) {
-    qid = ctx.repos.questions.add(deckId, toNewQuestion(card));
-    ctx.repos.idempotency.recordQuestion(ctx.stepKey, qid);
-  }
+  const qid = ctx.repos.tx.sync(() => {
+    const found = ctx.repos.idempotency.findQuestion(ctx.stepKey);
+    if (found !== null) return found;
+    const id = ctx.repos.questions.add(resolveDeck(ctx.repos, ctx.input), toNewQuestion(card));
+    ctx.repos.idempotency.recordQuestion(ctx.stepKey, id);
+    return id;
+  });
   const added = [...((ctx.outputs['insert'] as number[] | undefined) ?? []), qid];
   return { value: qid, progress: planResult(added) };
 };

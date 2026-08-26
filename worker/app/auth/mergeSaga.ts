@@ -11,7 +11,7 @@
 // rows a previous attempt moved are already the target's and count for
 // nobody. The rows converge; the counts are an operator's record of the run.
 import type { CellSnapshot, TombstoneReason } from '../entities.js';
-import type { CarriedPreferences, Clock, Directory, Limiter, Random, UserCells } from '../ports.js';
+import type { CarriedPreferences, Clock, Directory, JobCells, Limiter, Random, UserCells } from '../ports.js';
 import {
   CARRIED_USER_COLUMNS,
   DELETE,
@@ -52,6 +52,8 @@ export const MAX_ATTEMPTS = 3;
 
 export interface DestroyDeps {
   cells: UserCells;
+  /** The owner's jobs are terminated before the wipe; see `terminateJobs`. */
+  jobs: JobCells;
   directory: Directory;
   clock: Clock;
 }
@@ -200,19 +202,43 @@ function carriedOf(anon: CellSnapshot): CarriedPreferences {
 
 /**
  * The three-step deletion, shared by the merge, the reaper and account
- * deletion. `deleteAll` leaves the freed pages readable in the next
- * snapshot, so a zero-fill scrub follows in its own RPC: combining it with
- * the wipe fails the output gate with `DurabilityUnproven` and rolls the
- * whole RPC back. Every step is idempotent, and the retry that a transient
- * RPC failure needs is the cells adapter's, applied at the composition root.
+ * deletion, with the owner's jobs stopped first. `deleteAll` leaves the freed
+ * pages readable in the next snapshot, so a zero-fill scrub follows in its
+ * own RPC: combining it with the wipe fails the output gate with
+ * `DurabilityUnproven` and rolls the whole RPC back. Every step is
+ * idempotent, and the retry that a transient RPC failure needs is the cells
+ * adapter's, applied at the composition root.
  */
 export async function destroyAccount(id: string, reason: TombstoneReason, deps: DestroyDeps): Promise<void> {
   const at = isoUtc(deps.clock.now());
   const cell = deps.cells.cell(id);
+  await terminateJobs(id, reason, at, deps);
   await cell.destroy(reason, at);
   await cell.scrub(at);
   // The directory's tombstone outlives the cell's: it answers for an id whose
   // cell has since been reclaimed.
   await deps.directory.tombstone(id, reason, at);
   await deps.directory.remove(id);
+}
+
+/**
+ * Stops the owner's jobs before the wipe, so no in-flight step spends another
+ * LLM call on an account that is going away. The tombstone is what actually
+ * refuses a late write; this only saves the work. One job that cannot be
+ * reached does not hold up the deletion.
+ */
+async function terminateJobs(id: string, reason: TombstoneReason, at: string, deps: DestroyDeps): Promise<void> {
+  let ids: string[];
+  try {
+    ids = await deps.cells.cell(id).activeJobIds();
+  } catch {
+    return;
+  }
+  for (const jobId of ids) {
+    try {
+      await deps.jobs.cell(jobId).terminate(`account ${reason}`, at);
+    } catch {
+      // The tombstone stops its writes either way.
+    }
+  }
 }

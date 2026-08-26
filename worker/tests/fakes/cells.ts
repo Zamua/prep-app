@@ -2,7 +2,7 @@
 // sagas: the directory and limiter keep their rows in maps; a user cell is
 // the real UserCell over fake storage, so dump, import and destroy are real.
 import type { DirectoryUser, MergeAudit, MergeMarker, TombstoneReason } from '../../app/entities.js';
-import type { Directory, Limiter, ReserveResult, UserCellRpc, UserCells } from '../../app/ports.js';
+import type { Directory, JobCellRpc, JobCells, Limiter, ReserveResult, UserCellRpc, UserCells } from '../../app/ports.js';
 import { checkWindows, DEFAULT_LIMITS, RETENTION_DAYS, TERMINAL_OUTCOMES, type GenerationRow, type Limits } from '../../domain/instant/limiter.js';
 import { parseIso } from '../../domain/py.js';
 import { UserCell } from '../../runtime/cells/UserCell.js';
@@ -144,5 +144,29 @@ export class FakeUserCells implements UserCells {
       this.cells.set(id, e);
     }
     return e;
+  }
+}
+
+/** Records what a deletion terminated; the job ledger itself is exercised in
+ * `tests/jobs`, so nothing here needs a real JobCell. */
+export class FakeJobCells implements JobCells {
+  readonly terminated: { id: string; reason: string }[] = [];
+
+  cell(id: string): JobCellRpc {
+    const terminated = this.terminated;
+    return {
+      async start() {
+        return { status: '', progress: {}, transition: 0 };
+      },
+      async signal() {
+        return null;
+      },
+      async terminate(reason: string): Promise<void> {
+        terminated.push({ id, reason });
+      },
+      async peek() {
+        return null;
+      },
+    };
   }
 }

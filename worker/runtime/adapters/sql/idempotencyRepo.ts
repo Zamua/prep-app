@@ -58,4 +58,13 @@ export class SqlIdempotencyRepo implements IdempotencyRepo {
   recordQuestion(key: string, questionId: number): void {
     this.db.run('INSERT INTO questions_idempotency (idempotency_key, question_id, created_at) VALUES (?, ?, ?)', key, questionId, isoNow(this.clock));
   }
+
+  findStepResult(key: string): unknown | null {
+    const row = this.db.first<{ result: string }>('SELECT result FROM steps_idempotency WHERE idempotency_key = ?', key);
+    return row ? JSON.parse(String(row.result)) : null;
+  }
+
+  recordStepResult(key: string, result: unknown): void {
+    this.db.run('INSERT OR IGNORE INTO steps_idempotency (idempotency_key, result, created_at) VALUES (?, ?, ?)', key, JSON.stringify(result), isoNow(this.clock));
+  }
 }

@@ -338,11 +338,23 @@ function applyMoves(repos: UserRepos, plan: TransformPlan, names: Map<string, nu
 }
 
 /**
- * The plan, written. Every op is idempotent on its own - an addition by its
- * key, the rest by the state they check first - so a step redelivered after a
- * node died mid-apply converges on the same rows rather than doubling them.
+ * The plan, written: every op in ONE transaction, so a throw part-way leaves
+ * the library exactly as the user last saw it. Partial application is not a
+ * state the ledger can reach.
+ *
+ * The whole result is recorded under the step key, because most of these ops
+ * are idempotent by "check the state, skip if it is already there" and a skip
+ * has no id to report. A redelivered step answers from that record instead of
+ * re-deriving a result its first run already earned.
  */
 export const applyStep = async (ctx: WriteStepContext): Promise<StepOutput> => {
+  const done = ctx.repos.idempotency.findStepResult(ctx.stepKey) as TransformResult | null;
+  if (done) return { value: done, progress: transformApplied(done) };
+  const result = ctx.repos.tx.sync(() => applyPlan(ctx));
+  return { value: result, progress: transformApplied(result) };
+};
+
+function applyPlan(ctx: WriteStepContext): TransformResult {
   const input = transformJobInput(ctx.input);
   const plan = coerceTransformPlan(ctx.outputs['compute'], input.scope);
   const result = emptyTransformResult();
@@ -358,5 +370,6 @@ export const applyStep = async (ctx: WriteStepContext): Promise<StepOutput> => {
     const name = ctx.repos.decks.findName(deckId);
     if (name !== null && ctx.repos.decks.delete(name) > 0) result.deleted_deck_ids.push(deckId);
   }
-  return { value: result, progress: transformApplied(result) };
-};
+  ctx.repos.idempotency.recordStepResult(ctx.stepKey, result);
+  return result;
+}

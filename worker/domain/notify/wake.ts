@@ -50,14 +50,19 @@ export interface TriviaDeckState {
   queued: number;
   /** `context_prompt` or the slug, stripped; an empty one cannot be refilled. */
   topic: string;
-  /** A TriviaGenerate job for this deck is already in flight. */
-  refillPending: boolean;
+  /** When this deck's most recent TriviaGenerate job started, in flight or
+   * not: the refill's own guard, and the row a dispatch writes. */
+  lastRefillAt: string | null;
   /** `last_active` of an active session that still holds a queue. */
   activeSince: string | null;
 }
 
 export interface WakeInputs {
   prefs: WakePrefs;
+  /** Whether a tier funds an LLM call and this deploy runs jobs at all. With
+   * neither, a refill is not a task that could ever complete, so planning one
+   * would leave the deck asking on every wake for the life of the deploy. */
+  canGenerate: boolean;
   /** Python walks only the users who have a device to push to. */
   hasPushDevice: boolean;
   dueTotal: number;
@@ -94,7 +99,7 @@ export function planWake(inputs: WakeInputs, now: Date): WakePlan {
   if (inputs.hasPushDevice && inputs.prefs.mode === 'digest') planDigest(inputs, now, tasks, wakes);
   if (inputs.hasPushDevice && inputs.prefs.mode === 'when-ready') planWhenReady(inputs, now, quietEnd, tasks, wakes);
   // Trivia is per deck and ignores `mode`, which governs the SRS pair only.
-  for (const deck of inputs.decks) planDeck(deck, now, quietEnd, tasks, wakes);
+  for (const deck of inputs.decks) planDeck(deck, inputs.canGenerate, now, quietEnd, tasks, wakes);
   planPrune(inputs, now, tasks, wakes);
 
   if (tasks.length) return { tasks, wakeAt: isoUtc(now) };
@@ -136,7 +141,7 @@ function planWhenReady(i: WakeInputs, now: Date, quietEnd: Date | null, tasks: W
   else wakes.push(wake);
 }
 
-function planDeck(d: TriviaDeckState, now: Date, quietEnd: Date | null, tasks: WakeTask[], wakes: number[]): void {
+function planDeck(d: TriviaDeckState, canGenerate: boolean, now: Date, quietEnd: Date | null, tasks: WakeTask[], wakes: number[]): void {
   if (!d.notificationsEnabled) return;
   const at = now.getTime();
   // Python compares the stored stamp to `isoformat()` as strings.
@@ -152,8 +157,15 @@ function planDeck(d: TriviaDeckState, now: Date, quietEnd: Date | null, tasks: W
   }
 
   // The refill is a dispatch, never a generation: the alarm does not call the
-  // LLM. It runs during quiet hours so morning has fresh content.
-  if (d.unanswered < d.sessionSize && d.topic !== '' && !d.refillPending) tasks.push({ kind: 'trivia-refill', deckId: d.id });
+  // LLM. It runs during quiet hours so morning has fresh content, and no more
+  // often than the deck's own interval, which is where Python's tick put it.
+  // Its guard is the job row the dispatch writes; without one, a deck that
+  // cannot be refilled would ask again on every wake, forever.
+  if (canGenerate && d.unanswered < d.sessionSize && d.topic !== '') {
+    const refillAt = refillDueAt(d, now).getTime();
+    if (refillAt <= at) tasks.push({ kind: 'trivia-refill', deckId: d.id });
+    else wakes.push(refillAt);
+  }
 
   // Quiet hours skip the fire and leave `last_notified_at` alone, so the deck
   // fires the moment the window reopens.
@@ -206,7 +218,17 @@ export function effectiveIntervalMinutes(baseMinutes: number, ignoredStreak: num
 
 /** `_is_due` as an instant: an unset or unparsable stamp is due now. */
 export function triviaDueAt(deck: TriviaDeckState, now: Date): Date {
-  const last = tryParse(deck.lastNotifiedAt);
+  return dueAt(deck, deck.lastNotifiedAt, now);
+}
+
+/** The same cadence for the refill, off the job row a dispatch writes rather
+ * than off `last_notified_at`, which quiet hours deliberately leave alone. */
+export function refillDueAt(deck: TriviaDeckState, now: Date): Date {
+  return dueAt(deck, deck.lastRefillAt, now);
+}
+
+function dueAt(deck: TriviaDeckState, stamp: string | null, now: Date): Date {
+  const last = tryParse(stamp);
   if (last === null) return now;
   const base = deck.intervalMinutes || DEFAULT_TRIVIA_INTERVAL_MINUTES;
   return new Date(last + effectiveIntervalMinutes(base, deck.ignoredStreak) * MINUTE_MS);

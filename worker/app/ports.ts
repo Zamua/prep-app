@@ -197,6 +197,9 @@ export interface QuestionRepo {
   /** A deck's cards for the transform prompt: unsuspended, by id. */
   cardsForTransform(deckId: number): TransformCard[];
   promptsInDeck(deckId: number): string[];
+  /** The deck's card with this prompt under Go's `LOWER(TRIM(prompt))`
+   * compare, or null: the trivia insert's dedupe, one indexed lookup. */
+  findByPrompt(deckId: number, prompt: string): number | null;
   setSuspended(qid: number, suspended: boolean): void;
   delete(qid: number): boolean;
 }
@@ -314,6 +317,11 @@ export interface IdempotencyRepo {
   recordSync(clientId: string, kind: 'card' | 'review', status: string, questionId: number | null): void;
   findQuestion(key: string): number | null;
   recordQuestion(key: string, questionId: number): void;
+  /** A whole write step's result, for a step whose ops are not each keyed on
+   * their own: a redelivery answers from here instead of re-deriving it from
+   * rows its first run already wrote. */
+  findStepResult(key: string): unknown | null;
+  recordStepResult(key: string, result: unknown): void;
 }
 
 export interface PrefsRepo {
@@ -504,11 +512,13 @@ export type FundingTier = 'byok' | 'free' | 'none';
 
 export class RunnerUnavailable extends Error {}
 
+/** The tier cap is not optional either: a start that omits it hands the free
+ * tier's shared credential an uncapped call. Zero means uncapped. */
 export interface PlanGenerateInput {
   deckId: number;
   deckName: string;
   prompt: string;
-  maxCards?: number;
+  maxCards: number;
 }
 
 /** The snapshot fields are not optional: an LLM step has no repositories, so
@@ -531,7 +541,11 @@ export interface TriviaGenerateInput {
   deckId: number;
   deckName: string;
   topic: string;
-  batchSize?: number;
+  /** The tier's per-call ceiling; zero takes `DEFAULT_BATCH_SIZE`. */
+  batchSize: number;
+  /** The deck's current prompts, read here because the generate step holds no
+   * repositories: an empty list tells the model the deck is empty. */
+  existing: string[];
 }
 
 export interface GradeAnswerInput {
@@ -731,6 +745,9 @@ export interface UserCellRpc {
   /** Runs a write step here, where the repositories and the idempotency
    * ledgers are, so a step row and a data row cannot disagree. */
   applyJobStep(step: JobStepRequest): Promise<StepOutput>;
+  /** This owner's jobs that have not reached a terminal status, read before a
+   * deletion: they have to be stopped before the cell is emptied. */
+  activeJobIds(): Promise<string[]>;
 }
 
 export interface UserCells {

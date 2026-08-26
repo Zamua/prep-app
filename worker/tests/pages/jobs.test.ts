@@ -348,8 +348,23 @@ describe('trivia batch generation', () => {
     const res = await h.post(`/trivia/decks/${deckId}/generate`);
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe(`/trivia/gen/${TRIVIA_WID}`);
+    // The generate step holds no repositories, so the tier's cap and the
+    // deck's prompts are read here or the model never sees them.
     expect(h.runner.starts).toEqual([
-      { kind: 'TriviaGenerate', input: { deckId, deckName: 'world-history', topic: 'World history from antiquity to 1900.' } },
+      {
+        kind: 'TriviaGenerate',
+        input: {
+          deckId,
+          deckName: 'world-history',
+          topic: 'World history from antiquity to 1900.',
+          batchSize: 5,
+          existing: [
+            "Which empire's western half fell in 476?",
+            'Who introduced movable-type printing to Europe around 1450?',
+            'In which year was Magna Carta sealed?',
+          ],
+        },
+      },
     ]);
   });
 

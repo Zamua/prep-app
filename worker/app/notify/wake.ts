@@ -10,13 +10,20 @@
 import { formatDone, type DoneItem } from '../../domain/trivia.js';
 import { isoUtc, pyStrip } from '../../domain/py.js';
 import { MAX_BACKOFF_DOUBLINGS, planWake, type TriviaDeckState, type WakeInputs, type WakePlan, type WakeTask } from '../../domain/notify/wake.js';
+import { fundingTier, requireFundedWorkflow } from '../agent/funding.js';
 import { WORKFLOW_TYPE } from '../jobs/graph.js';
+import { triviaStartInput } from '../jobs/startInput.js';
+import type { ActiveWorkflow } from '../entities.js';
 import { AgentUnavailable, RunnerUnavailable, type Clock, type UserRepos, type WorkflowRunner } from '../ports.js';
 import { sendToUser, type NotifyDeps } from './routes.js';
 
 export interface WakeDeps extends NotifyDeps {
   runner: WorkflowRunner;
   clock: Clock;
+  /** Whether the shared tier would fund the refill this alarm dispatches. */
+  freeTierConfigured: boolean;
+  /** Whether this deploy runs jobs at all; a start refuses when it does not. */
+  jobsEnabled: boolean;
 }
 
 export interface WakeReport {
@@ -34,14 +41,15 @@ const BODY_LIMIT = 240;
 const PRUNE_SCAN_SECONDS = 100 * 365 * 24 * 3600;
 
 /** Everything the plan rests on, read in one pass. */
-export function readWakeInputs(repos: UserRepos, clock: Clock): WakeInputs {
+export function readWakeInputs(repos: UserRepos, clock: Clock, canGenerate: boolean): WakeInputs {
   const nextDueMinutes = repos.cards.nextDueMinutes(null);
-  const refilling = new Set(
-    repos.jobs
-      .listNonTerminal()
-      .filter((w) => w.workflow_type === WORKFLOW_TYPE.TriviaGenerate)
-      .map((w) => w.deck_id),
-  );
+  const jobs = repos.jobs.listForUser({ recentTerminalWindowSeconds: PRUNE_SCAN_SECONDS });
+  const lastRefill = new Map<number, string>();
+  for (const w of jobs) {
+    if (w.workflow_type !== WORKFLOW_TYPE.TriviaGenerate || w.deck_id === null) continue;
+    const seen = lastRefill.get(w.deck_id);
+    if (seen === undefined || w.started_at > seen) lastRefill.set(w.deck_id, w.started_at);
+  }
   const decks: TriviaDeckState[] = repos.decks.listTriviaDecks().map((d) => {
     const stats = repos.trivia.deckStats(d.id);
     const session = repos.trivia.getActiveSessionForDeck(d.id);
@@ -56,27 +64,30 @@ export function readWakeInputs(repos: UserRepos, clock: Clock): WakeInputs {
       unanswered: stats.unanswered,
       queued: stats.total,
       topic: pyStrip(d.context_prompt || d.name || ''),
-      refillPending: refilling.has(d.id),
+      lastRefillAt: lastRefill.get(d.id) ?? null,
       activeSince: session && session.queue.length ? session.last_active : null,
     };
   });
   return {
     prefs: repos.prefs.getNotificationPrefs(),
+    canGenerate,
     hasPushDevice: repos.pushSubs.count() > 0,
     dueTotal: repos.cards.countDue(),
     nextDueAt: nextDueMinutes === null ? null : isoUtc(new Date(clock.now().getTime() + nextDueMinutes * 60_000)),
     decks,
-    earliestTerminalAt: earliestTerminal(repos),
+    earliestTerminalAt: earliestTerminal(jobs),
   };
 }
 
-export function planFor(repos: UserRepos, clock: Clock): WakePlan {
-  return planWake(readWakeInputs(repos, clock), clock.now());
+export function planFor(repos: UserRepos, clock: Clock, canGenerate: boolean): WakePlan {
+  return planWake(readWakeInputs(repos, clock, canGenerate), clock.now());
 }
 
-/** Null when nothing is outstanding: the cell sleeps until a request. */
-export function nextWakeAt(repos: UserRepos, clock: Clock): string | null {
-  return planFor(repos, clock).wakeAt;
+/** Null when nothing is outstanding: the cell sleeps until a request. The
+ * arm and the run read the same rows through the same function, so what the
+ * alarm was set for and what it does when it fires cannot drift apart. */
+export function nextWakeAt(repos: UserRepos, clock: Clock, canGenerate: boolean): string | null {
+  return planFor(repos, clock, canGenerate).wakeAt;
 }
 
 /**
@@ -87,7 +98,7 @@ export function nextWakeAt(repos: UserRepos, clock: Clock): string | null {
  */
 export async function runWake(deps: WakeDeps): Promise<WakeReport> {
   const now = deps.clock.now();
-  const plan = planWake(readWakeInputs(deps.repos, deps.clock), now);
+  const plan = planWake(readWakeInputs(deps.repos, deps.clock, canGenerate(deps)), now);
   const ran: string[] = [];
   const failed: string[] = [];
   for (const task of plan.tasks) {
@@ -160,7 +171,8 @@ async function refill(deps: WakeDeps, deckId: number): Promise<void> {
   const topic = pyStrip(deps.repos.decks.getMeta(deckId).context_prompt || deckName);
   if (!topic) return;
   try {
-    await deps.runner.start('TriviaGenerate', { deckId, deckName, topic });
+    requireFundedWorkflow(deps.repos, deps.freeTierConfigured);
+    await deps.runner.start('TriviaGenerate', triviaStartInput(deps.repos, deckId, deckName, topic, deps.freeTierConfigured));
   } catch (e) {
     if (e instanceof RunnerUnavailable || e instanceof AgentUnavailable) return;
     throw e;
@@ -223,13 +235,21 @@ function prune(repos: UserRepos): void {
 
 // ---- reads ---------------------------------------------------------------------
 
-function earliestTerminal(repos: UserRepos): string | null {
+function earliestTerminal(jobs: readonly ActiveWorkflow[]): string | null {
   let oldest: string | null = null;
-  for (const w of repos.jobs.listForUser({ recentTerminalWindowSeconds: PRUNE_SCAN_SECONDS })) {
+  for (const w of jobs) {
     if (w.terminal_at === null) continue;
     if (oldest === null || w.terminal_at < oldest) oldest = w.terminal_at;
   }
   return oldest;
+}
+
+/** Whether a refill is a task that could ever finish: a tier that funds the
+ * call, and a deploy that accepts a start. Neither is a per-attempt
+ * condition, so a plan that ignored them would leave the deck asking on every
+ * wake for the life of the deploy. */
+export function canGenerate(deps: { repos: UserRepos; freeTierConfigured: boolean; jobsEnabled: boolean }): boolean {
+  return deps.jobsEnabled && fundingTier(deps.repos, deps.freeTierConfigured) !== 'none';
 }
 
 /** `isoformat(timespec="seconds")`, which is what the deck column holds. */

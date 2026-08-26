@@ -12,7 +12,8 @@ import { gradeCard } from '../../domain/jobs/snapshot.js';
 import { DurationError, parseUntil } from '../durations.js';
 import type { CardState, Question, StudySession } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
-import { RunnerUnavailable, SessionNotFound, StaleVersionError, type Clock, type UserRepos, type WorkflowRunner } from '../ports.js';
+import { AgentUnavailable, RunnerUnavailable, SessionNotFound, StaleVersionError, type Clock, type UserRepos, type WorkflowRunner } from '../ports.js';
+import { requireFundedWorkflow } from '../agent/funding.js';
 import { missing, RequestValidationError } from '../validation.js';
 import { buildMessage, DEFAULT_PROVIDER, providerLabels, providerUrls } from './handoff.js';
 
@@ -28,6 +29,8 @@ export interface StudyDeps {
   /** Whether any tier funds an LLM judge for this user. */
   agentAvailable: boolean;
   runner: WorkflowRunner;
+  /** Whether the shared tier would fund the judge; the start's precondition. */
+  freeTierConfigured: boolean;
 }
 
 const error = (status: number, code: string, message: string, extra: Record<string, unknown> = {}): ApiResult =>
@@ -233,6 +236,7 @@ async function submit(
     if (!deps.agentAvailable) return selfGrade;
     let wid: string;
     try {
+      requireFundedWorkflow(repos, deps.freeTierConfigured);
       const started = await deps.runner.start('GradeAnswer', {
         questionId: q.id,
         deckName,
@@ -255,7 +259,7 @@ async function submit(
       if (e instanceof StaleVersionError) return stale(e);
       // No tier funds an LLM judge for this user: self-grade rather than
       // book a worker slot the activity cannot pay.
-      if (e instanceof RunnerUnavailable) return selfGrade;
+      if (e instanceof RunnerUnavailable || e instanceof AgentUnavailable) return selfGrade;
       return error(502, 'grading_start_failed', `failed to start grading workflow: ${e instanceof Error ? e.message : String(e)}`);
     }
     const sid = s !== null ? s.id : '';

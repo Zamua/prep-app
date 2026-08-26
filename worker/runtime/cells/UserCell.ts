@@ -6,7 +6,7 @@ import type { CellSnapshot, InstantCard, InstantDeckResult, Profile, ProfileClai
 import type { AgentConfig, CarriedPreferences, Clock, JobStatusWrite, JobStepRequest, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
 import { agentConfig as agentConfigFor } from '../../app/agent/funding.js';
 import { deliverJobStatus } from '../../app/jobs/status.js';
-import { nextWakeAt, runWake } from '../../app/notify/wake.js';
+import { canGenerate, nextWakeAt, runWake, type WakeDeps } from '../../app/notify/wake.js';
 import type { StepOutput, WriteStepContext } from '../../app/jobs/registry.js';
 import { derive } from '../../app/viewmodels/derive.js';
 import { RowCapReached } from '../../domain/limits.js';
@@ -51,6 +51,11 @@ const SESSION_COUNTER_KEY = 'parity_session_counter';
 const ANONYMOUS_PROFILE = 'anonymous';
 
 export class UnknownProfile extends Error {}
+
+/** A job step reaching a cell the deletion already emptied. Not a refusal:
+ * the write will never succeed, so the step spends its attempts and the job
+ * fails rather than retrying against a tombstone forever. */
+export class AccountDestroyed extends Error {}
 
 export const TOMBSTONED_HEADER = 'x-prep-tombstoned';
 /** FastAPI's detail for an unauthenticated request. */
@@ -300,10 +305,17 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
    * `(jobId, transition)`, so a re-delivered write is dropped before any side
    * effect and a duplicate push is impossible. */
   async jobStatus(write: JobStatusWrite): Promise<void> {
-    await deliverJobStatus({ repos: this.repos(), webPush: this.c.webPush, vapidPublicKey: this.c.vapidPublicKey }, write);
+    const repos = this.repos();
+    // A destroyed account holds no rows to move and no device to push to, so
+    // this write is vacuously complete. Refusing it would only leave the job
+    // cell retrying a transition nobody can ever read.
+    if (repos.tombstone.get()) return;
+    await deliverJobStatus({ repos, webPush: this.c.webPush, vapidPublicKey: this.c.vapidPublicKey }, write);
     // A terminal transition is what a deck waiting on a refill wakes for, and
-    // what gives the prune something to count from.
-    await this.ensureAlarm();
+    // what gives the prune something to count from. On the tick, not the next
+    // millisecond: a job that failed leaves the deck's plan due again, and a
+    // due-now wake would dispatch its replacement immediately.
+    await this.ensureAlarm(TICK_MS);
   }
 
   /** A job's write step, run here rather than in the JobCell: the
@@ -311,6 +323,10 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
    * data row cannot disagree. */
   async applyJobStep(step: JobStepRequest): Promise<StepOutput> {
     const repos = this.repos(fixedClock(step.at));
+    // The tombstone is this cell's foreign key: a job still in flight when the
+    // account was destroyed must fail, not repopulate it.
+    const tomb = repos.tombstone.get();
+    if (tomb) throw new AccountDestroyed(`${step.jobId}: the owner's account was ${tomb.reason}`);
     const ctx: WriteStepContext = {
       site: 'owner',
       jobId: step.jobId,
@@ -328,9 +344,15 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     };
     const output = await this.c.stepRegistry.get(step.name)(ctx);
     // A write step is the one job path that adds rows here: fresh trivia
-    // cards change what the deck's next wake is worth.
-    await this.ensureAlarm();
+    // cards change what the deck's next wake is worth. Same tick floor as the
+    // status write, for the same reason.
+    await this.ensureAlarm(TICK_MS);
     return output;
+  }
+
+  async activeJobIds(): Promise<string[]> {
+    if (this.repos().tombstone.get()) return [];
+    return this.repos().jobs.listNonTerminal().map((w) => w.workflow_id);
   }
 
   async dump(): Promise<CellSnapshot> {
@@ -399,15 +421,22 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       return;
     }
     const owner = repos.prefs.get()?.tailscale_login ?? '';
-    const report = await runWake({
+    const report = await runWake(this.wakeDeps(repos, owner));
+    if (report.failed.length) console.warn(`wake for ${owner}: ${report.failed.join('; ')}`);
+    await this.ensureAlarm(TICK_MS);
+  }
+
+  /** One shape for the arm and the run, so the two cannot answer differently. */
+  private wakeDeps(repos: UserRepos, owner: string): WakeDeps {
+    return {
       repos,
       webPush: this.c.webPush,
       vapidPublicKey: this.c.vapidPublicKey,
       runner: this.c.runner({ owner, repos }),
       clock: this.c.clock,
-    });
-    if (report.failed.length) console.warn(`wake for ${owner}: ${report.failed.join('; ')}`);
-    await this.ensureAlarm(TICK_MS);
+      freeTierConfigured: this.c.freeTierConfigured,
+      jobsEnabled: this.c.jobsEnabled,
+    };
   }
 
   /**
@@ -419,7 +448,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   private async ensureAlarm(stillDue = ALARM_FLOOR_MS): Promise<void> {
     const repos = this.repos();
     const current = await this.storage.getAlarm();
-    const wake = repos.tombstone.get() || !this.c.periodicWork ? null : nextWakeAt(repos, this.c.clock);
+    const wake = repos.tombstone.get() || !this.c.periodicWork ? null : nextWakeAt(repos, this.c.clock, canGenerate({ repos, freeTierConfigured: this.c.freeTierConfigured, jobsEnabled: this.c.jobsEnabled }));
     if (wake === null) {
       if (current !== null) await this.storage.deleteAlarm();
       return;

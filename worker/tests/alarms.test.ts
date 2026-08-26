@@ -57,13 +57,14 @@ const DECK = (over: Partial<TriviaDeckState> = {}): TriviaDeckState => ({
   unanswered: 5,
   queued: 5,
   topic: 'World history',
-  refillPending: false,
+  lastRefillAt: null,
   activeSince: null,
   ...over,
 });
 
 const INPUTS = (over: Partial<WakeInputs> = {}): WakeInputs => ({
   prefs: PREFS(),
+  canGenerate: true,
   hasPushDevice: true,
   dueTotal: 0,
   nextDueAt: null,
@@ -176,9 +177,16 @@ describe('planWake', () => {
     ]);
   });
 
-  it('does not dispatch a second refill while one is in flight', () => {
-    const plan = planWake(INPUTS({ decks: [DECK({ unanswered: 1, refillPending: true })] }), NOW);
-    expect(plan.tasks).toEqual([{ kind: 'trivia-notify', deckId: 1 }]);
+  it('does not dispatch a second refill inside the deck\'s own interval', () => {
+    const recent = DECK({ unanswered: 1, lastRefillAt: isoUtc(new Date(NOW.getTime() - M)) });
+    expect(planWake(INPUTS({ decks: [recent] }), NOW).tasks).toEqual([{ kind: 'trivia-notify', deckId: 1 }]);
+  });
+
+  it('plans no refill at all where nothing would fund or run one', () => {
+    const starved = INPUTS({ canGenerate: false, decks: [DECK({ unanswered: 0, queued: 0 })] });
+    // Not merely skipped for this pass: a deck that asks and is never answered
+    // re-plans on every wake, which is a dispatch attempt every tick forever.
+    expect(planWake(starved, NOW)).toEqual({ tasks: [], wakeAt: null });
   });
 
   it('refills during quiet hours but leaves the fire and the stamp alone', () => {
@@ -187,9 +195,14 @@ describe('planWake', () => {
     expect(plan.tasks).toEqual([{ kind: 'trivia-refill', deckId: 1 }]);
     // Once that dispatch is on the books the deck waits out the window, with
     // no notification and no stamp behind it.
-    const after = planWake(INPUTS({ prefs: quiet, decks: [DECK({ unanswered: 0, refillPending: true })] }), NOW);
+    const after = planWake(INPUTS({ prefs: quiet, decks: [DECK({ unanswered: 0, lastRefillAt: isoUtc(NOW) })] }), NOW);
     expect(after.tasks).toEqual([]);
-    expect(partsIn(DEFAULT_TZ, new Date(after.wakeAt!)).hour).toBe(9);
+    expect(after.wakeAt).toBe(isoUtc(new Date(NOW.getTime() + 30 * M)));
+    // A deck the refill filled waits for the window instead: only the
+    // notification is what quiet hours hold back.
+    const filled = planWake(INPUTS({ prefs: quiet, decks: [DECK({ lastRefillAt: isoUtc(NOW) })] }), NOW);
+    expect(filled.tasks).toEqual([]);
+    expect(partsIn(DEFAULT_TZ, new Date(filled.wakeAt!)).hour).toBe(9);
   });
 
   it('waits out the backed-off interval, the mute and a mid-session user', () => {
@@ -212,8 +225,10 @@ describe('planWake', () => {
     const plan = planWake(INPUTS({ decks: [DECK({ unanswered: 0, queued: 0 })] }), NOW);
     expect(plan.tasks).toEqual([{ kind: 'trivia-refill', deckId: 1 }]);
 
-    const waiting = planWake(INPUTS({ decks: [DECK({ unanswered: 0, queued: 0, refillPending: true })] }), NOW);
-    expect(waiting).toEqual({ tasks: [], wakeAt: null });
+    // The dispatch on the books is what the deck waits on; the interval past
+    // it is the soonest a second one could help.
+    const waiting = planWake(INPUTS({ decks: [DECK({ unanswered: 0, queued: 0, lastRefillAt: isoUtc(NOW) })] }), NOW);
+    expect(waiting).toEqual({ tasks: [], wakeAt: isoUtc(new Date(NOW.getTime() + 30 * M)) });
   });
 
   it('prunes a day after the oldest terminal row, not before', () => {
@@ -298,6 +313,11 @@ function harness(opts: { at?: Date } = {}): Harness {
     PREP_PARITY_MODE: '1',
     PREP_BUILD_ID: 'ce11d0000000',
     PREP_INTERNAL_TOKEN: 'parity-internal-token',
+    // A funded tier: without one the plan declines to dispatch a refill at
+    // all, which is right and is its own test.
+    PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:9/v1',
+    PREP_FREE_INFERENCE_API_KEY: 'parity-free-tier-key',
+    PREP_FREE_INFERENCE_MODEL: 'parity-model',
   };
 
   const c = composeWith(env, {
@@ -461,7 +481,11 @@ describe('the user cell alarm', () => {
     await h.arm();
     await h.bus.settle();
 
-    expect(h.started).toEqual([{ kind: 'TriviaGenerate', input: { deckId: deck, deckName: 'world-history', topic: 'World history.' } }]);
+    // The free tier's per-call cap and the deck's prompts travel with it: the
+    // generate step runs in a cell that can read neither.
+    expect(h.started).toEqual([
+      { kind: 'TriviaGenerate', input: { deckId: deck, deckName: 'world-history', topic: 'World history.', batchSize: 5, existing: ['trivia 0'] } },
+    ]);
     // The deck still had a card, so the notification went out beside the dispatch.
     expect(h.logSources()).toEqual(['trivia']);
     expect(h.repos().decks.listTriviaDecks()[0]!.last_notified_at).toBe(isoUtc(NOW));
@@ -565,14 +589,18 @@ describe('the user cell alarm', () => {
 });
 
 describe('what the cell reads for its plan', () => {
-  it('names the deck it would refill and the job already refilling it', async () => {
+  it('names the deck it would refill and when its last refill was asked for', async () => {
     const h = harness();
     seedUser(h);
     const deck = seedTrivia(h, { cards: 2 });
     const repos = h.repos();
-    expect(readWakeInputs(repos, h.clock).decks[0]).toMatchObject({ id: deck, queued: 2, unanswered: 2, topic: 'World history.', refillPending: false });
+    expect(readWakeInputs(repos, h.clock, true).decks[0]).toMatchObject({ id: deck, queued: 2, unanswered: 2, topic: 'World history.', lastRefillAt: null });
 
     repos.jobs.register({ workflowId: 'trivia-world-history-1', workflowType: 'trivia_gen', deckId: deck, deckName: 'world-history', urlPath: '/trivia/gen/1' });
-    expect(readWakeInputs(repos, h.clock).decks[0]).toMatchObject({ refillPending: true });
+    expect(readWakeInputs(repos, h.clock, true).decks[0]).toMatchObject({ lastRefillAt: isoUtc(NOW) });
+    // A job that has since finished still holds the deck off: the guard is
+    // that a refill was asked for, not that one is still running.
+    repos.jobs.setTerminalAt('trivia-world-history-1');
+    expect(readWakeInputs(repos, h.clock, true).decks[0]).toMatchObject({ lastRefillAt: isoUtc(NOW) });
   });
 });

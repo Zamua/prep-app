@@ -6,6 +6,7 @@
 // the real handler consumes it.
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AgentPort, AgentRequest, JobInputs, JobKind, UserRepos } from '../../app/ports.js';
+import { FREE_TIER_MAX_CARDS_PER_CALL } from '../../app/agent/funding.js';
 import { registerWorkflowSteps } from '../../app/jobs/index.js';
 import { StepRegistry, type LlmStepContext } from '../../app/jobs/registry.js';
 import { UserCell } from '../../runtime/cells/UserCell.js';
@@ -16,6 +17,7 @@ import { fakeEnv, req } from '../helpers.js';
 
 const USER = 'parity@example.com';
 const DECK = 'distributed-systems';
+const TRIVIA_DECK = 'world-history';
 
 class CapturingRunner {
   readonly starts: { kind: JobKind; input: Record<string, unknown> }[] = [];
@@ -160,5 +162,42 @@ describe('a GradeAnswer start carries the question its grade step is shown', () 
     const prompt = await h.prompt('grade', input);
     expect(prompt).toContain(q.prompt);
     expect(prompt).toContain(q.answer);
+  });
+});
+
+describe('a TriviaGenerate start carries the deck its generate step must not repeat', () => {
+  it('sends the deck\'s own prompts, and the model is shown all of them', async () => {
+    const h = await harness();
+    const deckId = h.repos.decks.findId(TRIVIA_DECK)!;
+    expect((await h.post(`/trivia/decks/${deckId}/generate`)).status).toBe(303);
+    const input = h.runner.starts[0]!.input;
+    const prompts = h.repos.questions.promptsInDeck(deckId);
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(input['existing']).toEqual(prompts);
+
+    const prompt = await h.prompt('generate', input);
+    for (const q of prompts) expect(prompt).toContain(`- ${q}`);
+    expect(prompt).not.toContain('(none yet');
+  });
+});
+
+describe('a start carries the ceiling its tier puts on the call', () => {
+  it('caps the free tier per call and leaves BYOK uncapped', async () => {
+    const h = await harness();
+    const deckId = h.repos.decks.findId(TRIVIA_DECK)!;
+    await h.post('/decks/new/srs', { name: 'Nations', context_prompt: 'the nations of the world', action: 'plan' });
+    await h.post(`/trivia/decks/${deckId}/generate`);
+    expect(h.runner.starts.map((s) => s.input['maxCards'] ?? s.input['batchSize'])).toEqual([FREE_TIER_MAX_CARDS_PER_CALL, FREE_TIER_MAX_CARDS_PER_CALL]);
+    // The cap is advisory in the prompt and enforced on the reply, but the
+    // model is told the number either way.
+    expect(await h.prompt('plan', h.runner.starts[0]!.input)).toContain(`Create at most ${FREE_TIER_MAX_CARDS_PER_CALL} cards`);
+    expect(await h.prompt('generate', h.runner.starts[1]!.input)).toContain(`Generate exactly ${FREE_TIER_MAX_CARDS_PER_CALL} questions`);
+
+    // A key of their own: the owner pays, so the model picks the count.
+    h.repos.byok.store('anthropic-api', 'ciphertext', 'sk-ant-');
+    h.runner.starts.length = 0;
+    await h.post('/decks/new/srs', { name: 'Rivers', context_prompt: 'the rivers of the world', action: 'plan' });
+    expect(h.runner.starts[0]!.input['maxCards']).toBe(0);
+    expect(await h.prompt('plan', h.runner.starts[0]!.input)).toContain('Decide how many cards to create');
   });
 });

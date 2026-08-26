@@ -14,6 +14,7 @@ export const DATA_TABLES = [
   'reviews',
   'grading_idempotency',
   'questions_idempotency',
+  'steps_idempotency',
   'offline_sync_idempotency',
   'study_sessions',
   'study_session_answers',
@@ -112,6 +113,12 @@ CREATE TABLE IF NOT EXISTS grading_idempotency (
 CREATE TABLE IF NOT EXISTS questions_idempotency (
   idempotency_key TEXT PRIMARY KEY,
   question_id     INTEGER NOT NULL,
+  created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS steps_idempotency (
+  idempotency_key TEXT PRIMARY KEY,
+  result          TEXT NOT NULL,
   created_at      TEXT NOT NULL
 );
 

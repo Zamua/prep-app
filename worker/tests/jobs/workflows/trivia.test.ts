@@ -1,8 +1,9 @@
 // Trivia batch generation end to end: the counters the progress bar reads,
 // the per-deck prompt dedupe, and the two ways a batch is refused.
 import { describe, expect, it } from 'vitest';
-import { buildTriviaPrompt, DEFAULT_BATCH_SIZE, NO_CARDS, parseTriviaJson, TriviaParseError } from '../../../app/jobs/trivia.js';
-import { workflowHarness } from './harness.js';
+import { buildTriviaPrompt, DEFAULT_BATCH_SIZE, NO_CARDS, parseTriviaJson, TriviaParseError, triviaInsert } from '../../../app/jobs/trivia.js';
+import { workflowHarness, writeCtx } from './harness.js';
+import { cell } from '../../repos/setup.js';
 
 const ID = 'trivia-facts-0000000003';
 
@@ -88,6 +89,30 @@ describe('TriviaGenerate', () => {
     await h.run(ID);
     expect(h.agent.prompts[0]).toContain('- Capital of France?\n- Capital of Japan?\n');
     expect(h.agent.prompts[0]).toContain(`Generate exactly ${DEFAULT_BATCH_SIZE} questions`);
+  });
+});
+
+describe('the insert step', () => {
+  it('counts a redelivered row as the insert it already made, not a duplicate', async () => {
+    const c = cell();
+    const deck = c.repos.decks.createTrivia('facts', { topic: 'assorted facts', intervalMinutes: 30 });
+    const ctx = writeCtx({
+      repos: c.repos,
+      clock: c.clock,
+      kind: 'TriviaGenerate',
+      stepKey: `${ID}-insert-0`,
+      name: 'insert',
+      input: { deckId: deck, deckName: 'facts', topic: 'assorted facts' },
+      itemInput: { q: 'Capital of France?', a: 'Paris', e: 'because Paris' },
+    });
+
+    const first = (await triviaInsert(ctx)).value;
+    // Without the key the row finds the card it wrote itself and calls it a
+    // duplicate, so the counters the terminal screen reads under-report.
+    expect((await triviaInsert(ctx)).value).toEqual(first);
+    expect(first).toMatchObject({ outcome: 'inserted' });
+    expect(c.repos.questions.listInDeck(deck).length).toBe(1);
+    expect(c.repos.trivia.listQueueForDeck(deck).length).toBe(1);
   });
 });
 

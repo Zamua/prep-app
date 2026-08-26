@@ -17,7 +17,7 @@ import { SqlPrefsRepo } from './prefsRepo.js';
 import { SqlQuestionRepo } from './questionRepo.js';
 import { SqlReviewRepo } from './reviewRepo.js';
 import { SqlSessionRepo } from './sessionRepo.js';
-import type { CellStorage } from './storage.js';
+import { joinedTransactions, type CellStorage } from '../../storage.js';
 import { SqlTokenRepo } from './tokenRepo.js';
 import { SqlTriviaRepo } from './triviaRepo.js';
 
@@ -28,8 +28,12 @@ export interface RepoDeps {
   fuzz: Fuzz;
 }
 
-export function userRepos(storage: CellStorage, deps: RepoDeps): UserRepos {
+export function userRepos(raw: CellStorage, deps: RepoDeps): UserRepos {
   const { clock } = deps;
+  // One transaction depth for the whole set, so a caller can wrap several
+  // repository methods in `tx.sync` and have them land as one fact. celld
+  // refuses a second BEGIN, and most of these methods already open one.
+  const storage = joinedTransactions(raw);
   const decks = new SqlDeckRepo(storage, clock);
   const cards = new SqlCardRepo(storage, clock);
   return {

@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { llmStep, writeStep } from '../../app/jobs/registry.js';
 import type { StepGraph } from '../../domain/jobs/graph.js';
-import { DurabilityUnproven, MAX_REFUSALS } from '../../domain/jobs/refusal.js';
+import { DurabilityUnproven, MAX_DELIVERY_ATTEMPTS, MAX_REFUSALS } from '../../domain/jobs/refusal.js';
 import { isoUtc } from '../../domain/py.js';
 import { jobHarness, seedOwner, type JobHarness } from './harness.js';
 import { USER } from '../repos/setup.js';
@@ -99,7 +99,6 @@ function register(h: JobHarness, opts: { plan?: unknown[]; expandFails?: number[
     if (existing !== null) return { value: existing };
     const deck = ctx.repos.decks.getOrCreate('demo');
     const prompt = String(ctx.itemInput ?? ctx.stepKey);
-    // `add` transacts on its own; a cell's storage refuses a second BEGIN.
     const qid = ctx.repos.questions.add(deck, { type: 'short', prompt, answer: prompt });
     ctx.repos.idempotency.recordQuestion(ctx.stepKey, qid);
     return { value: qid, progress: { inserted: ctx.item + 1 } };
@@ -204,7 +203,7 @@ describe('driving to a gate', () => {
     expect(h.ledger(id).job['state']).toBe('terminal');
   });
 
-  it('consumes every pending event when a gate resolves, so a duplicated signal is a no-op', async () => {
+  it('consumes a duplicated signal with the one it resolved, so it cannot resolve a second gate', async () => {
     register(h);
     const id = await startDemo(h);
     await h.settle();
@@ -214,6 +213,22 @@ describe('driving to a gate', () => {
     const l = h.ledger(id);
     expect(l.events.every((e) => e['consumed_at'] !== null)).toBe(true);
     expect(l.outbox.filter((o) => o['status'] === 'accepting').length).toBe(1);
+  });
+
+  it('leaves a second, different signal for the gate it comes back to', async () => {
+    const calls = register(h);
+    const id = await startDemo(h);
+    await h.settle();
+    // Two tabs, or a double submit: the feedback resolves this round, and the
+    // accept has to survive it or the user's second press does nothing.
+    await h.jobCell(id).signal({ name: 'feedback', payload: 'fewer', at: h.clock.now().toISOString() });
+    await h.jobCell(id).signal({ name: 'accept', at: h.clock.now().toISOString() });
+    await h.settle();
+    const l = h.ledger(id);
+    // Both rounds of the plan, then the accept carries the job through.
+    expect(calls.llm.slice(0, 2)).toEqual([`${id}-plan-0`, `${id}-plan-1`]);
+    expect(l.outbox.map((o) => o['status'])).toEqual(['planning', 'awaiting_feedback', 'replanning', 'awaiting_feedback', 'accepting', 'generating', 'applying', 'done']);
+    expect(l.events.every((e) => e['consumed_at'] !== null)).toBe(true);
   });
 
   it('re-runs the plan on feedback with a fresh key and the same deadline', async () => {
@@ -375,6 +390,26 @@ describe('the post-restart window', () => {
     expect(calls.write.filter((k) => k === `${id}-insert-0`).length).toBe(1);
     expect(h.repos().questions.listInDeck(h.repos().decks.findId('demo')!).length).toBe(1);
     expect(h.repos().jobProgress.get(id)?.status).toBe('done');
+  });
+
+  it('abandons a status write the owner will never take, and lets the cell sleep', async () => {
+    register(h, { plan: ['a'] });
+    const id = await startDemo(h);
+    // Permanent, not the post-restart window: this owner refuses forever.
+    h.interfere(({ method }) => {
+      if (method === 'jobStatus') throw new Error('no such table: job_progress');
+    });
+    await h.settleThrough(600_000);
+    await h.jobCell(id).signal({ name: 'accept', at: h.clock.now().toISOString() });
+    await h.settleThrough(600_000);
+
+    const outbox = h.ledger(id).outbox;
+    expect(h.ledger(id).job['state']).toBe('terminal');
+    expect(outbox.every((o) => o['delivered_at'] === null)).toBe(true);
+    expect(outbox.map((o) => o['attempt'])).toEqual(outbox.map(() => MAX_DELIVERY_ATTEMPTS));
+    // The bound is what stops the cell waking every eight seconds for the
+    // life of the deployment over rows nobody will ever accept.
+    expect(h.jobStorage(id).alarmAt).toBeNull();
   });
 
   it('gives up on a step that refuses past the twelve-refusal cap', async () => {

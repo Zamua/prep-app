@@ -312,6 +312,7 @@ async function runMerge(c: Composition, identity: Identity, anonId: string, now:
       .upsert(identity.subject, { email: identity.email, displayName: identity.displayName, profilePicUrl: identity.profilePicUrl }, at, idx);
     const result = await mergeAnonymous(anonId, identity.subject, {
       cells: c.userCells,
+      jobs: c.jobCells,
       directory: c.directory,
       limiter: c.limiter,
       clock: { now: () => now },

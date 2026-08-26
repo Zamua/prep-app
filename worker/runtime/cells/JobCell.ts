@@ -23,8 +23,8 @@ import {
   type StepRow,
   type StepWrite,
 } from '../../domain/jobs/ledger.js';
-import { isRefusal, MAX_REFUSALS, refusalBackoffMs } from '../../domain/jobs/refusal.js';
-import { backoffMs, deriveAlarm, nextAction, stepKey, type Action, type LedgerState } from '../../domain/jobs/schedule.js';
+import { isAbandoned, isRefusal, MAX_DELIVERY_ATTEMPTS, MAX_REFUSALS, refusalBackoffMs } from '../../domain/jobs/refusal.js';
+import { backoffMs, deriveAlarm, nextAction, stepKey, type Action, type GateSignal, type LedgerState } from '../../domain/jobs/schedule.js';
 import { isoUtc } from '../../domain/py.js';
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
@@ -94,7 +94,7 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     this.ledger.appendEvent({ name: event.name, payload: event.payload ?? null, at: event.at });
     const state = this.stateOf(this.ledger.read()!);
     const action = nextAction(state, this.now());
-    if (action.kind === 'run' && action.event === event.name) this.ledger.commit(this.resolveGate(state, action.event, false, this.now()));
+    if (action.kind === 'run' && action.event?.name === event.name) this.ledger.commit(this.resolveGate(state, action.event, false, this.now()));
     await this.ensureAlarm();
     return this.peek();
   }
@@ -170,11 +170,13 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
   }
 
   /** Undelivered transitions, oldest first. A refused delivery is deferred on
-   * the refusal backoff and the alarm brings it back. */
+   * the refusal backoff and the alarm brings it back, up to
+   * `MAX_DELIVERY_ATTEMPTS`; past that the row is abandoned so an owner that
+   * refuses permanently cannot keep this cell awake for the deploy's life. */
   private async flushOutbox(rows: LedgerRows): Promise<void> {
     const route = this.ledger.route();
     for (const row of rows.outbox) {
-      if (row.delivered_at !== null) continue;
+      if (row.delivered_at !== null || isAbandoned(row)) continue;
       const now = this.now();
       if (row.next_attempt_at !== null && new Date(row.next_attempt_at).getTime() > now.getTime()) continue;
       const write: JobStatusWrite = {
@@ -193,7 +195,11 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
       } catch (e) {
         const attempt = row.attempt + 1;
         this.ledger.deferDelivery(row.transition, attempt, isoUtc(new Date(this.now().getTime() + refusalBackoffMs(attempt - 1))));
-        if (!isRefusal(e)) console.warn(`job ${rows.job.id}: status write ${row.transition} failed: ${message(e)}`);
+        if (attempt >= MAX_DELIVERY_ATTEMPTS) {
+          console.error(`job ${rows.job.id}: giving up on status write ${row.transition} to ${rows.job.owner} after ${attempt} attempts: ${message(e)}`);
+        } else if (!isRefusal(e)) {
+          console.warn(`job ${rows.job.id}: status write ${row.transition} failed: ${message(e)}`);
+        }
         return;
       }
     }
@@ -352,14 +358,15 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     const t = this.transition(state, status, now, state.steps, extra);
     // Nothing can resolve a gate any more, so a signal that arrived late is
     // stamped here rather than left looking pending forever.
-    return { job: { ...t.job, state: 'terminal', terminal_at: isoUtc(now), terminal_status: status }, outbox: t.outbox, consumeEventsAt: isoUtc(now) };
+    return { job: { ...t.job, state: 'terminal', terminal_at: isoUtc(now), terminal_status: status }, outbox: t.outbox, consumeEvents: { at: isoUtc(now), throughSeq: null } };
   }
 
   // ---- gates -------------------------------------------------------------------
 
-  private resolveGate(state: LedgerState, event: string, byDeadline: boolean, now: Date): LedgerCommit {
+  private resolveGate(state: LedgerState, signal: GateSignal, byDeadline: boolean, now: Date): LedgerCommit {
     const nodes = activeNodes(state.graph, state.job.input);
     const node = nodes[state.job.cursor]!;
+    const event = signal.name;
     const outcome = node.gate!.onEvent[event]!;
     const row = state.steps.find((r) => r.idx === state.job.cursor && r.status === 'pending')!;
     const write: StepWrite = {
@@ -368,14 +375,21 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
       attempt: row.attempt + 1,
       refusals: row.refusals,
       next_attempt_at: null,
-      output: { value: { event, byDeadline } },
+      // The payload travels with the outcome: a re-run reads its feedback text
+      // out of the step row, which is the only place a cold cell can find it.
+      output: { value: { event, byDeadline, payload: signal.payload } },
       error: null,
       started_at: row.started_at,
       finished_at: isoUtc(now),
     };
     const steps = state.steps.map((r) => (r.step_key === row.step_key ? { ...r, ...write } : r));
     const t = this.transition(state, outcome.transient, now, steps);
-    const commit: LedgerCommit = { step: write, consumeEventsAt: isoUtc(now), job: { ...t.job, state: 'running' }, outbox: t.outbox };
+    const commit: LedgerCommit = {
+      step: write,
+      consumeEvents: { at: isoUtc(now), throughSeq: signal.seq, name: event },
+      job: { ...t.job, state: 'running' },
+      outbox: t.outbox,
+    };
     if (outcome.go === 'reject') {
       commit.job = { ...commit.job, cursor: nodes.length, terminal_status: 'rejected' };
       return commit;

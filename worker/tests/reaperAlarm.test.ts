@@ -29,7 +29,7 @@ interface Harness {
   evict(): Promise<void>;
 }
 
-function harness(): Harness {
+function harness(over: Partial<Env> = {}): Harness {
   const clock = new MutableClock(NOW);
   const bus = new AlarmBus(clock);
   const users = new Map<string, { cell: UserCell; storage: FakeCellStorage }>();
@@ -63,6 +63,7 @@ function harness(): Harness {
     PREP_PARITY_MODE: '1',
     PREP_BUILD_ID: 'ce11d0000000',
     PREP_INTERNAL_TOKEN: 'parity-internal-token',
+    ...over,
   };
   composeWith(env, { clock });
 
@@ -103,6 +104,17 @@ describe('the directory alarm', () => {
     const h = harness();
     await settled();
     expect(h.storage.alarmAt).toBe(NOW.getTime() + FLOOR);
+  });
+
+  it('arms nothing at all where scheduled work is off', async () => {
+    // A parity target pins the clock, so a directory that has never swept
+    // reads as due at once: it would destroy accounts under the corpus.
+    const h = harness({ PREP_PARITY_NO_PERIODIC: '1' });
+    await h.mint('anon:a1', IDLE);
+    await settled();
+    expect(h.storage.alarmAt).toBeNull();
+    await h.cell().alarm();
+    expect(await h.ids()).toEqual(['anon:a1']);
   });
 
   it('reaps the idle accounts on the first fire and comes back a day later', async () => {

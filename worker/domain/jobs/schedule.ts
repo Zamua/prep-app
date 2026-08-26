@@ -3,6 +3,7 @@
 import { isoUtc, parseIso } from '../py.js';
 import { activeNodes, nodeAt, type Fanout, type StepGraph, type StepNode } from './graph.js';
 import { isFinished, type EventRow, type JobRow, type OutboxRow, type StepRow } from './ledger.js';
+import { isAbandoned } from './refusal.js';
 
 export interface LedgerState {
   graph: StepGraph;
@@ -12,9 +13,17 @@ export interface LedgerState {
   outbox: readonly OutboxRow[];
 }
 
+/** The signal a gate resolves on. `seq` is null for the deadline, which has no
+ * event row of its own; `payload` is the body a re-run is shown. */
+export interface GateSignal {
+  name: string;
+  payload: unknown;
+  seq: number | null;
+}
+
 export type Action =
   /** Run this step row. `event` is set when the row is a gate being resolved. */
-  | { kind: 'run'; stepKey: string; event: string | null; byDeadline: boolean }
+  | { kind: 'run'; stepKey: string; event: GateSignal | null; byDeadline: boolean }
   /** Nothing is due; the alarm is already derived for `untilIso`. */
   | { kind: 'wait'; untilIso: string }
   /** Parked on a human gate until an event or the deadline. */
@@ -71,9 +80,9 @@ export function nextAction(state: LedgerState, now: Date): Action {
     if (row === undefined) return { kind: 'wait', untilIso: isoUtc(now) };
     if (isFinished(row)) return { kind: 'advance', to: job.cursor + 1 };
     const event = firstUnconsumed(events, node.gate!.events);
-    if (event) return { kind: 'run', stepKey: row.step_key, event: event.name, byDeadline: false };
+    if (event) return { kind: 'run', stepKey: row.step_key, event: { name: event.name, payload: event.payload, seq: event.seq }, byDeadline: false };
     if (job.deadline_at !== null && ms(job.deadline_at) <= now.getTime()) {
-      return { kind: 'run', stepKey: row.step_key, event: node.gate!.onDeadline, byDeadline: true };
+      return { kind: 'run', stepKey: row.step_key, event: { name: node.gate!.onDeadline, payload: null, seq: null }, byDeadline: true };
     }
     return { kind: 'gate', untilIso: job.deadline_at };
   }
@@ -94,8 +103,9 @@ export function nextAction(state: LedgerState, now: Date): Action {
 
 /**
  * When the cell must next wake, from the rows alone: the earliest pending
- * retry, the gate deadline, and the earliest undelivered status write. Null
- * when nothing is outstanding, which is a job that has finished and flushed.
+ * retry, the gate deadline, and the earliest undelivered status write that is
+ * still worth offering. Null when nothing is outstanding, which is a job that
+ * has finished and flushed, or one whose owner refused every delivery.
  */
 export function deriveAlarm(state: LedgerState): string | null {
   const { graph, job, steps, outbox } = state;
@@ -110,9 +120,14 @@ export function deriveAlarm(state: LedgerState): string | null {
       candidates.push(row.next_attempt_at ?? job.created_at);
     }
     if (job.state === 'gated' && job.deadline_at !== null) candidates.push(job.deadline_at);
+    // A signal that landed while the cursor was elsewhere is acted on at the
+    // gate it belongs to, not where it arrived. Without a wake for it the cell
+    // would sleep to the deadline with the user's click unanswered.
+    const gate = job.state === 'gated' ? nodeAt(graph, job.input, job.cursor)?.gate : undefined;
+    if (gate && firstUnconsumed(state.events, gate.events)) candidates.push(job.created_at);
   }
   for (const row of outbox) {
-    if (row.delivered_at !== null) continue;
+    if (row.delivered_at !== null || isAbandoned(row)) continue;
     candidates.push(row.next_attempt_at ?? row.at);
   }
   return earliest(candidates);

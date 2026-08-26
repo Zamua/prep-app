@@ -11,7 +11,7 @@ import { namespaceUserCells, retrying } from '../runtime/adapters/cells.js';
 import { SeededRandom } from '../runtime/adapters/random.js';
 import { DATA_TABLES } from '../runtime/adapters/sql/schema.js';
 import type { Env } from '../runtime/env.js';
-import { FakeDirectory, FakeLimiter, FakeUserCells } from './fakes/cells.js';
+import { FakeDirectory, FakeJobCells, FakeLimiter, FakeUserCells } from './fakes/cells.js';
 import type { FakeCellStorage } from './fakes/sqlStorage.js';
 import { fakeEnv, namespaceOf, ROOT } from './helpers.js';
 
@@ -145,7 +145,7 @@ function fixture(): Fixture {
     directory,
     limiter,
     clock: { at },
-    deps: { cells, directory, limiter, clock, randomHex: () => SUFFIX },
+    deps: { cells, jobs: new FakeJobCells(), directory, limiter, clock, randomHex: () => SUFFIX },
   };
 }
 
@@ -446,7 +446,7 @@ describe('the deletion survives a lost durability ack', () => {
     });
     const cells = namespaceUserCells(namespace, { attempts: 3, baseMs: 0, sleep: async () => {} });
 
-    await destroyAccount(ANON, 'merged', { cells, directory: f.directory, clock: f.deps.clock });
+    await destroyAccount(ANON, 'merged', { cells, jobs: f.deps.jobs, directory: f.directory, clock: f.deps.clock });
 
     expect(wrapped.has(ANON)).toBe(true);
     expect(f.cells.entry(ANON).storage.rows('tombstone')[0]).toMatchObject({ reason: 'merged', scrubbed_at: NOW });
@@ -507,7 +507,7 @@ describe('a merge that fails the same way every time', () => {
           if (String(prop) !== 'beginMerge') return value;
           return async (...args: [string, string, string]) => {
             const out = await target.beginMerge(...args);
-            await destroyAccount(ANON, 'reaped', { cells: f.cells, directory: f.directory, clock: f.deps.clock });
+            await destroyAccount(ANON, 'reaped', { cells: f.cells, jobs: f.deps.jobs, directory: f.directory, clock: f.deps.clock });
             return out;
           };
         },

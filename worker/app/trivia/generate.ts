@@ -5,6 +5,8 @@
 import { AppError, badRequest, notFound } from '../errors.js';
 import { json } from '../http.js';
 import { flatten } from '../jobs/view.js';
+import { requireFundedWorkflow } from '../agent/funding.js';
+import { triviaStartInput } from '../jobs/startInput.js';
 import { agentAvailable } from '../pageContext.js';
 import { page, redirect, type PageRequest, type PageResult } from '../pageResult.js';
 import type { UserRepos, WorkflowRunner } from '../ports.js';
@@ -76,7 +78,8 @@ export async function triviaGenerate(repos: UserRepos, req: PageRequest, deps: T
   // back to its own name, as Python's route does.
   const topic = repos.decks.getContextPrompt(deckName) || deckName;
   try {
-    const { workflowId } = await deps.runner.start('TriviaGenerate', { deckId, deckName, topic });
+    requireFundedWorkflow(repos, deps.freeTierConfigured);
+    const { workflowId } = await deps.runner.start('TriviaGenerate', triviaStartInput(repos, deckId, deckName, topic, deps.freeTierConfigured));
     return redirect(`/trivia/gen/${workflowId}`);
   } catch (e) {
     throw new AppError(500, `failed to start trivia workflow: ${e instanceof Error ? e.message : String(e)}`);

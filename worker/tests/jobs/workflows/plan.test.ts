@@ -137,9 +137,11 @@ describe('PlanGenerate: the gate', () => {
     expect((h.progress(ID)?.progress['plan'] as { title: string }[]).map((p) => p.title)).toEqual(['charlie']);
     // The Go single-timer rule: a re-run returns to the gate it already had.
     expect(h.job(ID)['deadline_at']).toBe(deadline);
-    // The second plan call is the refine prompt, carrying the prior outline.
+    // The second plan call is the refine prompt, carrying the prior outline
+    // and the words the user typed, which is the whole point of the round.
     expect(h.agent.prompts[1]).toContain('Refine the card plan for deck "capitals"');
     expect(h.agent.prompts[1]).toContain('1. [short] alpha — about alpha');
+    expect(h.agent.prompts[1]).toContain('The user wants this changed:\nfewer cards please');
 
     await h.signal(ID, 'accept');
     expect(await h.run(ID)).toBe('terminal');
@@ -154,6 +156,8 @@ describe('PlanGenerate: the gate', () => {
     await h.run(ID);
     await h.signal(ID, 'feedback', 'try again');
     expect(await h.run(ID)).toBe('gated');
+    // A bare string is a payload too: the signal carries it either way.
+    expect(h.agent.prompts[1]).toContain('The user wants this changed:\ntry again');
 
     const at = h.progress(ID)!;
     expect(at.status).toBe('awaiting_feedback');

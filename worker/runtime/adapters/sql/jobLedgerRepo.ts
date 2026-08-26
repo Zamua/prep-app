@@ -148,8 +148,11 @@ export class SqlJobLedger implements JobLedger {
           row.item,
         );
       }
-      if (commit.consumeEventsAt) {
-        this.db.run('UPDATE events SET consumed_at = ? WHERE consumed_at IS NULL', commit.consumeEventsAt);
+      const consume = commit.consumeEvents;
+      if (consume && consume.throughSeq === null) {
+        this.db.run('UPDATE events SET consumed_at = ? WHERE consumed_at IS NULL', consume.at);
+      } else if (consume) {
+        this.db.run('UPDATE events SET consumed_at = ? WHERE consumed_at IS NULL AND (seq <= ? OR name = ?)', consume.at, consume.throughSeq, consume.name ?? '');
       }
       const job = commit.job;
       if (job && Object.keys(job).length) {

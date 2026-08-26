@@ -2,6 +2,7 @@
 // polling page and its fragment, and the two gate signals. The preview the
 // partial renders is built here, because it needs the live rows the model
 // proposed to change, not just the plan the model returned.
+import { requireFundedWorkflow } from '../agent/funding.js';
 import { AppError, badRequest, notFound } from '../errors.js';
 import { json } from '../http.js';
 import { agentAvailable } from '../pageContext.js';
@@ -226,6 +227,7 @@ export async function deckTransform(repos: UserRepos, req: PageRequest, deps: Tr
   const deckId = repos.decks.getOrCreate(name);
   if (!agentAvailable(repos, deps.freeTierConfigured)) throw new AppError(403, NO_FUNDING);
   try {
+    requireFundedWorkflow(repos, deps.freeTierConfigured);
     const { workflowId } = await deps.runner.start('Transform', {
       scope: 'deck',
       targetId: deckId,
@@ -262,6 +264,7 @@ export async function reorganizeSubmit(repos: UserRepos, req: PageRequest, deps:
   // own form with the refusal rather than throwing the error page.
   if (!agentAvailable(repos, deps.freeTierConfigured)) return reorganizePage(repos, { prompt, error: NO_FUNDING, status: 403 });
   try {
+    requireFundedWorkflow(repos, deps.freeTierConfigured);
     const { workflowId } = await deps.runner.start('Transform', {
       scope: 'reorganize',
       targetId: 0,

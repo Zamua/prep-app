@@ -5,7 +5,8 @@ import type { Clock, Precheck } from '../app/ports.js';
 import type { MergeMarker, TombstoneReason } from '../app/entities.js';
 import { SUBJECT_HEADER, KIND_HEADER } from '../runtime/cells/router.js';
 import { TOMBSTONED_HEADER, UserCell } from '../runtime/cells/UserCell.js';
-import { FakeDirectory, FakeUserCells } from './fakes/cells.js';
+import { FakeDirectory, FakeJobCells, FakeUserCells } from './fakes/cells.js';
+import { compose } from '../runtime/compose.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
 import { fakeEnv, req } from './helpers.js';
 
@@ -60,7 +61,7 @@ describe('a destroyed cell answers for itself', () => {
       at: AT,
     });
 
-    await destroyAccount(ANON, 'deleted', { cells, directory, clock });
+    await destroyAccount(ANON, 'deleted', { cells, jobs: new FakeJobCells(), directory, clock });
 
     const { storage } = cells.entry(ANON);
     const revived = new UserCell(fakeCellState(storage), env);
@@ -71,5 +72,64 @@ describe('a destroyed cell answers for itself', () => {
     expect(anonAccess(await revived.precheck())).toEqual({ kind: 'gone', reason: 'deleted' });
     // Re-migrating an emptied cell must not look like a fresh account.
     expect(storage.rows('profile')).toEqual([]);
+  });
+
+  it('refuses a job step and drops a job status, so an in-flight job cannot repopulate it', async () => {
+    const env = fakeEnv();
+    const cells = new FakeUserCells(env);
+    const directory = new FakeDirectory();
+    const clock: Clock = { now: () => new Date(AT) };
+    await directory.register(ANON, true, AT);
+    const cell = cells.cell(ANON);
+    await cell.createInstantDeck({
+      displayName: 'Capitals',
+      cards: [{ prompt: 'Capital of France?', answer: 'Paris', answer_regex: null }],
+      mint: { id: ANON, displayName: 'Guest', idx: 7 },
+      at: AT,
+    });
+    await destroyAccount(ANON, 'deleted', { cells, jobs: new FakeJobCells(), directory, clock });
+
+    // The cell's alarm reactivates it and its constructor re-migrates the
+    // schema, so the tables a late write wants are back.
+    const { storage } = cells.entry(ANON);
+    const revived = new UserCell(fakeCellState(storage), env);
+    const step = {
+      jobId: 'plan-capitals-0000000001',
+      jobKind: 'PlanGenerate',
+      name: 'insert',
+      stepKey: 'plan-capitals-0000000001-insert-0',
+      idx: 3,
+      item: 0,
+      input: { deckId: 1, deckName: 'capitals', prompt: 'p', maxCards: 0 },
+      outputs: {},
+      itemInput: { type: 'short', topic: 'geo', prompt: 'What about alpha?', answer: 'alpha', rubric: '' },
+      at: AT,
+    };
+    await expect(revived.applyJobStep(step)).rejects.toThrow(/deleted/);
+    // A status write is vacuous rather than refused: nothing to record, and a
+    // refusal would only leave the job cell retrying it forever.
+    await revived.jobStatus({ jobId: step.jobId, transition: 1, status: 'done', progress: {}, urlPath: '/plan/x', kind: 'plan', deckId: null, deckName: 'capitals' });
+
+    expect(storage.rows('questions')).toEqual([]);
+    expect(storage.rows('decks')).toEqual([]);
+    expect(storage.rows('active_workflows')).toEqual([]);
+  });
+
+  it('stops the owner\'s jobs before it empties the cell', async () => {
+    const env = fakeEnv();
+    const cells = new FakeUserCells(env);
+    const jobs = new FakeJobCells();
+    const directory = new FakeDirectory();
+    const clock: Clock = { now: () => new Date(AT) };
+    await directory.register(ANON, true, AT);
+    const repos = compose(env).userRepos(cells.entry(ANON).storage, clock);
+    repos.jobs.register({ workflowId: 'plan-capitals-1', workflowType: 'plan', deckId: null, deckName: 'capitals', urlPath: '/plan/plan-capitals-1' });
+    repos.jobs.register({ workflowId: 'trivia-facts-2', workflowType: 'trivia_gen', deckId: null, deckName: 'facts', urlPath: '/trivia/gen/trivia-facts-2' });
+    repos.jobs.setTerminalAt('trivia-facts-2');
+
+    await destroyAccount(ANON, 'deleted', { cells, jobs, directory, clock });
+
+    // The one still running, and not the one that already landed.
+    expect(jobs.terminated).toEqual([{ id: 'plan-capitals-1', reason: 'account deleted' }]);
   });
 });

@@ -75,10 +75,22 @@ describe('nextAction', () => {
     });
     expect(nextAction(gated, NOW)).toEqual({ kind: 'gate', untilIso: iso(86_400_000) });
 
-    const event: EventRow = { seq: 1, name: 'accept', payload: null, at: iso(10), consumed_at: null };
-    expect(nextAction({ ...gated, events: [event] }, NOW)).toEqual({ kind: 'run', stepKey: 'k-gate-0', event: 'accept', byDeadline: false });
+    const event: EventRow = { seq: 1, name: 'accept', payload: { feedback: 'fewer' }, at: iso(10), consumed_at: null };
+    expect(nextAction({ ...gated, events: [event] }, NOW)).toEqual({
+      kind: 'run',
+      stepKey: 'k-gate-0',
+      // The row's seq and body travel with the name: the gate's outcome stores
+      // the payload, and a re-run has no other place to read its feedback from.
+      event: { name: 'accept', payload: { feedback: 'fewer' }, seq: 1 },
+      byDeadline: false,
+    });
 
-    expect(nextAction(gated, new Date(NOW.getTime() + 86_400_001))).toEqual({ kind: 'run', stepKey: 'k-gate-0', event: 'reject', byDeadline: true });
+    expect(nextAction(gated, new Date(NOW.getTime() + 86_400_001))).toEqual({
+      kind: 'run',
+      stepKey: 'k-gate-0',
+      event: { name: 'reject', payload: null, seq: null },
+      byDeadline: true,
+    });
   });
 
   it('ignores an event the gate does not wait for, and a consumed one', () => {

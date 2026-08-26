@@ -10,6 +10,7 @@ import { CHAT_PROVIDERS, DEFAULT_PROVIDER, buildMessage, providerUrls, quoteAll 
 import { page, redirect, redirectBack, type PageRequest, type PageResult } from '../pageResult.js';
 import type { AgentPort, UserRepos, WorkflowRunner } from '../ports.js';
 import { pyInt } from '../decks/pages.js';
+import { triviaStartInput } from '../jobs/startInput.js';
 import { aiRegrade, gradeWithFallback, type Verdict } from './grading.js';
 
 export const DECK_NOT_FOUND = 'deck not found';
@@ -21,6 +22,7 @@ export interface TriviaDeps {
   repos: UserRepos;
   agent: AgentPort;
   runner: WorkflowRunner;
+  freeTierConfigured: boolean;
 }
 
 /** A native-browser search, so an iOS PWA escapes its in-app webview. */
@@ -76,7 +78,7 @@ export async function triviaSession(req: PageRequest, deps: TriviaDeps): Promise
       const topic = pyStrip(repos.decks.getContextPrompt(deckName) || deckName);
       if (topic) {
         try {
-          await deps.runner.start('TriviaGenerate', { deckId: id, deckName, topic });
+          await deps.runner.start('TriviaGenerate', triviaStartInput(repos, id, deckName, topic, deps.freeTierConfigured));
         } catch {
           // No refill: the session runs on what the queue already holds.
         }

@@ -39,6 +39,19 @@ export function isRefusal(e: unknown): boolean {
 export const REFUSAL_BACKOFF = { initialMs: 250, coefficient: 2, capMs: 8_000 } as const;
 export const MAX_REFUSALS = 12;
 
+/**
+ * How many times one outbox row is offered to the owner before it is
+ * abandoned. A step is bounded by its retry policy and by `MAX_REFUSALS`; a
+ * status write had no bound at all, so an owner in a permanently refusing
+ * state (a tombstone, an unmigratable schema) kept the cell awake forever.
+ * Same number as the refusal cap, on the same backoff: ~64s of trying.
+ */
+export const MAX_DELIVERY_ATTEMPTS = MAX_REFUSALS;
+
+/** An undelivered row nobody will retry: the job's own progress is unaffected. */
+export const isAbandoned = (row: { delivered_at: string | null; attempt: number }): boolean =>
+  row.delivered_at === null && row.attempt >= MAX_DELIVERY_ATTEMPTS;
+
 /** Delay before refusal number `refusals + 1` is retried. */
 export function refusalBackoffMs(refusals: number): number {
   const { initialMs, coefficient, capMs } = REFUSAL_BACKOFF;

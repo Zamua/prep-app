@@ -115,6 +115,9 @@ export interface Composition {
    * and a status write lands through that cell's repositories and push. */
   runner(ctx: { owner: string; repos: UserRepos }): WorkflowRunner;
   jobCells: JobCells;
+  /** Whether this deploy runs jobs at all: without the binding every start
+   * refuses, and a schedule that plans one would never see it finish. */
+  jobsEnabled: boolean;
   /** The job kinds this deploy can run, by kind name. */
   jobGraphs: Readonly<Record<string, StepGraph>>;
   /** Where a step name resolves to its handler; lane B registers into it. */
@@ -326,6 +329,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     openRouter: new OpenRouterOAuth(webRandom),
     agent: instantTier ? new FreeTierAgent(instantTier, warn) : new RefusingAgent(NO_FUNDING),
     agentFor: (load, opts = {}) => new SelectedAgent(load, { ...selectDeps, timeoutMs: opts.timeoutMs ?? selectDeps.timeoutMs }),
+    jobsEnabled: env.JOB !== undefined,
     // A deploy with no JOB binding has jobs off: every start refuses, and
     // the use cases take the branch Python takes when nothing funds one.
     runner: (ctx) =>

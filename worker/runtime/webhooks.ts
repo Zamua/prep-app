@@ -64,7 +64,7 @@ export async function clerkWebhook(request: Request, c: Composition): Promise<Re
     await c.userCells.cell(id).upsert(id, { email: primaryEmail(data), displayName: displayName(data), profilePicUrl: profilePic(data) }, at, idx);
   } else if (type === 'user.deleted') {
     if (!id) return Response.json({ detail: 'delete payload missing id' }, { status: 422 });
-    await destroyAccount(id, 'deleted', { cells: c.userCells, directory: c.directory, clock: clockFor(c, request) });
+    await destroyAccount(id, 'deleted', { cells: c.userCells, jobs: c.jobCells, directory: c.directory, clock: clockFor(c, request) });
   }
   // Anything else is acknowledged so svix stops retrying it.
   return new Response('', { status: 200 });

@@ -190,6 +190,11 @@ export class SqlQuestionRepo implements QuestionRepo {
     return this.db.all<{ prompt: string }>('SELECT prompt FROM questions WHERE deck_id = ?', deckId).map((r) => r.prompt);
   }
 
+  findByPrompt(deckId: number, prompt: string): number | null {
+    const row = this.db.first<{ id: number }>('SELECT id FROM questions WHERE deck_id = ? AND LOWER(TRIM(prompt)) = ? ORDER BY id LIMIT 1', deckId, prompt.trim().toLowerCase());
+    return row ? Number(row.id) : null;
+  }
+
   setSuspended(qid: number, suspended: boolean): void {
     this.db.run('UPDATE questions SET suspended = ? WHERE id = ?', suspended ? 1 : 0, qid);
   }

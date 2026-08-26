@@ -187,6 +187,74 @@ describe('the apply step', () => {
     expect(c.repos.questions.listInDeck(deck).map((q) => q.prompt)).toEqual(['one', 'two']);
   });
 
+  it('leaves the library untouched when an op part-way through the plan throws', async () => {
+    const c = cell();
+    const capitals = c.repos.decks.create('capitals');
+    const target = c.repos.questions.add(capitals, { type: 'short', prompt: 'Capital of France?', answer: 'Paris' });
+    const plan = coerceTransformPlan(
+      {
+        new_decks: [{ name: 'brand-new', deck_type: 'srs' }],
+        modifications: [{ question_id: target, type: 'short', prompt: 'Which city is the capital of France?', answer: 'Paris' }],
+        additions: [
+          { dest_deck: 'brand-new', type: 'short', prompt: 'a', answer: 'a' },
+          { dest_deck: 'brand-new', type: 'short', prompt: 'b', answer: 'b' },
+        ],
+      },
+      'reorganize',
+    );
+    const ctx = writeCtx({
+      repos: c.repos,
+      clock: c.clock,
+      stepKey: `${REORG_ID}-apply-0`,
+      name: 'apply',
+      input: { scope: 'reorganize', targetId: 0, prompt: 'p' },
+      outputs: { compute: plan },
+    });
+    // A row cap, a constraint, a concurrently deleted row: the second addition
+    // is as far as the apply gets.
+    const add = c.repos.questions.add.bind(c.repos.questions);
+    let adds = 0;
+    c.repos.questions.add = (deckId, q) => {
+      if (++adds === 2) throw new Error('row cap reached');
+      return add(deckId, q);
+    };
+    await expect(applyStep(ctx)).rejects.toThrow('row cap reached');
+    c.repos.questions.add = add;
+
+    expect(c.repos.decks.findId('brand-new')).toBeNull();
+    expect(c.repos.questions.get(target)?.prompt).toBe('Capital of France?');
+    expect(c.repos.questions.listInDeck(capitals).length).toBe(1);
+
+    // And the retry, from a library nothing half-rewrote, reports all of it.
+    const out = (await applyStep(ctx)).value as { created_deck_ids: number[]; modified_ids: number[]; added_ids: number[] };
+    expect(out.modified_ids).toEqual([target]);
+    expect(out.created_deck_ids).toEqual([c.repos.decks.findId('brand-new')]);
+    expect(out.added_ids.length).toBe(2);
+  });
+
+  it('reports the same result on a redelivery, not an empty one', async () => {
+    const c = cell();
+    const alpha = c.repos.decks.create('alpha');
+    const doomed = c.repos.questions.add(alpha, { type: 'short', prompt: 'doomed', answer: 'd' });
+    const plan = coerceTransformPlan({ new_decks: [{ name: 'gamma', deck_type: 'srs' }], deck_renames: [{ deck_id: alpha, new_name: 'alpha-2' }], deletions: [doomed] }, 'reorganize');
+    const ctx = writeCtx({
+      repos: c.repos,
+      clock: c.clock,
+      stepKey: `${REORG_ID}-apply-0`,
+      name: 'apply',
+      input: { scope: 'reorganize', targetId: 0, prompt: 'p' },
+      outputs: { compute: plan },
+    });
+
+    const first = (await applyStep(ctx)).value;
+    // Every op here is idempotent by checking the state first, so a second run
+    // finds its own work already done and would otherwise report nothing.
+    expect((await applyStep(ctx)).value).toEqual(first);
+    expect(first).toMatchObject({ renamed_deck_ids: [alpha], deleted_ids: [doomed] });
+    expect((first as { created_deck_ids: number[] }).created_deck_ids.length).toBe(1);
+    expect(c.repos.decks.listSummaries().map((d) => d.name).sort()).toEqual(['alpha-2', 'gamma']);
+  });
+
   it('keeps the stored value for a field the model left empty', () => {
     const existing = { id: 7, type: 'code', prompt: 'old prompt', answer: 'old answer', rubric: 'old rubric' } as never;
     const merged = mergeModification(existing, { question_id: 7, type: '', prompt: '', answer: '', rubric: '', topic: 'geo' });

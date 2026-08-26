@@ -23,6 +23,8 @@ function deps(opts: { agentAvailable?: boolean; runner?: WorkflowRunner } = {}):
     clock: c.clock,
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
     agentAvailable: opts.agentAvailable ?? false,
+    // The two answer the same question; the start's precondition reads this one.
+    freeTierConfigured: opts.agentAvailable ?? false,
     runner: opts.runner ?? refusing,
   };
 }

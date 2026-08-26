@@ -119,6 +119,7 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
    * that reaches it again re-selects it.
    */
   async alarm(): Promise<void> {
+    if (!this.c.periodicWork) return;
     const state = await this.reapState();
     const now = this.c.clock.now();
     if (parseIso(state.nextAt).getTime() > now.getTime()) {
@@ -126,7 +127,7 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
       return;
     }
     const report = await reapIdleAnonymous(
-      { cells: this.c.userCells, directory: this, clock: this.c.clock },
+      { cells: this.c.userCells, jobs: this.c.jobCells, directory: this, clock: this.c.clock },
       { after: state.cursor },
     );
     const done = report.cursor === null;
@@ -145,10 +146,17 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
     return stored ?? { nextAt: isoUtc(this.c.clock.now()), cursor: null, lastReapAt: null };
   }
 
+  /** Same kill switch the user cells honour: a parity target pins the clock,
+   * so a never-swept directory would read as due at once and destroy accounts
+   * under the corpus. */
   private async ensureAlarm(): Promise<void> {
+    const current = await this.storage.getAlarm();
+    if (!this.c.periodicWork) {
+      if (current !== null) await this.storage.deleteAlarm();
+      return;
+    }
     const state = await this.reapState();
     const target = Math.max(parseIso(state.nextAt).getTime(), this.c.clock.now().getTime() + ALARM_FLOOR_MS);
-    const current = await this.storage.getAlarm();
     if (current !== target) await this.storage.setAlarm(target);
   }
 }

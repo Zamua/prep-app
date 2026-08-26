@@ -126,8 +126,12 @@ export function countsBefore(item: number, prior: readonly TriviaInsertValue[]):
   return { inserted: of('inserted'), skipped_dups: of('duplicate'), skipped_invalid: of('invalid') + (item - prior.length) };
 }
 
-const normalized = (prompt: string): string => prompt.trim().toLowerCase();
-
+/**
+ * One pair into the deck, under `<jobId>-insert-<i>`. The key is checked
+ * first: without it a redelivered row finds the card it inserted itself and
+ * records a duplicate, so the counters the terminal screen shows would drift
+ * from the deck the user is reading.
+ */
 export const triviaInsert = async (ctx: WriteStepContext): Promise<StepOutput> => {
   const pair = (ctx.itemInput ?? {}) as TriviaPair;
   const prompt = (pair.q ?? '').trim();
@@ -140,20 +144,21 @@ export const triviaInsert = async (ctx: WriteStepContext): Promise<StepOutput> =
     counts.skipped_invalid += 1;
     value = { outcome: 'invalid', question_id: 0 };
   } else {
-    const deckId = resolveDeck(ctx.repos, ctx.input);
-    // Dedupe on the deck's live rows, so a second batch cannot repeat the
-    // first: the same LOWER(TRIM(prompt)) compare the Go insert made.
-    const want = normalized(prompt);
-    const duplicate = ctx.repos.questions.listInDeck(deckId).find((card) => normalized(card.prompt) === want);
-    if (duplicate) {
-      counts.skipped_dups += 1;
-      value = { outcome: 'duplicate', question_id: duplicate.id };
-    } else {
+    value = ctx.repos.tx.sync((): TriviaInsertValue => {
+      const already = ctx.repos.idempotency.findQuestion(ctx.stepKey);
+      if (already !== null) return { outcome: 'inserted', question_id: already };
+      const deckId = resolveDeck(ctx.repos, ctx.input);
+      // Dedupe on the deck's live rows, so a second batch cannot repeat the
+      // first: the same LOWER(TRIM(prompt)) compare the Go insert made.
+      const duplicate = ctx.repos.questions.findByPrompt(deckId, prompt);
+      if (duplicate !== null) return { outcome: 'duplicate', question_id: duplicate };
       const qid = ctx.repos.questions.add(deckId, { type: 'short', topic: ctx.input['topic'] ? String(ctx.input['topic']) : null, prompt, answer, explanation: explanation || null });
+      ctx.repos.idempotency.recordQuestion(ctx.stepKey, qid);
       ctx.repos.trivia.appendCard(qid, deckId);
-      counts.inserted += 1;
-      value = { outcome: 'inserted', question_id: qid };
-    }
+      return { outcome: 'inserted', question_id: qid };
+    });
+    if (value.outcome === 'inserted') counts.inserted += 1;
+    else counts.skipped_dups += 1;
   }
   return { value, progress: triviaProgress(counts) };
 };

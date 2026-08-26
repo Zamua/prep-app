@@ -7,6 +7,8 @@ import { pyStrip } from '../../domain/py.js';
 import { deckToCsv } from '../api/deckIo.js';
 import type { Question } from '../entities.js';
 import { AppError, badRequest, notFound } from '../errors.js';
+import { requireFundedWorkflow } from '../agent/funding.js';
+import { planStartInput, triviaStartInput } from '../jobs/startInput.js';
 import { agentAvailable } from '../pageContext.js';
 import { empty, page, redirect, redirectBack, type PageRequest, type PageResult } from '../pageResult.js';
 import { RunnerUnavailable, type Random, type UserRepos, type WorkflowRunner } from '../ports.js';
@@ -80,7 +82,8 @@ export async function deckNewSrsCreate(repos: UserRepos, req: PageRequest, deps:
   if (action !== 'plan') return redirect(`/deck/${slug}`);
 
   try {
-    const { workflowId } = await deps.runner.start('PlanGenerate', { deckId: deckIdCreated, deckName: slug, prompt: contextPrompt });
+    requireFundedWorkflow(repos, deps.freeTierConfigured);
+    const { workflowId } = await deps.runner.start('PlanGenerate', planStartInput(repos, deckIdCreated, slug, contextPrompt, deps.freeTierConfigured));
     return redirect(`/plan/${workflowId}`);
   } catch (e) {
     // The deck row landed; only the workflow start failed, and the deck stays.
@@ -120,14 +123,16 @@ export async function deckNewTriviaCreate(repos: UserRepos, req: PageRequest, de
   // added by hand, so the page lands on the deck rather than a poller.
   if (!agentAvailable(repos, deps.freeTierConfigured)) return redirect(`/deck/${slug}`);
   try {
-    const { workflowId } = await deps.runner.start('TriviaGenerate', { deckId: created, deckName: slug, topic });
+    requireFundedWorkflow(repos, deps.freeTierConfigured);
+    const { workflowId } = await deps.runner.start('TriviaGenerate', triviaStartInput(repos, created, slug, topic, deps.freeTierConfigured));
+    // Only reached when the job cell produced no transition of its own; the
+    // status write registers the row with the status the job actually reports.
     repos.jobs.register({
       workflowId,
       workflowType: 'trivia_gen',
       deckId: created,
       deckName: slug,
       urlPath: `/trivia/gen/${workflowId}`,
-      initialStatus: 'computing',
     });
     return redirect(`/trivia/gen/${workflowId}`);
   } catch (e) {
@@ -358,6 +363,7 @@ export async function questionImprove(repos: UserRepos, req: PageRequest, deps: 
   if (!agentAvailable(repos, deps.freeTierConfigured)) throw new AppError(403, NO_FUNDING);
   const deckName = repos.decks.findName(q.deck_id);
   try {
+    requireFundedWorkflow(repos, deps.freeTierConfigured);
     const { workflowId } = await deps.runner.start('Transform', {
       scope: 'card',
       targetId: qid,
@@ -372,7 +378,6 @@ export async function questionImprove(repos: UserRepos, req: PageRequest, deps: 
       deckId: null,
       deckName,
       urlPath: `/transform/${workflowId}`,
-      initialStatus: 'computing',
     });
     return redirect(`/transform/${workflowId}`);
   } catch (e) {

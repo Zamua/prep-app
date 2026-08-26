@@ -64,8 +64,8 @@ export class FakeCellStorage implements CellStorage {
 
   transactionSync<T>(fn: () => T): T {
     // better-sqlite3 nests through savepoints; a cell's storage refuses the
-    // second BEGIN outright. Refusing here too is what makes a handler that
-    // wraps a repository method fail in a test rather than on a node.
+    // second BEGIN outright. Refusing here too is what keeps `joinedTransactions`
+    // honest: code that reaches a raw storage fails here, not on a node.
     if (this.inTransaction) throw new Error('storage.transaction: cannot start a transaction within a transaction');
     this.inTransaction = true;
     try {

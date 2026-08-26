@@ -5,7 +5,7 @@ import { MAX_AGE_SECONDS } from '../domain/anonCookie.js';
 import { BATCH_LIMIT, IDLE_DAYS, cutoffFor, isIdle } from '../domain/reaper.js';
 import { UserCell } from '../runtime/cells/UserCell.js';
 import type { Env } from '../runtime/env.js';
-import { FakeDirectory, FakeUserCells } from './fakes/cells.js';
+import { FakeDirectory, FakeJobCells, FakeUserCells } from './fakes/cells.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
 import { fakeEnv } from './helpers.js';
 
@@ -27,7 +27,7 @@ function fixture(): Fixture {
   const directory = new FakeDirectory();
   const at = { now: NOW };
   const clock: Clock = { now: () => new Date(at.now.getTime()) };
-  return { env, cells, directory, at, deps: { cells, directory, clock } };
+  return { env, cells, directory, at, deps: { cells, jobs: new FakeJobCells(), directory, clock } };
 }
 
 let nextIdx = 1;

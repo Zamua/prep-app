@@ -80,3 +80,10 @@ export function agentConfig(repos: UserRepos, freeTierConfigured: boolean): Agen
 export function requireFundedWorkflow(repos: UserRepos, freeTierConfigured: boolean): void {
   if (fundingTier(repos, freeTierConfigured) === 'none') throw new AgentUnavailable(NO_FUNDING);
 }
+
+/** The per-call card ceiling this owner's tier imposes; 0 is uncapped. The
+ * job input carries it, because the step that spends the call holds no rows
+ * to read the tier from. */
+export function maxCardsPerCall(repos: UserRepos, freeTierConfigured: boolean): number {
+  return fundingTier(repos, freeTierConfigured) === 'free' ? FREE_TIER_MAX_CARDS_PER_CALL : 0;
+}

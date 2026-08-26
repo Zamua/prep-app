@@ -25,6 +25,7 @@ function deps(rows: Record<string, JobStatus> = {}): StudyDeps {
     clock: c.clock,
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
     agentAvailable: true,
+    freeTierConfigured: true,
     runner: reading(rows),
   };
 }
@@ -43,6 +44,7 @@ async function graded(rows: (qid: number) => Record<string, JobStatus>): Promise
     clock: c.clock,
     userAgent: null,
     agentAvailable: true,
+    freeTierConfigured: true,
     runner: reading(rows(qid)),
   };
   return { d, qid, wid, sid };

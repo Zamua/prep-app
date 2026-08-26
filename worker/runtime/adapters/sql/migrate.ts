@@ -12,6 +12,7 @@ export interface Migration {
 export const USER_MIGRATIONS: readonly Migration[] = [
   { version: 1, apply: (db) => db.script(USER_SCHEMA) },
   { version: 2, apply: addJobProgress },
+  { version: 3, apply: addStepResults },
 ];
 
 /** The read model `WorkflowRunner.status` answers from, on cells created
@@ -23,6 +24,18 @@ function addJobProgress(db: Db): void {
   payload     TEXT NOT NULL,
   transition  INTEGER NOT NULL,
   updated_at  TEXT NOT NULL
+)`,
+  );
+}
+
+/** What a redelivered write step answers from, for the steps whose ops are
+ * not each individually keyed. */
+function addStepResults(db: Db): void {
+  db.script(
+    `CREATE TABLE IF NOT EXISTS steps_idempotency (
+  idempotency_key TEXT PRIMARY KEY,
+  result          TEXT NOT NULL,
+  created_at      TEXT NOT NULL
 )`,
   );
 }
