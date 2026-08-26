@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { apiRoutes } from '../runtime/cells/routes/api.js';
 import { pageRoutes } from '../runtime/cells/routes/pages.js';
 import { servePublic } from '../runtime/routes/openapi.js';
+import { jobRoutes } from '../runtime/cells/routes/jobs.js';
 import { pythonJson } from './pyoracle.js';
 
 const PY_ROUTES = `
@@ -77,28 +78,6 @@ const ENTRY_WORKER: readonly Key[] = [
 
 /** Every route the phase does not own, with the phase that does (PHASE-3 G). */
 const OUT_OF_SCOPE: Record<Key, string> = {
-  'GET /plan/{wid}': 'phase 4',
-  'GET /plan/{wid}/fragment': 'phase 4',
-  'GET /plan/{wid}/status': 'phase 4',
-  'POST /plan/{wid}/accept': 'phase 4',
-  'POST /plan/{wid}/feedback': 'phase 4',
-  'POST /plan/{wid}/reject': 'phase 4',
-  'GET /transform/{wid}': 'phase 4',
-  'GET /transform/{wid}/fragment': 'phase 4',
-  'GET /transform/{wid}/status': 'phase 4',
-  'POST /transform/{wid}/apply': 'phase 4',
-  'POST /transform/{wid}/reject': 'phase 4',
-  'GET /reorganize': 'phase 4',
-  'POST /reorganize': 'phase 4',
-  'POST /deck/{name}/transform': 'phase 4',
-  'POST /trivia/decks/{deck_id}/generate': 'phase 4',
-  'GET /trivia/gen/{wid}': 'phase 4',
-  'GET /trivia/gen/{wid}/fragment': 'phase 4',
-  'GET /trivia/gen/{wid}/status': 'phase 4',
-  // Both are the durable worker's callbacks into the app, so they arrive with
-  // the jobs that make them.
-  'POST /api/agent/run': 'phase 4',
-  'POST /api/internal/record-review': 'phase 4',
   'GET /metrics': 'phase 5',
   'GET /decks/import-anki': 'phase 5',
   'POST /decks/import-anki': 'phase 5',
@@ -110,6 +89,17 @@ const OUT_OF_SCOPE: Record<Key, string> = {
   'GET /deck/{name}/export.prepdeck': 'phase 5',
   'GET /_debug/auth': 'decision 7.6',
   'GET /debug/session': 'decision 7.6',
+};
+
+/**
+ * Python routes this app deletes rather than ports, with why nothing calls
+ * them. Both existed only so an out-of-process Go worker could call back
+ * into the app; on celld the step handler holds the `AgentPort` and writes
+ * through the owner's repositories in the same isolate.
+ */
+const REMOVED: Record<Key, string> = {
+  'POST /api/agent/run': 'the worker’s own agent call; the step handler holds the port',
+  'POST /api/internal/record-review': 'the worker’s own review write; the record step is in the owner’s cell',
 };
 
 /** A cell route Python answers with no dependency at all. */
@@ -127,7 +117,7 @@ const UNGATED_IN_PYTHON: Record<Key, string> = {
 const NEW_IN_THIS_APP: readonly Key[] = ['GET /settings/agent/openrouter/start', 'GET /settings/agent/openrouter/callback'];
 
 const python = new Map<Key, string>(pythonJson<[string, string, string][]>(PY_ROUTES).map(([m, p, g]) => [key(m, p), g]));
-const cell = new Map<Key, string>([...pageRoutes, ...apiRoutes].map((r) => [key(r.method, r.pattern), r.gate]));
+const cell = new Map<Key, string>([...pageRoutes, ...jobRoutes, ...apiRoutes].map((r) => [key(r.method, r.pattern), r.gate]));
 
 describe('the cell route table against the Python inventory', () => {
   it('reads the inventory the phase was specified against', () => {
@@ -135,9 +125,9 @@ describe('the cell route table against the Python inventory', () => {
   });
 
   it('classifies every Python route exactly once', () => {
-    const unclassified = [...python.keys()].filter((k) => !cell.has(k) && !ENTRY_WORKER.includes(k) && !(k in OUT_OF_SCOPE));
+    const unclassified = [...python.keys()].filter((k) => !cell.has(k) && !ENTRY_WORKER.includes(k) && !(k in OUT_OF_SCOPE) && !(k in REMOVED));
     expect(unclassified).toEqual([]);
-    const doubled = [...python.keys()].filter((k) => [cell.has(k), ENTRY_WORKER.includes(k), k in OUT_OF_SCOPE].filter(Boolean).length > 1);
+    const doubled = [...python.keys()].filter((k) => [cell.has(k), ENTRY_WORKER.includes(k), k in OUT_OF_SCOPE, k in REMOVED].filter(Boolean).length > 1);
     expect(doubled).toEqual([]);
   });
 
@@ -163,8 +153,15 @@ describe('the cell route table against the Python inventory', () => {
   it('declares nothing the Python app does not serve', () => {
     const invented = [...cell.keys()].filter((k) => !python.has(k) && !NEW_IN_THIS_APP.includes(k));
     expect(invented).toEqual([]);
-    for (const k of [...ENTRY_WORKER, ...Object.keys(OUT_OF_SCOPE)]) expect(python.has(k), `${k} is not a Python route`).toBe(true);
+    for (const k of [...ENTRY_WORKER, ...Object.keys(OUT_OF_SCOPE), ...Object.keys(REMOVED)]) expect(python.has(k), `${k} is not a Python route`).toBe(true);
     for (const k of NEW_IN_THIS_APP) expect(cell.has(k), `${k} is not a cell route`).toBe(true);
+  });
+
+  it('serves every phase-4 route and deletes only the two with no caller', () => {
+    const phase4 = [...python.keys()].filter((k) => /^(GET|POST) \/(plan|transform|reorganize|trivia\/gen)\b/.test(k) || k === 'POST /deck/{name}/transform');
+    expect(phase4.filter((k) => !cell.has(k))).toEqual([]);
+    expect(Object.keys(REMOVED).filter((k) => cell.has(k))).toEqual([]);
+    expect([...cell.keys()].filter((k) => k in REMOVED)).toEqual([]);
   });
 
   it('answers the public routes it claims', () => {

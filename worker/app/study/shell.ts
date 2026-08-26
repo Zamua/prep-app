@@ -8,7 +8,7 @@ import { DurationError, parseUntil } from '../durations.js';
 import { badRequest, notFound } from '../errors.js';
 import { page, redirect, type PageRequest, type PageResult } from '../pageResult.js';
 import type { UserRepos } from '../ports.js';
-import { parseGradingWid } from './api.js';
+import { parseGradingWid } from './grading.js';
 
 export const SESSION_NOT_FOUND = 'session not found';
 export const NO_STUDY_SESSIONS = 'trivia decks are notification-driven; no study sessions';

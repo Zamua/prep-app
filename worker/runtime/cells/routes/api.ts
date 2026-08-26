@@ -11,6 +11,7 @@ import { snapshot } from '../../../app/offline/snapshot.js';
 import { syncBatch } from '../../../app/offline/sync.js';
 import { agentAvailable } from '../../../app/pageContext.js';
 import * as study from '../../../app/study/api.js';
+import { gradingPoll } from '../../../app/study/grading.js';
 import { jsonInvalid, pythonJsonError, RequestValidationError } from '../../../app/validation.js';
 import type { CellRequest, Handled, Route } from '../router.js';
 
@@ -122,7 +123,7 @@ export const apiRoutes: readonly Route[] = [
     method: 'GET',
     pattern: '/api/study/grading/{wid}',
     gate: 'user',
-    handler: handle((req) => study.gradingPoll(studyDeps(req), req.params['wid']!, req.url.searchParams.get('sid') ?? '')),
+    handler: handle((req) => gradingPoll(studyDeps(req), req.params['wid']!, req.url.searchParams.get('sid') ?? '')),
   },
 
   // ---- notify --------------------------------------------------------------

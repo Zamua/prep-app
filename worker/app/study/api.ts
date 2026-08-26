@@ -112,7 +112,7 @@ export function sessionPayload(s: StudySession, deckName: string): Record<string
   return { id: s.id, version: s.version, status: s.status, state: s.state, deck_id: s.deck_id, deck_name: deckName };
 }
 
-function verdictOutcome(
+export function verdictOutcome(
   q: Question,
   verdict: Record<string, unknown>,
   state: Record<string, unknown>,
@@ -137,7 +137,7 @@ function caughtUp(deps: StudyDeps, deckId: number, session: Record<string, unkno
   return { caughtUp: { nextDueMinutes: deps.repos.cards.nextDueMinutes(deckId) }, session };
 }
 
-const pollUrl = (wid: string, sid = ''): string => (sid ? `/api/study/grading/${wid}?sid=${sid}` : `/api/study/grading/${wid}`);
+export const pollUrl = (wid: string, sid = ''): string => (sid ? `/api/study/grading/${wid}?sid=${sid}` : `/api/study/grading/${wid}`);
 
 // ---- request bodies --------------------------------------------------------
 
@@ -444,37 +444,5 @@ export function authorCard(deps: StudyDeps, body: unknown): ApiResult {
   return json({ card: revealedPayload(q) }, 201);
 }
 
-// ---- grading polling ----------------------------------------------------------
-
-/** `grade-<deck>-q<qid>-<rand>` -> [deckName, questionId], walking from the
- * right since deck names may contain hyphens. */
-export function parseGradingWid(wid: string): [string, number] | null {
-  if (!wid.startsWith('grade-')) return null;
-  const parts = wid.slice('grade-'.length).split('-');
-  if (parts.length < 3) return null;
-  const qidPart = parts[parts.length - 2]!;
-  if (!qidPart.startsWith('q')) return null;
-  const digits = qidPart.slice(1);
-  if (!/^[+-]?\d+$/.test(digits)) return null;
-  return [parts.slice(0, -2).join('-'), Number(digits)];
-}
-
-/**
- * Poll an in-flight grade. The workflow itself lands in phase 4, so a wid
- * with no job row reports the failure the client already handles.
- */
-export function gradingPoll(deps: StudyDeps, wid: string, sid: string): ApiResult {
-  const parsed = parseGradingWid(wid);
-  if (!parsed) return error(400, 'malformed_workflow_id', 'workflow id is not a grading id');
-  const [, qid] = parsed;
-  // The wid embeds the question id, so ownership is checked here or not at
-  // all: guessing a wid must not expose another user's grade.
-  const q = deps.repos.questions.get(qid);
-  if (q === null) return notFound('question');
-  const job = deps.repos.jobs.get(wid);
-  if (job === null) {
-    if (sid) deps.repos.sessions.gradingAbandoned(sid, wid);
-    return json({ failed: { code: 'grading_failed', message: 'the grader returned nothing' } });
-  }
-  return json({ pending: { poll: pollUrl(wid, sid), workflow_id: wid, status: job.status } });
-}
+// The grading poll lives in ./grading.ts; these are what it renders with.
+export { error as studyError, notFound as notFoundResult };

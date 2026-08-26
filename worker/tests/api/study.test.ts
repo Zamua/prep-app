@@ -1,5 +1,5 @@
-// The study API's branches the corpus does not reach, and the two pure
-// pieces it leans on: the chat handoff and the grading workflow id.
+// The study API's branches the corpus does not reach, plus the pure piece
+// it leans on: the chat handoff. The grading poll has its own suite.
 import { describe, expect, it } from 'vitest';
 import { DurationError, FOREVER_ISO, parseUntil } from '../../app/durations.js';
 import * as study from '../../app/study/api.js';
@@ -28,54 +28,6 @@ function deps(opts: { agentAvailable?: boolean; runner?: WorkflowRunner } = {}):
 }
 
 const body = (json: unknown) => json;
-
-describe('parseGradingWid', () => {
-  it('walks from the right, so a hyphenated deck name survives', () => {
-    expect(study.parseGradingWid('grade-world-capitals-q42-abcdef')).toEqual(['world-capitals', 42]);
-    expect(study.parseGradingWid('grade-x-q1-a')).toEqual(['x', 1]);
-  });
-
-  it('refuses anything that is not a grading id', () => {
-    for (const wid of ['not-a-grading-id', 'grade-x-1-a', 'grade-x-qz-a', 'grade-a-b', 'transform-x-q1-a']) {
-      expect(study.parseGradingWid(wid), wid).toBeNull();
-    }
-  });
-});
-
-describe('GET /api/study/grading/{wid}', () => {
-  it('refuses a malformed id before touching any row', () => {
-    expect(study.gradingPoll(deps(), 'nope', '')).toEqual({
-      json: { error: { code: 'malformed_workflow_id', message: 'workflow id is not a grading id' } },
-      status: 400,
-    });
-  });
-
-  it('answers 404 for a question the caller does not own, so a guessed id leaks nothing', () => {
-    expect(study.gradingPoll(deps(), 'grade-x-q999999-abcdef', '')).toMatchObject({ status: 404 });
-  });
-
-  it('reports the failure when no job row backs the id, and releases the session', () => {
-    const d = deps();
-    const deck = d.repos.decks.create('capitals');
-    const qid = d.repos.questions.add(deck, { type: 'short', prompt: 'q', answer: 'a' });
-    expect(study.gradingPoll(d, `grade-capitals-q${qid}-abcdef`, '')).toEqual({
-      json: { failed: { code: 'grading_failed', message: 'the grader returned nothing' } },
-      status: 200,
-    });
-  });
-
-  it('reports the tracked status while the job is still running', () => {
-    const d = deps();
-    const deck = d.repos.decks.create('capitals');
-    const qid = d.repos.questions.add(deck, { type: 'short', prompt: 'q', answer: 'a' });
-    const wid = `grade-capitals-q${qid}-abcdef`;
-    d.repos.jobs.register({ workflowId: wid, workflowType: 'grading', deckId: null, deckName: 'capitals', urlPath: `/grading/${wid}`, initialStatus: 'grading' });
-    expect(study.gradingPoll(d, wid, 'sid-1')).toEqual({
-      json: { pending: { poll: `/api/study/grading/${wid}?sid=sid-1`, workflow_id: wid, status: 'grading' } },
-      status: 200,
-    });
-  });
-});
 
 describe('a free-text submission', () => {
   it('reveals for self-grading when no tier funds a judge', async () => {
