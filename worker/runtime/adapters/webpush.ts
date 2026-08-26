@@ -2,6 +2,7 @@
 // the message encryption (RFC 8291 `aes128gcm`, one record). A 404 or 410
 // means the subscription is gone and the caller prunes it; any other
 // failure counts as `fail` and never raises.
+import { hkdfSha256 } from './hkdf.js';
 import { b64uDecode, b64uEncode } from '../../domain/base64.js';
 import type { PushSubscription } from '../../app/entities.js';
 import type { PushOutcome, WebPush } from '../../app/ports.js';
@@ -67,11 +68,8 @@ const concat = (...parts: Uint8Array[]): Uint8Array => {
   return out;
 };
 
-async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey('raw', ikm as BufferSource, 'HKDF', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as BufferSource, info: info as BufferSource }, key, length * 8);
-  return new Uint8Array(bits);
-}
+const hkdf = (salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> =>
+  hkdfSha256(ikm, info, length, salt);
 
 /**
  * One `aes128gcm` record: `salt | rs | idlen | as_public | ciphertext`,
