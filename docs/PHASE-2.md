@@ -10,7 +10,7 @@ the TypeScript implementation.
 
 ```
 worker/domain/
-  index.ts            re-exports; the integrator adds one line per lane at the end
+  index.ts            re-exports, one namespace per lane
   py.ts               A: pyRound(x, nd) (half-even), pyStrip, codePoints(s), isoUtc(date),
                       parseIso(s): Python aware-UTC isoformat, naive parses as UTC
   fsrs/               A: index.ts scheduler.ts fuzz.ts
@@ -115,7 +115,7 @@ One module replaces `prep/domain/grading.py` and `grader.js`.
 ```ts
 export const MAX_REGEX_LEN = 500;
 export type Question = Record<string, unknown>;
-export interface GradeResult { result: Verdict; feedback: string; model_answer_summary: string }
+export interface GradeResult { result: Verdict; feedback: string; model_answer_summary: string | null }
 export class UnsupportedQuestionType extends Error {}
 export function grade(question: Question, userAnswer: string, idk?: boolean): GradeResult;
 export function gradeOffline(card: Question | null, userAnswer: unknown, idk?: boolean): { verdict: Verdict } | null;
@@ -136,20 +136,28 @@ export function validateRegexUpdate(pattern: unknown, expectedLiteral: string | 
   point; mixed types throw `GradingError`) as Python's list `repr` (quote
   choice, escapes, `True/False/None`, floats keeping `.0`), unit-tested.
 - `matchRegex`: non-string or empty gives null; over 500 null; `given =
-  pyStrip(String(given ?? ''))`; shorthand `\w \W \b \B \d \D` with
-  non-ASCII in the pattern or `given` gives null. Translations: `(?P<n>`
-  to `(?<n>`, `(?P=n)` to `\k<n>`, and
-  one leading inline-flag group whose letters are a subset of `is` is
-  removed (both flags are always on). Then `new RegExp(p, 'isu')` as a
-  validity probe and `new RegExp('^(?:' + p + ')$', 'isu').test(given)`; any
-  throw gives null. Rejected by the `u` engine, each pinned to null by a
-  unit test: `\A`, `\Z`, other inline flags, scoped `(?i:…)`, `(?#…)`,
-  possessive and atomic groups, conditionals, `{,n}`, `\N{…}`, unknown
-  escapes. Accepted divergence: non-ASCII case folding.
+  pyStrip(String(given ?? ''))`; the trust rule: shorthand `\w \W \b \B
+  \d \D` with non-ASCII in the pattern or the subject gives null, and `\B`
+  with an empty subject gives null (re never matches it there, JS does).
+  Translations: `(?P<n>` to `(?<n>`, `(?P=n)` to `\k<n>`, `\s` and `\S` to
+  the `str.isspace()` class (`\S` inside a class, or `\s` next to a range
+  dash, is refused), and one leading inline-flag group whose letters are a
+  subset of `is` is removed (both flags are always on). Refused before the
+  engine: lookbehind (re wants it fixed-width), a reused group name, a
+  backreference to a group that may be unset when it runs (open, forward,
+  quantified, nested, or behind a top-level `|`), a multi-digit `\NN`, an
+  escaped surrogate (`\uD83D\uDE00` is two code points to re, one to `u`).
+  Then `new RegExp(p, 'isu')` as a validity probe and
+  `new RegExp('^(?:' + p + ')$', 'isu').test(given)`; any throw gives null.
+  Rejected by the `u` engine, each pinned to null by a unit test: `\A`,
+  `\Z`, other inline flags, scoped `(?i:…)`, `(?#…)`, possessive and atomic
+  groups, conditionals, `{,n}`, `\N{…}`, unknown escapes. Accepted
+  divergence: non-ASCII case folding.
 - `validateRegexUpdate`: non-string or empty null; `pyStrip`; empty or
-  over 500 null; the same translation and probe (no shorthand rule); must
-  fullmatch `pyStrip(expectedLiteral ?? '')` and, when `priorGiven` is not
-  null, `pyStrip(priorGiven)`; returns the stripped pattern.
+  over 500 null; the same translation, probe and trust rule, the rule
+  taken over the pattern and both subjects; must fullmatch
+  `pyStrip(expectedLiteral ?? '')` and, when `priorGiven` is not null,
+  `pyStrip(priorGiven)`; returns the stripped pattern.
 - `gradeOffline`: idk `wrong`; mcq and multi the verdict only; short null
   when `matchRegex` is null, else the verdict; anything else null.
   `client.ts` exports `{ grade: gradeOffline, matchRegex, MAX_REGEX_LEN }`.
@@ -176,14 +184,15 @@ Add cases per the section 0 procedure (plus `.venv/bin/pytest
 tests/web/test_markdown_parity_fixtures.py -q`) for at least: an aligned
 table, a loose list, an indented code block, a `mailto:` link, an escaped backtick, a `data:image/png;` image,
 an autolink. The renderer is a block-then-inline parser of the subset,
-not regex passes; nesting depth is capped at 32 and degrades to escaped
-text; rendering never throws.
+not regex passes; nesting follows mistune's own depth handling (20000
+quote markers give 20 blockquotes, the rest escaped text); rendering
+never throws.
 
 Safety (`markdown.xss.test.ts`): for the corpus inputs and a hostile list
 (`<script>`, `<img onerror>`, `javascript:` and `data:text/html` links and
 images, entity smuggling, `"` inside a URL, NUL, unterminated fences, 10k
 nested quotes) the output matches a whitelist of the tags mistune emits
-for this subset and the attributes `href src alt class start style`,
+for this subset and the attributes `href src alt title class start style`,
 contains no `<script`, ` on[a-z]+=` or `javascript:`, and every input `<`
 is `&lt;`.
 
@@ -271,13 +280,13 @@ belong to phase 3.
 Corpus paths are under `tests/fixtures/parity/`.
 
 - **fsrs**, `fsrs.oracle.test.ts`, oracle `parity/fsrs/corpus.json`: every review replayed from its `input`, fuzz off: S and D within 1e-9 absolute; state, `last_review`, `next_due`, `interval_seconds`, `step_bucket` exact; `error` rows throw `RelearningStepMissing`; 5640 transitions and 2117 throws counted.
-- **fsrs**, `fsrs.fuzz.test.ts`, oracle the corpus, fuzz `{ random: seeded LCG }`: every Review-result transition with unfuzzed interval ≥ 3 days: whole days within the `[min, max]` of an independent copy of the range formula kept in the test; S, D, state equal the fuzz-off output; `random` 0 gives min, 0.999999 gives max; 64 draws on a 30-day interval yield ≥ 3 values; under 2.5 days identical to fuzz off.
-- **grading**, `grading.oracle.test.ts`, `grading.regex.test.ts`, oracle `parity/grading/corpus.json`, `tests/offline/fixtures/grader_cases.json`: `grade` rows deep-equal `result` or throw `UnsupportedQuestionType` on `error`; `match_regex` and `validate_regex_update` rows exact; all 46 grader cases `module[fn](...args)` deep-equal `expected`; the named rejections, translations and pyrepr cases.
+- **fsrs**, `fsrs.fuzz.test.ts`, oracle the corpus, fuzz `{ random: seeded LCG }`: every Review-result transition with unfuzzed interval ≥ 3 days: whole days within `[min, max + 1]` of an independent copy of the range formula kept in the test (py-fsrs rounds `random() * (max - min + 1) + min`, so max + 1 is reachable); S, D, state equal the fuzz-off output; `random` 0 gives min, 0.999999 gives max; 64 draws on a 30-day interval yield ≥ 3 values; under 2.5 days identical to fuzz off.
+- **grading**, `grading.oracle.test.ts`, `grading.regex.test.ts`, oracle `parity/grading/corpus.json`, `tests/offline/fixtures/grader_cases.json`: `grade` rows deep-equal `result` or throw `UnsupportedQuestionType` on `error`; `match_regex` and `validate_regex_update` rows exact; all 46 grader cases `module[fn](...args)` deep-equal `expected`; `client.ts` exports exactly `grade`, `matchRegex`, `MAX_REGEX_LEN`; the named rejections, translations and pyrepr cases, each pattern also run through Python, and `validate_regex_update` never persisting what Python refuses.
 - **markdown**, `markdown.oracle.test.ts`, `markdown.xss.test.ts`, oracle `parity/markdown/corpus.json`: every case byte-equal to `expected`; section C's safety assertions.
 - **merge**, `merge.oracle.test.ts`, oracle `parity/merge/{before,after}.json`: `mergeRows(before)` with `randomHex` stubbed to `fd58dd` (called once, with 3): rows per table and user equal `after.tables` as multisets; `users[target]`, counts (`after.result.counts` and the parsed `account_merges[0].counts`), `target_deck_slugs`, `previousUserIds` equal; the `precheck` table.
 - **limits, trivia, limiter**, `limits.test.ts`, `trivia.test.ts`, `limiter.test.ts`, oracle none: n = limit − 1 admits and n = limit refuses per window; `retryAfter` ceil, floor 1, missing gives window; `failed_free` counts only for burst; burst wins over day; the three user limits; the docstring examples of `session_state.py`; the cap message byte-exact.
 - **instant, ip, trivia, cookie**, `instant.oracle.test.ts`, `ip.oracle.test.ts`, `trivia.oracle.test.ts`, `anonCookie.oracle.test.ts`, oracle Python via `tests/pyoracle.ts`: input tables through `sanitize_topic`, `display_name_for`, `build_prompt`, `parse_qa_pairs`, `ipaddress` (20 addresses), the trivia helpers, `mint_cookie` / `verify_cookie` under `PREP_ANON_COOKIE_SECRET = "22" * 32` with explicit `issued_at` / `now` (HMAC via `node:crypto` in the test); exact, every rejection branch included.
-- **twins**, `bundles.test.ts`, oracle the committed `static/js/{study/markdown,offline/grader}.js`: byte-equal to a fresh esbuild output.
+- **twins**, `bundles.test.ts`, oracle the committed `static/js/{study/markdown,offline/grader}.js`: both carry the build banner and are byte-equal to a fresh esbuild output.
 
 Commands: each lane runs `cd worker && npx vitest run <its test files>
 tests/layering.test.ts` (A `tests/domain/fsrs`; B `tests/domain/grading
