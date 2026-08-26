@@ -1,0 +1,4697 @@
+{
+  "components": {
+    "schemas": {
+      "Body_account_settings_delete_settings_account_delete_post": {
+        "properties": {
+          "confirm": {
+            "default": "",
+            "title": "Confirm",
+            "type": "string"
+          }
+        },
+        "title": "Body_account_settings_delete_settings_account_delete_post",
+        "type": "object"
+      },
+      "Body_deck_delete_deck__name__delete_post": {
+        "properties": {
+          "confirm": {
+            "title": "Confirm",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "title": "Body_deck_delete_deck__name__delete_post",
+        "type": "object"
+      },
+      "Body_deck_rename_deck__name__rename_post": {
+        "properties": {
+          "new_name": {
+            "title": "New Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_name"
+        ],
+        "title": "Body_deck_rename_deck__name__rename_post",
+        "type": "object"
+      },
+      "Body_deck_set_retention_deck__name__retention_post": {
+        "properties": {
+          "retention": {
+            "title": "Retention",
+            "type": "string"
+          }
+        },
+        "required": [
+          "retention"
+        ],
+        "title": "Body_deck_set_retention_deck__name__retention_post",
+        "type": "object"
+      },
+      "Body_deck_toggle_notifications_deck__name__notifications_post": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "Body_deck_toggle_notifications_deck__name__notifications_post",
+        "type": "object"
+      },
+      "Body_deck_toggle_pin_deck__name__pin_post": {
+        "properties": {
+          "pinned": {
+            "title": "Pinned",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pinned"
+        ],
+        "title": "Body_deck_toggle_pin_deck__name__pin_post",
+        "type": "object"
+      },
+      "Body_deck_transform_deck__name__transform_post": {
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "Body_deck_transform_deck__name__transform_post",
+        "type": "object"
+      },
+      "Body_deck_update_topic_deck__name__topic_post": {
+        "properties": {
+          "context_prompt": {
+            "title": "Context Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "context_prompt"
+        ],
+        "title": "Body_deck_update_topic_deck__name__topic_post",
+        "type": "object"
+      },
+      "Body_editor_settings_save_settings_editor_post": {
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "Body_editor_settings_save_settings_editor_post",
+        "type": "object"
+      },
+      "Body_plan_feedback_plan__wid__feedback_post": {
+        "properties": {
+          "feedback": {
+            "title": "Feedback",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback"
+        ],
+        "title": "Body_plan_feedback_plan__wid__feedback_post",
+        "type": "object"
+      },
+      "Body_question_improve_question__qid__improve_post": {
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "Body_question_improve_question__qid__improve_post",
+        "type": "object"
+      },
+      "Body_reorganize_submit_reorganize_post": {
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "Body_reorganize_submit_reorganize_post",
+        "type": "object"
+      },
+      "Body_srs_settings_save_settings_srs_post": {
+        "properties": {
+          "retention": {
+            "title": "Retention",
+            "type": "string"
+          }
+        },
+        "required": [
+          "retention"
+        ],
+        "title": "Body_srs_settings_save_settings_srs_post",
+        "type": "object"
+      },
+      "Body_trivia_answer_trivia__question_id__answer_post": {
+        "properties": {
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          }
+        },
+        "title": "Body_trivia_answer_trivia__question_id__answer_post",
+        "type": "object"
+      },
+      "Body_trivia_override_trivia__question_id__override_post": {
+        "properties": {
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          }
+        },
+        "title": "Body_trivia_override_trivia__question_id__override_post",
+        "type": "object"
+      },
+      "Body_trivia_regrade_trivia__question_id__regrade_post": {
+        "properties": {
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          }
+        },
+        "title": "Body_trivia_regrade_trivia__question_id__regrade_post",
+        "type": "object"
+      },
+      "Body_trivia_session_answer_trivia_session__deck_name__answer_post": {
+        "properties": {
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          },
+          "cards": {
+            "default": "",
+            "title": "Cards",
+            "type": "string"
+          },
+          "done": {
+            "default": "",
+            "title": "Done",
+            "type": "string"
+          },
+          "idk": {
+            "default": "",
+            "title": "Idk",
+            "type": "string"
+          }
+        },
+        "title": "Body_trivia_session_answer_trivia_session__deck_name__answer_post",
+        "type": "object"
+      },
+      "Body_trivia_session_override_trivia_session__deck_name__override_post": {
+        "properties": {
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          },
+          "cards": {
+            "default": "",
+            "title": "Cards",
+            "type": "string"
+          },
+          "done": {
+            "default": "",
+            "title": "Done",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question_id"
+        ],
+        "title": "Body_trivia_session_override_trivia_session__deck_name__override_post",
+        "type": "object"
+      },
+      "Body_trivia_session_regrade_trivia_session__deck_name__regrade_post": {
+        "properties": {
+          "answer": {
+            "default": "",
+            "title": "Answer",
+            "type": "string"
+          },
+          "cards": {
+            "default": "",
+            "title": "Cards",
+            "type": "string"
+          },
+          "done": {
+            "default": "",
+            "title": "Done",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question_id"
+        ],
+        "title": "Body_trivia_session_regrade_trivia_session__deck_name__regrade_post",
+        "type": "object"
+      },
+      "Body_trivia_set_interval_trivia_decks__deck_id__interval_post": {
+        "properties": {
+          "minutes": {
+            "title": "Minutes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "minutes"
+        ],
+        "title": "Body_trivia_set_interval_trivia_decks__deck_id__interval_post",
+        "type": "object"
+      },
+      "Body_trivia_set_session_size_trivia_decks__deck_id__session_size_post": {
+        "properties": {
+          "size": {
+            "title": "Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "size"
+        ],
+        "title": "Body_trivia_set_session_size_trivia_decks__deck_id__session_size_post",
+        "type": "object"
+      },
+      "Body_trivia_toggle_notifications_trivia_decks__deck_id__notifications_post": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "Body_trivia_toggle_notifications_trivia_decks__deck_id__notifications_post",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "_CardJson": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "answer_regex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Regex"
+          },
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "skeleton": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skeleton"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "prompt",
+          "answer"
+        ],
+        "title": "_CardJson",
+        "type": "object"
+      },
+      "_CardListResponse": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/_CardJson"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "deck": {
+            "title": "Deck",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deck",
+          "cards"
+        ],
+        "title": "_CardListResponse",
+        "type": "object"
+      },
+      "_CsvImportOutcome": {
+        "description": "Result of a CSV upload — same shape `prep.decks.io.ImportOutcome`\nserializes to. Inserted vs duplicate-skipped vs row-level errors.",
+        "properties": {
+          "deck_id": {
+            "title": "Deck Id",
+            "type": "integer"
+          },
+          "deck_name": {
+            "title": "Deck Name",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "inserted": {
+            "title": "Inserted",
+            "type": "integer"
+          },
+          "skipped_duplicates": {
+            "title": "Skipped Duplicates",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deck_id",
+          "deck_name",
+          "inserted",
+          "skipped_duplicates",
+          "errors"
+        ],
+        "title": "_CsvImportOutcome",
+        "type": "object"
+      },
+      "_DeckListResponse": {
+        "properties": {
+          "decks": {
+            "items": {
+              "$ref": "#/components/schemas/_DeckSummaryJson"
+            },
+            "title": "Decks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decks"
+        ],
+        "title": "_DeckListResponse",
+        "type": "object"
+      },
+      "_DeckMetaResponse": {
+        "properties": {
+          "card_count": {
+            "title": "Card Count",
+            "type": "integer"
+          },
+          "context_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Prompt"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "card_count"
+        ],
+        "title": "_DeckMetaResponse",
+        "type": "object"
+      },
+      "_DeckSummaryJson": {
+        "properties": {
+          "card_count": {
+            "title": "Card Count",
+            "type": "integer"
+          },
+          "due": {
+            "default": 0,
+            "title": "Due",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinned": {
+            "default": false,
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "card_count"
+        ],
+        "title": "_DeckSummaryJson",
+        "type": "object"
+      },
+      "_NewDeckBody": {
+        "properties": {
+          "context_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free-form description used as AI context when generating cards.",
+            "title": "Context Prompt"
+          },
+          "name": {
+            "description": "Lowercase letters, digits, hyphens. 2–30 chars.",
+            "maxLength": 30,
+            "minLength": 2,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "_NewDeckBody",
+        "type": "object"
+      },
+      "_NewDeckResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id"
+        ],
+        "title": "_NewDeckResponse",
+        "type": "object"
+      },
+      "_RecordReviewRequest": {
+        "description": "Wire format for worker → prep SRS state writes.\n\nThe Go worker handled SRS bookkeeping locally via a hardcoded\nladder before this endpoint existed; consolidating here means\nFSRS (the live Python scheduler) drives every code/short grade,\nnot just the sync self-grade path. See worker-go/activities/grading.go's\nRecordReview activity for the caller.",
+        "properties": {
+          "grader_notes": {
+            "default": "",
+            "title": "Grader Notes",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "integer"
+          },
+          "result": {
+            "title": "Result",
+            "type": "string"
+          },
+          "user_answer": {
+            "default": "",
+            "title": "User Answer",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "question_id",
+          "result",
+          "idempotency_key"
+        ],
+        "title": "_RecordReviewRequest",
+        "type": "object"
+      },
+      "_RunRequest": {
+        "description": "Wire format matching worker-go/agent.RunInput so the worker can\npoint at prep with no client-side change. session_id / resume_id\nare accepted-but-ignored — the SDK port doesn't currently expose\nmulti-turn sessions for our one-shot callers.\n\n`user_id` is plumbed end-to-end so the selector can route to the\nuser's BYOK key when present. Optional for backwards compat (an\nolder worker without the field falls through to the deploy-wide\nprecedence: subscription token where allowed, else the free\ntier), but any new caller should send it.",
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "resume_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "_RunRequest",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Self-hosted spaced-repetition flashcards.\n\nThis document covers the **public REST API** at `/api/v1/*` and the **MCP (Model Context Protocol) server** at `/mcp`. Both share the same bearer-token auth — mint a token at `/settings/api` and pass it as `Authorization: Bearer prep_pat_…`.\n\nSource: https://github.com/Zamua/prep-app — AI-agent manifest: [/llms.txt](/llms.txt)",
+    "title": "prep",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "description": "Home page.\n\nUnauthenticated visitors get the marketing landing page (sells\nthe product, points at sign-in). Authenticated users get the\ndashboard — their decks plus the last five active study sessions\nacross all decks (pinned-first ordering split into two groups).\n\nBranching on auth state at the SAME URL means link-sharing works\nnaturally — `prepcards.app` is the canonical entrypoint whether\nyou're a first-time visitor or a returning user.",
+        "operationId": "index__get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Index"
+      }
+    },
+    "/_debug/auth": {
+      "get": {
+        "description": "Diagnostic endpoint — does NOT touch the DB, just reports what\nthe active provider sees on this request. Useful when sign-in\ncompletes but the user is bounced back to the landing page —\nanswer is almost always 'cookie not present' or 'JWT verify\nfailed'.\n\nReturns JSON; safe to leave deployed (no secrets, only request\nmetadata about the caller's own session).",
+        "operationId": "debug_auth__debug_auth_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Debug Auth"
+      }
+    },
+    "/api/active-workflows-badge": {
+      "get": {
+        "description": "Render the htmx-polled badge fragment.\n\nOpportunistic cleanup of stale terminal rows happens here so the\nbadge never carries indefinite cruft. We do it on the read path\nrather than via a scheduler task — cheap single-DELETE-per-poll\nis fine at our scale and keeps the scheduling story simple.",
+        "operationId": "active_workflows_badge_api_active_workflows_badge_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Active Workflows Badge"
+      }
+    },
+    "/api/agent/run": {
+      "post": {
+        "description": "Execute a single prompt via the user's configured adapter\n(selector precedence: BYOK, then the deploy-wide providers), log\nusage, return {stdout}\n(matching the legacy agent-server response shape so the Go\nworker doesn't notice it's hitting a different host).",
+        "operationId": "api_agent_run_api_agent_run_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Run"
+      }
+    },
+    "/api/internal/record-review": {
+      "post": {
+        "description": "Worker callback: record a review and advance FSRS state for the\ngiven (user, question). Idempotent on `idempotency_key`.\n\nReturns `{step, next_due, interval_minutes}` matching the Go\nworker's `shared.SRSState` so the GradeAnswerWorkflow output\nshape stays the same.",
+        "operationId": "api_record_review_api_internal_record_review_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_RecordReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Record Review"
+      }
+    },
+    "/api/v1/decks": {
+      "get": {
+        "operationId": "api_list_decks_api_v1_decks_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_DeckListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List your decks",
+        "tags": [
+          "Decks API"
+        ]
+      },
+      "post": {
+        "operationId": "api_create_deck_api_v1_decks_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_NewDeckBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_NewDeckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "deck name already in use"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a deck",
+        "tags": [
+          "Decks API"
+        ]
+      }
+    },
+    "/api/v1/decks/{name}": {
+      "get": {
+        "operationId": "api_deck_meta_api_v1_decks__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_DeckMetaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "deck not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get deck metadata",
+        "tags": [
+          "Decks API"
+        ]
+      }
+    },
+    "/api/v1/decks/{name}/cards": {
+      "get": {
+        "description": "List every card in the deck. Same field set the CSV exporter\nemits — JSON is the agent-friendly shape, CSV is the spreadsheet-\nfriendly shape, both backed by prep.decks.io.",
+        "operationId": "api_list_cards_api_v1_decks__name__cards_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_CardListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "deck not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List cards in a deck",
+        "tags": [
+          "Decks API"
+        ]
+      }
+    },
+    "/api/v1/decks/{name}/export.csv": {
+      "get": {
+        "operationId": "api_deck_export_csv_api_v1_decks__name__export_csv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {}
+            },
+            "description": "CSV with header row"
+          },
+          "404": {
+            "description": "deck not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download deck as CSV",
+        "tags": [
+          "Decks API"
+        ]
+      }
+    },
+    "/api/v1/decks/{name}/import-csv": {
+      "post": {
+        "description": "Append CSV rows to `name` (creates the deck if missing). The request body MUST be the raw CSV text (Content-Type: text/csv). Column shape matches the export — type, topic, prompt, answer, choices (newline-joined), rubric, skeleton, language, answer_regex, explanation.",
+        "operationId": "api_deck_import_csv_api_v1_decks__name__import_csv_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_CsvImportOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "empty body or malformed CSV"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import CSV into a deck",
+        "tags": [
+          "Decks API"
+        ]
+      }
+    },
+    "/deck/{name}": {
+      "get": {
+        "description": "Show every question in a deck (suspended + active), with\ninline SRS state + the deck's free-form context_prompt. Uses\n`get_or_create_deck` so first-time navigation lazily materializes\na deck row even if the user hasn't added any questions yet.",
+        "operationId": "deck_view_deck__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck View"
+      }
+    },
+    "/deck/{name}/delete": {
+      "post": {
+        "description": "Delete a deck and (via FK CASCADE) all its questions/cards/\nreviews/sessions. Requires the user to type the deck label into\n`confirm` — either the display name (preferred, what the dialog\nshows) or the URL slug (legacy decks without a display label).\nEither string suffices so renamed decks don't lock the owner\nout of deletion if they typed the slug.",
+        "operationId": "deck_delete_deck__name__delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deck_delete_deck__name__delete_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Delete"
+      }
+    },
+    "/deck/{name}/edit-with-ai": {
+      "get": {
+        "description": "Dedicated page for the deck-wide AI edit prompt. Replaces the\ninline toggle panel that used to live on the deck page; the prompt\n+ apply flow now has its own focused view.",
+        "operationId": "deck_edit_with_ai_deck__name__edit_with_ai_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Edit With Ai"
+      }
+    },
+    "/deck/{name}/edit-with-claude": {
+      "get": {
+        "description": "Legacy path kept as a redirect (bookmarks, PWA history).",
+        "operationId": "deck_edit_with_claude_redirect_deck__name__edit_with_claude_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Edit With Claude Redirect"
+      }
+    },
+    "/deck/{name}/export": {
+      "get": {
+        "description": "Dedicated export landing page. Hosts the three format options\n(prepdeck, CSV, Anki) with full explanations + one download button\nper format. The deck overflow menu links here instead of carrying\nthree flat actions that don't fit the popover.\n\nThe page's JS triggers the Web Share API (with file) for iOS PWAs,\nfalling back to a regular download elsewhere — see\nstatic/js/modules/deck-export.js.",
+        "operationId": "deck_export_hub_deck__name__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Export Hub"
+      }
+    },
+    "/deck/{name}/notifications": {
+      "post": {
+        "description": "Per-deck notification toggle. SRS decks honor it via the\ndigest count (paused decks subtract from the user's due_total\n+ drop out of the digest body). Trivia decks honor it via the\nper-deck scheduler skip. Pausing also abandons any in-progress\nsessions on the deck — see service.set_notifications_enabled.\n404 if the deck doesn't belong to the user.",
+        "operationId": "deck_toggle_notifications_deck__name__notifications_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deck_toggle_notifications_deck__name__notifications_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Toggle Notifications"
+      }
+    },
+    "/deck/{name}/pin": {
+      "post": {
+        "description": "Toggle deck pin. Pinned decks float to the top of the index,\nmost-recently-pinned first. 404 if the deck doesn't belong to\nthe user.\n\nhtmx-aware: when the request carries `HX-Request: true`, return\njust the pin-form fragment so the client can swap it in place\n(no full-page reload, no nav race with a follow-up tap).\nOtherwise, fall back to the POST→303 redirect for the no-JS path.\nThe dashboard's own menu takes that second path from JS and then\nre-reads the overview, so the list it renders comes from the\nserver's counts rather than from the response to this POST.",
+        "operationId": "deck_toggle_pin_deck__name__pin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deck_toggle_pin_deck__name__pin_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Toggle Pin"
+      }
+    },
+    "/deck/{name}/question/new": {
+      "get": {
+        "description": "Manual question entry form. The primary card-creation path when\nno AI agent is configured; an additional path otherwise.",
+        "operationId": "question_new_form_deck__name__question_new_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Question New Form"
+      },
+      "post": {
+        "operationId": "question_new_submit_deck__name__question_new_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Question New Submit"
+      }
+    },
+    "/deck/{name}/rename": {
+      "post": {
+        "description": "Update the deck's display label. The URL slug `name` stays put\nso existing bookmarks / shared links / open MCP sessions keep\nworking — only the human-facing label changes.",
+        "operationId": "deck_rename_deck__name__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deck_rename_deck__name__rename_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Rename"
+      }
+    },
+    "/deck/{name}/retention": {
+      "post": {
+        "description": "Per-deck FSRS retention override (SRS decks only).\n\n`retention` is either a float in [MIN, MAX] (override the user\ndefault for this deck) or the literal string \"default\" (clear\nthe override → fall back to the user's setting at /settings/srs).\n\nResolution at review time happens in prep/study/repo.py:record —\ndeck override wins; user-level fallback; FSRS algorithm default.",
+        "operationId": "deck_set_retention_deck__name__retention_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deck_set_retention_deck__name__retention_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Set Retention"
+      }
+    },
+    "/deck/{name}/split": {
+      "get": {
+        "description": "Render the manual split-deck form: card list with checkboxes,\nnew-deck-name field, optional new-topic-prompt for trivia.",
+        "operationId": "deck_split_form_deck__name__split_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Split Form"
+      },
+      "post": {
+        "description": "Apply the split: create the new deck, reassign selected\nquestions. Re-renders the form on validation error so the user\nkeeps their input.",
+        "operationId": "deck_split_submit_deck__name__split_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Split Submit"
+      }
+    },
+    "/deck/{name}/topic": {
+      "post": {
+        "description": "Update the trivia deck's topic prompt. Subsequent batch\ngenerations (scheduler refill OR explicit Generate) will use the\nupdated text. Existing cards are not touched. Trivia-only —\nSRS decks have a different edit surface.",
+        "operationId": "deck_update_topic_deck__name__topic_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deck_update_topic_deck__name__topic_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Update Topic"
+      }
+    },
+    "/deck/{name}/transform": {
+      "post": {
+        "description": "Deck-level free-text transform — returns a Plan and waits on\napply/reject signal before writing. The user is redirected to the\ntransform polling page where they can review the proposed changes.",
+        "operationId": "deck_transform_deck__name__transform_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_deck_transform_deck__name__transform_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Transform"
+      }
+    },
+    "/decks/import-anki": {
+      "get": {
+        "description": "Render the .apkg upload page. POSTs to the same path.",
+        "operationId": "decks_import_anki_form_decks_import_anki_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Decks Import Anki Form"
+      },
+      "post": {
+        "description": "Multipart-form upload: an .apkg file + a deck name. Parses the\nzipped sqlite collection, drops HTML and media, inserts each note\nas a short-type card. Returns an outcome block showing\ninserted / dedup / cloze-skipped / errors.",
+        "operationId": "decks_import_anki_submit_decks_import_anki_post",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Decks Import Anki Submit"
+      }
+    },
+    "/decks/import-csv": {
+      "get": {
+        "description": "Render the CSV upload page. Posts to the same path.",
+        "operationId": "decks_import_csv_form_decks_import_csv_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Decks Import Csv Form"
+      },
+      "post": {
+        "description": "Multipart-form upload: a CSV file + an optional deck name.\nCreates a new deck or appends to an existing one. Returns the\nsame template with an `outcome` block (inserted / skipped /\nerrors).",
+        "operationId": "decks_import_csv_submit_decks_import_csv_post",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Decks Import Csv Submit"
+      }
+    },
+    "/decks/import-prepdeck": {
+      "get": {
+        "description": "Render the .prepdeck upload page. POSTs to the same path.",
+        "operationId": "decks_import_prepdeck_form_decks_import_prepdeck_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Decks Import Prepdeck Form"
+      },
+      "post": {
+        "description": "Multipart-form upload: a `.prepdeck` zip + a deck name. Restores\na deck with full FSRS state, review log, and (for trivia decks)\nqueue state. Refuses if the target deck name already exists — the\nsemantics are 'restore deck,' not 'append cards.'",
+        "operationId": "decks_import_prepdeck_submit_decks_import_prepdeck_post",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Decks Import Prepdeck Submit"
+      }
+    },
+    "/decks/new": {
+      "get": {
+        "description": "Step 1 of deck creation — pick which kind. Each option leads\nto its own type-specific form (`/decks/new/srs` or\n`/decks/new/trivia`). Keeps each form focused on the fields that\nflow actually needs, instead of one mega-form with a multi-action\nsubmit row.",
+        "operationId": "deck_new_chooser_decks_new_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deck New Chooser"
+      }
+    },
+    "/decks/new/srs": {
+      "get": {
+        "description": "Step 2 (SRS): name + description + plan-vs-empty submit.",
+        "operationId": "deck_new_srs_form_decks_new_srs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deck New Srs Form"
+      },
+      "post": {
+        "description": "Create an SRS deck. `action` chooses the path:\naction=empty       → just create the deck row, redirect to /deck/<name>\naction=plan        → create the deck row, kick off PlanGenerateWorkflow,\n                     redirect to /plan/<wid>",
+        "operationId": "deck_new_srs_create_decks_new_srs_post",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deck New Srs Create"
+      }
+    },
+    "/decks/new/trivia": {
+      "get": {
+        "description": "Step 2 (trivia): name + topic + interval. Single submit\nbutton — there's no empty/plan branch here.",
+        "operationId": "deck_new_trivia_form_decks_new_trivia_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deck New Trivia Form"
+      },
+      "post": {
+        "description": "Create a trivia deck + kick off the initial-batch generation as\na background Temporal workflow. The deck row lands sync; the\nresponse is an immediate redirect to /trivia/gen/<wid> which polls\na status endpoint until the workflow's `done` (then jumps to the\ndeck page). Same pattern as /plan/<wid> for SRS plan-generate.",
+        "operationId": "deck_new_trivia_create_decks_new_trivia_post",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deck New Trivia Create"
+      }
+    },
+    "/forget-device": {
+      "post": {
+        "description": "Drop the anonymous cookie on this browser.\n\nDeletes nothing: the account and its decks survive and age out on\nthe reaper's schedule. Without this an anonymous user on a shared\nmachine has no way to leave. A request with no cookie is a no-op\nthat still lands on the landing page.\n\nRefused unless the browser says the request came from our own\npages: the client-side confirm never runs on a cross-site POST,\nand the cookie is the account's only credential.",
+        "operationId": "forget_device_forget_device_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Forget Device"
+      }
+    },
+    "/grading/{wid}": {
+      "get": {
+        "description": "Preserved entry point for links minted while grading was its own\npolling page (notifications, bookmarks). The study shell owns the\nin-flight grade now, so send the browser there: the session resumes\non whatever screen the grade actually reached.\n\nThe workflow id names a deck and a question, so it is attacker\nsupplied: both must belong to the caller. Without that check a\ncrafted id would redirect into /study/{name}, whose get-or-create\nwould mint decks in the visitor's account.",
+        "operationId": "grading_view_grading__wid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sid",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grading View"
+      }
+    },
+    "/manifest.json": {
+      "get": {
+        "description": "Web App Manifest, dynamic so the scope/start_url match whatever\nROOT_PATH this instance is served at (so prep vs prep-staging both\ninstall correctly without a hand-edited manifest each time).",
+        "operationId": "manifest_manifest_json_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Manifest"
+      }
+    },
+    "/mcp": {
+      "post": {
+        "description": "Single endpoint speaking JSON-RPC 2.0 over HTTP — the Model Context Protocol's streamable-HTTP transport. Supported methods: `initialize`, `tools/list`, `tools/call`, `notifications/initialized`. The tool catalog mirrors the REST API: list_decks, get_deck, list_cards, export_deck_csv, create_deck, import_csv.",
+        "operationId": "mcp_endpoint_mcp_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "MCP JSON-RPC endpoint",
+        "tags": [
+          "MCP"
+        ]
+      }
+    },
+    "/notify": {
+      "get": {
+        "operationId": "notify_settings_notify_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Notify Settings"
+      }
+    },
+    "/notify/log": {
+      "get": {
+        "description": "Render the recent notification history. Marks all currently\nunseen entries as seen on render — opening the page IS the\n\"I saw these\" gesture.",
+        "operationId": "notification_log_notify_log_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Notification Log"
+      }
+    },
+    "/notify/prefs": {
+      "post": {
+        "description": "Merge submitted values over the existing prefs so scheduler-only\nfields (last_digest_date, last_when_ready_at) survive an update.\npydantic does the bounds-check + mode validation.",
+        "operationId": "notify_prefs_save_notify_prefs_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Notify Prefs Save"
+      }
+    },
+    "/notify/subscribe": {
+      "post": {
+        "description": "Browser-supplied subscription payload: {endpoint, keys: {p256dh, auth}}.\nStored via the public surface in prep.notify so future repo extraction\nof the underlying SQL is invisible to the route layer.",
+        "operationId": "notify_subscribe_notify_subscribe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Notify Subscribe"
+      }
+    },
+    "/notify/test": {
+      "post": {
+        "description": "Send a one-off test push to the current user's devices so they\ncan verify subscription is alive end-to-end.",
+        "operationId": "notify_send_test_notify_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Notify Send Test"
+      }
+    },
+    "/notify/unsubscribe": {
+      "post": {
+        "description": "Remove a single device's push subscription. Endpoint is the\nnatural key — same endpoint can only belong to one user.",
+        "operationId": "notify_unsubscribe_notify_unsubscribe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Notify Unsubscribe"
+      }
+    },
+    "/notify/vapid-public-key": {
+      "get": {
+        "operationId": "vapid_public_key_notify_vapid_public_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Vapid Public Key"
+      }
+    },
+    "/offline": {
+      "get": {
+        "description": "The offline companion app's shell (docs/OFFLINE.md section 3).\n\nA standalone client-rendered page: no base.html, no identity\nprovider JS, no external CDN or fonts. The page renders its real\ncontent from IndexedDB client-side via offline-app.js.\n\nThe ?build= echo is load-bearing for cache consistency: the SW\nfetches the shell as /offline?build=<its own token> so the\nstylesheet URL + importmap prefix rendered into the shell match\nthe cache keys the same install stores, even when a deploy lands\nbetween the /sw.js fetch and the precache. The query value is\nvalidated against the accepted token charset before being echoed;\nanything else falls back to the current build token and is never\nreflected.",
+        "operationId": "offline_shell_offline_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Build"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Offline Shell"
+      }
+    },
+    "/plan/{wid}": {
+      "get": {
+        "description": "Plan polling page — renders the live planner UI while the\nworkflow is alive. If the query handler is gone (workflow ended),\nfall back to the deck page since there's nothing to poll.",
+        "operationId": "plan_view_plan__wid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan View"
+      }
+    },
+    "/plan/{wid}/accept": {
+      "post": {
+        "description": "Send accept signal and render the partial fragment. Status\nwill be `accepting` post-signal (transient state added in\nplan.go).",
+        "operationId": "plan_accept_plan__wid__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Accept"
+      }
+    },
+    "/plan/{wid}/feedback": {
+      "post": {
+        "description": "Send feedback signal and render the partial fragment.\nWas: signal → 303 redirect → full page re-render. Now: signal →\nquery → partial. htmx swaps #plan-progress in place.",
+        "operationId": "plan_feedback_plan__wid__feedback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_plan_feedback_plan__wid__feedback_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Feedback"
+      }
+    },
+    "/plan/{wid}/fragment": {
+      "get": {
+        "description": "htmx polling endpoint — returns just the #plan-progress fragment.\nThe partial embeds hx-trigger only for non-terminal states; once the\nworkflow hits awaiting_feedback / done / rejected / failed / gone,\nthe trigger is omitted and htmx stops polling. Server-driven loop\nlifecycle — no JS state machine.",
+        "operationId": "plan_fragment_plan__wid__fragment_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Fragment"
+      }
+    },
+    "/plan/{wid}/reject": {
+      "post": {
+        "description": "Send reject signal and render the partial fragment. Status\nwill be `rejecting` post-signal (transient state added in\nplan.go).",
+        "operationId": "plan_reject_plan__wid__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Reject"
+      }
+    },
+    "/plan/{wid}/status": {
+      "get": {
+        "description": "JSON status for the plan polling page. Returns the live progress\nwhile the workflow is alive, or {\"status\": \"gone\"} once the query\nhandler is no longer registered.",
+        "operationId": "plan_status_plan__wid__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan Status"
+      }
+    },
+    "/question/{qid}/edit": {
+      "get": {
+        "description": "Manual edit form. Always available regardless of agent —\ncounterpart to the AI Improve button.",
+        "operationId": "question_edit_form_question__qid__edit_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "qid",
+            "required": true,
+            "schema": {
+              "title": "Qid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Question Edit Form"
+      },
+      "post": {
+        "operationId": "question_edit_submit_question__qid__edit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "qid",
+            "required": true,
+            "schema": {
+              "title": "Qid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Question Edit Submit"
+      }
+    },
+    "/question/{qid}/improve": {
+      "post": {
+        "description": "Per-card free-text rewrite via the AI agent. Auto-applies on\ncompletion (card-scope transforms don't have an apply/reject\nreview step — that's reserved for deck-wide changes).",
+        "operationId": "question_improve_question__qid__improve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "qid",
+            "required": true,
+            "schema": {
+              "title": "Qid",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_question_improve_question__qid__improve_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Question Improve"
+      }
+    },
+    "/question/{qid}/suspend": {
+      "post": {
+        "description": "Toggle a question into the suspended state — it stops appearing\nin study sessions but stays in the deck. Redirects back to the\ndeck page so the toggle in the UI can update inline.",
+        "operationId": "question_suspend_question__qid__suspend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "qid",
+            "required": true,
+            "schema": {
+              "title": "Qid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Question Suspend"
+      }
+    },
+    "/question/{qid}/unsuspend": {
+      "post": {
+        "description": "Inverse of suspend — re-include the question in study sessions.",
+        "operationId": "question_unsuspend_question__qid__unsuspend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "qid",
+            "required": true,
+            "schema": {
+              "title": "Qid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Question Unsuspend"
+      }
+    },
+    "/reorganize": {
+      "get": {
+        "description": "Form for the cross-deck reorganize flow. Free-text prompt,\nplus a collapsible preview of the user's current decks so they\ncan see what the AI has to work with.",
+        "operationId": "reorganize_form_reorganize_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reorganize Form"
+      },
+      "post": {
+        "description": "Kick off a cross-deck reorganize workflow.",
+        "operationId": "reorganize_submit_reorganize_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_reorganize_submit_reorganize_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorganize Submit"
+      }
+    },
+    "/session/{sid}": {
+      "get": {
+        "description": "Render the study shell for this session. The shell's host reads\nthe session's real state through the JSON study API, so every\nbranch this route used to render (awaiting-answer, showing-result,\ngrading, completed) is decided client-side from one source of\ntruth. An abandoned session still redirects server-side: there is\nnothing for the loop to resume.",
+        "operationId": "session_view_session__sid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session View"
+      }
+    },
+    "/session/{sid}/abandon": {
+      "post": {
+        "description": "Manually kill a session. Returns the user to the deck page.",
+        "operationId": "session_abandon_session__sid__abandon_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Abandon"
+      }
+    },
+    "/session/{sid}/snooze": {
+      "post": {
+        "description": "Hide a session from the index Continue strip until a duration\npasses. Driven by the bottom-sheet picker in the session-card\noverflow menu; accepts either a `preset` (1h / tonight / tomorrow\n/ 1d / 1w / wake / …) OR a `custom` integer + `unit`.\n\nSession row stays status='active' — list_recent filters by\nsnoozed_until so it just doesn't surface until the timestamp is\nin the past. `preset=wake` clears the snooze (immediate wake) —\nused by the adjust sheet on already-snoozed sessions.",
+        "operationId": "session_snooze_session__sid__snooze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sid",
+            "required": true,
+            "schema": {
+              "title": "Sid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Snooze"
+      }
+    },
+    "/settings/account": {
+      "get": {
+        "operationId": "account_settings_settings_account_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Account Settings"
+      }
+    },
+    "/settings/account/delete": {
+      "post": {
+        "description": "Delete the caller's Clerk user. Webhook cascades the DB wipe.\n\nRequires the user to type their own login (the value the chip\nshows on every page) into the `confirm` field — same defense the\nGithub \"delete repo\" prompt uses, prevents a stray click from\nnuking an account.",
+        "operationId": "account_settings_delete_settings_account_delete_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_account_settings_delete_settings_account_delete_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Account Settings Delete"
+      }
+    },
+    "/settings/agent": {
+      "get": {
+        "operationId": "settings_agent_view_settings_agent_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Settings Agent View"
+      }
+    },
+    "/settings/agent/byok/{provider}/connect": {
+      "post": {
+        "description": "Store the user's API key for `provider` (encrypted). Key shape\nis validated against the provider's accepted prefixes; the\nencrypted row replaces whatever was there before.",
+        "operationId": "settings_byok_connect_settings_agent_byok__provider__connect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings Byok Connect"
+      }
+    },
+    "/settings/agent/byok/{provider}/disconnect": {
+      "post": {
+        "description": "Delete the user's BYOK row for `provider`. Idempotent: missing\nkey → still 200. Selector falls back to the next provider in the\nprecedence order, or the subscription path, or Noop after this.\n\nIf the user had explicitly marked this provider active, clear the\n`active_byok_provider` column so the next render's implicit\nfallback isn't fighting a ghost choice.",
+        "operationId": "settings_byok_disconnect_settings_agent_byok__provider__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings Byok Disconnect"
+      }
+    },
+    "/settings/agent/byok/{provider}/use": {
+      "post": {
+        "description": "Mark `provider` as the user's active BYOK choice. Refuses if\nthe user doesn't have a stored key for that provider (UX\ninvariant: the 'Use this one' button only appears for configured\nrows, so this is mostly defense against a stale form post).",
+        "operationId": "settings_byok_use_settings_agent_byok__provider__use_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings Byok Use"
+      }
+    },
+    "/settings/agent/connect": {
+      "post": {
+        "description": "Persist a `claude setup-token` value to prep-data + activate it\nin-process. Post-SDK migration: no HTTP round-trip to a separate\ncontainer — token storage is fully prep-side.\n\nHARD-GATED to non-clerk deploys. A clerk-mode deploy is multi-user;\na single deploy-wide token would fund every signup's AI usage from\nthe operator's Anthropic credit pool. Per-user subscription tokens\nare tracked separately as task #326.",
+        "operationId": "settings_agent_connect_settings_agent_connect_post",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Settings Agent Connect"
+      }
+    },
+    "/settings/agent/disconnect": {
+      "post": {
+        "description": "Delete the persisted token + clear the process env. Idempotent\n— calling on an already-disconnected instance is a no-op.",
+        "operationId": "settings_agent_disconnect_settings_agent_disconnect_post",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Settings Agent Disconnect"
+      }
+    },
+    "/settings/editor": {
+      "get": {
+        "operationId": "editor_settings_settings_editor_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Editor Settings"
+      },
+      "post": {
+        "operationId": "editor_settings_save_settings_editor_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_editor_settings_save_settings_editor_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Editor Settings Save"
+      }
+    },
+    "/settings/srs": {
+      "get": {
+        "operationId": "srs_settings_settings_srs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Srs Settings"
+      },
+      "post": {
+        "operationId": "srs_settings_save_settings_srs_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_srs_settings_save_settings_srs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Srs Settings Save"
+      }
+    },
+    "/sign-in": {
+      "get": {
+        "description": "Redirect to whatever sign-in URL the active provider exposes.\nClerk: hosted accounts UI. Tailscale: 404 — auth happens at the\nproxy layer, there's no in-app sign-in flow.",
+        "operationId": "sign_in_sign_in_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sign In"
+      }
+    },
+    "/sign-out": {
+      "get": {
+        "description": "Sign the user out.\n\nClerk: ClerkJS owns session revocation (it has to clear cookies\nacross the apex + Clerk's frontend host, and broadcast to other\ntabs). The hosted `/sign-out` URL on the account portal isn't a\nreal page on Clerk's current account-portal config — navigating\nthere returns 403/404 — so we render a small interstitial that\ncalls `Clerk.signOut()` from JS and then redirects home.\n\nOther providers (Tailscale: no concept of sign-out; FakeProvider:\nexplicit URL): keep the legacy redirect-to-provider behavior.\n\nThe anonymous cookie goes too. Provider sign-out leaves it\nuntouched, so the browser would resolve straight back into the\npre-signup anonymous account: on a shared machine that hands the\nnext person the first person's decks, and it makes \"Forget this\ndevice\" the only real way to leave.",
+        "operationId": "sign_out_sign_out_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sign Out"
+      }
+    },
+    "/static/css/v{build}/{path}": {
+      "get": {
+        "operationId": "_versioned_css_static_css_v_build___path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "build",
+            "required": true,
+            "schema": {
+              "title": "Build",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Versioned Css"
+      }
+    },
+    "/static/js/v{build}/{path}": {
+      "get": {
+        "operationId": "_versioned_js_static_js_v_build___path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "build",
+            "required": true,
+            "schema": {
+              "title": "Build",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Versioned Js"
+      }
+    },
+    "/study/{name}": {
+      "get": {
+        "description": "Sessionless single-card study path. Renders the same shell the\nsession path does, minus a session id: the host studies the deck\ndirectly through the JSON API. Most users land on\n/study/{name}/begin, which spins up a session and redirects.",
+        "operationId": "study_study__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Study"
+      }
+    },
+    "/study/{name}/begin": {
+      "post": {
+        "description": "Auto-resume an active session on this deck, or create a fresh one.\nPass ?fresh=1 to abandon any existing active session and start over.",
+        "operationId": "session_begin_study__name__begin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fresh",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Fresh",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Begin"
+      }
+    },
+    "/sw.js": {
+      "get": {
+        "description": "Serve the SW from the app's root scope (rather than /static/sw.js\nwhose default scope is /static/). The browser uses the SW's URL\npath as its scope, so this URL is what determines what the SW\ncontrols.\n\nRendered, not a plain FileResponse: static/sw.js carries two\nplaceholders the server substitutes at request time:\n\n- __BUILD__: the deploy's build-stable token. A new build changes\n  the served bytes, which is exactly the browser's trigger to\n  install the new SW version; a restart of the same build changes\n  nothing and triggers nothing.\n- __PRECACHE__: the JSON array of scope-relative URLs the install\n  handler precaches (see _precache_urls above).\n\nCache-Control: no-cache so the browser's SW update check always\nrevalidates against the server instead of reusing a heuristically\ncached copy.",
+        "operationId": "service_worker_sw_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service Worker"
+      }
+    },
+    "/transform/{wid}": {
+      "get": {
+        "description": "Transform polling page — shows live progress while the workflow\nis alive, falls back to the awaited result on terminal completion\n(since the queryable handler is gone by then).",
+        "operationId": "transform_view_transform__wid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transform View"
+      }
+    },
+    "/transform/{wid}/apply": {
+      "post": {
+        "description": "Send the apply signal and immediately render the partial.\n\nWas: signal → 303 redirect → transform_view → blocked on\nget_transform_result if the workflow had closed (1-5s hang).\nNow: signal → query → render partial. The htmx-targeted swap\nreplaces #transform-progress in place; the partial's own\nhx-trigger continues the polling loop if status is non-terminal.\nNo blocking calls.",
+        "operationId": "transform_apply_transform__wid__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transform Apply"
+      }
+    },
+    "/transform/{wid}/fragment": {
+      "get": {
+        "description": "htmx polling endpoint — returns just the #transform-progress\nfragment that swaps in place via hx-swap=outerHTML. The partial\nembeds its own hx-trigger ONLY when the workflow is still mid-flight,\nso when the server returns a terminal-state fragment the client\nstops polling automatically (no JS state machine, no separate\n/status call). Shares the same auth/ctx builder as transform_view.",
+        "operationId": "transform_fragment_transform__wid__fragment_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transform Fragment"
+      }
+    },
+    "/transform/{wid}/reject": {
+      "post": {
+        "description": "Send the reject signal and immediately render the partial.\nSee transform_apply for the rationale.",
+        "operationId": "transform_reject_transform__wid__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transform Reject"
+      }
+    },
+    "/transform/{wid}/status": {
+      "get": {
+        "operationId": "transform_status_transform__wid__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transform Status"
+      }
+    },
+    "/trivia/decks/{deck_id}/generate": {
+      "post": {
+        "description": "Synchronously generate a fresh batch for `deck_id`. Used as the\n\"Generate batch\" button on the deck page and as the implicit\nfallback the scheduler runs when a deck's queue is empty.\n\nRedirects back to the deck page on success; raises a 502-ish\nerror page if the agent is unreachable.",
+        "operationId": "trivia_generate_trivia_decks__deck_id__generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_id",
+            "required": true,
+            "schema": {
+              "title": "Deck Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Generate"
+      }
+    },
+    "/trivia/decks/{deck_id}/interval": {
+      "post": {
+        "description": "Update the deck's base notification interval. Form input is\nplain-text minutes (1..720); rejects garbage with 400, IDOR-guards\nvia user-scoped repo. htmx-aware response shape (see helper).",
+        "operationId": "trivia_set_interval_trivia_decks__deck_id__interval_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_id",
+            "required": true,
+            "schema": {
+              "title": "Deck Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_set_interval_trivia_decks__deck_id__interval_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Set Interval"
+      }
+    },
+    "/trivia/decks/{deck_id}/mute": {
+      "post": {
+        "description": "Mute push notifications for this trivia deck until the picked\nduration passes. Distinct from the permanent on/off toggle on the\ndeck page: mute is time-bounded and auto-expires; the toggle is\ndurable. Both gate the scheduler — a deck must be enabled AND\nnot muted to fire a push. Returns to /.",
+        "operationId": "trivia_deck_mute_trivia_decks__deck_id__mute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_id",
+            "required": true,
+            "schema": {
+              "title": "Deck Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Deck Mute"
+      }
+    },
+    "/trivia/decks/{deck_id}/notifications": {
+      "post": {
+        "description": "Flip the per-deck notification cycle on or off. Pausing also\nabandons any in-progress sessions on the deck — see\ndecks.service.set_notifications_enabled. 404 if the deck doesn't\nbelong to the user.\n\nhtmx-aware: HX-Request returns the notif-edit partial with the\nnew state baked in so the popover swaps in place. Otherwise a\nstandard 303 to the deck page (no-JS path).",
+        "operationId": "trivia_toggle_notifications_trivia_decks__deck_id__notifications_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_id",
+            "required": true,
+            "schema": {
+              "title": "Deck Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_toggle_notifications_trivia_decks__deck_id__notifications_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Toggle Notifications"
+      }
+    },
+    "/trivia/decks/{deck_id}/session_size": {
+      "post": {
+        "description": "Update the deck's mini-session card count (1..20). htmx-aware\nresponse shape (see helper).",
+        "operationId": "trivia_set_session_size_trivia_decks__deck_id__session_size_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_id",
+            "required": true,
+            "schema": {
+              "title": "Deck Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_set_session_size_trivia_decks__deck_id__session_size_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Set Session Size"
+      }
+    },
+    "/trivia/decks/{deck_id}/unmute": {
+      "post": {
+        "description": "Clear an active mute on this trivia deck. Idempotent — calling\non a non-muted deck is a no-op as long as the deck exists.",
+        "operationId": "trivia_deck_unmute_trivia_decks__deck_id__unmute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_id",
+            "required": true,
+            "schema": {
+              "title": "Deck Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Deck Unmute"
+      }
+    },
+    "/trivia/gen/{wid}": {
+      "get": {
+        "description": "Polling page that watches the TriviaGenerateWorkflow. Shows\nprogress (generating → applying → done). htmx polls the\nfragment route below every 1.5s; on terminal status the trigger\nis omitted and the user clicks \"Open deck\" to finish. The deck\nrow was already created sync in /decks/new/trivia.",
+        "operationId": "trivia_generating_trivia_gen__wid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Generating"
+      }
+    },
+    "/trivia/gen/{wid}/fragment": {
+      "get": {
+        "description": "htmx polling endpoint — returns just the #trivia-gen-progress\nfragment. The partial omits hx-trigger on terminal states (done /\nfailed) so polling stops without any client-side state.",
+        "operationId": "trivia_generating_fragment_trivia_gen__wid__fragment_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Generating Fragment"
+      }
+    },
+    "/trivia/gen/{wid}/status": {
+      "get": {
+        "description": "JSON poll endpoint. Returns the workflow's TriviaGenerateProgress.\nKept for backward compatibility; the live UI now uses the\n/fragment endpoint below for htmx swaps.",
+        "operationId": "trivia_generating_status_trivia_gen__wid__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wid",
+            "required": true,
+            "schema": {
+              "title": "Wid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Generating Status"
+      }
+    },
+    "/trivia/session/{deck_name}": {
+      "get": {
+        "description": "Notification deep-link target: a 3-card mini-session. With no\n`cards` param, server picks a fresh session and redirects with the\nqueue encoded. With an empty `cards`, renders the summary. Otherwise\nrenders the head card; submit pops the head and redirects.\n\nThe `done` param accumulates per-card verdicts as the user\nprogresses (`<qid><r|w>,...`) so the summary view at the end can\nrender the run without server-side session state.",
+        "operationId": "trivia_session_trivia_session__deck_name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_name",
+            "required": true,
+            "schema": {
+              "title": "Deck Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cards",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cards"
+            }
+          },
+          {
+            "in": "query",
+            "name": "done",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Done"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Session"
+      }
+    },
+    "/trivia/session/{deck_name}/abandon": {
+      "post": {
+        "description": "Abandon any active trivia mini-session for this (user, deck).\nUser-initiated discard from the index \"Continue trivia\" strip —\nparity with /session/{sid}/abandon for SRS. Soft delete: row\nflips to status='abandoned' and falls out of `list_active`,\ncards already answered keep their verdict history. Redirects\nto home; the JS on the index intercepts to do an optimistic\nremove without the round-trip.",
+        "operationId": "trivia_session_abandon_trivia_session__deck_name__abandon_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_name",
+            "required": true,
+            "schema": {
+              "title": "Deck Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Session Abandon"
+      }
+    },
+    "/trivia/session/{deck_name}/answer": {
+      "post": {
+        "description": "Grade the head card, mark_answered, render the result panel.\nAppends `<head><r|w>` to the `done` chain so the next-card link\n(and eventually the summary view) carries the verdict forward.\n\n`idk=1` is the \"I don't know\" submit — skip grading entirely and\nrecord as wrong. `formnovalidate` on the button bypasses the\nanswer field's `required`, so an empty input still POSTs.",
+        "operationId": "trivia_session_answer_trivia_session__deck_name__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_name",
+            "required": true,
+            "schema": {
+              "title": "Deck Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_session_answer_trivia_session__deck_name__answer_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Session Answer"
+      }
+    },
+    "/trivia/session/{deck_name}/override": {
+      "post": {
+        "description": "Session variant of the manual verdict override. In addition to\nflipping the recorded verdict, mutates the `done` chain so the\nnext-card link + the summary view see the corrected verdict for\nthis question — same shape as session_regrade.",
+        "operationId": "trivia_session_override_trivia_session__deck_name__override_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_name",
+            "required": true,
+            "schema": {
+              "title": "Deck Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_session_override_trivia_session__deck_name__override_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Session Override"
+      }
+    },
+    "/trivia/session/{deck_name}/regrade": {
+      "post": {
+        "description": "Session variant of the regrade route. In addition to flipping\nthe recorded verdict, mutates the `done` chain so the next-card\nlink (and the summary view at the end) reflects the new verdict\nfor this question.",
+        "operationId": "trivia_session_regrade_trivia_session__deck_name__regrade_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_name",
+            "required": true,
+            "schema": {
+              "title": "Deck Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_session_regrade_trivia_session__deck_name__regrade_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Session Regrade"
+      }
+    },
+    "/trivia/session/{deck_name}/snooze": {
+      "post": {
+        "description": "Snooze the active trivia mini-session for (user, deck) — hides\nit from the \"Continue trivia\" strip until the picked duration\npasses. Mirrors /session/{sid}/snooze for SRS. Same bottom-sheet\nform shape (preset OR custom + unit). `preset=wake` clears the\nsnooze (immediate wake) — used by the adjust sheet on already-\nsnoozed sessions. Status stays 'active' throughout; the list\nqueries filter by snoozed_until.",
+        "operationId": "trivia_session_snooze_trivia_session__deck_name__snooze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deck_name",
+            "required": true,
+            "schema": {
+              "title": "Deck Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Session Snooze"
+      }
+    },
+    "/trivia/{question_id}": {
+      "get": {
+        "description": "Render the minimal card view. Used as the deep-link target\nfrom the push notification body. Renders blank/no-result-yet\nuntil the user submits.",
+        "operationId": "trivia_card_trivia__question_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Card"
+      }
+    },
+    "/trivia/{question_id}/answer": {
+      "post": {
+        "description": "Grade + record + rotate. Re-renders the same card with the\nresult block populated; user dismisses to leave.",
+        "operationId": "trivia_answer_trivia__question_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_answer_trivia__question_id__answer_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Answer"
+      }
+    },
+    "/trivia/{question_id}/override": {
+      "post": {
+        "description": "Manual verdict override — flip the queue's last verdict to RIGHT\nwithout consulting the AI. For when the grader was too harsh and\nthe user is sure their answer was correct.\n\nDistinct from regrade (which asks the AI to re-evaluate). Override\njust sets correct=True. We don't auto-extend the answer_regex —\na one-off \"I was right\" tap shouldn't permanently relax grading\nfor that card. Users who want a permanent rule can edit the\nquestion's regex via the card-edit form.",
+        "operationId": "trivia_override_trivia__question_id__override_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_override_trivia__question_id__override_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Override"
+      }
+    },
+    "/trivia/{question_id}/regrade": {
+      "post": {
+        "description": "Force the AI grader to re-evaluate the user's answer for a\nstandalone (non-session) trivia card. Updates the recorded verdict\nif it flips and re-renders the result panel. The card isn't\nre-rotated — `set_last_correctness` only touches the verdict\ncolumn.",
+        "operationId": "trivia_regrade_trivia__question_id__regrade_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_trivia_regrade_trivia__question_id__regrade_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trivia Regrade"
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Public REST surface for managing decks + cards.",
+      "name": "Decks API"
+    },
+    {
+      "description": "Model Context Protocol server. JSON-RPC 2.0 over HTTP.",
+      "name": "MCP"
+    }
+  ]
+}

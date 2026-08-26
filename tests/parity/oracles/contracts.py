@@ -45,13 +45,18 @@ IP_SIGNED_IN = {"x-real-ip": "198.51.100.7"}
 IP_VISITOR = {"x-real-ip": "198.51.100.8"}
 IP_SECOND = {"x-real-ip": "198.51.100.9"}
 
+_TOOL_TEXT = "response.json.result.content.0.text"
+
 # (pair-name glob, dotted pointer into the pair, regex) -> `<VOLATILE>`.
 VOLATILE: tuple[tuple[str, str, str], ...] = (
-    ("*", "request.headers.authorization", r"prep_pat_[A-Za-z0-9_-]+"),
+    # The rewrite's token carries its owner before a dot
+    # (docs/PHASE-3.md B), so the mask has to admit one.
+    ("*", "request.headers.authorization", r"prep_pat_[A-Za-z0-9_.-]+"),
     ("*", "request.headers.cookie", r"prep_anon=[^;]+"),
     ("*", "response.set_cookie.*", r"prep_anon=v1\.[^;]+"),
     ("*", "response.set_cookie.*", r"expires=[^;]+"),
-    ("settings-api-mint-token", "response.text", r"prep_pat_[A-Za-z0-9_-]+"),
+    # The plaintext once, and the mask that replaces it thereafter.
+    ("settings-api-mint-token", "response.text", "prep_pat_[A-Za-z0-9_.\u2026-]+"),
     ("notify-*", "response.json.key", r"^.+$"),
     ("notify-page*", "response.text", r'vapidKey: "[^"]*"'),
     ("instant-*", "response.json.redirect", r"/deck/[a-z0-9]+"),
@@ -61,6 +66,19 @@ VOLATILE: tuple[tuple[str, str, str], ...] = (
         r'"apkg_base64": "[^"]+",\n  "byte_count": \d+',
     ),
     ("mcp-call-prep_import_apkg", "request.json.params.arguments.apkg_base64", r"^.+$"),
+    # Row ids drawn after the first anonymous mint. Python numbers every
+    # user's decks and questions from one sequence, so these carry the
+    # anonymous accounts' rows; per-cell id blocks do not, and no ordering
+    # makes the two agree.
+    ("v1-decks-create", "response.json.id", r"^\d+$"),
+    ("v1-deck-import-csv", "response.json.deck_id", r"^\d+$"),
+    ("mcp-call-prep_create_deck", _TOOL_TEXT, r'"id": \d+'),
+    ("mcp-call-prep_import_csv", _TOOL_TEXT, r'"deck_id": \d+'),
+    ("mcp-call-prep_add_card*", _TOOL_TEXT, r'"id": \d+'),
+    ("mcp-call-prep_get_card", _TOOL_TEXT, r'"(id|deck_id)": \d+'),
+    ("mcp-call-prep_update_card", _TOOL_TEXT, r'"id": \d+'),
+    ("mcp-call-prep_suspend_card", _TOOL_TEXT, r'"id": \d+'),
+    ("mcp-call-prep_delete_card", _TOOL_TEXT, r'"deleted_id": \d+'),
 )
 
 INSTANT_DECK = json.dumps(
@@ -551,7 +569,7 @@ def record_api_and_mcp(h: Harness, H: dict) -> None:
         headers=h.headers(),
         data={"label": "parity"},
     )
-    token = re.findall(r"prep_pat_[A-Za-z0-9_-]{30,}", r.text)[0]
+    token = re.findall(r"prep_pat_[A-Za-z0-9_.-]{30,}", r.text)[0]
     B = {**JSON, "authorization": f"Bearer {token}"}
 
     h.call("v1-decks-no-auth", "GET", "/api/v1/decks", headers=JSON)
