@@ -61,13 +61,13 @@ const MS: Record<keyof Delta, number> = { days: 86_400_000, hours: 3_600_000, mi
 /** A wake is never asked for the past: a due-now alarm lands just after now. */
 const ALARM_FLOOR_MS = 1;
 /**
- * The floor on an alarm-driven re-arm. A plan whose tasks all ran should move
- * the wake forward on its own; when one throws it leaves its stamp unwritten
- * and stays due, and this is what keeps that a retry rather than a hot loop.
+ * How soon a plan that is still due after a whole pass may come back. A task
+ * that throws leaves its stamp unwritten, and one whose effect is a job the
+ * deck is still waiting on cannot stamp anything yet; either way the retry
+ * belongs on the period Python's scheduler ran at (`_TICK_SECONDS`), not on
+ * the next millisecond. A wake that is already in the future is untouched.
  */
-const FAILED_TASK_BACKOFF_MS = 60_000;
-/** The same floor for a plan that is somehow still due after a full pass. */
-const ALARM_MIN_GAP_MS = 1_000;
+const TICK_MS = 300_000;
 
 export class UserCell extends DurableObject<Env> implements UserCellRpc {
   private readonly c: Composition;
@@ -113,7 +113,15 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
   // ---- requests -------------------------------------------------------------
 
+  /** A request that could have changed what the alarm rests on re-derives it
+   * on the way out; a read leaves the wake the last write computed. */
   async fetch(request: Request): Promise<Response> {
+    const response = await this.serve(request);
+    if (request.method !== 'GET' && request.method !== 'HEAD') await this.ensureAlarm();
+    return response;
+  }
+
+  private async serve(request: Request): Promise<Response> {
     const c = this.c;
     const clock = clockFor(c, request);
     const repos = this.repos(clock);
@@ -256,6 +264,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     const ids = await build({ repos, user, hasher: this.c.hasher, at: atDelta });
     await this.c.directory.register(user, false, isoUtc(now), { idx: 0 });
     await this.storage.put<ParityState>(STATE_KEY, { profile, flags: [] });
+    await this.ensureAlarm();
     return { user, profile, now: isoUtc(now), ...ids };
   }
 
@@ -292,6 +301,9 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
    * effect and a duplicate push is impossible. */
   async jobStatus(write: JobStatusWrite): Promise<void> {
     await deliverJobStatus({ repos: this.repos(), webPush: this.c.webPush, vapidPublicKey: this.c.vapidPublicKey }, write);
+    // A terminal transition is what a deck waiting on a refill wakes for, and
+    // what gives the prune something to count from.
+    await this.ensureAlarm();
   }
 
   /** A job's write step, run here rather than in the JobCell: the
@@ -314,7 +326,11 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       clock: fixedClock(step.at),
       repos,
     };
-    return this.c.stepRegistry.get(step.name)(ctx);
+    const output = await this.c.stepRegistry.get(step.name)(ctx);
+    // A write step is the one job path that adds rows here: fresh trivia
+    // cards change what the deck's next wake is worth.
+    await this.ensureAlarm();
+    return output;
   }
 
   async dump(): Promise<CellSnapshot> {
@@ -367,6 +383,51 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   /** Step two, its own RPC: zero-fill to the former size so the next snapshot holds no row bodies. */
   async scrub(at: string): Promise<void> {
     this.repos().tombstone.scrub(at);
+  }
+
+  // ---- the alarm ---------------------------------------------------------------
+
+  /**
+   * One activation of the user's own scheduler: the digest, when-ready, each
+   * trivia deck's refill and notification, and the 24h prune. Every task's
+   * guard is a stamp it writes, so a duplicate fire costs a read.
+   */
+  async alarm(): Promise<void> {
+    const repos = this.repos();
+    if (repos.tombstone.get()) {
+      await this.storage.deleteAlarm();
+      return;
+    }
+    const owner = repos.prefs.get()?.tailscale_login ?? '';
+    const report = await runWake({
+      repos,
+      webPush: this.c.webPush,
+      vapidPublicKey: this.c.vapidPublicKey,
+      runner: this.c.runner({ owner, repos }),
+      clock: this.c.clock,
+    });
+    if (report.failed.length) console.warn(`wake for ${owner}: ${report.failed.join('; ')}`);
+    await this.ensureAlarm(TICK_MS);
+  }
+
+  /**
+   * Derived from the rows and nothing else, at the end of every write and in
+   * the constructor, so an eviction, a node restart and a duplicate fire all
+   * converge. `stillDue` is the gap a plan that has not moved forward waits
+   * out; a wake the plan puts in the future is armed as asked either way.
+   */
+  private async ensureAlarm(stillDue = ALARM_FLOOR_MS): Promise<void> {
+    const repos = this.repos();
+    const current = await this.storage.getAlarm();
+    const wake = repos.tombstone.get() ? null : nextWakeAt(repos, this.c.clock);
+    if (wake === null) {
+      if (current !== null) await this.storage.deleteAlarm();
+      return;
+    }
+    const now = this.c.clock.now().getTime();
+    const wanted = new Date(wake).getTime();
+    const target = wanted <= now ? now + stillDue : Math.max(wanted, now + ALARM_FLOOR_MS);
+    if (current !== target) await this.storage.setAlarm(target);
   }
 }
 
