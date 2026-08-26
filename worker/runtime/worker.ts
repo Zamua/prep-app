@@ -205,7 +205,11 @@ export function sameOrigin(request: Request): boolean {
   if (site !== null) return site === 'same-origin' || site === 'none';
   const origin = request.headers.get('origin');
   if (origin === null) return true;
-  return origin.split('//').slice(-1)[0] === (request.headers.get('host') ?? '');
+  const scheme = origin.indexOf('//');
+  // The URL is the authority the runtime built from Host; a request assembled
+  // in-process carries no Host header at all, and comparing against '' would
+  // read every same-origin post as cross-site.
+  return (scheme === -1 ? origin : origin.slice(scheme + 2)) === (request.headers.get('host') ?? new URL(request.url).host);
 }
 
 async function providerFlows(
@@ -238,7 +242,10 @@ async function providerFlows(
   }
   if (url.pathname === '/forget-device') {
     if (request.method !== 'POST') return plain(errorPage(c.renderer, c.buildToken, 405, request, 'Method Not Allowed'));
-    if (!sameOrigin(request)) return plain(errorPage(c.renderer, c.buildToken, 403, request, 'cross-site request'));
+    if (!sameOrigin(request)) {
+      const detail = 'cross-site request';
+      return plain(wantsJson(request) ? Response.json({ detail }, { status: 403 }) : errorPage(c.renderer, c.buildToken, 403, request, detail));
+    }
     // Deletes nothing: the account and its decks survive and age out on the
     // reaper's schedule. A request with no cookie is a no-op that still
     // lands on the landing page.
