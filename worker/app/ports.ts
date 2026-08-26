@@ -663,6 +663,9 @@ export interface JobProgressRepo {
   upsert(row: { workflowId: string; transition: number; status: string; progress: Record<string, unknown> }): void;
   /** Rows whose workflow is gone from `active_workflows`; the per-user prune. */
   pruneOrphans(): number;
+  /** One row, dropped while its badge row stands: the parity abandon, which
+   * stands in for an execution deleted out from under a status read. */
+  remove(workflowId: string): boolean;
 }
 
 // ---- the global cells, as the user cell and the router see them ------------

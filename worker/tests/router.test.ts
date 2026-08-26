@@ -19,12 +19,14 @@ let seeded: { name: string; profile: string }[];
 /** The rows the owner's dump names, which is where the seed finds its jobs. */
 let jobRows: Record<string, Record<string, unknown>[]>;
 let jobsWiped: string[];
+let forgotten: { owner: string; jobId: string }[];
 
 beforeEach(() => {
   forwarded = [];
   seeded = [];
   jobRows = {};
   jobsWiped = [];
+  forgotten = [];
   env = fakeEnv({
     USER: namespaceOf((name) => ({
       fetch: async (request: Request) => {
@@ -39,6 +41,7 @@ beforeEach(() => {
         return { user: name, profile };
       },
       dump: async () => ({ profile: null, tables: jobRows }),
+      forgetJob: async (jobId: string) => void forgotten.push({ owner: name, jobId }),
     })),
     JOB: namespaceOf((name) => ({
       wipe: async () => void jobsWiped.push(name),
@@ -164,6 +167,17 @@ describe('the parity routes', () => {
     const ok = await call('/_parity/seed', { method: 'POST', body, headers: { 'x-internal-token': 'parity-internal-token' } });
     expect(ok.status).toBe(200);
     expect(jobsWiped).toEqual(['plan-a', 'grade-b']);
+  });
+
+  it('abandon empties the job cell and leaves its owner nothing to answer with', async () => {
+    const headers = { 'x-internal-token': 'parity-internal-token' };
+    const body = JSON.stringify({ id: 'plan-a-1', owner: 'parity@example.com' });
+    expect((await call('/_parity/job/abandon', { method: 'POST', body })).status).toBe(401);
+    expect((await call('/_parity/job/abandon', { method: 'POST', body: '{"id":"x"}', headers })).status).toBe(422);
+    const ok = await call('/_parity/job/abandon', { method: 'POST', body, headers });
+    expect(ok.status).toBe(200);
+    expect(jobsWiped).toEqual(['plan-a-1']);
+    expect(forgotten).toEqual([{ owner: 'parity@example.com', jobId: 'plan-a-1' }]);
   });
 
   it('seed fails closed without a configured token', async () => {

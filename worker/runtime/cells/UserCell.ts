@@ -49,6 +49,8 @@ const STATE_KEY = 'parity';
 const SESSION_COUNTER_KEY = 'parity_session_counter';
 /** A profile with no rows: the seed wipes and returns `{}`. */
 const ANONYMOUS_PROFILE = 'anonymous';
+/** What the partials render for a job whose record no longer answers. */
+const GONE_STATUS = 'gone';
 
 export class UnknownProfile extends Error {}
 
@@ -271,6 +273,21 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     await this.storage.put<ParityState>(STATE_KEY, { profile, flags: [] });
     await this.ensureAlarm();
     return { user, profile, now: isoUtc(now), ...ids };
+  }
+
+  /**
+   * What `temporal workflow terminate && workflow delete` left the Python app
+   * looking at, and the only way a parity run reaches the partial's `gone`:
+   * the badge row closed on the status a deleted execution reads as, and the
+   * progress row a poll answers from dropped out from under it.
+   */
+  async forgetJob(jobId: string, at: string): Promise<void> {
+    const repos = this.repos(fixedClock(at));
+    repos.tx.sync(() => {
+      repos.jobs.updateStatus(jobId, GONE_STATUS);
+      repos.jobs.setTerminalAt(jobId);
+      repos.jobProgress.remove(jobId);
+    });
   }
 
   // ---- RPC -------------------------------------------------------------------

@@ -26,6 +26,20 @@ interface SignalBody {
   payload?: unknown;
 }
 
+interface AbandonBody {
+  id?: unknown;
+  owner?: unknown;
+}
+
+/** The two parity-only resets, which no port declares: a job cell empties
+ * itself, and an owner drops what a deleted execution left behind. */
+interface JobReset {
+  wipe(): Promise<void>;
+}
+interface OwnerReset {
+  forgetJob(jobId: string, at: string): Promise<void>;
+}
+
 /** Null when the path is not one of ours, so the caller falls through. */
 export async function serveParityJobs(request: Request, url: URL, env: Env, c: Composition, at: string): Promise<Response | null> {
   if (!c.parity || !url.pathname.startsWith(PARITY_JOB_PREFIX)) return null;
@@ -60,6 +74,17 @@ export async function serveParityJobs(request: Request, url: URL, env: Env, c: C
     const body = (await request.json()) as SignalBody;
     if (typeof body.id !== 'string' || typeof body.name !== 'string') return Response.json({ detail: 'id and name are required' }, { status: 422 });
     return Response.json(await cell(body.id).signal({ name: body.name, payload: body.payload, at }));
+  }
+
+  // The pixel gate's `gone` screen. Python deletes the Temporal execution
+  // out from under a running job; here the job's cell is emptied and the
+  // owner is left with the closed badge row and no progress to answer from.
+  if (request.method === 'POST' && rest === '/abandon') {
+    const body = (await request.json()) as AbandonBody;
+    if (typeof body.id !== 'string' || typeof body.owner !== 'string') return Response.json({ detail: 'id and owner are required' }, { status: 422 });
+    await (cell(body.id) as unknown as JobReset).wipe();
+    await (c.userCells.cell(body.owner) as unknown as OwnerReset).forgetJob(body.id, at);
+    return Response.json({ abandoned: body.id });
   }
 
   if (request.method === 'GET' && rest.startsWith('/')) {

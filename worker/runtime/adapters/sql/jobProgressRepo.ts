@@ -42,6 +42,10 @@ export class SqlJobProgressRepo implements JobProgressRepo {
     );
   }
 
+  remove(workflowId: string): boolean {
+    return this.db.run('DELETE FROM job_progress WHERE workflow_id = ?', workflowId) > 0;
+  }
+
   pruneOrphans(): number {
     return this.db.run('DELETE FROM job_progress WHERE workflow_id NOT IN (SELECT workflow_id FROM active_workflows)');
   }

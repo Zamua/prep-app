@@ -243,4 +243,14 @@ describe('JobStatusRepo', () => {
     repos.jobs.setTerminalAt('old', '2026-03-13T00:00:00+00:00');
     expect(repos.jobs.pruneTerminalOlderThan()).toBe(1);
   });
+
+  it('removes one progress row while its badge row stands, which reads as gone', () => {
+    const { repos } = cell();
+    repos.jobs.register({ workflowId: 'w1', workflowType: 'plan', deckId: null, deckName: null, urlPath: '/plan/w1' });
+    repos.jobProgress.upsert({ workflowId: 'w1', transition: 1, status: 'planning', progress: {} });
+    expect(repos.jobProgress.remove('w1')).toBe(true);
+    expect(repos.jobProgress.remove('w1')).toBe(false);
+    expect(repos.jobProgress.get('w1')).toBeNull();
+    expect(repos.jobs.get('w1')).not.toBeNull();
+  });
 });
