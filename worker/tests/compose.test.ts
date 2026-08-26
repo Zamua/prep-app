@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compose, composeWith, cookieHooks, noCacheHtml } from '../runtime/compose.js';
+import { compose, composeWith, noCacheHtml } from '../runtime/compose.js';
 import { fakeEnv, IDENTIFIED, req } from './helpers.js';
 
 /** A prod-shaped env: no pin of any kind. */
@@ -26,9 +26,15 @@ describe('compose', () => {
     expect(c.parity).toBe(true);
     expect(await c.identity.identify(req('/', { headers: IDENTIFIED }))).toEqual({
       subject: 'parity@example.com',
+      kind: 'fake',
       displayName: 'Parity',
+      email: 'parity@example.com',
+      profilePicUrl: null,
     });
     expect(await c.identity.identify(req('/'))).toBeNull();
+    // The tailscale headers alone prove nothing (decision 7.0, option c).
+    const { 'x-internal-token': _token, ...unsigned } = IDENTIFIED;
+    expect(await c.identity.identify(req('/', { headers: unsigned }))).toBeNull();
   });
 
   it('has no identity provider without parity', async () => {
@@ -64,10 +70,5 @@ describe('the cross-cutting wrappers', () => {
     expect(html.headers.get('cache-control')).toBe('no-cache');
     const json = noCacheHtml(Response.json({ ok: true }));
     expect(json.headers.get('cache-control')).toBeNull();
-  });
-
-  it('cookieHooks is the identity until phase 3', () => {
-    const res = new Response('x');
-    expect(cookieHooks(req('/'), res)).toBe(res);
   });
 });

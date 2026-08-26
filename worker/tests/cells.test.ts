@@ -3,7 +3,7 @@ import type { CellSnapshot } from '../app/entities.js';
 import { RowCapReached } from '../domain/limits.js';
 import { composeWith, type Composition } from '../runtime/compose.js';
 import { JobCell } from '../runtime/cells/JobCell.js';
-import { KIND_HEADER, NOW_HEADER, SUBJECT_HEADER, type Route } from '../runtime/cells/router.js';
+import { KIND_HEADER, NOW_HEADER, PAT_HASH_HEADER, SUBJECT_HEADER, type Route } from '../runtime/cells/router.js';
 import { TOMBSTONED_HEADER, UnknownProfile, UserCell } from '../runtime/cells/UserCell.js';
 import * as pages from '../runtime/cells/routes/pages.js';
 import type { Env } from '../runtime/env.js';
@@ -11,6 +11,8 @@ import { fakeCellState } from './fakes/sqlStorage.js';
 import { corpusPage, fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
 
 const USER = 'parity@example.com';
+const ANON = 'anon:' + 'ab'.repeat(16);
+const AT = '2026-03-14T15:00:00+00:00';
 const IDENTIFIED = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Parity' };
 
 let env: Env;
@@ -28,6 +30,16 @@ beforeEach(() => {
 });
 
 const identified = (path: string, init: RequestInit = {}) => req(path, { ...init, headers: { ...IDENTIFIED, ...(init.headers as Record<string, string>) } });
+
+/** A live anonymous account, minted the way the instant path mints one. A
+ * cell holding no anonymous profile refuses an anon identity outright, so a
+ * gate can only be reached through a real one. */
+async function anonymousCell(): Promise<{ cell: UserCell; state: ReturnType<typeof fakeCellState> }> {
+  const state = fakeCellState();
+  const cell = new UserCell(state, env);
+  await cell.createInstantDeck({ displayName: 'Guest deck', cards: [], mint: { id: ANON, displayName: 'Guest', idx: 7 }, at: AT });
+  return { cell, state };
+}
 
 /** Routes the cell serves for the test's duration. Declaration order
  * decides a match, so a test route is prepended and wins over the real
@@ -90,7 +102,7 @@ describe('UserCell.fetch', () => {
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
       const ctx = renderer.calls[0]!.context;
       expect(renderer.calls[0]!.template).toBe('deck.html');
-      expect(ctx).toMatchObject({ deck_name: 'world-capitals', decks: 4, notif_unseen_count: 2, agent_available: false, auth_provider: 'tailscale', app_base: 'https://parity.example.test' });
+      expect(ctx).toMatchObject({ deck_name: 'world-capitals', decks: 4, notif_unseen_count: 2, agent_available: true, auth_provider: 'tailscale', app_base: 'https://parity.example.test' });
       expect(ctx['deck_display']).toEqual({ 'distributed-systems': 'Distributed Systems', 'world-capitals': 'World Capitals', scratch: 'Scratch', 'world-history': 'World History Trivia' });
       expect((ctx['user'] as { last_seen_at: string }).last_seen_at).toBe('2026-03-14T16:00:00+00:00');
     });
@@ -103,27 +115,34 @@ describe('UserCell.fetch', () => {
     ];
     await withRoutes(routes, async () => {
       await cell.seed('reader', USER, null);
-      const anon = { ...IDENTIFIED, [KIND_HEADER]: 'anon' };
-      const html = await cell.fetch(req('/settings', { headers: anon }));
+      const guest = await anonymousCell();
+      const anon = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon' };
+      const html = await guest.cell.fetch(req('/settings', { headers: anon }));
       expect(html.status).toBe(303);
       expect(html.headers.get('location')).toBe('/sign-in');
-      const json = await cell.fetch(req('/settings', { headers: { ...anon, accept: 'application/json' } }));
+      const json = await guest.cell.fetch(req('/settings', { headers: { ...anon, accept: 'application/json' } }));
       expect(json.status).toBe(403);
       expect(await json.json()).toEqual({ detail: 'sign in required' });
-      const pat = await cell.fetch(req('/settings', { headers: { ...IDENTIFIED, [KIND_HEADER]: 'pat' } }));
+      // The seeded token's own hash, or the credential check refuses before the gate.
+      const hash = String(state.fake.rows('api_tokens')[0]!['token_hash']);
+      const asToken = { ...IDENTIFIED, [KIND_HEADER]: 'pat', [PAT_HASH_HEADER]: hash };
+      const pat = await cell.fetch(req('/settings', { headers: asToken }));
       expect(pat.status).toBe(401);
       expect(await pat.json()).toEqual({ detail: 'not authenticated' });
       expect((await cell.fetch(identified('/api/v1/decks'))).status).toBe(401);
-      expect((await cell.fetch(req('/api/v1/decks', { headers: { ...IDENTIFIED, [KIND_HEADER]: 'pat' } }))).status).toBe(200);
+      expect((await cell.fetch(req('/api/v1/decks', { headers: asToken }))).status).toBe(200);
     });
   });
 
   it('an anonymous identity is touched, never upserted; a provider identity is created and registered', async () => {
     const route: Route = { method: 'GET', pattern: '/x', gate: 'user', handler: () => ({ empty: true }) };
     await withRoutes([route], async () => {
-      const anon = new UserCell(fakeCellState(), env);
-      expect((await anon.fetch(req('/x', { headers: { ...IDENTIFIED, [KIND_HEADER]: 'anon' } }))).status).toBe(204);
-      expect(await anon.precheck()).toEqual({ exists: false, isAnonymous: false, tombstoned: null });
+      const guest = await anonymousCell();
+      const claims = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon', 'x-prep-display-name': 'Parity', [NOW_HEADER]: '2026-03-14T16:00:00Z' };
+      expect((await guest.cell.fetch(req('/x', { headers: claims }))).status).toBe(204);
+      // Touched, never upserted: the bump lands, the presented claims do not.
+      expect(guest.state.fake.rows('profile')).toMatchObject([{ id: ANON, display_name: 'Guest', is_anonymous: 1, last_seen_at: '2026-03-14T16:00:00+00:00' }]);
+      expect(await guest.cell.precheck()).toEqual({ exists: true, isAnonymous: true, tombstoned: null });
       expect((await cell.fetch(identified('/x'))).status).toBe(204);
       expect(await cell.precheck()).toEqual({ exists: true, isAnonymous: false, tombstoned: null });
       expect(await c.directory.lookup(USER)).toMatchObject({ idx: 1 });
