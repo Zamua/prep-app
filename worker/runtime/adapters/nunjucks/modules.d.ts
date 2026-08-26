@@ -31,7 +31,3 @@ declare module "nunjucks/browser/nunjucks-slim.js" {
   };
   export default nunjucks;
 }
-
-declare module "*/static/js/study/markdown.js" {
-  export function markdownHTML(text: unknown): string;
-}

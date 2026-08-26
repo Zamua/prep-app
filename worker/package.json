@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-pages.mjs && node scripts/build.mjs",
+    "build": "node scripts/build-domain.mjs && node scripts/build-pages.mjs && node scripts/build.mjs",
+    "build:domain": "node scripts/build-domain.mjs",
     "build:pages": "node scripts/build-pages.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
     "test": "vitest run"

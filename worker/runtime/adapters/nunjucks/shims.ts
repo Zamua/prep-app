@@ -3,7 +3,7 @@
 // Python semantics the goldens were rendered with.
 import nunjucks from "nunjucks/browser/nunjucks-slim.js";
 import type { Clock } from "../../../app/ports";
-import { markdownHTML } from "../../../../static/js/study/markdown.js";
+import { markdownHTML } from "../../../domain/markdown";
 
 const { SafeString, copySafeness, markSafe } = nunjucks.runtime;
 
