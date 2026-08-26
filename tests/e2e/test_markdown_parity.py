@@ -169,19 +169,17 @@ def test_prompt_xss_renders_inert(offline_server, offline_page):
     assert dialogs == []
 
 
-def test_pathological_nesting_falls_back_to_text(offline_server, offline_page):
-    """A prompt nested deep enough to overflow the renderer's stack
-    still mounts: promptNode catches the throw and renders the raw
-    prompt as plain text, so the card stays studyable. The `threw`
-    assertion keeps the pin honest; if the engine ever handles this
-    depth, deepen the input."""
+def test_pathological_nesting_still_mounts(offline_server, offline_page):
+    """A prompt nested 20,000 blockquotes deep mounts without throwing
+    and renders exactly what the server renders: mistune nests 20
+    levels and keeps the rest as text, and the shared renderer agrees."""
     page = offline_page
     page.goto(offline_server.base_url + "/offline")
     result = page.evaluate(
         _DEEP_NESTING_JS,
         {"prefix": _module_prefix(page), "prompt": "> " * 20000 + "x"},
     )
-    assert result["threw"] is True
+    assert result["threw"] is False
     assert result["hasPrompt"] is True
-    assert result["blockquotes"] == 0
+    assert result["blockquotes"] == 20
     assert result["textStart"] == "> > "

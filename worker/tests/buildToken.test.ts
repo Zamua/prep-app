@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BUILD, bakeBuildInfo } from "../scripts/build.mjs";
 import { isAcceptedVersionToken, resolveToken, sha1Hex } from "../runtime/tokenRules";
 
@@ -73,6 +73,9 @@ describe("isAcceptedVersionToken", () => {
 describe("resolveBuildToken", () => {
   it("defaults to the token the build baked", async () => {
     bakeBuildInfo("ce11d0000000", BUILD);
+    // The module reads the baked token once at import; drop the copy the
+    // earlier describe imported so this import sees this bake.
+    vi.resetModules();
     const { resolveBuildToken } = await import("../runtime/buildToken");
     expect(resolveBuildToken(undefined)).toBe("ce11d0000000");
     expect(resolveBuildToken("")).toBe("ce11d0000000");
