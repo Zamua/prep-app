@@ -4,7 +4,7 @@ import { JOB_GRAPHS } from '../../app/jobs/graph.js';
 import type { StepGraph } from '../../domain/jobs/graph.js';
 import type { EventRow, JobRow, OutboxRow, StepRow } from '../../domain/jobs/ledger.js';
 import { backoffMs, deriveAlarm, nextAction, runnableRows, stepKey, type LedgerState } from '../../domain/jobs/schedule.js';
-import { MAX_REFUSALS, refusalBackoffMs } from '../../domain/jobs/refusal.js';
+import { DurabilityUnproven, isRefusal, MAX_REFUSALS, refusalBackoffMs } from '../../domain/jobs/refusal.js';
 
 const NOW = new Date('2026-03-14T15:00:00Z');
 const iso = (ms: number): string => new Date(NOW.getTime() + ms).toISOString().replace('Z', '+00:00').replace('.000', '');
@@ -214,5 +214,19 @@ describe('every declared graph', () => {
     for (const graph of Object.values(JOB_GRAPHS) as StepGraph[]) {
       for (const node of graph.nodes) expect(node.status, `${graph.kind}.${node.name}`).toBeTruthy();
     }
+  });
+});
+
+describe('what counts as a refusal', () => {
+  const named = (name: string, message = 'x'): Error => Object.assign(new Error(message), { name });
+
+  it('is what celld says when it declines the work, not when the work fails', () => {
+    expect(isRefusal(new DurabilityUnproven('celld output gate: durability unproven: too large'))).toBe(true);
+    expect(isRefusal(named('DurableObjectRoutingError', 'The Durable Object owner is currently unreachable'))).toBe(true);
+    expect(isRefusal(new Error('remote RPC owner was stale'))).toBe(true);
+    expect(isRefusal(new Error('node is shedding load'))).toBe(true);
+    expect(isRefusal(new Error('the AI returned 0 cards'))).toBe(false);
+    expect(isRefusal(new Error('agent http: deadline exceeded'))).toBe(false);
+    expect(isRefusal('not an error')).toBe(false);
   });
 });

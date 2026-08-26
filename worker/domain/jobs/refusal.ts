@@ -2,10 +2,12 @@
 // failing. Nothing was half-written, so it costs an attempt of nothing: it
 // increments `refusals`, backs off, and the same step runs again.
 //
-// The three shapes celld raises, by the strings in the binary:
+// The shapes celld raises, from the strings in the binary and from a node
+// killed under the crash suite:
 //   `celld output gate: durability unproven: ...`  (DurabilityUnproven)
-//   `The Durable Object owner is currently unreachable` (DurableObjectRoutingError),
-//   which is the 6-8s window after a node restart
+//   `The Durable Object owner is currently unreachable` (DurableObjectRoutingError)
+//   `remote RPC owner was stale`, which is what the window after a node
+//   restart actually answers
 //   `node is shedding load` / `node is at its stateless request limit`
 
 /** Raised by an adapter that knows its write was refused, not lost. */
@@ -19,6 +21,7 @@ const REFUSAL_MESSAGES = [
   /durability unproven/i,
   /output gate/i,
   /owner is currently unreachable/i,
+  /owner was stale/i,
   /no longer runs on/i,
   /node is shedding load/i,
   /stateless request limit/i,

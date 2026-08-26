@@ -99,11 +99,9 @@ function register(h: JobHarness, opts: { plan?: unknown[]; expandFails?: number[
     if (existing !== null) return { value: existing };
     const deck = ctx.repos.decks.getOrCreate('demo');
     const prompt = String(ctx.itemInput ?? ctx.stepKey);
-    const qid = ctx.repos.tx.sync(() => {
-      const id = ctx.repos.questions.add(deck, { type: 'short', prompt, answer: prompt });
-      ctx.repos.idempotency.recordQuestion(ctx.stepKey, id);
-      return id;
-    });
+    // `add` transacts on its own; a cell's storage refuses a second BEGIN.
+    const qid = ctx.repos.questions.add(deck, { type: 'short', prompt, answer: prompt });
+    ctx.repos.idempotency.recordQuestion(ctx.stepKey, qid);
     return { value: qid, progress: { inserted: ctx.item + 1 } };
   });
   h.registry.register('insert', write);

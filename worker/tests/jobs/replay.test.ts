@@ -40,11 +40,9 @@ function register(h: JobHarness, calls: { llm: string[]; write: string[] }, kill
     const existing = ctx.repos.idempotency.findQuestion(ctx.stepKey);
     if (existing !== null) return { value: existing };
     const deck = ctx.repos.decks.getOrCreate('capitals');
-    const qid = ctx.repos.tx.sync(() => {
-      const id = ctx.repos.questions.add(deck, { type: 'short', prompt: ctx.stepKey, answer: 'a' });
-      ctx.repos.idempotency.recordQuestion(ctx.stepKey, id);
-      return id;
-    });
+    // `add` transacts on its own; a cell's storage refuses a second BEGIN.
+    const qid = ctx.repos.questions.add(deck, { type: 'short', prompt: ctx.stepKey, answer: 'a' });
+    ctx.repos.idempotency.recordQuestion(ctx.stepKey, qid);
     // The dangerous kill: the data row landed, the step row has not. A
     // re-run must find the key, not write a second row.
     if (killAt && killAt.key === ctx.stepKey && !died.has(ctx.stepKey)) {

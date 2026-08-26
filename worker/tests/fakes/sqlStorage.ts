@@ -55,6 +55,7 @@ export class FakeCellStorage implements CellStorage {
   private readonly kv = new Map<string, unknown>();
   /** The scheduled wake, in epoch ms; a test drives it rather than waiting. */
   alarmAt: number | null = null;
+  private inTransaction = false;
 
   constructor(readonly db: Database.Database = new Database(':memory:')) {
     db.pragma('foreign_keys = ON');
@@ -62,7 +63,16 @@ export class FakeCellStorage implements CellStorage {
   }
 
   transactionSync<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
+    // better-sqlite3 nests through savepoints; a cell's storage refuses the
+    // second BEGIN outright. Refusing here too is what makes a handler that
+    // wraps a repository method fail in a test rather than on a node.
+    if (this.inTransaction) throw new Error('storage.transaction: cannot start a transaction within a transaction');
+    this.inTransaction = true;
+    try {
+      return this.db.transaction(fn)();
+    } finally {
+      this.inTransaction = false;
+    }
   }
 
   async deleteAll(): Promise<void> {

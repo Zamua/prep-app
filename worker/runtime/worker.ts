@@ -31,6 +31,7 @@ import { isoUtc } from '../domain/py.js';
 import { clerkWebhook } from './webhooks.js';
 import { serveInstant } from './routes/instant.js';
 import { servePublic } from './routes/openapi.js';
+import { serveParityJobs } from './routes/parityJobs.js';
 
 export { UserCell } from './cells/UserCell.js';
 export { DirectoryCell } from './cells/DirectoryCell.js';
@@ -126,6 +127,8 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
       return plain(page('sign_out_interstitial.html', { redirect_url: '/' }));
     }
     if (request.method === 'POST' && path === '/_parity/seed') return plain(await seed(request, env, c));
+    const job = await serveParityJobs(request, url, env, c, isoUtc(clockFor(c, request).now()));
+    if (job) return plain(job);
   }
 
   // Inbound copies of the identity headers are stripped before anything

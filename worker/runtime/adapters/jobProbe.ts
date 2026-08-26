@@ -75,16 +75,17 @@ export function registerProbe(registry: StepRegistry): void {
   registry.register(
     'probe-write',
     writeStep(async (ctx) => {
-      const existing = ctx.repos.idempotency.findQuestion(ctx.stepKey);
-      if (existing !== null) return { value: existing, progress: { inserted: ctx.item + 1 } };
       const deck = ctx.repos.decks.getOrCreate(String(ctx.input['deckName'] ?? 'probe'));
+      const existing = ctx.repos.idempotency.findQuestion(ctx.stepKey);
+      if (existing !== null) return { value: existing, progress: { inserted: ctx.item + 1, rows: ctx.repos.questions.listInDeck(deck).length } };
       const prompt = String(ctx.itemInput ?? `probe ${ctx.item}`);
-      const qid = ctx.repos.tx.sync(() => {
-        const id = ctx.repos.questions.add(deck, { type: 'short', prompt, answer: prompt });
-        ctx.repos.idempotency.recordQuestion(ctx.stepKey, id);
-        return id;
-      });
-      return { value: qid, progress: { inserted: ctx.item + 1 } };
+      // `add` transacts on its own, and a cell's storage refuses a nested
+      // transaction: the key is recorded beside it, not around it.
+      const qid = ctx.repos.questions.add(deck, { type: 'short', prompt, answer: prompt });
+      ctx.repos.idempotency.recordQuestion(ctx.stepKey, qid);
+      // The owner's own count, read where the rows are: what an
+      // exactly-once assertion needs after a kill.
+      return { value: qid, progress: { inserted: ctx.item + 1, rows: ctx.repos.questions.listInDeck(deck).length } };
     }),
   );
 }
