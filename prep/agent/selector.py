@@ -85,14 +85,12 @@ def set_user_agent_factory(fn: Callable[[str | None], AgentPort] | None) -> None
 
 # Provider precedence — when a user has BYOK keys for multiple
 # providers and hasn't set an explicit active choice, the first in
-# this list wins. CLAUDE_SUBSCRIPTION first: it draws from the
-# user's flat-rate Max-plan credit pool (no per-token surprise
-# charges), so when a user configures both subscription + API key
-# we'd rather burn the subscription quota by default. ANTHROPIC_API
-# second (same model surface, just metered). Then OpenRouter as the
-# multi-vendor router, then OpenAI as a fallback.
+# this list wins. ANTHROPIC_API leads (the model surface prep's
+# prompts were written against), then OpenRouter as the multi-vendor
+# router, then OpenAI. The retired subscription provider is absent:
+# a stored row for it selects nothing and falls through to the free
+# tier.
 _BYOK_PROVIDER_ORDER = (
-    Provider.CLAUDE_SUBSCRIPTION,
     Provider.ANTHROPIC_API,
     Provider.OPENROUTER_API,
     Provider.OPENAI_API,
@@ -116,14 +114,6 @@ def _build_byok_adapter(provider: Provider, secret: str) -> AgentPort:
         from prep.agent.openai_api import OpenAIAdapter
 
         return OpenAIAdapter(secret)
-    if provider is Provider.CLAUDE_SUBSCRIPTION:
-        # Same SDK adapter as the deploy-wide path, but with the
-        # user's token bound at construction so it's injected via
-        # ClaudeAgentOptions.env (per-subprocess) instead of read
-        # from process env. Concurrency-safe across users.
-        from prep.agent.sdk_adapter import ClaudeAgentSdkAdapter
-
-        return ClaudeAgentSdkAdapter(token=secret)
     raise ValueError(f"unsupported BYOK provider: {provider}")
 
 

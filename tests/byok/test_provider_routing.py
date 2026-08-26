@@ -32,7 +32,6 @@ def _byok_master(monkeypatch):
     "secret, expected",
     [
         ("sk-ant-api03-abcdef", Provider.ANTHROPIC_API),
-        ("sk-ant-oat01-abcdef", Provider.CLAUDE_SUBSCRIPTION),
         ("sk-or-v1-abcdef1234", Provider.OPENROUTER_API),
         ("sk-proj-abcdef1234", Provider.OPENAI_API),
         ("sk-abcdef1234", Provider.OPENAI_API),
@@ -95,10 +94,14 @@ def test_selector_openrouter_beats_openai_when_both_present(initialized_db, _byo
 
 
 def test_all_providers_have_metadata():
-    """Belt-and-suspenders: every Provider enum value must have a
-    corresponding PROVIDERS entry. Catches the 'added enum, forgot
-    metadata' bug."""
+    """Belt-and-suspenders: every offered Provider must have a
+    PROVIDERS entry. Catches the 'added enum, forgot metadata' bug.
+    CLAUDE_SUBSCRIPTION is retired: the value stays so stored rows
+    parse, and its absence from PROVIDERS is what retires it."""
+    assert Provider.CLAUDE_SUBSCRIPTION not in PROVIDERS
     for p in Provider:
+        if p is Provider.CLAUDE_SUBSCRIPTION:
+            continue
         assert p in PROVIDERS, f"missing metadata for {p}"
         info = PROVIDERS[p]
         assert info.label

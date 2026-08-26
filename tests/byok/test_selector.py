@@ -142,34 +142,25 @@ def test_subscription_path_blocked_on_clerk_mode(monkeypatch, initialized_db, _b
     assert agent.__class__.__name__ == "_NoopAgent"
 
 
-def test_subscription_byok_builds_sdk_adapter_with_bound_token(
-    monkeypatch, initialized_db, _byok_master
-):
-    """Cut 2: a per-user oat01 token stored as CLAUDE_SUBSCRIPTION must
-    materialize as ClaudeAgentSdkAdapter with the user's token bound,
-    so the SDK sees it via options.env instead of process env. This
-    is what makes the multi-user case concurrency-safe."""
+def test_a_retired_subscription_row_selects_nothing(monkeypatch, initialized_db, _byok_master):
+    """The provider is retired (decision 7.4): a row stored before the
+    retirement must not build an adapter, and must not shadow a real
+    API key the same user holds."""
     uid = "sub-byok@example.com"
     UserRepo().upsert(external_id=uid, email=uid)
-    user_token = "sk-ant-oat01-pretend-this-came-from-claude-setup-token"
-    BYOKRepo().store(user_id=uid, provider=Provider.CLAUDE_SUBSCRIPTION, secret=user_token)
+    BYOKRepo().store(
+        user_id=uid,
+        provider=Provider.CLAUDE_SUBSCRIPTION,
+        secret="sk-ant-oat01-pretend-this-came-from-claude-setup-token",
+    )
 
     agent = selector.agent_for_user(uid)
-    assert isinstance(agent, ClaudeAgentSdkAdapter)
-    # Token is bound to the adapter instance, not lifted into os.environ.
-    assert agent._token == user_token
-    import os as _os
-
-    assert _os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") is None
+    assert agent.__class__.__name__ == "_NoopAgent"
 
 
-def test_subscription_byok_wins_over_anthropic_api_by_default(
+def test_an_api_key_is_chosen_over_a_retired_subscription_row(
     monkeypatch, initialized_db, _byok_master
 ):
-    """Cut 2 precedence: when a user has both a sk-ant-oat01 (flat-rate
-    subscription pool) and a sk-ant-api03 (per-token metered API key)
-    configured, default to subscription so they don't get surprised
-    by metered API charges. Explicit active_byok_provider still wins."""
     uid = "sub-vs-api@example.com"
     UserRepo().upsert(external_id=uid, email=uid)
     repo = BYOKRepo()
@@ -177,28 +168,20 @@ def test_subscription_byok_wins_over_anthropic_api_by_default(
     repo.store(user_id=uid, provider=Provider.CLAUDE_SUBSCRIPTION, secret="sk-ant-oat01-flatrate")
 
     agent = selector.agent_for_user(uid)
-    assert isinstance(agent, ClaudeAgentSdkAdapter)
-    assert agent._token == "sk-ant-oat01-flatrate"
-
-    # Explicit choice flips it back to the API key.
-    UserRepo().set_active_byok_provider(uid, Provider.ANTHROPIC_API.value)
-    flipped = selector.agent_for_user(uid)
-    assert flipped.__class__.__name__ == "AnthropicApiAdapter"
+    assert agent.__class__.__name__ == "AnthropicApiAdapter"
 
 
 def test_agent_available_for_user_true_on_byok(monkeypatch, initialized_db, _byok_master):
     """The per-user availability helper drives the `agent_available`
-    template flag. The bug: without this, a clerk-mode user who saved
-    their subscription token via BYOK still saw "no AI configured"
-    because the legacy module-level probe is file-presence-only and
-    misses BYOK rows. Verify the helper actually returns True in that
-    setup."""
+    template flag. The bug it guards: a clerk-mode user who saved a
+    BYOK key still saw "no AI configured", because the legacy
+    module-level probe is file-presence-only and misses BYOK rows."""
     uid = "byok-only@example.com"
     UserRepo().upsert(external_id=uid, email=uid)
     BYOKRepo().store(
         user_id=uid,
-        provider=Provider.CLAUDE_SUBSCRIPTION,
-        secret="sk-ant-oat01-byokscoped",
+        provider=Provider.ANTHROPIC_API,
+        secret="sk-ant-api03-byokscoped",
     )
     assert selector.agent_available_for_user(uid) is True
 

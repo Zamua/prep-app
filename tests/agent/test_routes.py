@@ -260,31 +260,18 @@ def test_settings_agent_connect_blocked_on_clerk_mode(
     assert "Deploy-wide subscription tokens are disabled" in r.text
 
 
-def test_byok_connect_subscription_happy_path(
+def test_byok_connect_subscription_slug_is_retired(
     client: TestClient, initialized_db: str, token_dir: Path, _byok_master
 ):
-    """Cut 2: a sk-ant-oat01- token saved as the new CLAUDE_SUBSCRIPTION
-    BYOK provider stores + round-trips through the masked-prefix render."""
-    r = client.post(
-        "/settings/agent/byok/claude-subscription/connect",
-        data={"api_key": "sk-ant-oat01-userownedtokenwxyz"},
-    )
-    assert r.status_code == 200
-    assert "wxyz" in r.text
-
-
-def test_byok_connect_subscription_rejects_api_key_prefix(
-    client: TestClient, initialized_db: str, token_dir: Path, _byok_master
-):
-    """A sk-ant-api03 key sent to the subscription slug must be rejected
-    — they look similar but use different auth + billing pools. Wrong
-    field for that secret."""
-    r = client.post(
-        "/settings/agent/byok/claude-subscription/connect",
-        data={"api_key": "sk-ant-api03-wrong-field"},
-    )
-    assert r.status_code == 400
-    assert "sk-ant-oat01-" in r.text
+    """The provider is retired (decision 7.4). Its slug must not accept
+    a token, whichever prefix is sent: prep does not run the agent
+    harness that credential requires."""
+    for secret in ("sk-ant-oat01-userownedtokenwxyz", "sk-ant-api03-wrong-field"):
+        r = client.post(
+            "/settings/agent/byok/claude-subscription/connect",
+            data={"api_key": secret},
+        )
+        assert r.status_code == 404, secret
 
 
 def test_byok_disconnect_clears_active_when_it_was_chosen(

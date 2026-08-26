@@ -23,11 +23,11 @@ class Provider(str, Enum):
     ANTHROPIC_API = "anthropic-api"
     OPENAI_API = "openai-api"
     OPENROUTER_API = "openrouter-api"
-    # Claude subscription OAuth token from `claude setup-token`. NOT
-    # an Anthropic API key — different prefix, different endpoint,
-    # different billing pool (Max subscription credits instead of
-    # API account credits). Stored per-user and injected into the
-    # SDK subprocess at call time; see prep/agent/sdk_adapter.py.
+    # Retired 2026-08-25. The Claude subscription token is a Claude
+    # Code credential: the Messages API rejects it and the only
+    # sanctioned path runs the agent harness as a subprocess, which
+    # this deploy does not host. Rows are dropped at the celld
+    # cutover; the value stays reserved so a stored row still parses.
     CLAUDE_SUBSCRIPTION = "claude-subscription"
 
 
@@ -53,23 +53,9 @@ class ProviderInfo:
 
 
 # PROVIDERS insertion order = display order on /settings/agent.
-# Claude subscription leads: it's the most ergonomic option for users
-# who already have a Max plan (no per-token billing, one CLI command
-# to generate the token).
+# API keys only: the retired subscription provider has no entry, so it
+# renders nowhere and no new row can be created for it.
 PROVIDERS: dict[Provider, ProviderInfo] = {
-    Provider.CLAUDE_SUBSCRIPTION: ProviderInfo(
-        provider=Provider.CLAUDE_SUBSCRIPTION,
-        label="Claude subscription",
-        short_label="claude-sub",
-        # Output of `claude setup-token` — Anthropic OAuth token,
-        # one-year validity, draws from the user's Max-plan credit
-        # pool rather than API-account credits.
-        key_prefixes=("sk-ant-oat01-",),
-        # No web console — the token is generated CLI-side. Link to
-        # the relevant docs page so users know what to run.
-        console_url="https://docs.claude.com/en/docs/agent-sdk/auth#claude-app-tokens",
-        default_model="claude-sonnet-4-6",
-    ),
     Provider.ANTHROPIC_API: ProviderInfo(
         provider=Provider.ANTHROPIC_API,
         label="Anthropic",
@@ -114,12 +100,9 @@ def provider_for_key(secret: str) -> Provider | None:
     secret = (secret or "").strip()
     if not secret:
         return None
-    # Specific-before-generic. CLAUDE_SUBSCRIPTION's `sk-ant-oat01-`
-    # is more specific than ANTHROPIC_API's `sk-ant-api03-`, but both
-    # share the `sk-ant-` parent — list the subscription provider
-    # first so oat01 tokens never get routed as API keys.
+    # An `sk-ant-oat01-` subscription token matches no provider now, so
+    # it is refused at the form rather than stored as an API key.
     for p in (
-        Provider.CLAUDE_SUBSCRIPTION,
         Provider.ANTHROPIC_API,
         Provider.OPENROUTER_API,
         Provider.OPENAI_API,

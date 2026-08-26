@@ -7,21 +7,6 @@
   "byok_sections": [
    {
     "info": {
-     "console_url": "https://docs.claude.com/en/docs/agent-sdk/auth#claude-app-tokens",
-     "default_model": "claude-sonnet-4-6",
-     "key_prefixes": [
-      "sk-ant-oat01-"
-     ],
-     "label": "Claude subscription",
-     "provider": "claude-subscription",
-     "short_label": "claude-sub"
-    },
-    "is_active": false,
-    "metadata": null,
-    "provider": "claude-subscription"
-   },
-   {
-    "info": {
      "console_url": "https://console.anthropic.com/settings/keys",
      "default_model": "claude-sonnet-4-6",
      "key_prefixes": [
