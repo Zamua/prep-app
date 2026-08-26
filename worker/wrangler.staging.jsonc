@@ -18,6 +18,11 @@
   "assets": { "directory": "dist/assets", "binding": "ASSETS", "run_worker_first": true },
   "vars": {
     "PREP_ENV": "staging",
+    // The outbound fetch ceiling this deploy's celld node runs with; the
+    // worker takes the smaller of it and PREP_JOB_LLM_TIMEOUT_S minus 5s of
+    // headroom, so an LLM step gets its full 300s. Must match the node's own
+    // CELLD_FETCH_TIMEOUT_S.
+    "CELLD_FETCH_TIMEOUT_S": "330",
     // Clerk's public configuration. The secret key, the webhook secret and
     // every other credential arrive as CELLD_VAR_*, never from this file.
     "CLERK_ISSUER": "https://perfect-bengal-99.clerk.accounts.dev",

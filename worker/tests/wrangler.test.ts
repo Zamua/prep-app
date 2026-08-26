@@ -2,12 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { frontendApiHost } from '../runtime/adapters/clerk.js';
+import { jobLlmTimeoutMs } from '../runtime/compose.js';
 import { ROOT } from './helpers.js';
 
 const ENVS = ['dev', 'staging', 'prod'] as const;
 const CELLS = ['UserCell', 'DirectoryCell', 'InstantLimiterCell', 'JobCell'];
 const PUBLIC_VARS = new Set([
   'PREP_ENV',
+  'CELLD_FETCH_TIMEOUT_S',
   'PREP_PARITY_MODE',
   'PREP_PARITY_NO_PERIODIC',
   'PREP_FAKE_NOW',
@@ -119,5 +121,14 @@ describe('the three wrangler files', () => {
 
   it('keeps the seed credential out of staging and prod', () => {
     for (const env of ['staging', 'prod'] as const) expect(files[env].vars.PREP_INTERNAL_TOKEN, env).toBeUndefined();
+  });
+
+  // Unset, the worker assumes celld's 120s default and clamps an LLM step to
+  // 115s, where the spec and the node both allow 300s.
+  it('gives an LLM step its full budget on the two real deploys', () => {
+    for (const env of ['staging', 'prod'] as const) {
+      expect(files[env].vars.CELLD_FETCH_TIMEOUT_S, env).toBe('330');
+      expect(jobLlmTimeoutMs({ CELLD_FETCH_TIMEOUT_S: files[env].vars.CELLD_FETCH_TIMEOUT_S }), env).toBe(300_000);
+    }
   });
 });
