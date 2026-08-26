@@ -51,9 +51,13 @@ _PRELUDE_JS = """
 }
 """
 
+# Both readouts abort the upgrade a versionless open triggers: creating the
+# database empty at version 1 would make the app skip its own upgrade and
+# throw NotFoundError on every later transaction.
 _IDB_META_GET_JS = """
 async (name) => new Promise((resolve) => {
   const req = indexedDB.open("prep-offline");
+  req.onupgradeneeded = () => { req.transaction.abort(); };
   req.onsuccess = () => {
     const db = req.result;
     if (!db.objectStoreNames.contains("meta")) { db.close(); resolve(null); return; }
@@ -69,6 +73,7 @@ async (name) => new Promise((resolve) => {
 _IDB_ALL_JS = """
 async (storeName) => new Promise((resolve) => {
   const req = indexedDB.open("prep-offline");
+  req.onupgradeneeded = () => { req.transaction.abort(); };
   req.onsuccess = () => {
     const db = req.result;
     if (!db.objectStoreNames.contains(storeName)) { db.close(); resolve([]); return; }

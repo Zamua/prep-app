@@ -1,7 +1,7 @@
 """End-to-end offline study (docs/OFFLINE.md section 7, M3 scope).
 
-Drives the full study-offline-sync-later loop against a LOCAL
-tailscale-mode prep instance (the offline_server fixture): prime the
+Drives the full study-offline-sync-later loop against a LOCAL celld
+node (the offline_server fixture): prime the
 snapshot + service worker online, kill the server and cold-navigate to
 start_url (the only offline simulation that reaches the SW; Chromium's
 offline emulation does not apply to service-worker fetches), study all
@@ -19,11 +19,12 @@ and only for those.
 from __future__ import annotations
 
 import re
-import sqlite3
 import time
 from datetime import datetime, timezone
 
 import pytest
+
+from tests.e2e.celld_node import OFFLINE_E2E_LOGIN
 
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
 
@@ -35,9 +36,15 @@ _ISO_Z = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 # ---- IndexedDB readouts (evaluated in the page) -----------------------
 
+# A versionless open CREATES the database when it is absent, at version 1
+# with no object stores. The app's own open then finds the version it wants
+# already current, skips onupgradeneeded, and every later transaction throws
+# NotFoundError. So both readouts abort the upgrade they trigger: a poll that
+# arrives before the app's first open must observe nothing, never build it.
 _IDB_GETALL_JS = """
 async (storeName) => new Promise((resolve, reject) => {
   const req = indexedDB.open("prep-offline");
+  req.onupgradeneeded = () => { req.transaction.abort(); };
   req.onsuccess = () => {
     const db = req.result;
     if (!db.objectStoreNames.contains(storeName)) { db.close(); resolve([]); return; }
@@ -46,13 +53,14 @@ async (storeName) => new Promise((resolve, reject) => {
     getAll.onsuccess = () => { db.close(); resolve(getAll.result); };
     getAll.onerror = () => { db.close(); reject(getAll.error); };
   };
-  req.onerror = () => reject(req.error);
+  req.onerror = () => resolve([]);
 })
 """
 
 _IDB_META_GET_JS = """
 async (name) => new Promise((resolve) => {
   const req = indexedDB.open("prep-offline");
+  req.onupgradeneeded = () => { req.transaction.abort(); };
   req.onsuccess = () => {
     const db = req.result;
     if (!db.objectStoreNames.contains("meta")) { db.close(); resolve(null); return; }
@@ -262,24 +270,18 @@ def test_offline_study_and_reconnect_sync(offline_server, offline_ctx, offline_p
     #
     # The poll MUST make a Playwright call each iteration: with the
     # sync API, ctx.route() handlers only dispatch while the test
-    # thread is inside a Playwright call, so a sqlite-only wait loop
+    # thread is inside a Playwright call, so a read-only wait loop
     # would starve the very fetches (healthz probe, snapshot, sync
     # POST) it is waiting on.
     def _server_reviews():
         page.evaluate("() => 0")  # pump the event loop for route handlers
-        conn = sqlite3.connect(offline_server.db_path)
-        try:
-            rows = conn.execute(
-                "SELECT question_id, result, grader_notes, ts FROM reviews ORDER BY ts"
-            ).fetchall()
-        finally:
-            conn.close()
+        rows = sorted(offline_server.rows(OFFLINE_E2E_LOGIN, "reviews"), key=lambda r: r["ts"])
         return rows if len(rows) == 3 else None
 
     rows = _wait_for(_server_reviews, timeout=30, message="3 review rows on the server")
-    assert [r[0] for r in rows] == [seed["mcq_id"], seed["regex_id"], seed["short_id"]]
-    assert [r[1] for r in rows] == ["right", "right", "right"]
-    assert [r[2] for r in rows] == [
+    assert [r["question_id"] for r in rows] == [seed["mcq_id"], seed["regex_id"], seed["short_id"]]
+    assert [r["result"] for r in rows] == ["right", "right", "right"]
+    assert [r["grader_notes"] for r in rows] == [
         "(offline auto)",
         "(offline auto)",
         "(offline self-graded)",
@@ -431,8 +433,6 @@ def test_owner_mismatch_confirm_then_wipe(offline_server, offline_page):
     explicit; Keep records the choice (no re-prompt for the same
     account) and discards nothing; Wipe clears every store and
     reseeds as the signed-in account."""
-    from tests.e2e.conftest import OFFLINE_E2E_LOGIN
-
     offline_server.start()  # idempotent; heals a prior test's failure state
     page = offline_page
     _prime_online(page, offline_server.base_url)

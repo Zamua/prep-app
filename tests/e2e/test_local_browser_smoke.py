@@ -1,14 +1,14 @@
-"""Client-side smoke against a LOCAL prep, so the importmap regression
-class has coverage that runs without a deploy.
+"""Client-side smoke against a LOCAL celld node, so the importmap
+regression class has coverage that runs without a deploy.
 
 test_browser_smoke.py covers the same class plus the htmx transform
-flows, but those need a real Temporal worker, so that suite only runs
-against a deployed target and skips without credentials. The bug it
-guards (an inline `<script type="module">` that stops parsing, taking
-every behavior in that block with it) needs nothing but a real server
-and a real browser, which the local harness already provides. Keeping
-it here means a regression is caught on any machine, at any time,
-rather than only when someone points the suite at staging.
+flows, but those need a funded deploy, so that suite only runs against
+a deployed target and skips without credentials. The bug it guards (an
+inline `<script type="module">` that stops parsing, taking every
+behavior in that block with it) needs nothing but a real server and a
+real browser, which the local harness already provides. Keeping it
+here means a regression is caught on any machine, at any time, rather
+than only when someone points the suite at the fleet.
 """
 
 from __future__ import annotations

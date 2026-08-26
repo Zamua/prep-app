@@ -3,8 +3,8 @@
 The offline suite already drives the components through LocalSource.
 This module drives the same components through ServerSource, with
 every /api/study/* request fulfilled by a page route so the shapes
-under test are the wire shapes and nothing depends on a worker,
-Temporal, or an agent.
+under test are the wire shapes and nothing depends on a job engine or
+an agent.
 
 What it pins:
   - the async-grading path end to end in the DOM: submit renders the

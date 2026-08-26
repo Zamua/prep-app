@@ -23,11 +23,9 @@ study/authoring suites use (the offline_server fixture):
 
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
 
-from tests.e2e.conftest import OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME
+from tests.e2e.celld_node import OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME, identity_headers
 from tests.e2e.test_offline_author_e2e import _reset_seed_due_times
 from tests.e2e.test_offline_study_e2e import (
     _IDB_META_GET_JS,
@@ -49,17 +47,19 @@ A_FRONT = "Capital of Mongolia?"
 A_BACK = "Ulaanbaatar"
 
 
-def _server_counts(db_path) -> tuple[int, int, int]:
+def _server_counts(server) -> tuple[int, int, int]:
     """The server-side rows A's outbox could create if the guard ever
-    leaked: reviews, questions, idempotency pins."""
-    conn = sqlite3.connect(db_path)
-    try:
-        n_reviews = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
-        n_questions = conn.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
-        n_pins = conn.execute("SELECT COUNT(*) FROM offline_sync_idempotency").fetchone()[0]
-    finally:
-        conn.close()
-    return (n_reviews, n_questions, n_pins)
+    leaked: reviews, questions, idempotency pins.
+
+    Summed over BOTH accounts. A leak could land in either cell -- under
+    A's own id, or under the id B signed in with -- and one database is
+    what the two used to share."""
+    totals = [0, 0, 0]
+    for user in (OFFLINE_E2E_LOGIN, SECOND_LOGIN):
+        dump = server.dump(user)["tables"]
+        for i, table in enumerate(("reviews", "questions", "offline_sync_idempotency")):
+            totals[i] += len(dump.get(table) or [])
+    return tuple(totals)
 
 
 # ---- the different-owner flow -----------------------------------------
@@ -97,8 +97,7 @@ def owner_switch_ctx(browser_session, offline_server):
         if request.url.startswith(base):
             headers = {
                 **request.headers,
-                "tailscale-user-login": identity["login"],
-                "tailscale-user-name": identity["name"],
+                **identity_headers(identity["login"], identity["name"]),
             }
             route.continue_(headers=headers)
         else:
@@ -160,6 +159,10 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     # -- prime online as A: SW cache + IDB snapshot owned by A ---------
     _prime_online(page, base)
     prefix = _module_prefix(page)
+    # Read while the node is up: a cell answers over HTTP, so the
+    # baseline cannot be taken from under a stopped server the way a
+    # database file could. Nothing writes to it while it is down.
+    baseline = _server_counts(offline_server)
 
     # -- offline as A: study one card, author one card -----------------
     offline_server.stop()
@@ -188,8 +191,6 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     device_before = page.evaluate(_IDB_META_GET_JS, "device")
     assert device_before and device_before["device_id"]
 
-    baseline = _server_counts(offline_server.db_path)
-
     # -- B signs in on the same device; connectivity returns -----------
     identity["login"] = SECOND_LOGIN
     identity["name"] = SECOND_NAME
@@ -213,7 +214,7 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     # No sync happened: zero POSTs, server rows untouched, A's local
     # data untouched, owner still A.
     assert sync_posts == []
-    assert _server_counts(offline_server.db_path) == baseline
+    assert _server_counts(offline_server) == baseline
     assert len(_idb_all(page, "outbox_reviews")) == 1
     assert len(_idb_all(page, "local_cards")) == 1
     assert page.evaluate(_IDB_META_GET_JS, "owner")["user_id"] == OFFLINE_E2E_LOGIN
@@ -233,7 +234,7 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     assert disabled["suppressed"] is False  # keep recorded: no re-prompt
     assert disabled["dialogOpen"] is False
     assert sync_posts == []
-    assert _server_counts(offline_server.db_path) == baseline
+    assert _server_counts(offline_server) == baseline
 
     # -- wipe and start fresh: cleared, reseeded as B ------------------
     assert page.evaluate(_REPROMPT_JS, {"prefix": prefix}) is True
@@ -259,15 +260,14 @@ def test_different_owner_reconnect_confirm_then_wipe(offline_server, owner_switc
     # zero sync POSTs across the whole test, counts unchanged, and A's
     # authored card does not exist anywhere server-side.
     assert sync_posts == []
-    assert _server_counts(offline_server.db_path) == baseline
-    conn = sqlite3.connect(offline_server.db_path)
-    try:
-        leaked = conn.execute(
-            "SELECT COUNT(*) FROM questions WHERE prompt = ?", (A_FRONT,)
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert leaked == 0
+    assert _server_counts(offline_server) == baseline
+    leaked = [
+        q
+        for user in (OFFLINE_E2E_LOGIN, SECOND_LOGIN)
+        for q in offline_server.rows(user, "questions")
+        if q["prompt"] == A_FRONT
+    ]
+    assert leaked == []
 
     # -- the device now boots as B's ----------------------------------
     page.goto(base + "/offline")

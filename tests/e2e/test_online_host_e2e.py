@@ -9,7 +9,7 @@ order and threads its own answer through). These tests load
 assertions run through the host's own `apply` and `handleError`.
 
 Mocking the API rather than the upstream keeps the paths that matter
-here (self-grade, grading failure) reachable without a Temporal worker.
+here (self-grade, grading failure) reachable with no agent funded.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 
 import pytest
+
+from tests.e2e.celld_node import OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME, identity_headers
 
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
 
@@ -52,11 +54,7 @@ def host_page(browser_session, offline_server):
     def _inject(route, request):
         if request.url.startswith(base):
             route.continue_(
-                headers={
-                    **request.headers,
-                    "tailscale-user-login": "offline-e2e@example.com",
-                    "tailscale-user-name": "Offline Tester",
-                }
+                headers={**request.headers, **identity_headers(OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME)}
             )
         else:
             route.continue_()
@@ -125,8 +123,10 @@ def test_self_grade_records_what_the_user_actually_wrote(offline_server, host_pa
     page.locator("[data-study-root] textarea").first.fill("more than half the replicas")
     page.get_by_role("button", name="Submit").click()
 
-    # Reveal screen: the user's words, not the model answer.
-    page.wait_for_selector(".study-card")
+    # Reveal screen: the user's words, not the model answer. Waited on by
+    # the blurb only that screen carries: `.study-card` is already on the
+    # page, so it would match the pre-submit DOM.
+    page.wait_for_selector(".study-card .offline-selfgrade-blurb")
     revealed = page.locator("[data-study-root]").inner_text().lower()
     assert "more than half the replicas" in revealed
     assert "a majority of replicas" in revealed

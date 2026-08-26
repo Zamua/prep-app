@@ -14,6 +14,9 @@ import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import type { CellStorage } from '../storage.js';
 
+/** What a parity dump of the directory carries. */
+const DUMP_TABLES = ['users', 'account_merges', 'merge_markers', 'tombstones'] as const;
+
 const REAP_STATE_KEY = 'reap';
 const DAY_MS = 86_400_000;
 /** A wake is never asked for the past. */
@@ -48,6 +51,17 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
       await this.ensureAlarm();
     });
     this.repo = c.directoryRepo(storage);
+  }
+
+  /** The directory's own rows, in rowid order. Parity only: a test that
+   * used to read the merge audit out of the shared database has nowhere
+   * else to look for it. */
+  async dumpTables(): Promise<Record<string, Record<string, unknown>[]>> {
+    const tables: Record<string, Record<string, unknown>[]> = {};
+    for (const table of DUMP_TABLES) {
+      tables[table] = this.storage.sql.exec(`SELECT * FROM "${table}" ORDER BY rowid`).toArray();
+    }
+    return tables;
   }
 
   async register(id: string, isAnonymous: boolean, at: string, opts?: { idx?: number }): Promise<{ idx: number }> {

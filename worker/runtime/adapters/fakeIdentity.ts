@@ -27,7 +27,10 @@ function tagsEqual(a: string, b: string): boolean {
 export class FakeIdentityProvider implements IdentityProvider {
   readonly name = 'tailscale';
 
-  constructor(private readonly internalToken: string) {}
+  constructor(
+    private readonly internalToken: string,
+    private readonly signOutUrl: string = '',
+  ) {}
 
   async identify(request: Request): Promise<Identity | null> {
     const login = request.headers.get(LOGIN_HEADER);
@@ -47,8 +50,10 @@ export class FakeIdentityProvider implements IdentityProvider {
     return false;
   }
 
+  /** A sign-out URL only where one is configured: the masthead's sign-out row
+   * follows the provider, and the recorded corpus has none. */
   urls(): SignInUrls {
-    return NO_URLS;
+    return this.signOutUrl ? { ...NO_URLS, sign_out: this.signOutUrl } : NO_URLS;
   }
 }
 

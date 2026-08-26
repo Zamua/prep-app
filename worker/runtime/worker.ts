@@ -69,6 +69,11 @@ interface JobSeedApi {
   wipe(): Promise<void>;
 }
 
+/** The directory's own rows, which only the parity dump reads. */
+interface DirectorySeedApi {
+  dumpTables(): Promise<Record<string, Record<string, unknown>[]>>;
+}
+
 /** What the response owes the anonymous cookie, decided before any handler. */
 interface Outcome {
   response: Response;
@@ -171,6 +176,7 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
       return plain(page('sign_out_interstitial.html', { redirect_url: '/' }));
     }
     if (request.method === 'POST' && path === '/_parity/seed') return plain(await seed(request, env, c));
+    if (request.method === 'GET' && path === '/_parity/dump') return plain(await dumpCell(request, url, env, c));
     const job = await serveParityJobs(request, url, env, c, isoUtc(clockFor(c, request).now()));
     if (job) return plain(job);
   }
@@ -317,7 +323,7 @@ function visitorResponse(request: Request, url: URL, c: Composition, resolution:
     // the marketing page: the shell recovers the session and reloads.
     if (resolution.dormant && cookies[REAUTH_FALLBACK_COOKIE] !== '1') return { response: page('reauth.html'), cookie };
     const landing = c.pages.resolve('anonymous', 'GET', '/', []);
-    if (landing?.template) return { response: page(landing.template, landing.context ?? {}, landing.status), cookie };
+    if (landing?.template) return { response: page(landing.template, withLiveAuthUrls(landing.context), landing.status), cookie };
   }
   // A route that exists but needs an identity is 401; anything else never
   // existed, and saying so is not a signal worth withholding.
@@ -328,6 +334,18 @@ function visitorResponse(request: Request, url: URL, c: Composition, resolution:
   const signIn = c.identity.urls().sign_in;
   if (signIn) return { response: new Response(null, { status: 303, headers: { location: signIn } }), cookie };
   return { response: errorPage(c.renderer, c.buildToken, 401, request, NOT_AUTHENTICATED), cookie };
+}
+
+/** The auth chrome a recorded page must not pin. The corpus was taken
+ * against a target with no in-app flow, so its context carries empty
+ * sign-in URLs; a deploy that has them would otherwise render a landing
+ * page offering no way in. */
+const AUTH_KEYS = ['auth_provider', 'sign_in_url', 'sign_up_url', 'sign_out_url', 'clerk_publishable_key', 'clerk_frontend_api_host'];
+
+function withLiveAuthUrls(context: Record<string, unknown> | undefined): Record<string, unknown> {
+  const out = { ...(context ?? {}) };
+  for (const key of AUTH_KEYS) delete out[key];
+  return out;
 }
 
 /** A tombstoned cell answers 410; the browser is told what that means. */
@@ -415,6 +433,24 @@ async function clearAnonymous(c: Composition): Promise<void> {
       await c.directory.remove(user.id);
     }
   }
+}
+
+/**
+ * One cell's rows, for a test that used to open the server's database file.
+ * Read-only and parity-only, behind the same token the seed takes.
+ */
+async function dumpCell(request: Request, url: URL, env: Env, c: Composition): Promise<Response> {
+  if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
+  if (request.headers.get(INTERNAL_TOKEN_HEADER) !== c.internalToken) {
+    return Response.json({ detail: 'invalid X-Internal-Token' }, { status: 401 });
+  }
+  if (url.searchParams.get('cell') === 'directory') {
+    return Response.json({ tables: await (c.directory as unknown as DirectorySeedApi).dumpTables() });
+  }
+  const user = url.searchParams.get('user');
+  if (!user) return Response.json({ detail: 'user is required' }, { status: 422 });
+  const stub = env.USER.get(env.USER.idFromName(user)) as unknown as SeedApi;
+  return Response.json(await stub.dump());
 }
 
 /**

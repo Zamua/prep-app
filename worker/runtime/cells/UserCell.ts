@@ -38,7 +38,7 @@ import {
 import { apiRoutes } from './routes/api.js';
 import { jobRoutes } from './routes/jobs.js';
 import { pageRoutes } from './routes/pages.js';
-import { createUser, PROFILES, type Delta } from './seed/index.js';
+import { createUser, isAnonymousProfile, PROFILES, type Delta } from './seed/index.js';
 
 export interface ParityState {
   profile: string;
@@ -263,7 +263,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     const clock = at ? clockFor(this.c, new Request('https://cell.internal/', { headers: { 'x-prep-now': at } })) : this.c.clock;
     const now = clock.now();
     const repos = this.repos(clock);
-    createUser(repos, user);
+    createUser(repos, user, profile);
     repos.prefs.setIdBase(0);
     const atDelta = (delta: Delta = {}): string => {
       let ms = 0;
@@ -271,7 +271,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       return isoUtc(new Date(now.getTime() + ms));
     };
     const ids = await build({ repos, user, hasher: this.c.hasher, at: atDelta });
-    await this.c.directory.register(user, false, isoUtc(now), { idx: 0 });
+    await this.c.directory.register(user, isAnonymousProfile(profile), isoUtc(now), { idx: 0 });
     await this.storage.put<ParityState>(STATE_KEY, { profile, flags: [] });
     await this.ensureAlarm();
     return { user, profile, now: isoUtc(now), ...ids };

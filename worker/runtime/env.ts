@@ -49,6 +49,9 @@ export interface Env extends InstantLimitEnv, ClerkVars, SecretVars, PublicServi
   PREP_BUILD_ID?: string;
   PREP_PLACEHOLDER_INDEX?: string;
   PREP_INTERNAL_TOKEN?: string;
+  /** Where the fake provider's sign-out points; unset means no sign-out row,
+   * which is what the tailnet shape and the recorded corpus have. */
+  PREP_PARITY_SIGN_OUT_URL?: string;
 }
 
 /** The instant limiter's windows, as Python names them; unset means the default. */

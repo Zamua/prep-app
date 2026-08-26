@@ -17,11 +17,9 @@ Playwright's routing, dropping the injected identity header.
 
 from __future__ import annotations
 
-import os
-import sqlite3
-
 import pytest
 
+from tests.e2e.celld_node import identity_headers, mint_anon_cookie
 from tests.e2e.test_offline_study_e2e import (
     _IDB_META_GET_JS,
     _idb_all,
@@ -58,12 +56,9 @@ def merge_ctx(browser_session, offline_server):
 
     def _inject_header(route, request):
         if request.url.startswith(base):
-            headers = {
-                **request.headers,
-                "tailscale-user-login": MERGE_LOGIN,
-                "tailscale-user-name": MERGE_NAME,
-            }
-            route.continue_(headers=headers)
+            route.continue_(
+                headers={**request.headers, **identity_headers(MERGE_LOGIN, MERGE_NAME)}
+            )
         else:
             route.continue_()
 
@@ -76,74 +71,46 @@ def merge_ctx(browser_session, offline_server):
 
 
 def _anon_cookie_value() -> str:
-    """Minted with the master key the local server boots with, so the
-    server's own verify accepts it."""
-    from tests.e2e.conftest import _TEST_KEY_ENCRYPTION_SECRET
-
-    os.environ["PREP_KEY_ENCRYPTION_SECRET"] = _TEST_KEY_ENCRYPTION_SECRET
-    os.environ.pop("PREP_ANON_COOKIE_SECRET", None)
-    from prep.auth.anon_cookie import mint_cookie
-
-    return mint_cookie(ANON_ID)
+    """Signed with the key the local node derives from its master key, so
+    the node's own verify accepts it."""
+    return mint_anon_cookie(ANON_ID)
 
 
-def _seed_anon_account(db_path) -> int:
+def _seed_anon_account(server) -> int:
     """An anonymous account with one instant deck, the shape a visitor
     lands on before signing up. Returns the question id."""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        ts = "2026-01-01T00:00:00+00:00"
-        conn.execute(
-            "INSERT INTO users (tailscale_login, display_name, email, created_at,"
-            " last_seen_at, is_anonymous) VALUES (?, 'Guest', NULL, ?, ?, 1)",
-            (ANON_ID, ts, ts),
-        )
-        deck = conn.execute(
-            "INSERT INTO decks (user_id, name, display_name, deck_type, created_at)"
-            " VALUES (?, ?, 'African capitals', 'srs', ?)",
-            (ANON_ID, ANON_DECK, ts),
-        )
-        question = conn.execute(
-            "INSERT INTO questions (user_id, deck_id, type, prompt, answer, created_at)"
-            " VALUES (?, ?, 'short', ?, 'Nairobi', ?)",
-            (ANON_ID, deck.lastrowid, ANON_PROMPT, ts),
-        )
-        qid = question.lastrowid
-        conn.execute(
-            "INSERT INTO cards (question_id, step, next_due) VALUES (?, 0, ?)",
-            (qid, ts),
-        )
-        conn.commit()
-        return qid
-    finally:
-        conn.close()
+    return server.seed_profile(ANON_ID, "merge_anon")["question_id"]
 
 
-def _server_state(db_path, question_id: int) -> dict:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        owner = conn.execute(
-            "SELECT user_id FROM questions WHERE id = ?", (question_id,)
-        ).fetchone()
-        reviews = conn.execute(
-            "SELECT COUNT(*) AS n FROM reviews WHERE question_id = ?", (question_id,)
-        ).fetchone()["n"]
-        anon = conn.execute(
-            "SELECT COUNT(*) AS n FROM users WHERE tailscale_login = ?", (ANON_ID,)
-        ).fetchone()["n"]
-        merges = conn.execute(
-            "SELECT status, anon_user_id, target_user_id FROM account_merges ORDER BY id"
-        ).fetchall()
-        return {
-            "question_owner": owner["user_id"] if owner else None,
-            "reviews": reviews,
-            "anon_rows": anon,
-            "merges": [dict(m) for m in merges],
-        }
-    finally:
-        conn.close()
+def _server_state(server, question_id: int) -> dict:
+    """Where the row ended up, and what the directory recorded.
+
+    The owner column is gone: a question lives in exactly one cell, so
+    "who owns it" is which cell answers for it. The audit trail is the
+    directory's, which is its own cell.
+    """
+    directory = server.dump_directory()
+    owner = None
+    for user in (MERGE_LOGIN, ANON_ID):
+        if any(q["id"] == question_id for q in server.rows(user, "questions")):
+            owner = user
+            break
+    reviews = len(
+        [r for r in server.rows(MERGE_LOGIN, "reviews") if r["question_id"] == question_id]
+    )
+    return {
+        "question_owner": owner,
+        "reviews": reviews,
+        "anon_rows": len([u for u in directory["users"] if u["id"] == ANON_ID]),
+        "merges": [
+            {
+                "status": m["status"],
+                "anon_user_id": m["anon_user_id"],
+                "target_user_id": m["target_user_id"],
+            }
+            for m in directory["account_merges"]
+        ],
+    }
 
 
 # Stamp the device as the anonymous account and queue a review of one
@@ -185,7 +152,7 @@ def test_a_merged_device_flushes_with_no_dialog(offline_server, merge_ctx):
     base = offline_server.base_url
     page = merge_ctx.new_page()
 
-    qid = _seed_anon_account(offline_server.db_path)
+    qid = _seed_anon_account(offline_server)
 
     # -- the device: signed in once, then stamped as the anon account --
     page.goto(base + "/")
@@ -209,7 +176,7 @@ def test_a_merged_device_flushes_with_no_dialog(offline_server, merge_ctx):
         message="the queued review to flush after the merge",
     )
 
-    state = _server_state(offline_server.db_path, qid)
+    state = _server_state(offline_server, qid)
     assert state["question_owner"] == MERGE_LOGIN, "the anon deck did not move"
     assert state["anon_rows"] == 0
     assert state["reviews"] == 1, "the queued review never reached the server"

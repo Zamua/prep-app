@@ -28,36 +28,33 @@ was leaving. What each test pins:
 - The landing page's status line says the cards are on this browser
   and carries the removal inline.
 
-The sign-out suite runs against a LOCAL server in `fake` auth mode:
-its provider identifies every request AND exposes a sign-out URL, so
-the masthead renders the real row with its real hook (the row follows
-the provider, pinned in tests/web/test_signout_choice.py). The
-landing test needs the opposite -- a visitor the server cannot
-identify -- so it uses the tailscale-mode server with no header
-injected.
+The sign-out suite runs against a LOCAL celld node started with a
+sign-out URL configured (`PREP_PARITY_SIGN_OUT_URL`), so its provider
+identifies every request AND the masthead renders the real row with
+its real hook (the row follows the provider, pinned in
+tests/web/test_signout_choice.py). The landing test needs the opposite
+-- a visitor the server cannot identify -- so it uses the shared
+offline node with no identity injected.
 """
 
 from __future__ import annotations
 
-import os
 import re
-import sqlite3
-import subprocess
-import sys
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from tests.e2e.conftest import _REPO_ROOT, LocalOfflineServer
+from tests.e2e.celld_node import LocalCelldNode
+from tests.e2e.conftest import inject_identity, new_iphone_context
 from tests.e2e.test_offline_study_e2e import _idb_all, _module_prefix, _wait_for
 
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
 
 SNAPSHOT_FLAG = "prep:offline_snapshot"
 
-# FakeProvider's default external_id (prep/auth/providers/fake.py):
-# in fake auth mode every request resolves to this user.
-FAKE_LOGIN = "test@example.com"
+# Who the node's provider resolves for this suite's contexts.
+FAKE_LOGIN = "device-wipe@example.com"
+FAKE_NAME = "Device Tester"
 
 DECK_LABEL = "Device Capitals"
 AUTHORED_PROMPT = "Capital of Iceland?"
@@ -71,63 +68,21 @@ LANDING_DECK_ID = 71
 # ---- servers -----------------------------------------------------------
 
 
-def _seed_fake_mode_db(db_path) -> dict:
-    """One deck with two past-due short cards, owned by the user the
-    fake provider resolves on every request."""
-    subprocess.run(
-        [sys.executable, "-c", "from prep.infrastructure import db; db.init()"],
-        cwd=_REPO_ROOT,
-        env={**os.environ, "PREP_DB_PATH": str(db_path)},
-        check=True,
-    )
-    now = datetime.now(timezone.utc)
-    ts = now.isoformat()
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute(
-            "INSERT INTO users (tailscale_login, display_name, created_at, last_seen_at) "
-            "VALUES (?,?,?,?)",
-            (FAKE_LOGIN, "Device Tester", ts, ts),
-        )
-        deck_id = conn.execute(
-            "INSERT INTO decks (user_id, name, display_name, deck_type, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (FAKE_LOGIN, "device-capitals", DECK_LABEL, "srs", ts),
-        ).lastrowid
-        qids = []
-        for i, (prompt, answer) in enumerate(
-            [("Capital of Peru?", "Lima"), ("Capital of Japan?", "Tokyo")]
-        ):
-            qid = conn.execute(
-                "INSERT INTO questions (user_id, deck_id, type, prompt, answer, created_at) "
-                "VALUES (?,?,?,?,?,?)",
-                (FAKE_LOGIN, deck_id, "short", prompt, answer, ts),
-            ).lastrowid
-            conn.execute(
-                "INSERT INTO cards (question_id, step, next_due) VALUES (?,0,?)",
-                (qid, (now - timedelta(hours=i + 1)).isoformat()),
-            )
-            qids.append(qid)
-        conn.commit()
-    finally:
-        conn.close()
-    return {"deck_id": deck_id, "qids": qids}
-
-
 @pytest.fixture(scope="session")
-def wipe_server(tmp_path_factory):
-    """A local prep whose provider both identifies every request and
-    has a sign-out URL, which is what makes the masthead render the
-    row under test."""
-    db_path = tmp_path_factory.mktemp("device-wipe-e2e") / "data.sqlite"
-    server = LocalOfflineServer(db_path)
-    server.extra_env = {"PREP_AUTH_MODE": "fake"}
-    server.seed = _seed_fake_mode_db(db_path)
-    server.start()
+def wipe_server(celld_build):
+    """A local node whose provider both identifies every request and has a
+    sign-out URL, which is what makes the masthead render the row under
+    test. The URL is the parity interstitial the entry worker already
+    serves."""
+    node = LocalCelldNode(
+        "wipe", vars={"PREP_PARITY_SIGN_OUT_URL": PROVIDER_SIGN_OUT_PATH}, probe_user=FAKE_LOGIN
+    )
+    node.start()
     try:
-        yield server
+        node.seed = node.seed_profile(FAKE_LOGIN, "device_wipe")
+        yield node
     finally:
-        server.stop()
+        node.stop()
 
 
 # Records that a modal was opened, in storage that outlives the page.
@@ -154,20 +109,7 @@ def _new_ctx(browser_session):
     page it re-issues navigations itself, outside Playwright's routing,
     so the sign-out navigation this suite has to observe would be
     invisible."""
-    ctx = browser_session.new_context(
-        user_agent=(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-            "Version/17.4 Mobile/15E148 Safari/604.1"
-        ),
-        viewport={"width": 393, "height": 852},
-        device_scale_factor=3,
-        is_mobile=True,
-        has_touch=True,
-        service_workers="block",
-    )
-    ctx.set_default_timeout(15_000)
-    ctx.set_default_navigation_timeout(15_000)
+    ctx = new_iphone_context(browser_session, service_workers="block")
     ctx.add_init_script(_DIALOG_PROBE_JS)
     return ctx
 
@@ -175,6 +117,7 @@ def _new_ctx(browser_session):
 @pytest.fixture()
 def wipe_page(browser_session, wipe_server):
     ctx = _new_ctx(browser_session)
+    inject_identity(ctx, wipe_server.base_url, FAKE_LOGIN, FAKE_NAME)
     try:
         yield ctx.new_page()
     finally:
@@ -183,8 +126,7 @@ def wipe_page(browser_session, wipe_server):
 
 @pytest.fixture()
 def landing_page(browser_session, offline_server):
-    """No identity of any kind against the tailscale-mode server, so
-    every load of `/` is the landing."""
+    """No identity of any kind, so every load of `/` is the landing."""
     ctx = _new_ctx(browser_session)
     try:
         yield ctx.new_page()
@@ -364,8 +306,11 @@ def _prime(page, base: str) -> str:
 
 SNAPSHOT_URL = re.compile(r"/api/offline/snapshot$")
 SYNC_URL = re.compile(r"/api/offline/sync$")
-SIGN_OUT_URL = re.compile(r"/sign-out$")
-PROVIDER_SIGN_OUT_URL = re.compile(r"/fake/sign-out$")
+# Anchored on the whole URL: the provider's own page ends in the same
+# segment, and a bare suffix match would swallow the redirect target too.
+SIGN_OUT_URL = re.compile(r"^[a-z]+://[^/]+/sign-out$")
+PROVIDER_SIGN_OUT_PATH = "/_parity/sign-out"
+PROVIDER_SIGN_OUT_URL = re.compile(r"/_parity/sign-out$")
 
 
 # What the sign-out navigation is answered with in the tests that
@@ -429,12 +374,12 @@ def _choices(dialog) -> list[str]:
     return dialog.locator(".offline-choice-actions button").all_inner_texts()
 
 
-def _rows(db_path, sql: str, params: tuple) -> int:
-    conn = sqlite3.connect(db_path)
-    try:
-        return conn.execute(sql, params).fetchone()[0]
-    finally:
-        conn.close()
+def _questions_with(server, prompt: str) -> int:
+    return len([q for q in server.rows(FAKE_LOGIN, "questions") if q["prompt"] == prompt])
+
+
+def _reviews_of(server, qid: int) -> int:
+    return len([r for r in server.rows(FAKE_LOGIN, "reviews") if r["question_id"] == qid])
 
 
 # ---- the sign-out choice ------------------------------------------------
@@ -534,12 +479,8 @@ def test_sign_out_and_remove_flushes_before_it_clears_the_stores(wipe_server, wi
         "wiped",
     ]
     # And the consequence of that order: the work is on the server.
-    assert _rows(wipe_server.db_path, "SELECT COUNT(*) FROM reviews WHERE question_id = ?", (qid,))
-    assert _rows(
-        wipe_server.db_path,
-        "SELECT COUNT(*) FROM questions WHERE prompt = ? AND user_id = ?",
-        (AUTHORED_PROMPT, FAKE_LOGIN),
-    )
+    assert _reviews_of(wipe_server, qid)
+    assert _questions_with(wipe_server, AUTHORED_PROMPT)
 
     # Then the device: nothing left, and nothing claiming otherwise.
     assert _idb_all(page, "decks") == []
@@ -628,9 +569,7 @@ def test_an_unreachable_server_costs_the_user_nothing_without_a_second_choice(
     assert _idb_all(page, "local_cards") == []
     assert _flag(page) is None
     # The server never got the review: that is what the user chose.
-    assert not _rows(
-        wipe_server.db_path, "SELECT COUNT(*) FROM reviews WHERE question_id = ?", (qid,)
-    )
+    assert not _reviews_of(wipe_server, qid)
 
 
 def test_keeping_the_unsaved_work_still_signs_the_user_out(wipe_server, wipe_page):
@@ -751,9 +690,7 @@ def test_a_row_written_after_a_wipe_never_reaches_the_next_account(wipe_server, 
     assert result["before"] == 1
     # The harm, first: the row never became a question in the account
     # the server resolves for this browser.
-    assert not _rows(
-        wipe_server.db_path, "SELECT COUNT(*) FROM questions WHERE prompt = ?", (orphan,)
-    )
+    assert not _questions_with(wipe_server, orphan)
     # Dropped rather than left to be adopted later, and the device is
     # still un-owned: only a snapshot refresh may stamp one.
     assert result["after"] == 0
@@ -779,7 +716,7 @@ def test_a_wiped_device_syncs_again_once_it_has_an_owner(wipe_server, wipe_page)
     # The queue drained because the server took the row, not because
     # the marker dropped it.
     assert result["after"] == 0
-    assert _rows(wipe_server.db_path, "SELECT COUNT(*) FROM questions WHERE prompt = ?", (kept,))
+    assert _questions_with(wipe_server, kept)
 
 
 # ---- the landing page's second exit -------------------------------------

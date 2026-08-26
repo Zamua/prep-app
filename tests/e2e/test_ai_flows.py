@@ -181,8 +181,8 @@ def test_transform_flow_drives_to_awaiting_apply(http: httpx.Client, test_deck: 
     terminal cancelled state with no further polling.
 
     This is the canonical "drive the htmx-polling lifecycle to
-    terminal" e2e: covers the route-template-temporal-claude
-    integration end-to-end."""
+    terminal" e2e: covers the route, the template, the job engine and
+    the agent end-to-end."""
     name = test_deck["name"]
     # Fire the transform — small, scoped prompt so claude returns a
     # plan quickly. The intent is a no-op edit (rephrase prompts), not
@@ -393,10 +393,9 @@ def test_trivia_generation_flow_drives_to_done(http: httpx.Client, e2e_trivia_de
 
 def test_no_blocking_handle_result_in_polling_routes(http: httpx.Client, test_deck: dict):
     """Each fragment-poll route MUST return promptly even when the
-    workflow id is bogus / not-found / not-owned. If a future refactor
-    re-introduces `await handle.result()` in the route handler, this
-    test will hang for the temporal long-poll timeout instead of
-    returning <500ms.
+    workflow id is bogus / not-found / not-owned. A route that waits on
+    the job instead of reading its recorded status hangs here rather
+    than returning <500ms.
 
     Not marked slow — it's the cheapest test in this file (3 HTTP
     roundtrips, all expected to error fast). Lives here rather than in

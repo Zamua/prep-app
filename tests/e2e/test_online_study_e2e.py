@@ -15,11 +15,9 @@ from __future__ import annotations
 
 import pytest
 
+from tests.e2e.celld_node import OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME, identity_headers
+
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
-
-
-OFFLINE_E2E_LOGIN = "offline-e2e@example.com"
-OFFLINE_E2E_NAME = "Offline Tester"
 
 
 @pytest.fixture
@@ -54,11 +52,7 @@ def online_page(browser_session, offline_server):
     def _inject_header(route, request):
         if request.url.startswith(base):
             route.continue_(
-                headers={
-                    **request.headers,
-                    "tailscale-user-login": OFFLINE_E2E_LOGIN,
-                    "tailscale-user-name": OFFLINE_E2E_NAME,
-                }
+                headers={**request.headers, **identity_headers(OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME)}
             )
         else:
             route.continue_()

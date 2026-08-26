@@ -1,8 +1,7 @@
 """End-to-end offline authoring (docs/OFFLINE.md section 7, M4 scope).
 
-Drives the complete v1 authoring story against the same LOCAL
-tailscale-mode prep instance the study suite uses (the offline_server
-fixture): prime online, kill the server and cold-navigate to start_url
+Drives the complete v1 authoring story against the same LOCAL celld
+node the study suite uses (the offline_server fixture): prime online, kill the server and cold-navigate to start_url
 (reaching the SW's navigation fallback), author a card through the
 form flow (validation refusals pinned on the way), watch it join the
 due queue immediately, study it as a reveal + self-verdict card, then
@@ -13,20 +12,19 @@ self-graded marker, FSRS state initialized by the replay, and full
 idempotency (a forced second flush of the same client rows leaves
 zero duplicates).
 
-Server rows created here are purged on teardown so the session-scoped
-offline_server database stays exactly as seeded for the sibling
-offline suites (their primes and review counts assume the 3-card
-seed).
+Server rows created here are dropped on teardown so the session-scoped
+cell stays exactly as seeded for the sibling offline suites (their
+primes and review counts assume the 3-card seed).
 """
 
 from __future__ import annotations
 
 import re
-import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
+from tests.e2e.celld_node import OFFLINE_E2E_LOGIN
 from tests.e2e.test_offline_study_e2e import (
     _ISO_Z,
     _idb_all,
@@ -60,38 +58,16 @@ def _due_count(page) -> int:
     return int(m.group(1))
 
 
-# ---- server-side purge -------------------------------------------------
+# ---- server-side reset -------------------------------------------------
 #
-# The offline_server database is session-scoped and the sibling suites
-# assert exact seeded counts (3 snapshot cards, 3 review rows). Every
-# row this suite creates is keyed off the authored prompt, so entry
-# and exit both purge by prompt: the question, its cards/reviews rows,
-# its idempotency pins, and the inbox deck when it ends up empty.
+# The cell is session-scoped and the sibling suites assert exact seeded
+# counts (3 snapshot cards, 3 review rows). A cell has no rows to delete
+# one at a time: the reset is a re-seed, which wipes it and writes the
+# canonical profile back, ids included.
 
 
-def _purge_authored(db_path) -> None:
-    conn = sqlite3.connect(db_path)
-    try:
-        qids = [
-            r[0]
-            for r in conn.execute(
-                "SELECT id FROM questions WHERE prompt = ?", (AUTHOR_FRONT,)
-            ).fetchall()
-        ]
-        for qid in qids:
-            conn.execute("DELETE FROM reviews WHERE question_id = ?", (qid,))
-            conn.execute("DELETE FROM cards WHERE question_id = ?", (qid,))
-            conn.execute("DELETE FROM offline_sync_idempotency WHERE question_id = ?", (qid,))
-            conn.execute("DELETE FROM questions WHERE id = ?", (qid,))
-        # Drop the auto-created inbox deck only when nothing else lives
-        # in it (another suite must never lose a deck it created).
-        conn.execute(
-            "DELETE FROM decks WHERE name = 'inbox' "
-            " AND id NOT IN (SELECT DISTINCT deck_id FROM questions WHERE deck_id IS NOT NULL)"
-        )
-        conn.commit()
-    finally:
-        conn.close()
+def _reseed(offline_server) -> None:
+    offline_server.seed = offline_server.seed_profile(OFFLINE_E2E_LOGIN, "offline_e2e")
 
 
 @pytest.fixture()
@@ -100,10 +76,10 @@ def authored_rows_purged(offline_server):
     half also restarts the server so a mid-test failure while
     'offline' (server stopped) cannot leak a dead server into the
     next test's fixtures."""
-    _purge_authored(offline_server.db_path)
+    _reseed(offline_server)
     yield
     offline_server.start()
-    _purge_authored(offline_server.db_path)
+    _reseed(offline_server)
 
 
 # ---- idempotency replay (evaluated in the page) ------------------------
@@ -248,70 +224,48 @@ def test_offline_author_study_and_reconnect_sync(
     # Playwright call (see the study suite's identical loop).
     def _server_question_and_review():
         page.evaluate("() => 0")  # pump the event loop for route handlers
-        conn = sqlite3.connect(offline_server.db_path)
-        try:
-            qrows = conn.execute(
-                "SELECT q.id, q.type, q.answer, q.user_id, d.name, "
-                "       COALESCE(d.deck_type, 'srs') "
-                "  FROM questions q JOIN decks d ON d.id = q.deck_id "
-                " WHERE q.prompt = ?",
-                (AUTHOR_FRONT,),
-            ).fetchall()
-            if len(qrows) != 1:
-                return None
-            rrows = conn.execute(
-                "SELECT result, user_answer, grader_notes, ts FROM reviews  WHERE question_id = ?",
-                (qrows[0][0],),
-            ).fetchall()
-        finally:
-            conn.close()
-        return (qrows[0], rrows) if len(rrows) == 1 else None
+        tables = offline_server.dump(OFFLINE_E2E_LOGIN)["tables"]
+        qrows = [q for q in (tables.get("questions") or []) if q["prompt"] == AUTHOR_FRONT]
+        if len(qrows) != 1:
+            return None
+        rrows = [r for r in (tables.get("reviews") or []) if r["question_id"] == qrows[0]["id"]]
+        return (tables, qrows[0], rrows) if len(rrows) == 1 else None
 
-    qrow, rrows = _wait_for(
+    tables, qrow, rrows = _wait_for(
         _server_question_and_review,
         timeout=30,
         message="authored question + its review on the server",
     )
-    qid, qtype, qanswer, quser, deck_name, deck_type = qrow
-    assert qtype == "short"
-    assert qanswer == AUTHOR_BACK
-    assert quser == "offline-e2e@example.com"
-    assert deck_name == "inbox"  # deck_id null files into the SRS inbox
-    assert deck_type == "srs"
-    result, user_answer, grader_notes, review_ts = rrows[0]
-    assert result == "right"
-    assert user_answer == AUTHOR_ANSWER_TYPED
-    assert grader_notes == "(offline self-graded)"
-    assert datetime.fromisoformat(review_ts) == datetime.fromisoformat(
+    qid = qrow["id"]
+    deck = next(d for d in tables["decks"] if d["id"] == qrow["deck_id"])
+    assert qrow["type"] == "short"
+    assert qrow["answer"] == AUTHOR_BACK
+    assert deck["name"] == "inbox"  # deck_id null files into the SRS inbox
+    assert (deck["deck_type"] or "srs") == "srs"
+    # The cell IS the owner: a row reachable here belongs to this account
+    # and to no other, which is what the user_id column used to say.
+    assert offline_server.profile_row(OFFLINE_E2E_LOGIN)["tailscale_login"] == OFFLINE_E2E_LOGIN
+    assert rrows[0]["result"] == "right"
+    assert rrows[0]["user_answer"] == AUTHOR_ANSWER_TYPED
+    assert rrows[0]["grader_notes"] == "(offline self-graded)"
+    assert datetime.fromisoformat(rrows[0]["ts"]) == datetime.fromisoformat(
         review["reviewed_at"].replace("Z", "+00:00")
     )
 
     # -- FSRS state initialized by the replay --------------------------
-    conn = sqlite3.connect(offline_server.db_path)
-    try:
-        card_row = conn.execute(
-            "SELECT next_due, last_review, stability, difficulty, fsrs_state "
-            "  FROM cards WHERE question_id = ?",
-            (qid,),
-        ).fetchone()
-        pins = conn.execute(
-            "SELECT client_id, kind, status, question_id "
-            "  FROM offline_sync_idempotency WHERE question_id = ?",
-            (qid,),
-        ).fetchall()
-    finally:
-        conn.close()
-    next_due, last_review, stability, difficulty, fsrs_state = card_row
-    assert stability is not None
-    assert difficulty is not None
-    assert fsrs_state is not None
-    assert datetime.fromisoformat(last_review) == datetime.fromisoformat(
+    card_row = next(c for c in tables["cards"] if c["question_id"] == qid)
+    pins = [p for p in (tables.get("offline_sync_idempotency") or []) if p["question_id"] == qid]
+    next_due = card_row["next_due"]
+    assert card_row["stability"] is not None
+    assert card_row["difficulty"] is not None
+    assert card_row["fsrs_state"] is not None
+    assert datetime.fromisoformat(card_row["last_review"]) == datetime.fromisoformat(
         review["reviewed_at"].replace("Z", "+00:00")
     )
     assert datetime.fromisoformat(next_due) > datetime.now(timezone.utc)
 
     # Both idempotency pins landed: the created card and its review.
-    assert {(p[0], p[1], p[2]) for p in pins} == {
+    assert {(p["client_id"], p["kind"], p["status"]) for p in pins} == {
         (local["client_id"], "card", "created"),
         (review["client_id"], "review", "applied"),
     }
@@ -368,26 +322,12 @@ def test_offline_author_study_and_reconnect_sync(
 
     # Zero dupes server-side: still one question, one review, the same
     # FSRS card state, and exactly the two idempotency pins.
-    conn = sqlite3.connect(offline_server.db_path)
-    try:
-        n_questions = conn.execute(
-            "SELECT COUNT(*) FROM questions WHERE prompt = ?", (AUTHOR_FRONT,)
-        ).fetchone()[0]
-        n_reviews = conn.execute(
-            "SELECT COUNT(*) FROM reviews WHERE question_id = ?", (qid,)
-        ).fetchone()[0]
-        next_due_after = conn.execute(
-            "SELECT next_due FROM cards WHERE question_id = ?", (qid,)
-        ).fetchone()[0]
-        n_pins = conn.execute(
-            "SELECT COUNT(*) FROM offline_sync_idempotency WHERE question_id = ?", (qid,)
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert n_questions == 1
-    assert n_reviews == 1
+    tables = offline_server.dump(OFFLINE_E2E_LOGIN)["tables"]
+    assert len([q for q in tables["questions"] if q["prompt"] == AUTHOR_FRONT]) == 1
+    assert len([r for r in tables["reviews"] if r["question_id"] == qid]) == 1
+    next_due_after = next(c for c in tables["cards"] if c["question_id"] == qid)["next_due"]
     assert next_due_after == next_due  # the replay never re-ran the scheduler
-    assert n_pins == 2
+    assert len([p for p in tables["offline_sync_idempotency"] if p["question_id"] == qid]) == 2
 
 
 # ---- the partial-flush trap, M4 edition -------------------------------
@@ -489,21 +429,11 @@ def test_partial_flush_preserves_authored_card_overlay(
 
 
 def _reset_seed_due_times(offline_server) -> None:
-    """Restore the seeded cards' next_due to the canonical
-    staggered-past values so the due queue is deterministic regardless
-    of which sibling suite ran first in this session (the study suite
-    leaves the seeded cards rescheduled into the future)."""
-    now = datetime.now(timezone.utc)
-    conn = sqlite3.connect(offline_server.db_path)
-    try:
-        for key, hours in (("mcq_id", 3), ("regex_id", 2), ("short_id", 1)):
-            conn.execute(
-                "UPDATE cards SET next_due = ? WHERE question_id = ?",
-                ((now - timedelta(hours=hours)).isoformat(), offline_server.seed[key]),
-            )
-        conn.commit()
-    finally:
-        conn.close()
+    """Restore the seeded cards' staggered-past next_due so the due queue
+    is deterministic regardless of which sibling suite ran first in this
+    session (the study suite leaves the seeded cards rescheduled into the
+    future). The profile owns those values, so this is a re-seed."""
+    _reseed(offline_server)
 
 
 def test_caught_up_view_offers_authoring(offline_server, offline_ctx, offline_page):

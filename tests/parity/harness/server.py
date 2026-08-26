@@ -12,7 +12,8 @@ from pathlib import Path
 
 import httpx
 
-from tests.e2e.conftest import _TEST_KEY_ENCRYPTION_SECRET, _free_port
+from tests.e2e.celld_node import MASTER_KEY as _TEST_KEY_ENCRYPTION_SECRET
+from tests.e2e.celld_node import _free_port
 from tests.parity.harness.constants import (
     PARITY_BUILD_ID,
     PARITY_INTERNAL_TOKEN,

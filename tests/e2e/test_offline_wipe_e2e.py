@@ -24,8 +24,8 @@ What each test pins:
 - After the stamp, a different sign-in is a mismatch, not an
   absorption: the confirm-then-wipe dialog fires and nothing syncs.
 
-Runs against the LOCAL tailscale-mode server (offline_server fixture)
-with route-injected identity headers. sw.js is blocked: these tests
+Runs against the LOCAL celld node (offline_server fixture) with
+route-injected identity headers. sw.js is blocked: these tests
 need repeated authenticated NAVIGATIONS, and a controlling SW
 re-issues navigations outside Playwright's routing, dropping the
 injected header.
@@ -33,10 +33,9 @@ injected header.
 
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
 
+from tests.e2e.celld_node import identity_headers
 from tests.e2e.test_offline_study_e2e import (
     _IDB_META_GET_JS,
     _idb_all,
@@ -79,8 +78,7 @@ def wipe_ctx(browser_session, offline_server):
         if request.url.startswith(base):
             headers = {
                 **request.headers,
-                "tailscale-user-login": identity["login"],
-                "tailscale-user-name": identity["name"],
+                **identity_headers(identity["login"], identity["name"]),
             }
             route.continue_(headers=headers)
         else:
@@ -173,16 +171,11 @@ async ({prefix, prompt}) => {
 """
 
 
-def _questions_with(db_path, prompt: str, user: str) -> int:
-    """Scoped to one account: the server db is session-scoped, so a
-    sibling test's flush of the same prompt is not this test's leak."""
-    conn = sqlite3.connect(db_path)
-    try:
-        return conn.execute(
-            "SELECT COUNT(*) FROM questions WHERE prompt = ? AND user_id = ?", (prompt, user)
-        ).fetchone()[0]
-    finally:
-        conn.close()
+def _questions_with(server, prompt: str, user: str) -> int:
+    """Scoped to one account, which is now one cell: a sibling test's
+    flush of the same prompt into another account is not this test's
+    leak."""
+    return len([q for q in server.rows(user, "questions") if q["prompt"] == prompt])
 
 
 def _meta_keys_gone(page) -> bool:
@@ -240,8 +233,8 @@ def test_the_wipe_runs_before_the_flush_on_the_online_path(offline_server, wipe_
 
     # Nothing was posted, and in particular no legacy card or review.
     assert sync_posts == []
-    assert _questions_with(offline_server.db_path, KENYA_PROMPT, identity["login"]) == 0
-    assert _questions_with(offline_server.db_path, GHANA_PROMPT, identity["login"]) == 0
+    assert _questions_with(offline_server, KENYA_PROMPT, identity["login"]) == 0
+    assert _questions_with(offline_server, GHANA_PROMPT, identity["login"]) == 0
     # The retired confirm is gone from the build, not merely unreached.
     assert page.locator("dialog.offline-adoption-dialog").count() == 0
 
@@ -363,7 +356,7 @@ def test_owner_absent_authored_cards_survive_and_flush_on_the_next_pass(offline_
     )
     assert len(sync_posts) >= 1
     assert any(AUTHORED_PROMPT in body for body in sync_posts)
-    assert _questions_with(offline_server.db_path, AUTHORED_PROMPT, identity["login"]) == 1
+    assert _questions_with(offline_server, AUTHORED_PROMPT, identity["login"]) == 1
     assert _idb_all(page, "rejects") == []
 
 
@@ -410,4 +403,4 @@ def test_a_different_sign_in_after_the_stamp_is_a_mismatch_not_an_absorption(
     assert len(_idb_all(page, "local_cards")) == 1
     assert page.evaluate(_IDB_META_GET_JS, "owner")["user_id"] == "wipe-first@example.com"
     for login in ("wipe-first@example.com", "wipe-second@example.com"):
-        assert _questions_with(offline_server.db_path, AUTHORED_PROMPT, login) == 0
+        assert _questions_with(offline_server, AUTHORED_PROMPT, login) == 0

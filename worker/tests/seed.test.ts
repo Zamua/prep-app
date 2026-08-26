@@ -100,3 +100,51 @@ describe('the parity seed profiles', () => {
     expect(state.fake.rows('active_workflows')).toEqual([]);
   });
 });
+
+describe('the e2e seed profiles', () => {
+  it('offline_e2e: the three gradeable shapes and the suspended card, each due in its own past hour', async () => {
+    const { state, seed } = seeded('offline_e2e');
+    const ids = (await seed) as Record<string, number>;
+    expect(Object.keys(ids).sort()).toEqual(['deck_id', 'mcq_id', 'now', 'profile', 'regex_id', 'short_id', 'suspended_id', 'user'].sort());
+    const decks = state.fake.rows('decks');
+    expect(decks).toHaveLength(1);
+    expect(decks[0]).toMatchObject({ name: 'offline-e2e', display_name: 'Offline E2E', deck_type: 'srs' });
+    const questions = Object.fromEntries(state.fake.rows('questions').map((q) => [q['id'], q]));
+    expect(questions[ids['mcq_id']!]).toMatchObject({ type: 'mcq', prompt: 'Capital of France?', answer: 'Paris', choices: '["Paris", "Lyon", "Marseille"]' });
+    expect(questions[ids['regex_id']!]).toMatchObject({ type: 'short', answer_regex: 'lima' });
+    expect(questions[ids['short_id']!]).toMatchObject({ type: 'short', answer_regex: null });
+    expect(questions[ids['suspended_id']!]?.['suspended']).toBe(1);
+    // Oldest first is the order the offline queue serves, so the dues are
+    // pinned an hour apart rather than left to insertion order.
+    const cards = Object.fromEntries(state.fake.rows('cards').map((c) => [c['question_id'], c['next_due']]));
+    expect(cards[ids['mcq_id']!]).toBe('2026-03-14T12:00:00+00:00');
+    expect(cards[ids['regex_id']!]).toBe('2026-03-14T13:00:00+00:00');
+    expect(cards[ids['short_id']!]).toBe('2026-03-14T14:00:00+00:00');
+    expect(cards[ids['suspended_id']!]).toBe('2026-03-14T11:00:00+00:00');
+  });
+
+  it('device_wipe: two past-due short cards, ids in the order the suite indexes them', async () => {
+    const { state, seed } = seeded('device_wipe');
+    const ids = (await seed) as { deck_id: number; qids: number[] };
+    expect(state.fake.rows('decks')[0]).toMatchObject({ name: 'device-capitals', display_name: 'Device Capitals' });
+    const prompts = ids.qids.map((qid) => state.fake.rows('questions').find((q) => q['id'] === qid)?.['prompt']);
+    expect(prompts).toEqual(['Capital of Peru?', 'Capital of Japan?']);
+    const cards = Object.fromEntries(state.fake.rows('cards').map((c) => [c['question_id'], c['next_due']]));
+    expect(cards[ids.qids[0]!]).toBe('2026-03-14T14:00:00+00:00');
+    expect(cards[ids.qids[1]!]).toBe('2026-03-14T13:00:00+00:00');
+  });
+
+  it('merge_anon: the profile row is anonymous, which is what admits the merge', async () => {
+    const { state, seed } = seeded('merge_anon');
+    const ids = (await seed) as { deck_id: number; deck_name: string; question_id: number };
+    expect(ids.deck_name).toBe('instant-9f3c');
+    expect(state.fake.rows('profile')[0]).toMatchObject({ is_anonymous: 1, display_name: 'Guest' });
+    expect(state.fake.rows('questions').find((q) => q['id'] === ids.question_id)).toMatchObject({ prompt: 'Capital of Kenya?', answer: 'Nairobi' });
+  });
+
+  it('a non-anonymous profile keeps the named account row', async () => {
+    const { state, seed } = seeded('offline_e2e');
+    await seed;
+    expect(state.fake.rows('profile')[0]).toMatchObject({ is_anonymous: 0, display_name: 'Parity' });
+  });
+});

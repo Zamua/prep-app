@@ -16,12 +16,12 @@ Two ways to reach the endpoint, both with ZERO upstream spend:
 - `instant_ctx` intercepts POST /api/instant/generate and serves
   canned responses, for the error branches where no deck is written.
 
-The server is a LOCAL uvicorn booted in the PUBLIC deploy shape
-(PREP_AUTH_MODE=clerk + free-tier env): the instant hero renders only
-when the deploy serves a free tier AND the provider exposes a hosted
-sign-in URL, and clerk mode is the only provider that does. Dummy
-clerk env is enough - every request in this suite is anonymous, and
-nothing navigates to the (fake) sign-in host.
+The server is a LOCAL celld node started in the PUBLIC deploy shape
+(clerk plus free-tier env): the instant hero renders only when the
+deploy serves a free tier AND the provider exposes a hosted sign-in
+URL, and clerk is the only provider that does. Dummy clerk env is
+enough - every request in this suite is anonymous, and nothing
+navigates to the (fake) sign-in host.
 
 sw.js is stubbed to an empty no-fetch-handler worker: registration
 succeeds quietly (no console noise for the zero-console-error pin)
@@ -46,8 +46,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from tests.e2e.conftest import LocalOfflineServer
-from tests.e2e.test_offline_study_e2e import _idb_all
+from tests.e2e.celld_node import (
+    LocalCelldNode,
+    clerk_vars,
+    llm_stub_env,
+    open_limiter_vars,
+)
+from tests.e2e.conftest import new_iphone_context
+from tests.e2e.test_offline_study_e2e import _idb_all, _wait_for
 
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
 
@@ -140,53 +146,32 @@ def stub_inference():
 
 
 @pytest.fixture(scope="session")
-def instant_server(tmp_path_factory, stub_inference):
-    """LOCAL server in the public deploy shape: clerk auth (anonymous
+def instant_server(celld_build, stub_inference):
+    """LOCAL node in the public deploy shape: clerk auth (anonymous
     visitors resolve to None and the provider exposes a sign-in URL
     for the hero gate + nudges) and a free tier pointed at the stub.
 
     The limiter is opened up because several tests generate for real
     from one client IP; the limiter's own behaviour is pinned by the
     route tests, which can control the clock."""
-    db_path = tmp_path_factory.mktemp("instant-e2e") / "data.sqlite"
-    server = LocalOfflineServer(db_path)
-    server.extra_env = {
-        "PREP_AUTH_MODE": "clerk",
-        "CLERK_SECRET_KEY": "sk_test_instant_e2e_dummy",
-        "CLERK_AUTHORIZED_PARTIES": server.base_url,
-        "CLERK_FRONTEND_API_URL": "https://accounts.example.test",
-        "PREP_FREE_INFERENCE_BASE_URL": stub_inference.base_url,
-        "PREP_FREE_INFERENCE_API_KEY": "instant-e2e-test-key",
-        "PREP_FREE_INFERENCE_MODEL": "instant-e2e-test-model",
-        "PREP_INSTANT_BURST_LIMIT": "100",
-        "PREP_INSTANT_PER_IP_PER_DAY": "100",
-        "PREP_INSTANT_GLOBAL_PER_MINUTE": "100",
-        "PREP_INSTANT_GLOBAL_PER_DAY": "500",
-    }
-    server.start()
+    node = LocalCelldNode(
+        "instant",
+        vars=open_limiter_vars(),
+        script_env=llm_stub_env(stub_inference.base_url),
+    )
+    node.vars.update(clerk_vars(node.base_url))
+    node.start()
     try:
-        yield server
+        yield node
     finally:
-        server.stop()
+        node.stop()
 
 
 def _new_anon_context(browser_session):
     """Anonymous browser context: no identity headers of any kind, and
     a no-op sw.js so registration succeeds without a fetch handler
     that would bypass Playwright's routing."""
-    ctx = browser_session.new_context(
-        user_agent=(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-            "Version/17.4 Mobile/15E148 Safari/604.1"
-        ),
-        viewport={"width": 393, "height": 852},
-        device_scale_factor=3,
-        is_mobile=True,
-        has_touch=True,
-    )
-    ctx.set_default_timeout(15_000)
-    ctx.set_default_navigation_timeout(15_000)
+    ctx = new_iphone_context(browser_session)
 
     def _stub_sw(route):
         route.fulfill(
@@ -372,6 +357,10 @@ def test_forget_this_device_works_from_the_real_page(instant_server, live_ctx):
     _goto_landing(page, base)
     _generate(page, "world capitals")
     page.wait_for_url("**/deck/**")
+    # The deck page refreshes the snapshot on load. Wait for that to land
+    # before pressing the button: a refresh still in flight re-stamps the
+    # flag after the wipe, and the landing then keeps rendering local decks.
+    _wait_for(lambda: _idb_all(page, "cards"), message="the snapshot on the device")
 
     page.on("dialog", lambda dialog: dialog.accept())
     page.locator(".user-forget-form").wait_for(state="attached")

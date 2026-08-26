@@ -37,7 +37,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from tests.e2e.conftest import LocalOfflineServer
+from tests.e2e.celld_node import LocalCelldNode, clerk_vars, llm_stub_env
 from tests.e2e.test_instant_start_e2e import _new_anon_context
 
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
@@ -186,28 +186,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 @pytest.fixture(scope="session")
-def landing_server(tmp_path_factory):
-    """A LOCAL prep in the public deploy shape: clerk auth (so an
+def landing_server(celld_build):
+    """A LOCAL node in the public deploy shape: clerk auth (so an
     unidentified visitor gets the landing and the provider exposes a
     sign-in URL) plus a configured free tier (so the splash is the
     instant hero). The inference address is deliberately dead; no test
     here generates for real."""
-    db_path = tmp_path_factory.mktemp("landing-e2e") / "data.sqlite"
-    server = LocalOfflineServer(db_path)
-    server.extra_env = {
-        "PREP_AUTH_MODE": "clerk",
-        "CLERK_SECRET_KEY": "sk_test_landing_e2e_dummy",
-        "CLERK_AUTHORIZED_PARTIES": server.base_url,
-        "CLERK_FRONTEND_API_URL": "https://accounts.example.test",
-        "PREP_FREE_INFERENCE_BASE_URL": "http://127.0.0.1:1/v1",
-        "PREP_FREE_INFERENCE_API_KEY": "landing-e2e-test-key",
-        "PREP_FREE_INFERENCE_MODEL": "landing-e2e-test-model",
-    }
-    server.start()
+    node = LocalCelldNode("landing", script_env=llm_stub_env("http://127.0.0.1:1/v1"))
+    node.vars.update(clerk_vars(node.base_url))
+    node.start()
     try:
-        yield server
+        yield node
     finally:
-        server.stop()
+        node.stop()
 
 
 @pytest.fixture()

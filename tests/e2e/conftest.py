@@ -93,27 +93,20 @@ def http(base_url: str, deployed_target: str) -> Iterator[httpx.Client]:
     """Synchronous HTTP client for setup/teardown against a deployed
     prep.
 
-    Auth, in the order the deploy shapes need it:
-      - E2E_API_TOKEN (`prep_pat_…`): the public bearer API. This is
-        what a Clerk deploy such as staging requires; mint one at
-        /settings/api while signed in.
-      - E2E_TAILSCALE_LOGIN: header spoof, for a tailscale-mode or
-        local dev server only.
-    Neither present means the suite cannot create its fixtures, so it
-    skips rather than failing test by test."""
+    Auth is E2E_API_TOKEN (`prep_pat_…`), the public bearer API; mint
+    one at /settings/api while signed in. The header spoof that used to
+    stand in for it is gone: nothing verified it, so a deploy that
+    honoured it would hand any caller any user's data. A local target
+    identifies by header plus `X-Internal-Token` instead
+    (tests/e2e/celld_node.py). No token means the suite cannot create
+    its fixtures, so it skips rather than failing test by test."""
     token = os.environ.get("E2E_API_TOKEN")
-    spoof = os.environ.get("E2E_TAILSCALE_LOGIN")
-    headers = {}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    elif spoof:
-        headers["Tailscale-User-Login"] = spoof
-    else:
+    if not token:
         pytest.skip(
             "no credentials for the deployed target: set E2E_API_TOKEN "
-            "(a prep_pat_ token from /settings/api) for a Clerk deploy, "
-            "or E2E_TAILSCALE_LOGIN for a tailscale-mode server"
+            "(a prep_pat_ token from /settings/api)"
         )
+    headers = {"Authorization": f"Bearer {token}"}
     with httpx.Client(
         base_url=base_url,
         headers=headers,
@@ -280,22 +273,17 @@ def browser_session():
             browser.close()
 
 
-# Default Tailscale-User-Login spoof for the browser context. The
-# httpx fixtures above use E2E_TAILSCALE_LOGIN when running off-host;
-# on-host, the Tailscale Serve proxy injects the real header so this
-# header is silently overwritten upstream — fine. For dev contributors
-# pointing at a local fastapi instance, set E2E_TAILSCALE_LOGIN to a
-# stable identity so created decks attach to a known user.
+# The identity a deployed-target browser context claims. A Clerk deploy
+# ignores it (the storage state below is what signs in), and no deploy
+# trusts it on its own; it is here so a context that reaches a local
+# target still names a stable user.
 _DEFAULT_TS_LOGIN = "e2e-browser@example.com"
 
 
 @pytest.fixture(scope="session")
 def default_user_header() -> str:
-    """The Tailscale-User-Login header value used by browser contexts.
-    Honors E2E_TAILSCALE_LOGIN so the same env var the httpx fixtures
-    use also applies here. The default identity isn't load-bearing on
-    staging (Tailscale Serve overwrites it) but matters off-host."""
-    return os.environ.get("E2E_TAILSCALE_LOGIN", _DEFAULT_TS_LOGIN)
+    """The Tailscale-User-Login header value used by browser contexts."""
+    return _DEFAULT_TS_LOGIN
 
 
 @pytest.fixture(scope="session")
@@ -411,15 +399,14 @@ def page(browser_session, base_url, default_user_header, clerk_storage_state):
         ctx.close()
 
 
-# ---- Local offline-suite fixtures -------------------------------------
+# ---- Local celld-node fixtures ----------------------------------------
 #
-# The offline e2e suite (test_offline_parity.py, test_offline_study_e2e.py)
-# cannot run against staging: staging is PREP_AUTH_MODE=clerk, which the
-# Tailscale header injection does nothing for, and the suite needs to
-# stop/start the server to simulate a genuinely unreachable network (see
-# below). So it drives a LOCAL tailscale-mode uvicorn on a scratch port
-# with PREP_DB_PATH under tmp and PREP_DEFAULT_USER unset, using the
-# same route-based header injection as the `page` fixture above.
+# The offline suites cannot run against the fleet: it is Clerk-mode, which
+# the header injection does nothing for, and the suites have to make the
+# server genuinely unreachable. So they drive a LOCAL celld node
+# (tests/e2e/celld_node.py) seeded through `POST /_parity/seed`, using the
+# same route-based header injection as the `page` fixture above plus the
+# internal token the fake provider demands.
 #
 # Two empirically-verified Playwright/service-worker facts shape these
 # fixtures (probed against Chromium before the suite was written):
@@ -434,261 +421,99 @@ def page(browser_session, base_url, default_user_header, clerk_storage_state):
 # - ctx.set_offline(True) does not apply to the service worker target:
 #   with a live server the SW's navigation fetch succeeds and the
 #   offline fallback never fires. Real offline is simulated by STOPPING
-#   the local server (connection refused rejects the SW's fetch
+#   the local node (connection refused rejects the SW's fetch
 #   instantly). set_offline no longer even reaches the renderer a
 #   SW-fallback navigation created (Chromium drops the context's
 #   emulation there), so reconnect tests dispatch the window `online`
 #   event themselves; the event is browser plumbing, not the contract
 #   under test.
 
-import json as _json
-import socket as _socket
-import sqlite3 as _sqlite3
 import subprocess as _subprocess
-import sys as _sys
-import time as _time
-from datetime import datetime as _datetime
-from datetime import timedelta as _timedelta
-from datetime import timezone as _timezone
-from pathlib import Path as _Path
 
-_REPO_ROOT = _Path(__file__).resolve().parents[2]
+from tests.e2e.celld_node import (
+    OFFLINE_E2E_LOGIN,
+    OFFLINE_E2E_NAME,
+    WORKER_DIR,
+    LocalCelldNode,
+    identity_headers,
+    require_scratch_storage,
+)
 
-OFFLINE_E2E_LOGIN = "offline-e2e@example.com"
-OFFLINE_E2E_NAME = "Offline Tester"
-
-# Deterministic non-secret test value: the app refuses byok work (and
-# logs a boot-time stack) without a 32-byte hex master key in env.
-_TEST_KEY_ENCRYPTION_SECRET = "ab" * 32
-
-
-def _free_port() -> int:
-    s = _socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+IPHONE_UA = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+    "Version/17.4 Mobile/15E148 Safari/604.1"
+)
 
 
-def _seed_offline_db(db_path: _Path) -> dict:
-    """Initialize the scratch sqlite via the app's own db.init() (run in
-    a subprocess so this pytest process never imports prep with a
-    monkeyed DB path), then insert one SRS deck with three cards all
-    due in the past, oldest-first ordering pinned by distinct next_due
-    values: an mcq, a short with a usable answer_regex, and a plain
-    short (the reveal + self-verdict path). Returns the seeded ids.
-
-    Plus one SUSPENDED question, due in the past: it is in the deck's
-    "in deck" count and in no snapshot, which is the one place the two
-    dashboards can state different numbers under the same label."""
-    _subprocess.run(
-        [_sys.executable, "-c", "from prep.infrastructure import db; db.init()"],
-        cwd=_REPO_ROOT,
-        env={**os.environ, "PREP_DB_PATH": str(db_path)},
-        check=True,
-    )
-    now = _datetime.now(_timezone.utc)
-    ts = now.isoformat()
-    conn = _sqlite3.connect(db_path)
-    try:
-        conn.execute(
-            "INSERT INTO users (tailscale_login, display_name, created_at, last_seen_at) "
-            "VALUES (?,?,?,?)",
-            (OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME, ts, ts),
-        )
-        deck_id = conn.execute(
-            "INSERT INTO decks (user_id, name, display_name, deck_type, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (OFFLINE_E2E_LOGIN, "offline-e2e", "Offline E2E", "srs", ts),
-        ).lastrowid
-
-        def add_question(
-            qtype,
-            prompt,
-            answer,
-            choices=None,
-            answer_regex=None,
-            due_hours_ago=1,
-            suspended=0,
-        ):
-            qid = conn.execute(
-                "INSERT INTO questions (user_id, deck_id, type, prompt, choices, answer, "
-                " answer_regex, suspended, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                (
-                    OFFLINE_E2E_LOGIN,
-                    deck_id,
-                    qtype,
-                    prompt,
-                    _json.dumps(choices) if choices else None,
-                    answer,
-                    answer_regex,
-                    suspended,
-                    ts,
-                ),
-            ).lastrowid
-            conn.execute(
-                "INSERT INTO cards (question_id, step, next_due) VALUES (?,0,?)",
-                (qid, (now - _timedelta(hours=due_hours_ago)).isoformat()),
-            )
-            return qid
-
-        mcq_id = add_question(
-            "mcq",
-            "Capital of France?",
-            "Paris",
-            choices=["Paris", "Lyon", "Marseille"],
-            due_hours_ago=3,
-        )
-        regex_id = add_question(
-            "short",
-            "Capital of Peru?",
-            "Lima",
-            answer_regex="lima",
-            due_hours_ago=2,
-        )
-        short_id = add_question(
-            "short",
-            "What does the acronym SRS stand for?",
-            "Spaced repetition system.",
-            due_hours_ago=1,
-        )
-        suspended_id = add_question(
-            "short",
-            "Suspended: never studied, still in the deck.",
-            "yes",
-            due_hours_ago=4,
-            suspended=1,
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    return {
-        "deck_id": deck_id,
-        "mcq_id": mcq_id,
-        "regex_id": regex_id,
-        "short_id": short_id,
-        "suspended_id": suspended_id,
-    }
-
-
-class LocalOfflineServer:
-    """A stop/start-able local uvicorn running prep against a scratch
-    sqlite. stop()/start() exist so the offline study test can make the
-    server genuinely unreachable (the only offline simulation that
-    reaches the service worker; see the fixture-block comment)."""
-
-    def __init__(self, db_path: _Path, extra_env: dict[str, str] | None = None):
-        self.db_path = db_path
-        self.port = _free_port()
-        self.base_url = f"http://127.0.0.1:{self.port}"
-        self.seed: dict = {}
-        # Applied last in start(), so a suite can boot a different
-        # deploy shape (e.g. clerk mode + free tier for the instant
-        # landing) without forking the server harness.
-        self.extra_env: dict[str, str] = dict(extra_env or {})
-        self._proc: _subprocess.Popen | None = None
-
-    def start(self, timeout: float = 30.0) -> None:
-        if self._proc is not None and self._proc.poll() is None:
-            return
-        env = {**os.environ}
-        env.pop("PREP_DEFAULT_USER", None)
-        env.pop("PREP_AUTH_MODE", None)  # default tailscale
-        env["PREP_DB_PATH"] = str(self.db_path)
-        env["PREP_KEY_ENCRYPTION_SECRET"] = _TEST_KEY_ENCRYPTION_SECRET
-        env.update(self.extra_env)
-        self._proc = _subprocess.Popen(
-            [
-                _sys.executable,
-                "-m",
-                "uvicorn",
-                "prep.app:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(self.port),
-                "--log-level",
-                "warning",
-            ],
-            cwd=_REPO_ROOT,
-            env=env,
-        )
-        deadline = _time.time() + timeout
-        while _time.time() < deadline:
-            if self._proc.poll() is not None:
-                raise RuntimeError(
-                    f"local prep server exited during startup (code {self._proc.returncode})"
-                )
-            try:
-                r = httpx.get(f"{self.base_url}/healthz", timeout=1.0)
-                if r.status_code == 200:
-                    return
-            except httpx.HTTPError:
-                _time.sleep(0.2)
-        self.stop()
-        raise RuntimeError("local prep server did not become healthy in time")
-
-    def stop(self) -> None:
-        if self._proc is None:
-            return
-        if self._proc.poll() is None:
-            self._proc.terminate()
-            try:
-                self._proc.wait(timeout=10)
-            except _subprocess.TimeoutExpired:
-                self._proc.kill()
-                self._proc.wait(timeout=10)
-        self._proc = None
-
-
-@pytest.fixture(scope="session")
-def offline_server(tmp_path_factory) -> Iterator[LocalOfflineServer]:
-    """Session-scoped local server for the offline suite: scratch db,
-    seeded SRS deck (ids on `.seed`), uvicorn on a free port."""
-    db_path = tmp_path_factory.mktemp("offline-e2e") / "data.sqlite"
-    server = LocalOfflineServer(db_path)
-    server.seed = _seed_offline_db(db_path)
-    server.start()
-    try:
-        yield server
-    finally:
-        server.stop()
-
-
-@pytest.fixture(scope="function")
-def offline_ctx(browser_session, offline_server):
-    """Browser context against the LOCAL offline-suite server: same
-    iPhone shape and route-based Tailscale header injection as the
-    `page` fixture, but scoped to the local origin. Function-scoped so
-    each test gets fresh IndexedDB + service-worker state."""
+def new_iphone_context(browser_session, **kwargs):
+    """The device shape every local context shares: the primary user's
+    phone, function-scoped so IndexedDB and service-worker state from one
+    test never reach the next."""
     ctx = browser_session.new_context(
-        user_agent=(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-            "Version/17.4 Mobile/15E148 Safari/604.1"
-        ),
+        user_agent=IPHONE_UA,
         viewport={"width": 393, "height": 852},
         device_scale_factor=3,
         is_mobile=True,
         has_touch=True,
+        **kwargs,
     )
     ctx.set_default_timeout(15_000)
     ctx.set_default_navigation_timeout(15_000)
+    return ctx
 
-    base = offline_server.base_url
 
-    def _inject_header(route, request):
-        if request.url.startswith(base):
-            headers = {
-                **request.headers,
-                "tailscale-user-login": OFFLINE_E2E_LOGIN,
-                "tailscale-user-name": OFFLINE_E2E_NAME,
-            }
-            route.continue_(headers=headers)
+def inject_identity(ctx, base_url: str, login: str, name: str | None = None):
+    """Route-based injection, scoped to the local origin. `extra_http_headers`
+    would apply to cross-origin asset fetches too, whose CORS preflight does
+    not whitelist these names."""
+    headers = identity_headers(login, name)
+
+    def _inject(route, request):
+        if request.url.startswith(base_url):
+            route.continue_(headers={**request.headers, **headers})
         else:
             route.continue_()
 
-    ctx.route("**/*", _inject_header)
+    ctx.route("**/*", _inject)
+
+
+@pytest.fixture(scope="session")
+def celld_build():
+    """One worker build per session. Every node deploys this same build to
+    its own bucket prefix; the shapes differ by environment, not by code."""
+    require_scratch_storage()
+    proc = _subprocess.run(
+        ["npm", "run", "build"],
+        cwd=str(WORKER_DIR),
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        pytest.fail(f"worker build failed:\n{proc.stdout[-3000:]}\n{proc.stderr[-3000:]}")
+    return True
+
+
+@pytest.fixture(scope="session")
+def offline_server(celld_build) -> Iterator[LocalCelldNode]:
+    """Session-scoped local node for the offline suites: the `offline_e2e`
+    profile seeded into one cell, ids on `.seed`."""
+    node = LocalCelldNode("offline")
+    node.start()
+    try:
+        node.seed = node.seed_profile(OFFLINE_E2E_LOGIN, "offline_e2e")
+        yield node
+    finally:
+        node.stop()
+
+
+@pytest.fixture(scope="function")
+def offline_ctx(browser_session, offline_server):
+    """Browser context against the LOCAL node: the same iPhone shape and
+    route-based header injection as the `page` fixture, scoped to the local
+    origin."""
+    ctx = new_iphone_context(browser_session)
+    inject_identity(ctx, offline_server.base_url, OFFLINE_E2E_LOGIN, OFFLINE_E2E_NAME)
     try:
         yield ctx
     finally:

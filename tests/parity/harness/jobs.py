@@ -20,7 +20,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from tests.e2e.conftest import _free_port
+from tests.e2e.celld_node import _free_port
 from tests.parity.harness.constants import PARITY_NOW_ISO, REPO_ROOT
 
 NAMESPACE = "prep"

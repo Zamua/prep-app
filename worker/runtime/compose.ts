@@ -220,8 +220,10 @@ function seededRandoms(): Randoms {
 }
 
 /** Empty strings, not nulls: the templates test truthiness on these. */
-function authUrlsOf(clerk: ClerkProvider | null): AuthUrls {
-  if (!clerk) return { signIn: '', signUp: '', signOut: '', clerkPublishableKey: null, clerkFrontendApiHost: null };
+function authUrlsOf(clerk: ClerkProvider | null, identity: IdentityProvider): AuthUrls {
+  // The masthead's sign-out row follows the provider, so a non-clerk one
+  // that does expose a sign-out URL still gets its row.
+  if (!clerk) return { signIn: '', signUp: '', signOut: identity.urls().sign_out ?? '', clerkPublishableKey: null, clerkFrontendApiHost: null };
   const urls = clerk.urls();
   return {
     signIn: urls.sign_in ?? '',
@@ -322,11 +324,14 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
   const freeTier = freeTierConfig(env, { warn });
   const instantTier = freeTierConfig(env, { maxTokens: INSTANT_MAX_OUTPUT_TOKENS, warn });
   const selectDeps: SelectDeps = { env, cipher: cipherOrNull(env, webRandom, warn), warn };
+  const identity: IdentityProvider = parity
+    ? new FakeIdentityProvider(env.PREP_INTERNAL_TOKEN ?? '', env.PREP_PARITY_SIGN_OUT_URL ?? '')
+    : (clerk?.provider ?? new NoIdentityProvider());
   let signerOnce: Promise<Signer | null> | null = null;
   const composition: Composition = {
     clock,
     wallClock: new SystemClock(),
-    identity: parity ? new FakeIdentityProvider(env.PREP_INTERNAL_TOKEN ?? '') : (clerk?.provider ?? new NoIdentityProvider()),
+    identity,
     signer: () => {
       signerOnce ??= resolveCookieSecret(env, warn).then((secret) => (secret ? new HmacSigner(secret) : null));
       return signerOnce;
@@ -365,7 +370,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     apkg: new SqlJsApkg(),
     freeTierConfigured: freeTier !== null,
     vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
-    authUrls: authUrlsOf(clerk?.provider ?? null),
+    authUrls: authUrlsOf(clerk?.provider ?? null, identity),
     renderer: createRenderer({ clock, root: '' }),
     pages: fixturePagesFromBuild(),
     buildToken: resolveBuildToken(env.PREP_BUILD_ID),
