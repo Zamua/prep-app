@@ -12,7 +12,7 @@ import {
   previousUserIds,
   type Row,
   type Snapshot,
-} from '../../domain/merge.js';
+} from '../../domain/merge';
 
 const DIR = new URL('../../../tests/fixtures/parity/merge/', import.meta.url).pathname;
 const read = (name: string) => JSON.parse(readFileSync(`${DIR}${name}.json`, 'utf8'));

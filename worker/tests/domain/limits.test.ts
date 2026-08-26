@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANON_MAX_DECKS, ANON_MAX_QUESTIONS, RowCapReached, assertUnderRowCap } from '../../domain/limits.js';
+import { ANON_MAX_DECKS, ANON_MAX_QUESTIONS, RowCapReached, assertUnderRowCap } from '../../domain/limits';
 
 const MESSAGE = 'guest account limit reached: 5 decks, 200 cards. Create an account to add more.';
 

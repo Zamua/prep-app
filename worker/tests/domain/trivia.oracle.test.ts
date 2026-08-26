@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { flipDoneVerdict, formatDone, parseCardIds, parseDone, type DoneItem } from '../../domain/trivia.js';
-import { pythonJson } from '../pyoracle.js';
+import { flipDoneVerdict, formatDone, parseCardIds, parseDone, type DoneItem } from '../../domain/trivia';
+import { pythonJson } from '../pyoracle';
 
 const CARDS = ['1,2,3', '', ' 4 , 5,,x,6a,-1,1.5, 007', '49', '1,　2　,3', '\t7\n,8\r', '12345678901234'];
 const DONE = ['42r,17w,99r', '', 'r,1,1x,1R, 2w ,r3,1.5r,-1w', '　5r　,6w', '0r,00w', '42rr,17ww'];

@@ -20,8 +20,8 @@ import {
   parseCookie,
   verifyCookie,
   type AnonCookie,
-} from '../../domain/anonCookie.js';
-import { pythonJson } from '../pyoracle.js';
+} from '../../domain/anonCookie';
+import { pythonJson } from '../pyoracle';
 
 const SECRET = Buffer.from('22'.repeat(32), 'hex');
 const sign = (payload: string): Uint8Array => new Uint8Array(createHmac('sha256', SECRET).update(payload, 'ascii').digest());

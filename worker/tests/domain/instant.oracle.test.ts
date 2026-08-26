@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrompt, displayNameFor, parseQaPairs, sanitizeTopic } from '../../domain/instant/cards.js';
-import { pythonJson } from '../pyoracle.js';
+import { buildPrompt, displayNameFor, parseQaPairs, sanitizeTopic } from '../../domain/instant/cards';
+import { pythonJson } from '../pyoracle';
 
 const SANITIZE: unknown[] = [
   'Roman history',

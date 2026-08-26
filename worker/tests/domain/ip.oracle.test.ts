@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SENTINEL_BUCKET, limiterBucket } from '../../domain/instant/ip.js';
-import { pythonJson } from '../pyoracle.js';
+import { SENTINEL_BUCKET, limiterBucket } from '../../domain/instant/ip';
+import { pythonJson } from '../pyoracle';
 
 const ADDRESSES = [
   '203.0.113.5',

@@ -1,6 +1,6 @@
 // URL-encoded trivia session state: the remaining queue (`?cards=1,2,3`)
 // and the verdict chain (`?done=1r,2w`).
-import { pyStrip } from './py.js';
+import { pyStrip } from './py';
 
 export type DoneVerdict = 'r' | 'w';
 export type DoneItem = readonly [qid: number, verdict: DoneVerdict];

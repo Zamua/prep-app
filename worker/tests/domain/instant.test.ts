@@ -9,7 +9,7 @@ import {
   QaParseError,
   TOPIC_MAX_CHARS,
   extractCards,
-} from '../../domain/instant/cards.js';
+} from '../../domain/instant/cards';
 
 const card = (i: number, r: unknown = null) => ({ q: ` Q${i} `, a: `A${i}`, r });
 const json = (items: unknown[]) => JSON.stringify(items);

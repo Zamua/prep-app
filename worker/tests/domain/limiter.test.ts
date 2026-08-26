@@ -8,8 +8,8 @@ import {
   retryAfter,
   type GenerationRow,
   type WindowRequest,
-} from '../../domain/instant/limiter.js';
-import { isoUtc } from '../../domain/py.js';
+} from '../../domain/instant/limiter';
+import { isoUtc } from '../../domain/py';
 
 const AT = new Date('2026-03-14T15:00:00Z');
 const ago = (seconds: number) => isoUtc(new Date(AT.getTime() - seconds * 1000));

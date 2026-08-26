@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flipDoneVerdict, formatDone, parseCardIds, parseDone } from '../../domain/trivia.js';
+import { flipDoneVerdict, formatDone, parseCardIds, parseDone } from '../../domain/trivia';
 
 describe('trivia session state', () => {
   it('parseCardIds: the docstring example, empties and junk', () => {
