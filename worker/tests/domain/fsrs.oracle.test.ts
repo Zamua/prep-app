@@ -149,6 +149,29 @@ describe('the surface around the scheduler', () => {
     expect(run(0.99)).toEqual(run(0.97));
     expect(run(0.7).nextDue.getTime()).toBeGreaterThan(run(0.97).nextDue.getTime());
   });
+  it('NaN retention is the upper bound, as Python min/max leave it', () => {
+    const s = seedStateFromLadderStep(5, now);
+    const at = parseIso('2026-03-21T15:00:00+00:00');
+    const want = pythonJson<[string, number]>(
+      `import json
+from datetime import datetime, timezone
+import prep.domain.srs as srs
+from prep.domain.srs import CardSRSState, Verdict, schedule_review
+class NoFuzz(srs._FsrsScheduler):
+    def __init__(self, *a, **k):
+        k["enable_fuzzing"] = False
+        super().__init__(*a, **k)
+srs._FsrsScheduler = NoFuzz
+srs._SCHEDULER_CACHE.clear()
+s = CardSRSState(stability=30.0, difficulty=5.0, fsrs_state=2, last_review=datetime(2026, 3, 14, 15, tzinfo=timezone.utc))
+r = schedule_review(s, Verdict.RIGHT, now=datetime(2026, 3, 21, 15, tzinfo=timezone.utc), desired_retention=float("nan"))
+print(json.dumps([r.next_due.isoformat(), r.interval_seconds]))`,
+    );
+    const got = scheduleReview(s, 'right', at, { desiredRetention: NaN, fuzz: false });
+    expect(isoUtc(got.nextDue)).toBe(want[0]);
+    expect(got.intervalSeconds).toBe(want[1]);
+    expect(got).toEqual(scheduleReview(s, 'right', at, { desiredRetention: 0.97, fuzz: false }));
+  });
   it('fsrsState 0 or missing means Learning', () => {
     const zero = { ...freshState(), fsrsState: 0 as unknown as CardSRSState['fsrsState'] };
     const missing = { stability: null, difficulty: null, lastReview: null } as unknown as CardSRSState;

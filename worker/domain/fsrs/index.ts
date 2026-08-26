@@ -82,7 +82,9 @@ export function scheduleReview(
   opts: { desiredRetention?: number | null; fuzz: Fuzz },
 ): ScheduledReview {
   const wanted = opts.desiredRetention ?? DEFAULT_DESIRED_RETENTION;
-  const retention = pyRound(Math.max(MIN_DESIRED_RETENTION, Math.min(MAX_DESIRED_RETENTION, wanted)), 3);
+  // Python's min/max keep the bound when the other side is NaN.
+  const clamped = Number.isNaN(wanted) ? MAX_DESIRED_RETENTION : Math.max(MIN_DESIRED_RETENTION, Math.min(MAX_DESIRED_RETENTION, wanted));
+  const retention = pyRound(clamped, 3);
   const cfg: SchedulerConfig = {
     parameters: DEFAULT_PARAMETERS,
     desiredRetention: retention,
