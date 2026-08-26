@@ -45,6 +45,9 @@ function writeConfig(): string {
   const dev = JSON.parse(readFileSync(join(WORKER, 'wrangler.dev.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '')) as { vars: Record<string, string> };
   const vars = { ...dev.vars };
   delete vars['PREP_FAKE_NOW'];
+  // Same reason: a scheduler held still for the corpus proves nothing about
+  // the alarm these suites exist to drive.
+  delete vars['PREP_PARITY_NO_PERIODIC'];
   // The deploy name stays the dev one: a second name in the same bucket is a
   // second deployment, and which one a node serves is not the test's to guess.
   const config = { ...dev, vars };
