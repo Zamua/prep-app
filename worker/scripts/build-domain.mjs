@@ -3,7 +3,7 @@
 // twins under static/js. The TypeScript is the source; the twins are
 // generated, dependency-free ES modules. `bundle` returns the text so
 // the twin test can compare a fresh build against the committed file.
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
@@ -32,12 +32,10 @@ export async function bundle(entry) {
   return result.outputFiles[0].text;
 }
 
-// `only`: substrings of the twin's output path; empty builds every twin
-// whose entry exists.
+// `only`: substrings of the twin's output path; empty builds every twin.
 export async function buildTwins(repo = REPO, only = []) {
   const written = [];
   for (const twin of TWINS) {
-    if (!existsSync(join(WORKER, twin.entry))) continue;
     if (only.length && !only.some((s) => twin.out.includes(s))) continue;
     writeFileSync(join(repo, twin.out), await bundle(twin.entry));
     written.push(twin.out);

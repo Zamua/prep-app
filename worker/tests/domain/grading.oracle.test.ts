@@ -71,6 +71,10 @@ describe('validateRegexUpdate matches the corpus', () => {
 });
 
 describe('the client twin matches the offline fixture', () => {
+  it('exports the browser surface', () => {
+    expect(Object.keys(client).sort()).toEqual(['MAX_REGEX_LEN', 'grade', 'matchRegex']);
+  });
+
   it('covers the whole fixture', () => {
     expect(cases).toHaveLength(46);
     expect(new Set(cases.map((c) => c.fn))).toEqual(new Set(['grade', 'matchRegex']));
