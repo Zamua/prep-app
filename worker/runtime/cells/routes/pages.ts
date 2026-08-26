@@ -168,9 +168,9 @@ export const pageRoutes: readonly Route[] = [
   route('GET', '/settings/agent', 'signedIn', (_p, { repos, ports }) => agentSettings.renderAgentSettings(repos, ports.freeTierConfigured)),
   route('POST', '/settings/agent/connect', 'signedIn', (_p, { repos, ports }) => agentSettings.subscriptionRefusal(repos, ports.freeTierConfigured)),
   route('POST', '/settings/agent/disconnect', 'signedIn', (_p, { repos, ports }) => agentSettings.subscriptionRefusal(repos, ports.freeTierConfigured)),
-  route('GET', '/settings/agent/openrouter/start', 'signedIn', (_p, { ports }) => openrouter.openrouterStart(openRouterDeps(ports))),
-  route('GET', '/settings/agent/openrouter/callback', 'signedIn', (p, { repos, ports }) =>
-    openrouter.openrouterCallback(repos, p, openRouterDeps(ports)),
+  route('GET', '/settings/agent/openrouter/start', 'signedIn', (_p, { ports, subject }) => openrouter.openrouterStart(subject, openRouterDeps(ports))),
+  route('GET', '/settings/agent/openrouter/callback', 'signedIn', (p, { repos, ports, subject }) =>
+    openrouter.openrouterCallback(subject, repos, p, openRouterDeps(ports)),
   ),
   route('POST', '/settings/agent/byok/{provider}/connect', 'signedIn', (p, { repos, ports }) =>
     agentSettings.byokConnect(repos, p, { freeTierConfigured: ports.freeTierConfigured, cipher: ports.cipher }),

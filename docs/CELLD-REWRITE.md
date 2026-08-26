@@ -631,19 +631,16 @@ critical path is 0b -> 0 -> 1 -> 3 -> 6; phases 2 and 4 overlap it.
 
 Settled 2026-08-25 unless marked open.
 
-0. **OPEN, due before phase 3 ships real data to the parity host.** Phase
-   1 enables the fake identity provider on the staging fleet, which
-   answers from the public internet, against 2.5's "never enabled by a
-   deploy file" (PHASE-1 A5 records the override). Inert while cells hold
-   fixture pages; from phase 3 on, anyone who sends
-   `tailscale-user-login: <subject>` to that host reads that user's cell.
-   Options: (a) the parity fleet never holds real data, and phase 3
-   stands up a second staging fleet without the pins; (b) the parity
-   host's ingress requires a secret header or an IP allowlist, and the
-   pixel harness sends it; (c) the fake provider itself requires
-   `X-Internal-Token` beside the tailscale headers, so the harness's
-   existing seed credential also gates identity. Record the choice here
-   and in the staging manifest.
+0. Settled: **option (c)**, approved with the phase 3 spec. The fake
+   identity provider accepts the `tailscale-user-*` headers only when
+   `X-Internal-Token` matches `PREP_INTERNAL_TOKEN` on the same request,
+   so the harness's seed credential is also what gates identity, and one
+   staging fleet holds the parity data behind it. `PREP_INTERNAL_TOKEN`
+   is therefore a secret: it arrives as `CELLD_VAR_PREP_INTERNAL_TOKEN`
+   from the staging manifest and never enters a deploy file.
+   `refusePinsOutsideParityHosts` keeps the pins off any environment but
+   dev and staging, and both the fake provider and `/_parity/seed` are
+   behind the parity flag.
 1. Settled: the four-class taxonomy (2.1), approved 2026-08-25.
 2. Settled: in-repo `worker/` (3), approved 2026-08-25.
 3. Settled: PATs are reissued in the new format; one token exists and

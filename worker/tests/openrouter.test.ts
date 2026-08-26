@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { b64uEncode } from '../domain/base64';
 import { KEYS_URL, KeyExchangeFailed, OpenRouterOAuth, VERIFIER_BYTES } from '../runtime/adapters/openrouter';
 import { SeededRandom, WebCryptoRandom } from '../runtime/adapters/random';
+import { PKCE_COOKIE, openrouterCallback, openrouterStart, type OpenRouterAuth } from '../app/settings/openrouter';
+import type { PageRequest, PageResult } from '../app/pageResult';
+import type { Cipher } from '../app/ports';
+import { cell } from './repos/setup';
+
+/** The `Cipher` port with the crypto taken out: this file is about the flow. */
+const plainCipher = (): Cipher => ({ encrypt: async (v) => `enc:${v}`, decrypt: async (v) => v.slice(4) });
 
 const counting = (fill: number) => ({
   bytes: (n: number) => new Uint8Array(n).fill(fill),
@@ -69,5 +76,66 @@ describe('the key exchange', () => {
     const [url, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(String(url)).not.toContain('secret-verifier');
     expect(JSON.stringify(init.headers)).not.toContain('secret-verifier');
+  });
+});
+
+// ---- the use case ----------------------------------------------------------
+
+describe('the connect flow', () => {
+  const auth: OpenRouterAuth = {
+    startChallenge: async () => ({ verifier: 'the-verifier', challenge: 'the-challenge' }),
+    exchange: async () => 'sk-or-v1-minted',
+  };
+  const deps = { freeTierConfigured: false, cipher: plainCipher(), auth, appBase: 'https://parity.example.test' };
+  const SUBJECT = 'parity@example.com';
+
+  const request = (cookies: Record<string, string>, query = 'code=the-code'): PageRequest => ({
+    params: {},
+    query: new URLSearchParams(query),
+    form: new URLSearchParams(),
+    htmx: false,
+    hxHeader: null,
+    userAgent: null,
+    cookies,
+    now: '2026-03-14T15:00:00+00:00',
+  });
+
+  function cookieOf(result: PageResult): string {
+    const value = (result.headers ?? {})['set-cookie'] ?? '';
+    return value.slice(value.indexOf('=') + 1, value.indexOf(';'));
+  }
+
+  it('sends the browser to OpenRouter holding the verifier and who asked for it', async () => {
+    const started = await openrouterStart(SUBJECT, deps);
+    expect('redirect' in started && started.redirect).toContain('code_challenge=the-challenge');
+    expect('redirect' in started && started.redirect).toContain('code_challenge_method=S256');
+    expect(cookieOf(started)).toBe(`the-verifier.${encodeURIComponent(SUBJECT)}`);
+    expect((started.headers ?? {})['set-cookie']).toContain('HttpOnly');
+  });
+
+  it('stores the minted key and makes it the active provider', async () => {
+    const c = cell();
+    const started = await openrouterStart(SUBJECT, deps);
+    const done = await openrouterCallback(SUBJECT, c.repos, request({ [PKCE_COOKIE]: cookieOf(started) }), deps);
+    expect('page' in done && done.status).toBeUndefined();
+    expect(c.repos.byok.metadata('openrouter-api')).not.toBeNull();
+    expect(c.repos.prefs.getActiveByokProvider()).toBe('openrouter-api');
+  });
+
+  // A cookie is the only thing the callback carries, so one planted in a
+  // victim's browser would otherwise store the planter's key on their account.
+  it('refuses a verifier another account started', async () => {
+    const c = cell();
+    const started = await openrouterStart('attacker@example.test', deps);
+    const done = await openrouterCallback(SUBJECT, c.repos, request({ [PKCE_COOKIE]: cookieOf(started) }), deps);
+    expect('page' in done && done.status).toBe(400);
+    expect(c.repos.byok.metadata('openrouter-api')).toBeNull();
+  });
+
+  it('refuses a cookie that names no account at all', async () => {
+    const c = cell();
+    const done = await openrouterCallback(SUBJECT, c.repos, request({ [PKCE_COOKIE]: 'bare-verifier' }), deps);
+    expect('page' in done && done.status).toBe(400);
+    expect(c.repos.byok.metadata('openrouter-api')).toBeNull();
   });
 });

@@ -52,7 +52,9 @@ export function clerkConfig(env: ClerkEnv): ClerkConfig {
     jwksUrl,
     authorizedParties: parties,
     accountsUrl: need('CLERK_ACCOUNTS_URL').replace(/\/+$/, ''),
-    publishableKey: trimmed(env.CLERK_PUBLISHABLE_KEY),
+    // ClerkJS never bootstraps without it, so session recovery cannot run
+    // and the reauth page loops. A deploy missing it must not take traffic.
+    publishableKey: need('CLERK_PUBLISHABLE_KEY'),
     secretKey: trimmed(env.CLERK_SECRET_KEY),
   };
 }

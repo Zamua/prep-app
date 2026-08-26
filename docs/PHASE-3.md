@@ -396,10 +396,16 @@ and asserts the retry converges. Account deletion and the reaper share
 ## G. Out of scope
 
 Durable jobs, the six job pages and their fragments and status routes,
-alarms, the reaper, `JobCell` (phase 4); CSV/prepdeck/Anki page
-importers, `.apkg` and `.prepdeck` exports, `/metrics` (phase 5);
-migration and the block-0 importer (phase 6); the debug endpoints (7.6);
-any visual change.
+alarms, the reaper, `JobCell` (phase 4); `POST /api/agent/run` and
+`POST /api/internal/record-review`, which exist for the durable worker
+to call back into the app and arrive with the jobs that call them
+(phase 4); CSV/prepdeck/Anki page importers, `.apkg` and `.prepdeck`
+exports, `/metrics` (phase 5); migration and the block-0 importer
+(phase 6); the debug endpoints (7.6); any visual change.
+
+`worker/tests/routeTable.test.ts` holds this list as data and checks it
+against the Python inventory, so a route named here that no longer
+exists, or one that exists and is named nowhere, fails.
 
 ## H. Lanes, files, commands
 

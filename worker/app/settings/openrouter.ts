@@ -30,7 +30,25 @@ export interface OpenRouterDeps {
 const cookie = (value: string, maxAge: number, secure: boolean): string =>
   `${PKCE_COOKIE}=${value}; HttpOnly; Max-Age=${maxAge}; Path=${CALLBACK_PATH}; SameSite=lax${secure ? '; Secure' : ''}`;
 
-export async function openrouterStart(deps: OpenRouterDeps): Promise<PageResult> {
+/**
+ * The verifier, and who started the flow. A verifier alone would let a
+ * planted cookie finish someone else's sign-in inside this account, which
+ * stores an attacker's key under a victim's name. The verifier is base64url
+ * and carries no dot, so the first one separates the two.
+ */
+const bind = (subject: string, verifier: string): string => `${verifier}.${encodeURIComponent(subject)}`;
+
+function unbind(value: string): { verifier: string; subject: string } | null {
+  const dot = value.indexOf('.');
+  if (dot <= 0 || dot === value.length - 1) return null;
+  try {
+    return { verifier: value.slice(0, dot), subject: decodeURIComponent(value.slice(dot + 1)) };
+  } catch {
+    return null;
+  }
+}
+
+export async function openrouterStart(subject: string, deps: OpenRouterDeps): Promise<PageResult> {
   const { verifier, challenge } = await deps.auth.startChallenge();
   const url = new URL(AUTHORIZE_URL);
   url.searchParams.set('callback_url', `${deps.appBase}${CALLBACK_PATH}`);
@@ -39,11 +57,11 @@ export async function openrouterStart(deps: OpenRouterDeps): Promise<PageResult>
   return {
     redirect: url.toString(),
     status: 303,
-    headers: { 'set-cookie': cookie(verifier, PKCE_MAX_AGE, deps.appBase.startsWith('https:')) },
+    headers: { 'set-cookie': cookie(bind(subject, verifier), PKCE_MAX_AGE, deps.appBase.startsWith('https:')) },
   };
 }
 
-export async function openrouterCallback(repos: UserRepos, req: PageRequest, deps: OpenRouterDeps): Promise<PageResult> {
+export async function openrouterCallback(subject: string, repos: UserRepos, req: PageRequest, deps: OpenRouterDeps): Promise<PageResult> {
   const drop = { 'set-cookie': cookie('', 0, deps.appBase.startsWith('https:')) };
   const refuse = (message: string, status: number): PageResult => ({
     ...renderAgentSettings(repos, deps.freeTierConfigured, { byok_error: message, status }),
@@ -51,9 +69,11 @@ export async function openrouterCallback(repos: UserRepos, req: PageRequest, dep
   });
 
   const code = req.query.get('code') ?? '';
-  const verifier = req.cookies[PKCE_COOKIE] ?? '';
+  const held = unbind(req.cookies[PKCE_COOKIE] ?? '');
   if (!code) return refuse('OpenRouter did not return an authorization code. Start the connection again.', 400);
-  if (!verifier) return refuse('That OpenRouter sign-in expired. Start the connection again.', 400);
+  if (!held) return refuse('That OpenRouter sign-in expired. Start the connection again.', 400);
+  if (held.subject !== subject) return refuse('That OpenRouter sign-in was started by another account. Start the connection again.', 400);
+  const verifier = held.verifier;
   if (!deps.cipher) return refuse("BYOK isn't available on this deploy — the operator hasn't configured PREP_KEY_ENCRYPTION_SECRET.", 503);
 
   let key: string;

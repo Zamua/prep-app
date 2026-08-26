@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { frontendApiHost } from '../runtime/adapters/clerk.js';
 import { ROOT } from './helpers.js';
 
 const ENVS = ['dev', 'staging', 'prod'] as const;
@@ -20,7 +21,12 @@ const PUBLIC_VARS = new Set([
 ]);
 /** A secret in a deploy file is the mistake this file exists to catch. */
 const SECRET_NAME = /SECRET|TOKEN|KEY|PASSWORD/;
-const ALLOWED_KEY_NAMES = new Set(['PREP_INTERNAL_TOKEN', 'CLERK_PUBLISHABLE_KEY']);
+/** Named like a credential and public by construction: the publishable key
+ * ships in every page's markup. */
+const NOT_A_SECRET = new Set(['CLERK_PUBLISHABLE_KEY']);
+/** The parity pins, committable in `dev` alone. `PREP_INTERNAL_TOKEN` is one
+ * of them and is what gates the fake identity provider (decision 7.0), so
+ * anywhere else it is a secret and arrives as `CELLD_VAR_`. */
 const DEV_ONLY = /^(PREP_PARITY|PREP_FAKE|PREP_INTERNAL|PREP_BUILD_ID)/;
 
 /** JSON with `//` comments; a `//` inside a string is not a comment. */
@@ -90,7 +96,7 @@ describe('the three wrangler files', () => {
     for (const env of ENVS) {
       for (const key of Object.keys(files[env].vars)) {
         expect(PUBLIC_VARS.has(key), `${env}: ${key} is not an allowed public var`).toBe(true);
-        const secretish = SECRET_NAME.test(key) && !ALLOWED_KEY_NAMES.has(key);
+        const secretish = SECRET_NAME.test(key) && !NOT_A_SECRET.has(key) && !(env === 'dev' && DEV_ONLY.test(key));
         expect(secretish, `${env}: ${key} names a credential; it belongs in CELLD_VAR_*`).toBe(false);
       }
     }
@@ -103,6 +109,14 @@ describe('the three wrangler files', () => {
       // `urls()` redirects back to the first party, so the deploy's own
       // origin has to lead the list or staging bounces onto prod.
       expect((vars.CLERK_AUTHORIZED_PARTIES ?? '').split(',')[0], env).toMatch(/^https:\/\//);
+      // The key encodes the frontend API host, and `compose` refuses to boot
+      // without it: a blank or borrowed one leaves ClerkJS unbootstrapped and
+      // the dormant-session recovery with nothing to recover through.
+      expect(frontendApiHost(vars.CLERK_PUBLISHABLE_KEY ?? ''), env).toBe(new URL(vars.CLERK_ISSUER!).host);
     }
+  });
+
+  it('keeps the seed credential out of staging and prod', () => {
+    for (const env of ['staging', 'prod'] as const) expect(files[env].vars.PREP_INTERNAL_TOKEN, env).toBeUndefined();
   });
 });

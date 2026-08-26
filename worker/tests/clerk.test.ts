@@ -81,10 +81,24 @@ describe('the configuration', () => {
       CLERK_JWKS_URL: 'https://j',
       CLERK_AUTHORIZED_PARTIES: 'https://a, https://b ,',
       CLERK_ACCOUNTS_URL: 'https://accounts.example.test//',
+      CLERK_PUBLISHABLE_KEY: 'pk_test_aQ',
     });
     expect(config.authorizedParties).toEqual(['https://a', 'https://b']);
     expect(config.accountsUrl).toBe('https://accounts.example.test');
-    expect(config.publishableKey).toBe('');
+    expect(config.publishableKey).toBe('pk_test_aQ');
+  });
+
+  // Without it ClerkJS never loads, so a signed-in user whose token expired
+  // has no path back and the reauth page cannot close its loop.
+  it('refuses to boot without the publishable key', () => {
+    expect(() =>
+      clerkConfig({
+        CLERK_ISSUER: 'https://i',
+        CLERK_JWKS_URL: 'https://j',
+        CLERK_AUTHORIZED_PARTIES: 'https://a',
+        CLERK_ACCOUNTS_URL: 'https://accounts.example.test',
+      }),
+    ).toThrow(/CLERK_PUBLISHABLE_KEY/);
   });
 });
 

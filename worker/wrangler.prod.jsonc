@@ -24,6 +24,6 @@
     "CLERK_JWKS_URL": "https://clerk.prepcards.app/.well-known/jwks.json",
     "CLERK_ACCOUNTS_URL": "https://accounts.prepcards.app",
     "CLERK_AUTHORIZED_PARTIES": "https://prepcards.app",
-    "CLERK_PUBLISHABLE_KEY": ""
+    "CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsucHJlcGNhcmRzLmFwcCQ"
   }
 }
