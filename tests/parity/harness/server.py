@@ -51,7 +51,9 @@ def seed(base_url: str, user: str, profile: str, *, token: str | None = None) ->
     raise AssertionError("unreachable")
 
 
-def parity_env(db_path: Path, llm_base_url: str) -> dict[str, str]:
+def parity_env(
+    db_path: Path, llm_base_url: str, extra: dict[str, str] | None = None
+) -> dict[str, str]:
     env = {**os.environ}
     env.pop("PREP_DEFAULT_USER", None)
     env.pop("PREP_AUTH_MODE", None)
@@ -69,6 +71,7 @@ def parity_env(db_path: Path, llm_base_url: str) -> dict[str, str]:
             "PREP_FREE_INFERENCE_MODEL": "parity-model",
         }
     )
+    env.update(extra or {})
     return env
 
 
@@ -78,15 +81,18 @@ class ParityTarget:
     def __init__(self, base_url: str, *, token: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.token = token
+        # Set by the fixture when the run drives real jobs (phase 4).
+        self.jobs: object | None = None
 
     def seed(self, user: str, profile: str) -> dict:
         return seed(self.base_url, user, profile, token=self.token)
 
 
 class LocalParityServer(ParityTarget):
-    def __init__(self, db_path: Path, llm_base_url: str):
+    def __init__(self, db_path: Path, llm_base_url: str, extra_env: dict[str, str] | None = None):
         self.db_path = Path(db_path)
         self.llm_base_url = llm_base_url
+        self.extra_env = dict(extra_env or {})
         self.port = _free_port()
         super().__init__(f"http://127.0.0.1:{self.port}", token=PARITY_INTERNAL_TOKEN)
         self._proc: subprocess.Popen | None = None
@@ -105,7 +111,7 @@ class LocalParityServer(ParityTarget):
                 str(self.port),
             ],
             cwd=REPO_ROOT,
-            env=parity_env(self.db_path, self.llm_base_url),
+            env=parity_env(self.db_path, self.llm_base_url, self.extra_env),
         )
         deadline = time.time() + timeout
         while time.time() < deadline:

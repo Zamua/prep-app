@@ -83,3 +83,80 @@ def wait_for_snapshot(ctx: FlowCtx, *, cards: int, timeout_ms: int = 20_000) -> 
                 f"offline snapshot not ready: owner={owner!r}, cards={count} < {cards}"
             )
         page.wait_for_timeout(100)
+
+
+# ---- job screens (phase 4) -------------------------------------------------
+
+
+def wait_status(ctx: FlowCtx, status: str, *, timeout_ms: int = 30_000) -> None:
+    """Block until the progress partial renders `status`. The partial
+    stamps it on `#t-status` / `#trivia-gen-status` as `data-status`."""
+    ctx.page.wait_for_selector(f'[data-status="{status}"]', timeout=timeout_ms)
+
+
+def wait_badge(ctx: FlowCtx, label: str, *, timeout_ms: int = 30_000) -> None:
+    """Block until the masthead badge's own 5s poll has caught up with
+    the jobs behind it. The chip's aria-label carries both counts, so
+    waiting on it pins the icon and the number a shot will hold."""
+    ctx.page.wait_for_selector(f'#workflow-badge summary[aria-label="{label}"]', timeout=timeout_ms)
+
+
+def submit_form(ctx: FlowCtx, selector: str, then: str) -> None:
+    """Click a form's submit and wait out the navigation it starts."""
+    with ctx.page.expect_navigation(wait_until="load"):
+        ctx.page.click(selector)
+    ctx.page.wait_for_selector(then)
+
+
+def wait_badge_status(ctx: FlowCtx, status: str, *, timeout_ms: int = 30_000) -> None:
+    """Block until the badge's row carries `status`.
+
+    Only a progress fragment's own poll writes the tracked status, so a
+    flow that leaves a job's page before that poll lands would carry the
+    status the start registered into every later shot.
+    """
+    ctx.page.wait_for_function(
+        "s => document.querySelector('#workflow-badge .workflow-row-status')"
+        "?.textContent.includes(s)",
+        arg=status,
+        timeout=timeout_ms,
+    )
+
+
+def wait_badge_empty(ctx: FlowCtx, *, timeout_ms: int = 30_000) -> None:
+    """Block until the badge reports no tracked workflows."""
+    # Attached, not visible: an empty badge renders a zero-size div.
+    ctx.page.wait_for_selector(
+        '#workflow-badge[data-empty="1"]', state="attached", timeout=timeout_ms
+    )
+
+
+_FRAGMENT_GLOB = "**/fragment"
+
+
+def freeze_polling(ctx: FlowCtx) -> None:
+    """Abort the progress fragment's polls so a transient state holds.
+
+    A post-signal state (`applying`, `rejecting`) lives only until the
+    next 2s poll, which is less than a full-page capture takes. htmx
+    leaves the DOM alone when a request fails and the stylesheet keys off
+    none of its state classes, so the frozen screen is the one the server
+    sent. The badge keeps polling on its own URL.
+    """
+    ctx.page.route(_FRAGMENT_GLOB, lambda route: route.abort())
+
+
+def resume_polling(ctx: FlowCtx) -> None:
+    ctx.page.unroute(_FRAGMENT_GLOB)
+
+
+def shot(ctx: FlowCtx, label: str, **kwargs):
+    """Scroll to the top, then capture.
+
+    The masthead is sticky and the install nudge is fixed, so a full-page
+    capture draws both wherever the page happens to be scrolled. A job
+    page's height changes under the reader as fragments swap, which moves
+    that offset between runs.
+    """
+    ctx.page.evaluate("() => window.scrollTo(0, 0)")
+    return ctx.shot(label, **kwargs)

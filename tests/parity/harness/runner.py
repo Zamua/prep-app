@@ -92,6 +92,7 @@ def run_flow(
             llm=llm,
             scheme=scheme,
             sink=sink,
+            jobs=getattr(target, "jobs", None),
         )
         flow.steps(fctx)
     finally:

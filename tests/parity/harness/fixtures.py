@@ -10,7 +10,7 @@ import pytest
 
 from tests.parity.harness import browser as browser_pin
 from tests.parity.harness import registry, runner
-from tests.parity.harness.constants import INTERNAL_TOKEN_ENV
+from tests.parity.harness.constants import INTERNAL_TOKEN_ENV, PARITY_INTERNAL_TOKEN
 from tests.parity.harness.server import (
     BASE_URL_ENV,
     LocalParityServer,
@@ -49,19 +49,41 @@ def parity_browser():
             browser.close()
 
 
+def _wants_jobs() -> bool:
+    """Phase 4 and later read every job screen back out of Temporal, so a
+    local target needs the Procfile's other two processes."""
+    limit = registry.phase_limit()
+    return limit is not None and limit >= 4
+
+
 @pytest.fixture(scope="session")
 def parity_target(tmp_path_factory, parity_llm) -> Iterator[ParityTarget]:
     remote = (os.environ.get(BASE_URL_ENV) or "").strip()
     if remote:
         yield ParityTarget(remote, token=os.environ.get(INTERNAL_TOKEN_ENV))
         return
-    db_path = tmp_path_factory.mktemp("parity") / "data.sqlite"
-    server = LocalParityServer(db_path, parity_llm.base_url)
+    root = tmp_path_factory.mktemp("parity")
+    db_path = root / "data.sqlite"
+    stack = None
+    if _wants_jobs():
+        from tests.parity.harness.jobs import JobsStack, MissingTool
+
+        try:
+            stack = JobsStack(db_path, root / "temporal")
+            stack.start_temporal()
+        except MissingTool as e:
+            pytest.skip(str(e))
+    server = LocalParityServer(db_path, parity_llm.base_url, stack.env if stack else None)
     server.start()
+    if stack is not None:
+        stack.start_worker(app_base_url=server.base_url, internal_token=PARITY_INTERNAL_TOKEN)
+        server.jobs = stack
     try:
         yield server
     finally:
         server.stop()
+        if stack is not None:
+            stack.stop()
 
 
 @pytest.fixture

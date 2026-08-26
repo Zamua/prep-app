@@ -41,11 +41,14 @@ class FlowCtx:
         llm: Any,
         scheme: str,
         sink: Callable[[str, str, Any], Path],
+        jobs: Any = None,
     ):
         self.page = page
         self.base_url = base_url
         self.seed = seed
         self.llm = llm
+        # The Temporal + worker stack behind a phase-4 target, when one runs.
+        self.jobs = jobs
         self.scheme = scheme
         self._sink = sink
         self._n = 0
