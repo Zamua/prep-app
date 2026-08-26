@@ -393,6 +393,26 @@ and asserts the retry converges. Account deletion and the reaper share
    Staging carries the new secrets and vars before the deploy (operator
    repo, committed, not pushed).
 
+   Two flows cannot be green against phase-1 goldens, and both causes are
+   measured rather than assumed:
+
+   - `settings`, its two `/settings/agent` shots only, and only in
+     height (`01-agent-none` 5838 vs 5487, `02-agent-connected` 5640 vs
+     5481). Python renders four BYOK rows and this app renders three:
+     decision 7.4 dropped `claude-subscription`, which is offered now
+     only while a stored credential still names it. The other five shots
+     of the flow match. Nothing here is fixable without a visual change
+     (section 8 forbids one) or a golden regenerated after cutover.
+   - `study`, intermittently, on one scheme per run: the submit answers
+     the 500 page because the cell refused the write with
+     `DurabilityUnproven`. The node log carries `log ensemble degraded;
+     acks ride the bucket` throughout, which is the single-node dev
+     shape, and the same refusal appears on `/_parity/seed` and on
+     `/mcp`. The runtime documents it as retryable and the seed already
+     retries it; nothing on the request path does, so a user sees the
+     error page. Whether the ingress may retry a refused write is a
+     design question the phase has not settled.
+
 ## G. Out of scope
 
 Durable jobs, the six job pages and their fragments and status routes,
