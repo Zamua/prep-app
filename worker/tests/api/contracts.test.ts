@@ -3,7 +3,7 @@
 // which is how the Python recording was made.
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { comparable, type VolatileRule } from './compare.js';
-import { loadCorpus, mintToken, PARITY_USER, replay, replayEnv, seed, type Pair } from './harness.js';
+import { loadCorpus, PARITY_USER, replay, replayEnv, seed, type Pair } from './harness.js';
 import type { Env } from '../../runtime/env.js';
 
 // The five cards the parity LLM stub answers a generation with.
@@ -20,19 +20,14 @@ const INSTANT_DECK = JSON.stringify([
  * import would have created. */
 const PHASE_5 = new Set(['mcp-call-prep_export_deck_apkg', 'mcp-call-prep_import_apkg', 'v1-decks-list-after']);
 
-/** Owned by the auth and pages lanes: the cookie lifecycle needs the
- * harness clock the corpus does not carry, and the mint page is lane C's. */
-const OTHER_LANES = new Set([
-  'settings-api-mint-token',
-  'cookie-fresh-no-refresh',
-  'cookie-refreshed-after-window',
-  'cookie-refreshed-value-accepted',
-  'cookie-from-the-future-cleared',
-  'cookie-bad-signature-cleared',
-  'cookie-garbage-cleared',
-  'forget-device',
-  'forget-device-cross-site',
-]);
+/** The instant each pair was recorded at, which the corpus states in its
+ * notes rather than a header: the refresh window is reached by moving the
+ * clock, not by waiting. A name here changes the clock from that pair on. */
+const PARITY_NOW = '2026-03-14T15:00:00Z';
+const CLOCK_FROM: Record<string, string> = {
+  'cookie-refreshed-after-window': '2026-04-13T15:00:01Z',
+  'cookie-from-the-future-cleared': PARITY_NOW,
+};
 
 const corpus = loadCorpus('contracts');
 // The corpus header names every value another implementation cannot
@@ -63,10 +58,12 @@ function bodyFor(pair: Pair): unknown {
   return { ...recorded, params: { ...recorded.params, arguments: { ...recorded.params.arguments, card_id: cardId } } };
 }
 
+let clockNow = PARITY_NOW;
+
 function headersFor(pair: Pair): Record<string, string> {
-  const extra: Record<string, string> = {};
-  // The recorded bearer is the token the settings page minted; the reader
-  // seed's own token proves the same thing and the header is volatile.
+  const extra: Record<string, string> = { 'x-parity-now': clockNow };
+  // Every bearer pair follows the mint, so the replay carries the token the
+  // settings page just issued, exactly as the recording did.
   if (pair.name !== 'v1-decks-bad-token' && pair.request.headers['authorization']?.startsWith('Bearer prep_pat_')) {
     extra['authorization'] = `Bearer ${bearer}`;
   }
@@ -75,7 +72,7 @@ function headersFor(pair: Pair): Record<string, string> {
 }
 
 beforeAll(async () => {
-  const { env, userStorage } = replayEnv();
+  const { env } = replayEnv();
   vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url.includes('/chat/completions')) {
@@ -84,13 +81,18 @@ beforeAll(async () => {
     throw new Error(`unexpected outbound fetch to ${url}`);
   });
   await seed(env, 'reader', PARITY_USER);
-  bearer = await mintToken(userStorage(PARITY_USER), PARITY_USER, 'parity');
   for (const pair of corpus.pairs) {
-    if (PHASE_5.has(pair.name) || OTHER_LANES.has(pair.name)) continue;
+    clockNow = CLOCK_FROM[pair.name] ?? clockNow;
+    if (PHASE_5.has(pair.name)) continue;
     const actual = await replay(env as Env, pair, headersFor(pair), bodyFor(pair));
     if (pair.name === 'mcp-call-prep_add_card') {
       const text = (actual.json as { result: { content: { text: string }[] } }).result.content[0]!.text;
       cardId = (JSON.parse(text) as { id: number }).id;
+    }
+    // Shown in full exactly once, on the page that mints it; every later
+    // render masks the secret, which is why the mask carries no dot.
+    if (pair.name === 'settings-api-mint-token') {
+      bearer = /prep_pat_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.exec(actual.text ?? '')?.[0] ?? '';
     }
     if (pair.name === 'instant-visitor-mints') {
       const set = actual.setCookie.find((c) => c.startsWith('prep_anon='));
@@ -111,7 +113,7 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('the contracts corpus replays against the TypeScript app', () => {
-  const replayed = corpus.pairs.filter((p) => !PHASE_5.has(p.name) && !OTHER_LANES.has(p.name));
+  const replayed = corpus.pairs.filter((p) => !PHASE_5.has(p.name));
 
   it.each(replayed.map((p) => p.name))('%s', (name) => {
     const outcome = results.get(name);
@@ -120,7 +122,7 @@ describe('the contracts corpus replays against the TypeScript app', () => {
   });
 
   it('covers every pair the phase owns', () => {
-    expect(replayed.length).toBe(corpus.pairs.length - PHASE_5.size - OTHER_LANES.size);
-    expect(replayed.length).toBe(118);
+    expect(replayed.length).toBe(corpus.pairs.length - PHASE_5.size);
+    expect(replayed.length).toBe(127);
   });
 });

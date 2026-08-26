@@ -70,6 +70,9 @@ VOLATILE: tuple[tuple[str, str, str], ...] = (
     # user's decks and questions from one sequence, so these carry the
     # anonymous accounts' rows; per-cell id blocks do not, and no ordering
     # makes the two agree.
+    ("cookie-*", "response.json.decks.*.id", r"^\d+$"),
+    ("cookie-*", "response.json.cards.*.deck_id", r"^\d+$"),
+    ("cookie-*", "response.json.cards.*.question_id", r"^\d+$"),
     ("v1-decks-create", "response.json.id", r"^\d+$"),
     ("v1-deck-import-csv", "response.json.deck_id", r"^\d+$"),
     ("mcp-call-prep_create_deck", _TOOL_TEXT, r'"id": \d+'),

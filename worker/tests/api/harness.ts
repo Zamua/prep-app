@@ -149,7 +149,9 @@ export async function record(res: Response): Promise<Recorded> {
     status: res.status,
     contentType,
     json,
-    text: isJson ? null : raw || null,
+    // Python records `response.text` for any non-JSON body, so an empty one
+    // is '' and never null; collapsing it loses a 303's empty body.
+    text: isJson ? null : raw,
     location: res.headers.get('location'),
     setCookie: res.headers.getAll ? res.headers.getAll('set-cookie') : [res.headers.get('set-cookie')].filter((v): v is string => v !== null),
   };
