@@ -7,7 +7,7 @@ import type { CarriedPreferences, Clock, Precheck, UserCellRpc, UserRepos } from
 import { derive } from '../../app/viewmodels/derive.js';
 import { RowCapReached } from '../../domain/limits.js';
 import { BAD_TOKEN, NO_USER } from '../../domain/pat.js';
-import { carryPreferences, type Row } from '../../domain/merge.js';
+import { carryPreferences, TARGET_COLUMNS, type Row } from '../../domain/merge.js';
 import { appBase } from '../appBase.js';
 import { ANON_COOKIE_HEADER, clockFor, compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
@@ -266,6 +266,10 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
 
   async dump(): Promise<CellSnapshot> {
     return this.repos().export.dump();
+  }
+
+  async mergeView(): Promise<CellSnapshot> {
+    return this.repos().export.project(TARGET_COLUMNS);
   }
 
   async importRows(snapshot: CellSnapshot): Promise<Record<string, number>> {

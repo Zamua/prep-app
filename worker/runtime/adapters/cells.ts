@@ -2,6 +2,7 @@
 // stubs. A cell is unreachable for a few seconds after a node restart, so
 // idempotent calls retry with backoff; the one non-idempotent call does not.
 import type { Directory, Limiter, UserCellRpc, UserCells } from '../../app/ports.js';
+import { RowCapReached } from '../../domain/limits.js';
 
 export const GLOBAL = 'global';
 
@@ -14,13 +15,24 @@ export interface RetryPolicy {
 /** Five tries over roughly eight seconds: the restart window measured in spike 6. */
 export const DEFAULT_RETRY: RetryPolicy = { attempts: 5, baseMs: 250, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
 
+/**
+ * A decision the cell reached, not a cell that could not be reached. Calling
+ * again repeats the decision, so the caller would pay the whole backoff for
+ * an answer it already has. Errors with no class behind them stay retryable:
+ * a wrong guess there costs one wasted call, the wrong guess the other way
+ * costs a lost write.
+ */
+function decided(e: unknown): boolean {
+  return e instanceof RowCapReached;
+}
+
 export async function retrying<T>(fn: () => Promise<T>, policy: RetryPolicy = DEFAULT_RETRY): Promise<T> {
   let delay = policy.baseMs;
   for (let attempt = 1; ; attempt++) {
     try {
       return await fn();
     } catch (e) {
-      if (attempt >= policy.attempts) throw e;
+      if (attempt >= policy.attempts || decided(e)) throw e;
       await policy.sleep(delay);
       delay *= 2;
     }

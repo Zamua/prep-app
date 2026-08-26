@@ -76,6 +76,17 @@ describe('the reaper walk', () => {
     expect(await f.cells.cell('anon:a2').lastSeenAt()).toBe(FRESH);
   });
 
+  it('leaves an idle account a merge is already moving', async () => {
+    const f = fixture();
+    await mint(f, 'anon:a1', IDLE);
+    await mint(f, 'anon:a2', IDLE);
+    await f.directory.beginMerge('anon:a1', 'reader@example.com', IDLE);
+
+    expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 2, reaped: 1, cleaned: 0, failed: 0, cursor: null });
+    expect([...f.directory.users.keys()]).toEqual(['anon:a1']);
+    expect(f.cells.entry('anon:a1').storage.rows('decks')).toHaveLength(1);
+  });
+
   it('deletes in three steps: wipe, tombstone, scrub, then the directory', async () => {
     const f = fixture();
     await mint(f, 'anon:a1', IDLE);

@@ -47,6 +47,10 @@ export async function reapIdleAnonymous(deps: ReapDeps, opts: ReapOptions = {}):
         cleaned++;
         continue;
       }
+      // A merge already owns this account's rows. Destroying it now would
+      // leave the saga reading an empty cell and recording a merge that
+      // moved nothing, with the cookie that could have retried deleted.
+      if (await deps.directory.marker(user.id)) continue;
       // A cell with no profile yet is an account minted between the register
       // and its first write; its directory row is the only date there is.
       const lastSeen = (await deps.cells.cell(user.id).lastSeenAt()) ?? user.created_at;

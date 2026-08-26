@@ -33,9 +33,22 @@ const LIMITER_TABLE = 'instant_generations';
 
 const MERGED: TombstoneReason = 'merged';
 
+/** The anonymous cell was destroyed between the precheck that admitted the
+ * merge and the read that would have moved its rows. */
+export class AnonCellVanished extends Error {}
+
 /** Another merge already owns this anonymous id: its rows are going
  * somewhere else, and this cookie is not ours to resolve. */
 export const MERGE_IN_PROGRESS = 'merge_in_progress';
+
+/** Given up on after `MAX_ATTEMPTS`. The rows stay where they are and the
+ * audit row says why; the cookie goes, because retrying it costs the user a
+ * pair of cell reads on every request and will never end. */
+export const MERGE_FAILED = 'merge_failed';
+
+/** A transient failure resolves inside the cells adapter's own retry, so a
+ * merge that fails this many times is failing deterministically. */
+export const MAX_ATTEMPTS = 3;
 
 export interface DestroyDeps {
   cells: UserCells;
@@ -54,6 +67,13 @@ export function hexFrom(random: Random): RandomHex {
     Array.from(random.bytes(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * No refusal is audited. Python writes a `failed` row for `anon_missing`,
+ * but that is the steady state of every cookie outliving its account: one
+ * shared directory cell would take a row per request from any client that
+ * ignores the delete. `failMerge` is for a merge that was admitted and then
+ * gave up, which is the state an operator has to see.
+ */
 const refusal = (reason: string, resolved: boolean): MergeResult => ({ resolved, merged: false, counts: {}, reason });
 
 /**
@@ -88,6 +108,11 @@ async function finish(auditId: number, anonId: string, targetId: string, deps: M
   const audit = await deps.directory.audit(auditId);
   let counts = audit?.status === 'completed' ? (audit.counts ?? {}) : null;
   if (counts === null) {
+    const attempt = await deps.directory.noteMergeAttempt(anonId);
+    if (attempt > MAX_ATTEMPTS) {
+      await deps.directory.failMerge(auditId, `gave up after ${MAX_ATTEMPTS} attempts`, isoUtc(deps.clock.now()));
+      return refusal(MERGE_FAILED, true);
+    }
     counts = await moveRows(anonId, targetId, deps);
     await deps.directory.completeMerge(auditId, counts, isoUtc(deps.clock.now()));
   }
@@ -102,11 +127,14 @@ async function finish(auditId: number, anonId: string, targetId: string, deps: M
 async function moveRows(anonId: string, targetId: string, deps: MergeDeps): Promise<Counts> {
   const anon = deps.cells.cell(anonId);
   const target = deps.cells.cell(targetId);
+  // `beginMerge` saw the cell exist, so a cell that has gone since is a cell
+  // something else destroyed under the saga. Recording that as a merge of
+  // nothing would delete the cookie and lose the account silently.
   const state = await anon.precheck();
-  if (!state.exists) return {};
+  if (!state.exists) throw new AnonCellVanished(anonId);
 
   const anonSnapshot = await anon.dump();
-  const targetSnapshot = await target.dump();
+  const targetSnapshot = await target.mergeView();
   const before = snapshotOf(anonSnapshot, targetSnapshot, anonId, targetId);
   const { after, counts } = mergeRows(before, anonId, targetId, deps.randomHex);
 

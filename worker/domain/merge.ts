@@ -57,6 +57,18 @@ export const ROW_KEYS: Readonly<Record<string, readonly string[]>> = {
   active_workflows: ['workflow_id'],
 };
 
+/**
+ * All the policy reads from the target: the slug namespace it de-collides
+ * against, and the client keys the drop-conflicts rule tests. Every other
+ * table contributes nothing but rows that are already the target's, so a
+ * whole-cell dump would make each attempt cost a full read of the account
+ * that is not moving.
+ */
+export const TARGET_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  decks: ['id', 'name'],
+  offline_sync_idempotency: ['client_id'],
+};
+
 /** The row's identity within `table`, or null when the table has none. */
 export function rowKey(table: string, row: Row): string | null {
   const columns = ROW_KEYS[table];
@@ -226,12 +238,18 @@ export function mergeRows(
 
 const refuse = (reason: string, resolved: boolean): MergeResult => ({ resolved, merged: false, counts: {}, reason });
 
+export const SAME_USER = 'same_user';
+/** The cookie names an account that is gone: reaped, deleted, or merged elsewhere. */
+export const ANON_MISSING = 'anon_missing';
+export const NOT_ANONYMOUS = 'not_anonymous';
+export const TARGET_MISSING = 'target_missing';
+
 /** The four refusals of the merge, in the order the transaction applies them; null admits. */
 export function precheck(anon: Row | null, target: Row | null, sameUser: boolean): MergeResult | null {
-  if (sameUser) return refuse('same_user', true);
-  if (anon === null) return refuse('anon_missing', true);
-  if (!anon['is_anonymous']) return refuse('not_anonymous', false);
-  if (target === null) return refuse('target_missing', false);
+  if (sameUser) return refuse(SAME_USER, true);
+  if (anon === null) return refuse(ANON_MISSING, true);
+  if (!anon['is_anonymous']) return refuse(NOT_ANONYMOUS, false);
+  if (target === null) return refuse(TARGET_MISSING, false);
   return null;
 }
 

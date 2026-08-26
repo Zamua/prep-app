@@ -260,7 +260,8 @@ CREATE TABLE IF NOT EXISTS merge_markers (
   anon_id    TEXT PRIMARY KEY,
   target_id  TEXT NOT NULL,
   audit_id   INTEGER NOT NULL,
-  started_at TEXT NOT NULL
+  started_at TEXT NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS tombstones (

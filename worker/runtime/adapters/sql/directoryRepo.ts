@@ -79,6 +79,16 @@ export class SqlDirectoryRepo {
     });
   }
 
+  /** One attempt counted against the marker, and the count now standing. A
+   * marker that has since been cleared reports zero: the saga is over. */
+  noteMergeAttempt(anonId: string): number {
+    return this.storage.transactionSync(() => {
+      this.db.run('UPDATE merge_markers SET attempts = attempts + 1 WHERE anon_id = ?', anonId);
+      const row = this.db.first<{ attempts: number }>('SELECT attempts FROM merge_markers WHERE anon_id = ?', anonId);
+      return Number(row?.attempts ?? 0);
+    });
+  }
+
   marker(anonId: string): MergeMarker | null {
     const row = this.db.first('SELECT anon_id, target_id, audit_id, started_at FROM merge_markers WHERE anon_id = ?', anonId);
     return row ? toMarker(row) : null;

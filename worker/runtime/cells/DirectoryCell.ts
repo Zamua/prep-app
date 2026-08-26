@@ -40,6 +40,10 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
     this.repo.failMerge(auditId, error, at);
   }
 
+  async noteMergeAttempt(anonId: string): Promise<number> {
+    return this.repo.noteMergeAttempt(anonId);
+  }
+
   async marker(anonId: string): Promise<MergeMarker | null> {
     return this.repo.marker(anonId);
   }

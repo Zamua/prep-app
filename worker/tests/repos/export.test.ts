@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { seedSequences } from '../../runtime/adapters/sql/migrate.js';
+import { TARGET_COLUMNS } from '../../domain/merge.js';
 import { DATA_TABLES } from '../../runtime/adapters/sql/schema.js';
 import { cell, PARITY_NOW } from './setup.js';
 
@@ -27,6 +28,15 @@ describe('ExportRepo', () => {
     expect(snap.tables['cards']).toEqual([expect.objectContaining({ question_id: q })]);
     expect(snap.tables['reviews']).toHaveLength(1);
     expect(snap.tables['api_tokens']).toHaveLength(1);
+  });
+
+  it('projects only the columns the merge policy reads of a target', () => {
+    const { c, d } = populated();
+    const snap = c.repos.export.project(TARGET_COLUMNS);
+    expect(snap.profile).toMatchObject({ tailscale_login: 'parity@example.com' });
+    expect(Object.keys(snap.tables).sort()).toEqual(['decks', 'offline_sync_idempotency']);
+    expect(snap.tables['decks']).toEqual([{ id: d, name: 'd' }]);
+    expect(snap.tables['offline_sync_idempotency']).toEqual([{ client_id: 'c1' }]);
   });
 
   it('imports rows the target lacks, idempotent by primary key, dropping user columns', () => {

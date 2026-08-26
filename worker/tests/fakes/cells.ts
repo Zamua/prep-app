@@ -13,6 +13,7 @@ export class FakeDirectory implements Directory {
   users = new Map<string, DirectoryUser>();
   merges: MergeAudit[] = [];
   markers = new Map<string, MergeMarker>();
+  attempts = new Map<string, number>();
   tombstones = new Map<string, { reason: TombstoneReason; at: string }>();
 
   async register(id: string, isAnonymous: boolean, at: string, opts: { idx?: number } = {}): Promise<{ idx: number }> {
@@ -47,7 +48,15 @@ export class FakeDirectory implements Directory {
     if (m && m.status === 'started') {
       Object.assign(m, { status: 'failed', completed_at: at, error });
       this.markers.delete(m.anon_user_id);
+      this.attempts.delete(m.anon_user_id);
     }
+  }
+
+  async noteMergeAttempt(anonId: string): Promise<number> {
+    if (!this.markers.has(anonId)) return 0;
+    const next = (this.attempts.get(anonId) ?? 0) + 1;
+    this.attempts.set(anonId, next);
+    return next;
   }
 
   async marker(anonId: string): Promise<MergeMarker | null> {
@@ -56,6 +65,7 @@ export class FakeDirectory implements Directory {
 
   async clearMarker(anonId: string): Promise<void> {
     this.markers.delete(anonId);
+    this.attempts.delete(anonId);
   }
 
   async previousIds(targetId: string): Promise<string[]> {

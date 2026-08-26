@@ -19,10 +19,23 @@ export class SqlExportRepo implements ExportRepo {
   }
 
   dump(): CellSnapshot {
-    const profileRow = this.db.first('SELECT * FROM profile LIMIT 1');
     const tables: Record<string, Record<string, unknown>[]> = {};
     for (const table of DATA_TABLES) tables[table] = this.db.all(`SELECT * FROM "${table}" ORDER BY rowid`);
-    return { profile: profileRow ? { ...rowToProfile(profileRow) } : null, tables };
+    return { profile: this.profile(), tables };
+  }
+
+  private profile(): Record<string, unknown> | null {
+    const row = this.db.first('SELECT * FROM profile LIMIT 1');
+    return row ? { ...rowToProfile(row) } : null;
+  }
+
+  project(columns: Readonly<Record<string, readonly string[]>>): CellSnapshot {
+    const tables: Record<string, Record<string, unknown>[]> = {};
+    for (const [table, cols] of Object.entries(columns)) {
+      if (!(DATA_TABLES as readonly string[]).includes(table) || cols.length === 0) continue;
+      tables[table] = this.db.all(`SELECT ${cols.map((c) => `"${c}"`).join(', ')} FROM "${table}" ORDER BY rowid`);
+    }
+    return { profile: this.profile(), tables };
   }
 
   importRows(snapshot: CellSnapshot, _opts: { idempotentBy: 'id' }): Record<string, number> {

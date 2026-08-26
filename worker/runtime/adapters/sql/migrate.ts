@@ -10,7 +10,16 @@ export interface Migration {
 }
 
 export const USER_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(USER_SCHEMA) }];
-export const DIRECTORY_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(DIRECTORY_SCHEMA) }];
+export const DIRECTORY_MIGRATIONS: readonly Migration[] = [
+  { version: 1, apply: (db) => db.script(DIRECTORY_SCHEMA) },
+  { version: 2, apply: addMergeAttempts },
+];
+
+/** The merge's give-up counter, on markers written before it existed. */
+function addMergeAttempts(db: Db): void {
+  const has = db.first("SELECT name FROM pragma_table_info('merge_markers') WHERE name = 'attempts'");
+  if (!has) db.script('ALTER TABLE merge_markers ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
+}
 export const LIMITER_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(LIMITER_SCHEMA) }];
 
 /** 0 when the version table does not exist yet (a fresh or wiped cell). */

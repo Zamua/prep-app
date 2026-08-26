@@ -367,6 +367,9 @@ export interface OfflineRepo {
 
 export interface ExportRepo {
   dump(): CellSnapshot;
+  /** The named columns of the named tables, plus the profile: the merge's
+   * read of an account that is not moving. */
+  project(columns: Readonly<Record<string, readonly string[]>>): CellSnapshot;
   /** Inserts rows the cell lacks by primary key; user columns are dropped. Returns rows inserted per table. */
   importRows(snapshot: CellSnapshot, opts: { idempotentBy: 'id' }): Record<string, number>;
   /** Every data row, the profile kept. */
@@ -478,6 +481,9 @@ export interface Directory {
   beginMerge(anonId: string, targetId: string, at: string): Promise<{ auditId: number; marker: MergeMarker }>;
   completeMerge(auditId: number, counts: Record<string, number>, at: string): Promise<void>;
   failMerge(auditId: number, error: string, at: string): Promise<void>;
+  /** Counts this attempt against the marker and returns the count, so a merge
+   * that fails the same way every time gives up instead of retrying forever. */
+  noteMergeAttempt(anonId: string): Promise<number>;
   marker(anonId: string): Promise<MergeMarker | null>;
   clearMarker(anonId: string): Promise<void>;
   previousIds(targetId: string): Promise<string[]>;
@@ -520,6 +526,8 @@ export interface UserCellRpc {
   /** `idx` seeds the id block on the first contact; later calls keep the row's. */
   upsert(id: string, claims: ProfileClaims, at: string, idx?: number): Promise<Profile>;
   dump(): Promise<CellSnapshot>;
+  /** What a merge into this cell reads of it: the policy's target columns. */
+  mergeView(): Promise<CellSnapshot>;
   importRows(snapshot: CellSnapshot): Promise<Record<string, number>>;
   /** COPY-IF-NULL of the merge's carried profile columns; counts what moved. */
   carryPreferences(carried: CarriedPreferences): Promise<Record<string, number>>;

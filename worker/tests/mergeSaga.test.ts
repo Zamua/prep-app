@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MERGE_IN_PROGRESS, destroyAccount, hexFrom, mergeAnonymous, type MergeDeps } from '../app/auth/mergeSaga.js';
+import { AnonCellVanished, MAX_ATTEMPTS, MERGE_FAILED, MERGE_IN_PROGRESS, destroyAccount, hexFrom, mergeAnonymous, type MergeDeps } from '../app/auth/mergeSaga.js';
 import { anonAccess, cookieVerdict } from '../app/auth/anonymous.js';
 import type { Clock, UserCellRpc } from '../app/ports.js';
+import { RowCapReached } from '../domain/limits.js';
 import type { Row } from '../domain/merge.js';
 import { PARITY_SEED } from '../runtime/compose.js';
-import { namespaceUserCells } from '../runtime/adapters/cells.js';
+import { namespaceUserCells, retrying } from '../runtime/adapters/cells.js';
 import { SeededRandom } from '../runtime/adapters/random.js';
 import { DATA_TABLES } from '../runtime/adapters/sql/schema.js';
 import type { Env } from '../runtime/env.js';
@@ -456,5 +457,88 @@ describe('the deletion survives a lost durability ack', () => {
 describe('hexFrom', () => {
   it('draws the suffix the corpus recorded from the parity merge generator', () => {
     expect(hexFrom(new SeededRandom(PARITY_SEED + 1))(3)).toBe(SUFFIX);
+  });
+});
+
+// ---- giving up -------------------------------------------------------------
+
+/** Fails `method` on every call, not just the first. */
+function alwaysFails(deps: MergeDeps, method: string): MergeDeps {
+  const wrap = <T extends object>(obj: T): T =>
+    new Proxy(obj, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop) as unknown;
+        if (typeof value !== 'function') return value;
+        const fn = value as (...args: unknown[]) => unknown;
+        if (String(prop) !== method) return (...args: unknown[]) => fn.apply(target, args);
+        return () => Promise.reject(new Crash(method));
+      },
+    });
+  return { ...deps, cells: { cell: (id: string) => wrap(deps.cells.cell(id)) } };
+}
+
+describe('a merge that fails the same way every time', () => {
+  it('gives up after MAX_ATTEMPTS, records why, and resolves the cookie', async () => {
+    const f = fixture();
+    const broken = alwaysFails(f.deps, 'importRows');
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await expect(mergeAnonymous(ANON, TARGET, broken)).rejects.toBeInstanceOf(Crash);
+    }
+
+    const verdict = await mergeAnonymous(ANON, TARGET, broken);
+
+    expect(verdict).toEqual({ resolved: true, merged: false, counts: {}, reason: MERGE_FAILED });
+    expect(cookieVerdict(verdict)).toBe('clear');
+    expect(f.directory.merges).toHaveLength(1);
+    expect(f.directory.merges[0]).toMatchObject({ status: 'failed', error: `gave up after ${MAX_ATTEMPTS} attempts` });
+    // The marker goes with the audit row, so nothing keeps retrying.
+    expect(await f.directory.marker(ANON)).toBeNull();
+    // The rows never moved: they are still the anonymous account's.
+    expect(f.cells.entry(ANON).storage.rows('decks').length).toBeGreaterThan(0);
+  });
+
+  it('refuses to record a merge of nothing when the anonymous cell is destroyed mid-saga', async () => {
+    const f = fixture();
+    const reaped: MergeDeps = {
+      ...f.deps,
+      directory: new Proxy(f.directory, {
+        get(target, prop) {
+          const value = Reflect.get(target, prop) as unknown;
+          if (String(prop) !== 'beginMerge') return value;
+          return async (...args: [string, string, string]) => {
+            const out = await target.beginMerge(...args);
+            await destroyAccount(ANON, 'reaped', { cells: f.cells, directory: f.directory, clock: f.deps.clock });
+            return out;
+          };
+        },
+      }),
+    };
+
+    await expect(mergeAnonymous(ANON, TARGET, reaped)).rejects.toBeInstanceOf(AnonCellVanished);
+    expect(f.directory.merges[0]).toMatchObject({ status: 'started' });
+  });
+});
+
+describe('retrying', () => {
+  const policy = { attempts: 5, baseMs: 0, sleep: async () => {} };
+
+  it('retries a call that could not reach its cell', async () => {
+    let calls = 0;
+    await retrying(async () => {
+      calls++;
+      if (calls < 3) throw new Error('cell unreachable');
+    }, policy);
+    expect(calls).toBe(3);
+  });
+
+  it('does not retry a cap the cell decided on', async () => {
+    let calls = 0;
+    await expect(
+      retrying(async () => {
+        calls++;
+        throw new RowCapReached('too many decks');
+      }, policy),
+    ).rejects.toBeInstanceOf(RowCapReached);
+    expect(calls).toBe(1);
   });
 });
