@@ -63,6 +63,17 @@ describe('QuestionRepo', () => {
     expect(() => repos.questions.update(999, { type: 'short', prompt: 'x', answer: 'y' })).toThrow(QuestionNotFound);
   });
 
+  it('only replace writes the explanation; update leaves the stored one alone', () => {
+    const { repos } = cell();
+    const d = repos.decks.create('d');
+    const qid = repos.questions.add(d, { type: 'short', prompt: 'p', answer: 'a', explanation: 'why' });
+    repos.questions.update(qid, { type: 'short', prompt: 'p', answer: 'a', explanation: 'edited' });
+    expect(repos.questions.get(qid)?.explanation).toBe('why');
+    repos.questions.replace(qid, { type: 'short', prompt: 'p', answer: 'a', explanation: 'edited' });
+    expect(repos.questions.get(qid)?.explanation).toBe('edited');
+    expect(() => repos.questions.replace(999, { type: 'short', prompt: 'x', answer: 'y' })).toThrow(QuestionNotFound);
+  });
+
   it('lists deck cards by due then id, with attempts and rights', () => {
     const { repos, storage } = cell();
     const d = repos.decks.create('d');

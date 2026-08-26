@@ -185,8 +185,12 @@ export interface DeckRepo {
 export interface QuestionRepo {
   /** Seeds the cards row for an SRS deck; trivia decks queue instead. */
   add(deckId: number, q: NewQuestion): number;
-  /** Throws `QuestionNotFound`. SRS state survives the edit. */
+  /** Throws `QuestionNotFound`. SRS state survives the edit. The card form
+   * carries no explanation, so that column stays as it stands. */
   update(qid: number, q: NewQuestion): void;
+  /** `update` plus the explanation: a transform returns the card's whole new
+   * shape, so the field the form cannot reach moves with the rest. */
+  replace(qid: number, q: NewQuestion): void;
   setAnswerRegex(qid: number, regex: string | null): boolean;
   get(qid: number): Question | null;
   moveToDeck(questionIds: readonly number[], destDeckId: number): number;

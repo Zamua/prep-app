@@ -143,6 +143,27 @@ export class SqlQuestionRepo implements QuestionRepo {
     if (n === 0) throw new QuestionNotFound(`question ${qid} not found for user`);
   }
 
+  replace(qid: number, q: NewQuestion): void {
+    const c = columnsOf(q);
+    const n = this.db.run(
+      `UPDATE questions
+          SET type = ?, topic = ?, prompt = ?, choices = ?, answer = ?, rubric = ?, skeleton = ?, language = ?, explanation = ?, answer_regex = ?
+        WHERE id = ?`,
+      q.type,
+      q.topic ?? null,
+      q.prompt,
+      c.choices,
+      c.answer,
+      c.rubric,
+      c.skeleton,
+      c.language,
+      q.explanation ?? null,
+      q.answer_regex ?? null,
+      qid,
+    );
+    if (n === 0) throw new QuestionNotFound(`question ${qid} not found for user`);
+  }
+
   setAnswerRegex(qid: number, regex: string | null): boolean {
     return this.db.run('UPDATE questions SET answer_regex = ? WHERE id = ?', regex, qid) > 0;
   }

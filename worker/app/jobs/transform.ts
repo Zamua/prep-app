@@ -301,7 +301,9 @@ function applyModifications(repos: UserRepos, plan: TransformPlan, result: Trans
     // Go activity spent a query on; a hallucinated id is skipped.
     const existing = repos.questions.get(m.question_id);
     if (existing === null) continue;
-    repos.questions.update(m.question_id, mergeModification(existing, m));
+    // `replace`, not `update`: a modification carries the card's whole new
+    // shape, explanation included.
+    repos.questions.replace(m.question_id, mergeModification(existing, m));
     result.modified_ids.push(m.question_id);
   }
 }
