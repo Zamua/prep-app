@@ -145,6 +145,10 @@ export function coerceTriviaPairs(value: unknown): TriviaPair[] {
   return value.filter(isDict).map((raw) => withOptional<TriviaPair>({ q: str(raw['q']), a: str(raw['a']) }, { e: str(raw['e']) }));
 }
 
+/** Before the call returns: the batch it was asked for, beside the counters
+ * Go's zero-valued ints marshalled. */
+export const triviaStarting = (total: number): JsonRecord => ({ total, generated_count: 0, inserted: 0, skipped_dups: 0, skipped_invalid: 0 });
+
 export const triviaGenerated = (total: number): JsonRecord => ({ total, generated_count: total, inserted: 0, skipped_dups: 0, skipped_invalid: 0 });
 
 export const triviaProgress = (counts: TriviaCounts): JsonRecord => ({ ...counts });

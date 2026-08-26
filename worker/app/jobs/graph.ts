@@ -1,7 +1,9 @@
 // The four job kinds as data. The runner reads these and nothing else, so a
 // workflow's shape is reviewable as a table rather than as control flow.
 // Retry values are the Go worker's RetryPolicy values, transcribed.
+import { triviaStarting } from '../../domain/jobs/progress.js';
 import type { RetryPolicy, StepGraph } from '../../domain/jobs/graph.js';
+import { triviaBatchSize } from './trivia.js';
 import type { JobKind } from '../ports.js';
 
 // One definition, in the port; re-exported here so a graph and its key set
@@ -50,7 +52,7 @@ export const TRANSFORM_GRAPH: StepGraph = {
   kind: 'Transform',
   partial: 'partials/transform_progress.html',
   doneStatus: 'done',
-  progressFromInput: ['scope'],
+  progressSeed: (input) => ({ scope: input['scope'] ?? null }),
   nodes: [
     { name: 'compute', kind: 'llm', retry: LLM, status: 'computing' },
     {
@@ -79,6 +81,8 @@ export const TRIVIA_GRAPH: StepGraph = {
   kind: 'TriviaGenerate',
   partial: 'partials/trivia_generating_progress.html',
   doneStatus: 'done',
+  // The batch the call was asked for, shown as "up to N" while it runs.
+  progressSeed: (input) => triviaStarting(triviaBatchSize(input)),
   nodes: [
     { name: 'generate', kind: 'llm', retry: LLM, status: 'generating' },
     { name: 'insert', kind: 'write', retry: TRIVIA_WRITE, fanout: { mode: 'per-item', from: 'generate' }, onError: 'skip', status: 'applying' },

@@ -78,9 +78,9 @@ export interface StepGraph {
   partial: string | null;
   /** The status a finished run lands on. */
   doneStatus: string;
-  /** Input keys copied into the progress payload before the first step runs,
-   * so a partial polling at transition 1 already has them. */
-  progressFromInput?: readonly string[];
+  /** The payload a job starts with, before any step has run, so a partial
+   * polling at transition 1 reads what Go's zero-valued struct marshalled. */
+  progressSeed?: (input: Readonly<Record<string, unknown>>) => Record<string, unknown>;
 }
 
 /** Terminal statuses the runner writes; `gone` is what a missing row renders. */

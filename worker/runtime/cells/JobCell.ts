@@ -443,8 +443,7 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     steps: readonly StepRow[],
     extra: Record<string, unknown> = {},
   ): { job: JobWrite; outbox: Omit<OutboxRow, 'delivered_at' | 'attempt' | 'next_attempt_at'> } {
-    const base: Record<string, unknown> = { started_at: state.job.created_at };
-    for (const key of state.graph.progressFromInput ?? []) base[key] = state.job.input[key] ?? null;
+    const base: Record<string, unknown> = { started_at: state.job.created_at, ...(state.graph.progressSeed?.(state.job.input) ?? {}) };
     const payload = mergeProgress(base, steps);
     Object.assign(payload, extra);
     payload['status'] = status;

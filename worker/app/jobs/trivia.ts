@@ -96,9 +96,15 @@ export function parseTriviaJson(raw: string): TriviaPair[] {
   }
 }
 
+/** The batch this job asks the model for; an uncapped tier leaves the input
+ * at zero, which is the default the Go workflow substituted. */
+export function triviaBatchSize(input: Readonly<Record<string, unknown>>): number {
+  return triviaJobInput(input).batchSize || DEFAULT_BATCH_SIZE;
+}
+
 export const generateStep = llmStep(async (ctx) => {
   const input = triviaJobInput(ctx.input);
-  const batch = input.batchSize > 0 ? input.batchSize : DEFAULT_BATCH_SIZE;
+  const batch = triviaBatchSize(ctx.input);
   const text = await ctx.agent.complete({ system: '', user: buildTriviaPrompt(batch, input.topic, input.existing) });
   let pairs = parseTriviaJson(text);
   // The prompt's "exactly N" is advisory; the cap is enforced here.

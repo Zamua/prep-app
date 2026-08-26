@@ -17,7 +17,7 @@ const GRAPH: StepGraph = {
   kind: 'Demo',
   partial: null,
   doneStatus: 'done',
-  progressFromInput: ['scope'],
+  progressSeed: (input) => ({ scope: input['scope'] ?? null }),
   nodes: [
     { name: 'plan', kind: 'llm', retry: ONCE, status: 'planning' },
     {
