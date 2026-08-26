@@ -24,17 +24,31 @@ BASE_URL_ENV = "PARITY_BASE_URL"
 INTERNAL_TOKEN_ENV = "PARITY_INTERNAL_TOKEN"
 
 
+SEED_ATTEMPTS = 4
+
+
 def seed(base_url: str, user: str, profile: str, *, token: str | None = None) -> dict:
+    """Re-seed the target, retrying a 5xx.
+
+    A cell-backed target answers the wipe from a replicated store: when a
+    durability proof times out the cell restarts and the write never landed,
+    which the runtime documents as retryable. A 4xx is the request's own
+    fault and is raised on the first answer.
+    """
     token = token or os.environ.get(INTERNAL_TOKEN_ENV) or PARITY_INTERNAL_TOKEN
-    r = httpx.post(
-        f"{base_url}/_parity/seed",
-        json={"user": user, "profile": profile},
-        headers={"X-Internal-Token": token},
-        timeout=60.0,
-    )
-    if r.status_code != 200:
-        raise RuntimeError(f"seed {profile!r} for {user!r}: {r.status_code} {r.text[:300]}")
-    return r.json()
+    for attempt in range(1, SEED_ATTEMPTS + 1):
+        r = httpx.post(
+            f"{base_url}/_parity/seed",
+            json={"user": user, "profile": profile},
+            headers={"X-Internal-Token": token},
+            timeout=60.0,
+        )
+        if r.status_code == 200:
+            return r.json()
+        if r.status_code < 500 or attempt == SEED_ATTEMPTS:
+            raise RuntimeError(f"seed {profile!r} for {user!r}: {r.status_code} {r.text[:300]}")
+        time.sleep(attempt)
+    raise AssertionError("unreachable")
 
 
 def parity_env(db_path: Path, llm_base_url: str) -> dict[str, str]:
