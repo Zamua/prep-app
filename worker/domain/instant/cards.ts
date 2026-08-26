@@ -1,6 +1,6 @@
 // Topic hygiene, the prompt, and the parse of model output into wire
 // cards. Lengths are code points.
-import { codePoints, pyStrip } from '../py.js';
+import { PY_SPACE, codePoints, pyStrip } from '../py';
 
 export const TOPIC_MAX_CHARS = 500;
 export const DISPLAY_NAME_MAX_CHARS = 60;
@@ -26,7 +26,6 @@ export interface InstantCard {
 export type RegexValidator = (pattern: unknown, expectedLiteral: string) => string | null;
 
 // Python `\s`: the str.isspace() set, not JS's.
-const PY_SPACE = '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
 const SPACES = new RegExp(`[${PY_SPACE}]+`, 'g');
 const LEADING_FENCE = new RegExp(`^\`\`\`(?:json)?[${PY_SPACE}]*`, 'i');
 const TRAILING_FENCE = new RegExp(`[${PY_SPACE}]*\`\`\`[${PY_SPACE}]*$`);

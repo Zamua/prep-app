@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { matchRegex, translatePattern, validateRegexUpdate } from '../../domain/grading';
+import { PY_SPACE } from '../../domain/py';
 import { pythonJson } from '../pyoracle';
 
 // Every pattern runs through Python's match_regex too. The port may answer
@@ -28,6 +29,15 @@ const TRANSLATED: Row[] = [
   ['escaped-bracket-in-class', '[a\\]]+', 'a]a'],
   ['escaped-slash', '\\/', '/'],
   ['escaped-backslash-then-w', 'x\\\\wé', 'x\\wé'],
+  ['space-nel', 'a\\sb', 'a\u0085b'],
+  ['space-file-separator', 'a\\sb', 'a\u001cb'],
+  ['optional-space', 'new\\s?york', 'newyork'],
+  ['nonspace-bom', 'a\\Sb', 'a\ufeffb'],
+  ['space-in-class', 'x[\\s,]y', 'x\u00a0y'],
+  ['space-class-then-dash', 'x[\\s-]y', 'x-y'],
+  ['space-class-after-dash', 'x[-\\s]y', 'x y'],
+  ['ref-after-inner-alternation', '(a|b)\\1', 'bb'],
+  ['ref-then-quantifier', '(a)\\1?', 'a'],
 ];
 
 const REFUSED: Row[] = [
@@ -64,6 +74,24 @@ const REFUSED: Row[] = [
   ['shorthand-non-ascii-pattern', 'caf\\w+', 'café'],
   ['shorthand-non-ascii-answer', '\\w+', 'naïve'],
   ['boundary-non-ascii-answer', '\\bcafé\\b', 'café'],
+  ['nonboundary-empty-answer', '\\B', ''],
+  ['nonboundary-empty-answer-optional', 'a?\\B', ''],
+  ['lookbehind-variable', '(?<=a*)b', 'b'],
+  ['lookbehind-fixed', '(?<=a)b', 'ab'],
+  ['negative-lookbehind', '(?<!a)b', 'b'],
+  ['duplicate-group-name', '(?P<n>a)|(?P<n>b)', 'b'],
+  ['forward-named-ref', '(?P=n)(?P<n>a)', 'a'],
+  ['forward-numbered-ref', '\\1(a)', 'a'],
+  ['open-group-ref', '(a\\1)', 'a'],
+  ['ref-across-alternation', '(a)|\\1', ''],
+  ['ref-to-optional-group', '(a)?\\1b', 'b'],
+  ['ref-to-nested-group', '(?:(a)|b)\\1', 'b'],
+  ['two-digit-ref', '\\10', 'a'],
+  ['surrogate-pair-escapes', '\\uD83D\\uDE00', '😀'],
+  ['lone-surrogate-escape', '\\uD83D', 'x'],
+  ['nonspace-in-class', '[^\\S]', ' '],
+  ['space-range-end', '[a-\\s]', 'x'],
+  ['space-range-start', '[\\s-z]', 'x'],
 ];
 
 const PLAIN: Row[] = [
@@ -87,6 +115,9 @@ const PLAIN: Row[] = [
   ['over-cap', 'a'.repeat(501), 'a'.repeat(501)],
   ['astral-cap-in-code-points', '😀'.repeat(300), '😀'.repeat(300)],
   ['empty-answer', 'a?', ''],
+  ['space-vs-bom', 'a\\sb', 'a\ufeffb'],
+  ['nonspace-vs-nel', 'a\\Sb', 'a\u0085b'],
+  ['boundary-empty-answer', '\\b', ''],
 ];
 
 const ROWS = [...TRANSLATED, ...REFUSED, ...PLAIN];
@@ -119,6 +150,25 @@ describe('translated patterns grade', () => {
     expect(translatePattern('a\\ b\\_\\#\\-[\\-\\ ]')).toBe('a b_#-[\\- ]');
     expect(translatePattern('\\.\\*\\/\\\\')).toBe('\\.\\*\\/\\\\');
     expect(translatePattern('[(?P<x]')).toBe('[(?P<x]');
+    expect(translatePattern('a\\sb')).toBe(`a[${PY_SPACE}]b`);
+    expect(translatePattern('a\\Sb')).toBe(`a[^${PY_SPACE}]b`);
+    expect(translatePattern('[\\s,]')).toBe(`[${PY_SPACE},]`);
+  });
+});
+
+describe('the translated \\s is str.isspace() on every BMP code point', () => {
+  const probe = [...Array.from({ length: 0xd800 }, (_, i) => i), ...Array.from({ length: 0x10000 - 0xe000 }, (_, i) => 0xe000 + i), 0x1680, 0x1f600, 0x10ffff];
+  const python = pythonJson<string[]>(
+    `import json, re
+cps = json.loads(${JSON.stringify(JSON.stringify(probe))})
+flags = re.I | re.S
+s = re.compile(r"\\s", flags); S = re.compile(r"\\S", flags)
+print(json.dumps(["".join("1" if s.fullmatch(chr(c)) else "0" for c in cps), "".join("1" if S.fullmatch(chr(c)) else "0" for c in cps)]))`,
+  );
+  it.each([['\\s', 0], ['\\S', 1]] as const)('%s', (pattern, column) => {
+    const re = new RegExp(`^(?:${translatePattern(pattern)})$`, 'isu');
+    const ours = probe.map((c) => (re.test(String.fromCodePoint(c)) ? '1' : '0')).join('');
+    expect(ours).toBe(python[column]);
   });
 });
 
@@ -157,8 +207,39 @@ describe('validateRegexUpdate uses the same translation', () => {
     expect(validateRegexUpdate('\\Aparis\\Z', 'Paris')).toBeNull();
     expect(validateRegexUpdate('(?i:paris)', 'Paris')).toBeNull();
   });
-  it('keeps the shorthand rule out of validation', () => {
+  it('applies the trust rule over the expected and prior answers', () => {
     expect(validateRegexUpdate('caf\\w+', 'cafe')).toBe('caf\\w+');
+    expect(validateRegexUpdate('\\w+', 'café')).toBeNull();
+    expect(validateRegexUpdate('\\w+', 'cafe', 'café')).toBeNull();
+    expect(validateRegexUpdate('\\D', '١')).toBeNull();
+    expect(validateRegexUpdate('a?\\B', '')).toBeNull();
+    expect(validateRegexUpdate('(?<=a*)b', 'b')).toBeNull();
+    expect(validateRegexUpdate('(a)?\\1b', 'b')).toBeNull();
+    expect(validateRegexUpdate('new\\s?york', 'New York', 'newyork')).toBe('new\\s?york');
+  });
+  it('never persists what Python refuses', () => {
+    const rows: [string, string, string | null][] = [
+      ['\\w+', 'café', null],
+      ['\\D', '١', null],
+      ['\\W', 'é', null],
+      ['a?\\B', '', null],
+      ['(?<=a*)b', 'b', null],
+      ['(?P<n>a)|(?P<n>b)', 'b', null],
+      ['(a)?\\1b', 'b', null],
+      ['new\\s?york', 'New York', 'newyork'],
+      ['a\\sb', 'a\u0085b', null],
+    ];
+    const python = pythonJson<(string | null)[]>(
+      `import json
+from prep.domain.grading import validate_regex_update
+rows = json.loads(${JSON.stringify(JSON.stringify(rows))})
+print(json.dumps([validate_regex_update(p, expected_literal=e, prior_given=g) for p, e, g in rows]))`,
+    );
+    rows.forEach(([p, e, g], i) => {
+      const ours = validateRegexUpdate(p, e, g);
+      if (ours !== null) expect(ours, p).toBe(python[i]);
+    });
+    expect(validateRegexUpdate('new\\s?york', 'New York', 'newyork')).toBe(python[7]);
   });
   it('counts the cap in code points', () => {
     expect(validateRegexUpdate('😀'.repeat(500), '😀'.repeat(500))).toBe('😀'.repeat(500));

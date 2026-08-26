@@ -21,9 +21,12 @@ export function pyRound(x: number, nd = 0): number {
   return Number(x.toFixed(nd));
 }
 
-// str.isspace(): 0x09-0x0D, 0x1C-0x1F, space, NEL, NBSP and the Zs block.
-// Not JS trim(): U+FEFF stays, U+0085 and U+001C-U+001F go.
-const PY_SPACE = '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
+/**
+ * str.isspace() as class body text: 0x09-0x0D, 0x1C-0x1F, space, NEL, NBSP
+ * and the Zs block. Not JS trim() or \s: U+FEFF stays out, U+0085 and
+ * U+001C-U+001F are in.
+ */
+export const PY_SPACE = '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
 const STRIP = new RegExp(`^[${PY_SPACE}]+|[${PY_SPACE}]+$`, 'g');
 
 /** Python `str.strip()`. */
