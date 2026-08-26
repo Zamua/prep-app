@@ -33,13 +33,6 @@ from tests.parity.oracles.contracts import INSTANT_DECK, extract
 from tests.parity.oracles.harness import remote_app
 from tests.parity.oracles.test_oracles import compare_pairs
 
-# `.apkg` is phase 5, so its two calls are not replayed and the deck they
-# would have created is dropped from the list pair that follows them.
-PHASE_5 = frozenset({"mcp-call-prep_export_deck_apkg", "mcp-call-prep_import_apkg"})
-APKG_DECK = "mcp-restored"
-LIST_AFTER = "v1-decks-list-after"
-
-
 LLM_STUB_ENV = "PARITY_LLM_STUB_URL"
 DEFAULT_LLM_STUB = "http://127.0.0.1:8089"
 
@@ -49,21 +42,6 @@ def base_url() -> str:
     if not url:
         pytest.skip(f"set {BASE_URL_ENV} to a running TypeScript parity server")
     return url.rstrip("/")
-
-
-def without_phase_5(corpus: dict) -> dict:
-    """The corpus as this phase owns it: the two deferred calls removed,
-    and the deck the import would have created removed from the list."""
-    pairs = []
-    for pair in corpus["pairs"]:
-        if pair["name"] in PHASE_5:
-            continue
-        if pair["name"] == LIST_AFTER:
-            body = pair["response"]["json"]
-            decks = [d for d in body["decks"] if d["name"] != APKG_DECK]
-            pair = {**pair, "response": {**pair["response"], "json": {**body, "decks": decks}}}
-        pairs.append(pair)
-    return {**corpus, "pairs": pairs}
 
 
 @pytest.fixture(scope="module")
@@ -77,20 +55,22 @@ def replayed() -> dict:
 
 
 def test_the_corpus_replays_against_the_server(replayed: dict):
-    corpus = without_phase_5(json.loads(read_corpus("contracts")["pairs.json"]))
-    candidate = without_phase_5(replayed)
-    assert len(candidate["pairs"]) == 128
+    corpus = json.loads(read_corpus("contracts")["pairs.json"])
+    candidate = replayed
+    assert len(candidate["pairs"]) == 130
     diffs = compare_pairs(json.dumps(corpus), json.dumps(candidate))
     assert not diffs, "\n".join(diffs[:20]) + (
         f"\n... {len(diffs) - 20} more" if len(diffs) > 20 else ""
     )
 
 
-def test_the_two_deferred_calls_answer_a_tool_error(replayed: dict):
-    """Phase 5 owns the codecs, not the route: the tool has to exist and
-    refuse, or `tools/call` is answering a different shape."""
+def test_the_apkg_tools_round_trip(replayed: dict):
+    """The export hands its base64 to the import in the same replay, so a
+    codec that writes a package it cannot read fails here and nowhere else."""
     by_name = {p["name"]: p for p in replayed["pairs"]}
-    for name in PHASE_5:
-        pair = by_name[name]
-        assert pair["response"]["status"] == 200, name
-        assert pair["response"]["json"]["result"]["isError"] is True, name
+    exported = by_name["mcp-call-prep_export_deck_apkg"]["response"]["json"]["result"]
+    assert exported["isError"] is False
+    assert json.loads(exported["content"][0]["text"])["filename"] == "mcp-renamed.apkg"
+    imported = by_name["mcp-call-prep_import_apkg"]["response"]["json"]["result"]
+    assert imported["isError"] is False
+    assert json.loads(imported["content"][0]["text"])["inserted"] == 4

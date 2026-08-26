@@ -3,20 +3,24 @@
 // redirect; the cell's route table turns that into a response.
 import { MAX_DESIRED_RETENTION, MIN_DESIRED_RETENTION } from '../../domain/fsrs/index.js';
 import { pyRepr } from '../../domain/grading/pyrepr.js';
-import { pyStrip } from '../../domain/py.js';
-import { deckToCsv } from '../api/deckIo.js';
+import { parseIso, pyStrip } from '../../domain/py.js';
+import { csvToDeck, deckToCsv, questionsForExport } from '../api/deckIo.js';
+import { ankiNotesToDeck } from './anki.js';
+import { buildApkg } from './ankiExport.js';
+import { deckToPrepdeck, prepdeckToDeck } from './archive.js';
+import { ARCHIVE_TOO_LARGE, EXPORT_TOO_LARGE, MAX_EXPORT_QUESTIONS, MAX_IMPORT_ROWS, MAX_ZIP_ENTRY_BYTES } from './importLimits.js';
 import type { Question } from '../entities.js';
 import { AppError, badRequest, notFound } from '../errors.js';
 import { requireFundedWorkflow } from '../agent/funding.js';
 import { planStartInput, triviaStartInput } from '../jobs/startInput.js';
 import { agentAvailable } from '../pageContext.js';
 import { empty, page, redirect, redirectBack, type PageRequest, type PageResult } from '../pageResult.js';
-import { RunnerUnavailable, type Random, type UserRepos, type WorkflowRunner } from '../ports.js';
+import { NotAnApkg, RunnerUnavailable, ZipEntryTooLarge, type ApkgReader, type ApkgWriter, type Random, type UserRepos, type WorkflowRunner, type ZipCodec } from '../ports.js';
 import { parseQuestionForm, questionFormFromEntity } from './questionForm.js';
 import { RETENTION_PRESETS, pyFloat } from '../settings/srs.js';
 import { addQuestion, setNotificationsEnabled, splitDeck, SplitRejected } from './service.js';
 import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
-import { MAX_CONTEXT_PROMPT_CHARS, MAX_TOPIC_PROMPT_CHARS, uniqueSlug, validateDisplayName } from './validation.js';
+import { MAX_CONTEXT_PROMPT_CHARS, MAX_TOPIC_PROMPT_CHARS, uniqueSlug, validateDeckName, validateDisplayName } from './validation.js';
 
 export const DECK_NOT_FOUND = 'deck not found';
 export const QUESTION_NOT_FOUND = 'question not found';
@@ -212,7 +216,105 @@ export function deckEditWithClaude(req: PageRequest): PageResult {
 export function deckExportHub(repos: UserRepos, req: PageRequest): PageResult {
   const name = req.params['name']!;
   const id = deckId(repos, name);
-  return page('deck_export.html', { deck_name: name, deck_type: repos.decks.getType(id) ?? 'srs' });
+  return page('deck_export.html', { deck_name: name, deck_type: repos.decks.getType(id) ?? 'srs', error: null });
+}
+
+/** The hub again, carrying the one refusal it can produce. */
+function exportRefusal(repos: UserRepos, name: string, id: number): PageResult {
+  return page('deck_export.html', { deck_name: name, deck_type: repos.decks.getType(id) ?? 'srs', error: EXPORT_TOO_LARGE }, 413);
+}
+
+const download = (bytes: Uint8Array, contentType: string, filename: string): PageResult => ({
+  bytes,
+  status: 200,
+  headers: { 'content-type': contentType, 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'no-store' },
+});
+
+export function deckExportPrepdeck(repos: UserRepos, req: PageRequest, deps: { zip: ZipCodec }): PageResult {
+  const name = req.params['name']!;
+  const id = deckId(repos, name);
+  if (repos.questions.listInDeck(id).length > MAX_EXPORT_QUESTIONS) return exportRefusal(repos, name, id);
+  const bytes = deckToPrepdeck(repos, id, deps.zip, req.now.replace('+00:00', 'Z'));
+  return download(bytes, 'application/zip', `${name}.prepdeck`);
+}
+
+export async function deckExportApkg(repos: UserRepos, req: PageRequest, deps: { apkg: ApkgWriter; subject: string }): Promise<PageResult> {
+  const name = req.params['name']!;
+  const id = deckId(repos, name);
+  const questions = questionsForExport(repos, id);
+  if (questions.length > MAX_EXPORT_QUESTIONS) return exportRefusal(repos, name, id);
+  const nowMs = parseIso(req.now).getTime();
+  const { col, notes, cards } = buildApkg(name, questions, deps.subject, nowMs, req.now.slice(0, 10));
+  return download(await deps.apkg.build(col, notes, cards), 'application/octet-stream', `${name}.apkg`);
+}
+
+// ---- the three importers ---------------------------------------------------
+
+/** Every importer page takes the same three keys and nothing else. */
+const importPage = (template: string, outcome: unknown, error: string | null, status?: number): PageResult => page(template, { outcome, error }, status);
+
+/** The deck name a form posted, or the page re-rendered with why it is not
+ * usable. Python raises `HTTPException` here and renders its detail. */
+function importDeckName(template: string, raw: string): { name: string } | { refusal: PageResult } {
+  try {
+    return { name: validateDeckName(raw) };
+  } catch (e) {
+    if (e instanceof AppError) return { refusal: importPage(template, null, e.detail, 400) };
+    throw e;
+  }
+}
+
+export function deckImportCsvForm(): PageResult {
+  return importPage('deck_import_csv.html', null, null);
+}
+
+export function deckImportCsvSubmit(repos: UserRepos, req: PageRequest): PageResult {
+  const template = 'deck_import_csv.html';
+  if (!req.upload) return importPage(template, null, 'Pick a CSV file to upload.', 400);
+  const named = importDeckName(template, pyStrip(req.form.get('name') ?? ''));
+  if ('refusal' in named) return named.refusal;
+  // Undecodable bytes become replacement characters rather than a refusal:
+  // a mostly-fine CSV with one bad byte still imports.
+  const csvText = new TextDecoder('utf-8').decode(req.upload.bytes);
+  return importPage(template, csvToDeck(repos, named.name, csvText, { rowCap: MAX_IMPORT_ROWS }), null);
+}
+
+export function deckImportPrepdeckForm(): PageResult {
+  return importPage('deck_import_prepdeck.html', null, null);
+}
+
+export function deckImportPrepdeckSubmit(repos: UserRepos, req: PageRequest, deps: { zip: ZipCodec }): PageResult {
+  const template = 'deck_import_prepdeck.html';
+  if (!req.upload) return importPage(template, null, 'Pick a .prepdeck file to upload.', 400);
+  const named = importDeckName(template, pyStrip(req.form.get('name') ?? ''));
+  if ('refusal' in named) return named.refusal;
+  try {
+    const outcome = prepdeckToDeck(repos, named.name, req.upload.bytes, deps.zip, { rowCap: MAX_IMPORT_ROWS, maxEntryBytes: MAX_ZIP_ENTRY_BYTES });
+    return importPage(template, outcome, null);
+  } catch (e) {
+    if (e instanceof ZipEntryTooLarge) return importPage(template, null, ARCHIVE_TOO_LARGE, 400);
+    throw e;
+  }
+}
+
+export function deckImportAnkiForm(): PageResult {
+  return importPage('deck_import_anki.html', null, null);
+}
+
+export async function deckImportAnkiSubmit(repos: UserRepos, req: PageRequest, deps: { apkg: ApkgReader }): Promise<PageResult> {
+  const template = 'deck_import_anki.html';
+  if (!req.upload) return importPage(template, null, 'Pick an .apkg file to upload.', 400);
+  const named = importDeckName(template, pyStrip(req.form.get('name') ?? ''));
+  if ('refusal' in named) return named.refusal;
+  let notes;
+  try {
+    notes = await deps.apkg.notes(req.upload.bytes, { maxEntryBytes: MAX_ZIP_ENTRY_BYTES });
+  } catch (e) {
+    if (e instanceof ZipEntryTooLarge) return importPage(template, null, ARCHIVE_TOO_LARGE, 400);
+    if (e instanceof NotAnApkg) return importPage(template, null, e.message, 400);
+    throw e;
+  }
+  return importPage(template, ankiNotesToDeck(repos, named.name, notes, { noteCap: MAX_IMPORT_ROWS }), null);
 }
 
 /** The hub's CSV button. `no-store`: a download taken right after adding a

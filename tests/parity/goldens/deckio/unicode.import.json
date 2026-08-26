@@ -1,0 +1,344 @@
+{
+ "apkg": {
+  "outcome": {
+   "cloze_skipped": 0,
+   "deck_id": 4,
+   "deck_name": "from-apkg",
+   "errors": [],
+   "inserted": 4,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "東京\n\nTopic: 地理",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "日本の首都は？",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "A flashcard 🎴 emoji\n\nExplanation:\nAstral plane: U+1F3B4.",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "What does 🎴 mean here?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "القاهرة\n\nTopic: جغرافيا",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "ما هي عاصمة مصر؟",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "Ja — mit Gedankenstrich",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Zwei Wörter mit NBSP",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-apkg",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "日本の首都は？",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "What does 🎴 mean here?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "ما هي عاصمة مصر؟",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Zwei Wörter mit NBSP",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ },
+ "csv": {
+  "outcome": {
+   "deck_id": 2,
+   "deck_name": "from-csv",
+   "errors": [],
+   "inserted": 4,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "東京",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "日本の首都は？",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "地理",
+     "type": "short"
+    },
+    {
+     "answer": "A flashcard 🎴 emoji",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": "Astral plane: U+1F3B4.",
+     "language": null,
+     "prompt": "What does 🎴 mean here?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "القاهرة",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "ما هي عاصمة مصر؟",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "جغرافيا",
+     "type": "short"
+    },
+    {
+     "answer": "Ja — mit Gedankenstrich",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Zwei Wörter mit NBSP",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-csv",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "日本の首都は？",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "What does 🎴 mean here?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "ما هي عاصمة مصر؟",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Zwei Wörter mit NBSP",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ },
+ "prepdeck": {
+  "outcome": {
+   "deck_id": 3,
+   "deck_name": "from-prepdeck",
+   "errors": [],
+   "inserted": 4,
+   "queue_rows_inserted": 0,
+   "reviews_inserted": 0,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "東京",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "日本の首都は？",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "地理",
+     "type": "short"
+    },
+    {
+     "answer": "A flashcard 🎴 emoji",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": "Astral plane: U+1F3B4.",
+     "language": null,
+     "prompt": "What does 🎴 mean here?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "القاهرة",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "ما هي عاصمة مصر؟",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "جغرافيا",
+     "type": "short"
+    },
+    {
+     "answer": "Ja — mit Gedankenstrich",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Zwei Wörter mit NBSP",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": "多言語 / متعدد اللغات",
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-prepdeck",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "日本の首都は？",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "What does 🎴 mean here?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "ما هي عاصمة مصر؟",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Zwei Wörter mit NBSP",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ }
+}

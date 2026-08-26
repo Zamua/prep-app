@@ -1,0 +1,333 @@
+{
+ "entries": [
+  "collection.anki21",
+  "media"
+ ],
+ "media": "{}",
+ "tables": {
+  "cards": [
+   {
+    "data": "",
+    "did": 1700000000001,
+    "due": 1,
+    "factor": 0,
+    "flags": 0,
+    "id": 1773500500000,
+    "ivl": 0,
+    "lapses": 0,
+    "left": 0,
+    "mod": 1773500400,
+    "nid": 1773500400000,
+    "odid": 0,
+    "odue": 0,
+    "ord": 0,
+    "queue": 0,
+    "reps": 0,
+    "type": 0,
+    "usn": -1
+   },
+   {
+    "data": "",
+    "did": 1700000000001,
+    "due": 2,
+    "factor": 0,
+    "flags": 0,
+    "id": 1773500500001,
+    "ivl": 0,
+    "lapses": 0,
+    "left": 0,
+    "mod": 1773500400,
+    "nid": 1773500400001,
+    "odid": 0,
+    "odue": 0,
+    "ord": 0,
+    "queue": 0,
+    "reps": 0,
+    "type": 0,
+    "usn": -1
+   },
+   {
+    "data": "",
+    "did": 1700000000001,
+    "due": 3,
+    "factor": 0,
+    "flags": 0,
+    "id": 1773500500002,
+    "ivl": 0,
+    "lapses": 0,
+    "left": 0,
+    "mod": 1773500400,
+    "nid": 1773500400002,
+    "odid": 0,
+    "odue": 0,
+    "ord": 0,
+    "queue": 0,
+    "reps": 0,
+    "type": 0,
+    "usn": -1
+   },
+   {
+    "data": "",
+    "did": 1700000000001,
+    "due": 4,
+    "factor": 0,
+    "flags": 0,
+    "id": 1773500500003,
+    "ivl": 0,
+    "lapses": 0,
+    "left": 0,
+    "mod": 1773500400,
+    "nid": 1773500400003,
+    "odid": 0,
+    "odue": 0,
+    "ord": 0,
+    "queue": 0,
+    "reps": 0,
+    "type": 0,
+    "usn": -1
+   }
+  ],
+  "col": [
+   {
+    "conf": {
+     "activeDecks": [
+      1
+     ],
+     "addToCur": true,
+     "collapseTime": 1200,
+     "curDeck": 1,
+     "curModel": 1700000000000,
+     "dueCounts": true,
+     "estTimes": true,
+     "newBury": true,
+     "newSpread": 0,
+     "nextPos": 1,
+     "sortBackwards": false,
+     "sortType": "noteFld",
+     "timeLim": 0
+    },
+    "crt": 1773500400,
+    "dconf": {
+     "1": {
+      "autoplay": true,
+      "id": 1,
+      "lapse": {
+       "delays": [
+        10
+       ],
+       "leechAction": 0,
+       "leechFails": 8,
+       "minInt": 1,
+       "mult": 0
+      },
+      "maxTaken": 60,
+      "mod": 0,
+      "name": "Default",
+      "new": {
+       "bury": false,
+       "delays": [
+        1,
+        10
+       ],
+       "initialFactor": 2500,
+       "ints": [
+        1,
+        4,
+        7
+       ],
+       "order": 1,
+       "perDay": 20,
+       "separate": true
+      },
+      "replayq": true,
+      "rev": {
+       "bury": false,
+       "ease4": 1.3,
+       "fuzz": 0.05,
+       "ivlFct": 1,
+       "maxIvl": 36500,
+       "minSpace": 1,
+       "perDay": 100
+      },
+      "timer": 0,
+      "usn": -1
+     }
+    },
+    "decks": {
+     "1": {
+      "browserCollapsed": false,
+      "collapsed": false,
+      "conf": 1,
+      "desc": "",
+      "dyn": 0,
+      "extendNew": 10,
+      "extendRev": 50,
+      "id": 1,
+      "lrnToday": [
+       0,
+       0
+      ],
+      "mod": 1773500400,
+      "name": "Default",
+      "newToday": [
+       0,
+       0
+      ],
+      "revToday": [
+       0,
+       0
+      ],
+      "timeToday": [
+       0,
+       0
+      ],
+      "usn": -1
+     },
+     "1700000000001": {
+      "browserCollapsed": false,
+      "collapsed": false,
+      "conf": 1,
+      "desc": "Exported from prep on 2026-03-14",
+      "dyn": 0,
+      "extendNew": 10,
+      "extendRev": 50,
+      "id": 1700000000001,
+      "lrnToday": [
+       0,
+       0
+      ],
+      "mod": 1773500400,
+      "name": "quoting",
+      "newToday": [
+       0,
+       0
+      ],
+      "revToday": [
+       0,
+       0
+      ],
+      "timeToday": [
+       0,
+       0
+      ],
+      "usn": -1
+     }
+    },
+    "dty": 0,
+    "id": 1,
+    "ls": 0,
+    "mod": 1773500400,
+    "models": {
+     "1700000000000": {
+      "css": ".card { font-family: arial; font-size: 20px; text-align: left; color: black; background: white; }",
+      "did": 1700000000001,
+      "flds": [
+       {
+        "font": "Arial",
+        "name": "Front",
+        "ord": 0,
+        "rtl": false,
+        "size": 20,
+        "sticky": false
+       },
+       {
+        "font": "Arial",
+        "name": "Back",
+        "ord": 1,
+        "rtl": false,
+        "size": 20,
+        "sticky": false
+       }
+      ],
+      "id": 1700000000000,
+      "latexPost": "",
+      "latexPre": "",
+      "mod": 1773500400,
+      "name": "Basic (prep export)",
+      "req": [
+       [
+        0,
+        "any",
+        [
+         0
+        ]
+       ]
+      ],
+      "sortf": 0,
+      "tmpls": [
+       {
+        "afmt": "{{FrontSide}}<hr id=\"answer\">{{Back}}",
+        "bafmt": "",
+        "bfont": "",
+        "bqfmt": "",
+        "bsize": 0,
+        "did": null,
+        "name": "Card 1",
+        "ord": 0,
+        "qfmt": "{{Front}}"
+       }
+      ],
+      "type": 0,
+      "usn": -1
+     }
+    },
+    "scm": 1773500400000,
+    "tags": {},
+    "usn": -1,
+    "ver": 11
+   }
+  ],
+  "graves": [],
+  "notes": [
+   {
+    "data": "",
+    "flags": 0,
+    "flds": "He said \"hello\", then left\u001fShe replied \"goodbye\"",
+    "guid": "prep-parity@e-1",
+    "id": 1773500400000,
+    "mid": 1700000000000,
+    "mod": 1773500400,
+    "sfld": "He said \"hello\", then left",
+    "tags": "",
+    "usn": -1
+   },
+   {
+    "data": "",
+    "flags": 0,
+    "flds": "Line one<br>line two\u001fAnswer with, a comma",
+    "guid": "prep-parity@e-2",
+    "id": 1773500400001,
+    "mid": 1700000000000,
+    "mod": 1773500400,
+    "sfld": "Line one<br>line two",
+    "tags": "",
+    "usn": -1
+   },
+   {
+    "data": "",
+    "flags": 0,
+    "flds": "CRLF inside\r<br>the cell\u001fLF inside<br>the cell",
+    "guid": "prep-parity@e-3",
+    "id": 1773500400002,
+    "mid": 1700000000000,
+    "mod": 1773500400,
+    "sfld": "CRLF inside\r<br>the cell",
+    "tags": "",
+    "usn": -1
+   },
+   {
+    "data": "",
+    "flags": 0,
+    "flds": "Trailing quote \"\u001fLeading \"quote<br><br><b>Explanation:</b><br>a, b, \"c\"",
+    "guid": "prep-parity@e-4",
+    "id": 1773500400003,
+    "mid": 1700000000000,
+    "mod": 1773500400,
+    "sfld": "Trailing quote \"",
+    "tags": "",
+    "usn": -1
+   }
+  ],
+  "revlog": []
+ }
+}

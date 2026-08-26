@@ -1,0 +1,8 @@
+type,topic,prompt,answer,choices,rubric,skeleton,language,answer_regex,explanation
+short,,"He said ""hello"", then left","She replied ""goodbye""",,,,,,
+short,,"Line one
+line two","Answer with, a comma",,,,,,
+short,,"CRLF inside
+the cell","LF inside
+the cell",,,,,,
+short,,"Trailing quote ""","Leading ""quote",,,,,,"a, b, ""c"""

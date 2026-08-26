@@ -2,7 +2,7 @@
 // the JSON-RPC envelopes, and the tool-level refusals the corpus does not
 // reach. Driven through the entry worker so the bearer gate is real.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { APKG_PENDING, MCP_PROTOCOL_VERSION } from '../../app/api/mcp.js';
+import { MCP_PROTOCOL_VERSION } from '../../app/api/mcp.js';
 import { TOOLS } from '../../app/api/tools.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
@@ -140,9 +140,31 @@ describe('the tool refusals', () => {
     expect(result.text).toBe(message);
   });
 
-  it('refuses the apkg codecs until phase 5, past their own validation', async () => {
-    expect(await tool('prep_export_deck_apkg', { name: 'world-capitals' })).toEqual({ isError: true, text: APKG_PENDING });
-    expect(await tool('prep_import_apkg', { name: 'restored', apkg_base64: 'AAAA' })).toEqual({ isError: true, text: APKG_PENDING });
+  it('round-trips a deck through the two apkg tools', async () => {
+    const exported = JSON.parse((await tool('prep_export_deck_apkg', { name: 'world-capitals' })).text) as {
+      filename: string;
+      apkg_base64: string;
+      byte_count: number;
+    };
+    expect(exported.filename).toBe('world-capitals.apkg');
+    expect(exported.byte_count).toBeGreaterThan(0);
+
+    const imported = JSON.parse((await tool('prep_import_apkg', { name: 'from-apkg', apkg_base64: exported.apkg_base64 })).text) as {
+      deck_name: string;
+      inserted: number;
+      cloze_skipped: number;
+      errors: string[];
+    };
+    expect(imported.deck_name).toBe('from-apkg');
+    expect(imported.inserted).toBeGreaterThan(0);
+    expect(imported.cloze_skipped).toBe(0);
+    expect(imported.errors).toEqual([]);
+  });
+
+  it('refuses a blob that is not an apkg, past its own validation', async () => {
+    const result = await tool('prep_import_apkg', { name: 'restored', apkg_base64: 'AAAA' });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('not a valid .apkg');
   });
 });
 

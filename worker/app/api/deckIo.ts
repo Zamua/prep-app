@@ -3,6 +3,7 @@
 // header so the importer can rebuild the deck shape.
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 import type { DeckRepo, QuestionRepo, TriviaRepo } from '../ports.js';
+import { rowCapMessage } from '../decks/importLimits.js';
 import { parseDict, writeRow } from './csv.js';
 
 export const CSV_COLUMNS = ['type', 'topic', 'prompt', 'answer', 'choices', 'rubric', 'skeleton', 'language', 'answer_regex', 'explanation'] as const;
@@ -37,7 +38,7 @@ export function questionsForExport(repos: DeckIoRepos, deckId: number): Question
   return out;
 }
 
-function questionToRow(q: Question): string[] {
+export function questionToRow(q: Question): string[] {
   const cell: Record<string, string> = {
     type: q.type,
     topic: q.topic || '',
@@ -109,7 +110,7 @@ export function csvToDeck(
   repos: DeckIoRepos,
   deckName: string,
   csvText: string,
-  opts: { contextPrompt?: string | null } = {},
+  opts: { contextPrompt?: string | null; rowCap?: number } = {},
 ): ImportOutcome {
   const { preamble, rest } = splitPreamble(csvText);
   const declaredType = (preamble['deck_type'] || 'srs').toLowerCase();
@@ -164,26 +165,32 @@ export function csvToDeck(
     return { deck_id: deckId, deck_name: deckName, inserted: 0, skipped_duplicates: 0, errors: ['CSV has no header row'] };
   }
 
-  rows.forEach((row, index) => {
+  const cap = opts.rowCap ?? Infinity;
+  for (let index = 0; index < rows.length; index++) {
+    if (index >= cap) {
+      errors.push(rowCapMessage(cap));
+      break;
+    }
+    const row = rows[index]!;
     const i = index + 2; // row 1 is the header
     const prompt = cell(row, 'prompt');
     if (!prompt) {
       errors.push(`row ${i}: missing prompt`);
-      return;
+      continue;
     }
     if (existing.has(prompt)) {
       skippedDuplicates++;
-      return;
+      continue;
     }
     const typeRaw = cell(row, 'type').toLowerCase() || 'short';
     if (!QUESTION_TYPES.includes(typeRaw)) {
       errors.push(`row ${i}: unknown type '${typeRaw}'`);
-      return;
+      continue;
     }
     const answer = cell(row, 'answer');
     if (!answer) {
       errors.push(`row ${i}: missing answer`);
-      return;
+      continue;
     }
     const choices = cell(row, 'choices')
       .split(/\r\n|\r|\n/)
@@ -211,7 +218,7 @@ export function csvToDeck(
       // the separator is the one the wire format already carries.
       errors.push(`row ${i}: write failed \u2014 ${e instanceof Error ? e.message : String(e)}`);
     }
-  });
+  }
 
   return { deck_id: deckId, deck_name: deckName, inserted, skipped_duplicates: skippedDuplicates, errors };
 }

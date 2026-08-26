@@ -1,0 +1,94 @@
+{
+ "apkg": {
+  "outcome": {
+   "cloze_skipped": 2,
+   "deck_id": 1,
+   "deck_name": "from-apkg",
+   "errors": [],
+   "inserted": 3,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "normal answer",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Normal note",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "entities on the back: &amp;",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "<escaped> \"quotes\" 'and' 'apostrophes'",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "second\n\nthird",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Three fields",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-apkg",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Normal note",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "<escaped> \"quotes\" 'and' 'apostrophes'",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Three fields",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ }
+}

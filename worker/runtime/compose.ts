@@ -4,6 +4,8 @@
 import type {
   AgentConfig,
   AgentPort,
+  ApkgReader,
+  ApkgWriter,
   Cipher,
   Clock,
   Directory,
@@ -24,6 +26,7 @@ import type {
   WebhookVerifier,
   WebPush,
   WorkflowRunner,
+  ZipCodec,
 } from '../app/ports.js';
 import { JOB_GRAPHS } from '../app/jobs/graph.js';
 import { registerWorkflowSteps } from '../app/jobs/index.js';
@@ -52,6 +55,8 @@ import { SvixVerifier } from './adapters/svix.js';
 import { PatIssuer } from './adapters/pat.js';
 import { fixturePagesFromBuild } from './adapters/fixturePages.js';
 import { WebCryptoHasher } from './adapters/hash.js';
+import { SqlJsApkg } from './adapters/apkg.js';
+import { FflateZip } from './adapters/zip.js';
 import { createRenderer } from './adapters/nunjucks/index.js';
 import { ParitySessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from './adapters/random.js';
 import {
@@ -129,6 +134,10 @@ export interface Composition {
   jobLlmTimeoutMs: number;
   jobLedger(storage: CellStorage): JobLedger;
   webPush: WebPush;
+  /** The `.prepdeck` container. */
+  zip: ZipCodec;
+  /** The `.apkg` codec; its WASM module compiles once per isolate. */
+  apkg: ApkgReader & ApkgWriter;
   /** Whether the shared tier would actually serve, not whether vars exist. */
   freeTierConfigured: boolean;
   vapidPublicKey: string;
@@ -352,6 +361,8 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     jobLlmTimeoutMs: jobLlmTimeoutMs(env),
     jobLedger: (storage) => new SqlJobLedger(storage),
     webPush: webPushOf(env, clock, warn),
+    zip: new FflateZip(),
+    apkg: new SqlJsApkg(),
     freeTierConfigured: freeTier !== null,
     vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
     authUrls: authUrlsOf(clerk?.provider ?? null),

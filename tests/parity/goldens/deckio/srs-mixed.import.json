@@ -1,0 +1,344 @@
+{
+ "apkg": {
+  "outcome": {
+   "cloze_skipped": 0,
+   "deck_id": 4,
+   "deck_name": "from-apkg",
+   "errors": [],
+   "inserted": 4,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "Lima\n\nExplanation:\nLima has been the capital since 1535.\n\nTopic: geography",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Capital of Peru?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "Bolivia\n\nExplanation:\nBolivia lost its coast in 1884.\n\nTopic: geography",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Which of these is landlocked?\n\n• Bolivia\n• Chile\n• Peru\n• Ecuador",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "[\"Austria\", \"Poland\"]\n\nTopic: geography",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Which border Germany?\n\n• Austria\n• Poland\n• Spain\n• Portugal",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "SELECT * FROM users;\n\nExplanation:\nA bare star is fine for a table this small.\n\nRubric:\n- names the table\n- selects all columns\n\nSkeleton (sql):\nSELECT ___ FROM ___;\n\nTopic: databases",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Select every row of `users`.",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-apkg",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Capital of Peru?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Which of these is landlocked?\n\n• Bolivia\n• Chile\n• Peru\n• Ecuador",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Which border Germany?\n\n• Austria\n• Poland\n• Spain\n• Portugal",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Select every row of `users`.",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ },
+ "csv": {
+  "outcome": {
+   "deck_id": 2,
+   "deck_name": "from-csv",
+   "errors": [],
+   "inserted": 4,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "Lima",
+     "answer_regex": "(?i)^lima$",
+     "choices": null,
+     "explanation": "Lima has been the capital since 1535.",
+     "language": null,
+     "prompt": "Capital of Peru?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "geography",
+     "type": "short"
+    },
+    {
+     "answer": "Bolivia",
+     "answer_regex": null,
+     "choices": "[\"Bolivia\", \"Chile\", \"Peru\", \"Ecuador\"]",
+     "explanation": "Bolivia lost its coast in 1884.",
+     "language": null,
+     "prompt": "Which of these is landlocked?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "geography",
+     "type": "mcq"
+    },
+    {
+     "answer": "[\"Austria\", \"Poland\"]",
+     "answer_regex": null,
+     "choices": "[\"Austria\", \"Poland\", \"Spain\", \"Portugal\"]",
+     "explanation": null,
+     "language": null,
+     "prompt": "Which border Germany?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "geography",
+     "type": "multi"
+    },
+    {
+     "answer": "SELECT * FROM users;",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": "A bare star is fine for a table this small.",
+     "language": "sql",
+     "prompt": "Select every row of `users`.",
+     "rubric": "- names the table\n- selects all columns",
+     "skeleton": "SELECT ___ FROM ___;",
+     "suspended": 0,
+     "topic": "databases",
+     "type": "code"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-csv",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Capital of Peru?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Which of these is landlocked?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Which border Germany?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Select every row of `users`.",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ },
+ "prepdeck": {
+  "outcome": {
+   "deck_id": 3,
+   "deck_name": "from-prepdeck",
+   "errors": [],
+   "inserted": 4,
+   "queue_rows_inserted": 0,
+   "reviews_inserted": 0,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "Lima",
+     "answer_regex": "(?i)^lima$",
+     "choices": null,
+     "explanation": "Lima has been the capital since 1535.",
+     "language": null,
+     "prompt": "Capital of Peru?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "geography",
+     "type": "short"
+    },
+    {
+     "answer": "Bolivia",
+     "answer_regex": null,
+     "choices": "[\"Bolivia\", \"Chile\", \"Peru\", \"Ecuador\"]",
+     "explanation": "Bolivia lost its coast in 1884.",
+     "language": null,
+     "prompt": "Which of these is landlocked?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "geography",
+     "type": "mcq"
+    },
+    {
+     "answer": "[\"Austria\", \"Poland\"]",
+     "answer_regex": null,
+     "choices": "[\"Austria\", \"Poland\", \"Spain\", \"Portugal\"]",
+     "explanation": null,
+     "language": null,
+     "prompt": "Which border Germany?",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": "geography",
+     "type": "multi"
+    },
+    {
+     "answer": "SELECT * FROM users;",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": "A bare star is fine for a table this small.",
+     "language": "sql",
+     "prompt": "Select every row of `users`.",
+     "rubric": "- names the table\n- selects all columns",
+     "skeleton": "SELECT ___ FROM ___;",
+     "suspended": 0,
+     "topic": "databases",
+     "type": "code"
+    }
+   ],
+   "deck": {
+    "context_prompt": "World capitals and a little SQL.",
+    "deck_type": "srs",
+    "desired_retention": 0.92,
+    "name": "from-prepdeck",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Capital of Peru?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Which of these is landlocked?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Which border Germany?",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Select every row of `users`.",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ }
+}

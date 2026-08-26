@@ -1,0 +1,300 @@
+{
+ "apkg": {
+  "outcome": {
+   "cloze_skipped": 0,
+   "deck_id": 4,
+   "deck_name": "from-apkg",
+   "errors": [],
+   "inserted": 3,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "A",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Reviewed twice",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "B",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Reviewed once",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "C",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Never reviewed",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-apkg",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Reviewed twice",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Reviewed once",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Never reviewed",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ },
+ "csv": {
+  "outcome": {
+   "deck_id": 2,
+   "deck_name": "from-csv",
+   "errors": [],
+   "inserted": 3,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "A",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Reviewed twice",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "B",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Reviewed once",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "C",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Never reviewed",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": null,
+    "name": "from-csv",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [],
+   "state": [
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Reviewed twice",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Reviewed once",
+     "stability": null,
+     "step": 0
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Never reviewed",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ },
+ "prepdeck": {
+  "outcome": {
+   "deck_id": 3,
+   "deck_name": "from-prepdeck",
+   "errors": [],
+   "inserted": 3,
+   "queue_rows_inserted": 0,
+   "reviews_inserted": 3,
+   "skipped_duplicates": 0
+  },
+  "rows": {
+   "cards": [
+    {
+     "answer": "A",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Reviewed twice",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "B",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Reviewed once",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    },
+    {
+     "answer": "C",
+     "answer_regex": null,
+     "choices": null,
+     "explanation": null,
+     "language": null,
+     "prompt": "Never reviewed",
+     "rubric": null,
+     "skeleton": null,
+     "suspended": 0,
+     "topic": null,
+     "type": "short"
+    }
+   ],
+   "deck": {
+    "context_prompt": null,
+    "deck_type": "srs",
+    "desired_retention": 0.87,
+    "name": "from-prepdeck",
+    "notification_interval_minutes": null,
+    "trivia_session_size": 3
+   },
+   "queue": [],
+   "reviews": [
+    {
+     "grader_notes": "close",
+     "prompt": "Reviewed twice",
+     "result": "wrong",
+     "ts": "2026-03-10T09:00:00+00:00",
+     "user_answer": "B"
+    },
+    {
+     "grader_notes": "",
+     "prompt": "Reviewed twice",
+     "result": "right",
+     "ts": "2026-03-12T15:00:00+00:00",
+     "user_answer": "A"
+    },
+    {
+     "grader_notes": "",
+     "prompt": "Reviewed once",
+     "result": "right",
+     "ts": "2026-03-14T09:00:00+00:00",
+     "user_answer": "B"
+    }
+   ],
+   "state": [
+    {
+     "difficulty": 5.44091,
+     "fsrs_state": 2,
+     "last_review": "2026-03-12T15:00:00+00:00",
+     "next_due": "2026-03-20T15:00:00+00:00",
+     "prompt": "Reviewed twice",
+     "stability": 3.12618,
+     "step": 2
+    },
+    {
+     "difficulty": 7.0,
+     "fsrs_state": 1,
+     "last_review": "2026-03-14T09:00:00+00:00",
+     "next_due": "2026-03-15T15:00:00+00:00",
+     "prompt": "Reviewed once",
+     "stability": 0.4072,
+     "step": 1
+    },
+    {
+     "difficulty": null,
+     "fsrs_state": 1,
+     "last_review": null,
+     "next_due": "2026-03-14T15:00:00+00:00",
+     "prompt": "Never reviewed",
+     "stability": null,
+     "step": 0
+    }
+   ]
+  }
+ }
+}

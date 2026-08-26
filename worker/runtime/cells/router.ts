@@ -2,7 +2,7 @@
 // identity gates, and the handler result shapes turned into responses.
 // Handlers live in cells/routes; the identity arrives in the headers the
 // entry worker sets after stripping any inbound copy.
-import type { AgentPort, Cipher, Clock, Hasher, IdentityKind, Random, UserRepos, WebPush, WorkflowRunner } from '../../app/ports.js';
+import type { AgentPort, ApkgReader, ApkgWriter, Cipher, Clock, Hasher, IdentityKind, Random, UserRepos, WebPush, WorkflowRunner, ZipCodec } from '../../app/ports.js';
 import type { AuthUrls } from '../../app/pageContext.js';
 import type { OpenRouterAuth } from '../../app/settings/openrouter.js';
 import { RowCapReached } from '../../domain/limits.js';
@@ -71,6 +71,8 @@ export interface CellPorts {
   cipher: Cipher | null;
   openRouter: OpenRouterAuth;
   webPush: WebPush;
+  zip: ZipCodec;
+  apkg: ApkgReader & ApkgWriter;
   authProvider: string;
   authUrls: AuthUrls;
   /** The deploy serves a shared tier, so AI works without a stored key. */
@@ -86,6 +88,7 @@ export type Handled =
   | { json: unknown; status?: number; headers?: Record<string, string> }
   | { redirect: string; status?: number; headers?: Record<string, string> }
   | { text: string; status?: number; headers?: Record<string, string> }
+  | { bytes: Uint8Array; status?: number; headers?: Record<string, string> }
   | { empty: true; status?: number; headers?: Record<string, string> };
 
 export interface Route {
@@ -183,6 +186,10 @@ export function toResponse(handled: Handled, render: (template: string, context:
   if ('text' in handled) {
     if (!headers.has('content-type')) headers.set('content-type', 'text/plain; charset=utf-8');
     return new Response(handled.text, { status: handled.status ?? 200, headers });
+  }
+  if ('bytes' in handled) {
+    if (!headers.has('content-type')) headers.set('content-type', 'application/octet-stream');
+    return new Response(handled.bytes, { status: handled.status ?? 200, headers });
   }
   return new Response(null, { status: handled.status ?? 204, headers });
 }

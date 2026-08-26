@@ -13,6 +13,7 @@ import { agentAvailable } from '../../../app/pageContext.js';
 import * as study from '../../../app/study/api.js';
 import { gradingPoll } from '../../../app/study/grading.js';
 import { jsonInvalid, pythonJsonError, RequestValidationError } from '../../../app/validation.js';
+import { isoUtc } from '../../../domain/py.js';
 import type { CellRequest, Handled, Route } from '../router.js';
 
 /** A body pydantic would have parsed: a decode failure is the model's 422. */
@@ -161,7 +162,7 @@ export const apiRoutes: readonly Route[] = [
         return PARSE_ERROR() as Handled;
       }
       if (typeof body !== 'object' || body === null || Array.isArray(body)) return INVALID_REQUEST() as Handled;
-      const result = dispatch(v1Repos(req), body);
+      const result = await dispatch(v1Repos(req), body, { apkg: req.ports.apkg, subject: req.identity.subject, now: isoUtc(req.clock.now()) });
       // A JSON-RPC notification has no response body; the 204 must carry none.
       if ('json' in result && result.json === null && result.status === 204) {
         return { empty: true, status: 204, headers: { 'content-type': 'application/json' } };

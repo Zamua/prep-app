@@ -20,13 +20,21 @@ export interface PageResult {
   headers?: Record<string, string>;
 }
 
+/** A download: the codecs answer bytes, not text, and a `.apkg` is not
+ * valid UTF-8. */
+export interface BytesResult {
+  bytes: Uint8Array;
+  status?: number;
+  headers?: Record<string, string>;
+}
+
 export interface EmptyResult {
   empty: true;
   status?: number;
   headers?: Record<string, string>;
 }
 
-export type ApiResult = JsonResult | TextResult | PageResult | EmptyResult;
+export type ApiResult = JsonResult | TextResult | BytesResult | PageResult | EmptyResult;
 
 export const json = (body: unknown, status = 200, headers?: Record<string, string>): JsonResult => ({ json: body, status, headers });
 

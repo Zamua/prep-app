@@ -3,6 +3,13 @@
 // cell's route table parses the one and builds the other.
 import type { ApiResult } from './http.js';
 
+/** One `multipart/form-data` file part, already read. The three importers
+ * are the only routes that take a body a form cannot express. */
+export interface Upload {
+  filename: string | null;
+  bytes: Uint8Array;
+}
+
 export interface PageRequest {
   /** Path parameters, already decoded. */
   params: Record<string, string>;
@@ -17,6 +24,8 @@ export interface PageRequest {
   cookies: Record<string, string>;
   /** The request instant, ISO UTC: the clock is the router's to choose. */
   now: string;
+  /** The `file` part on an upload route, null when the caller sent none. */
+  upload?: Upload | null;
 }
 
 export interface RedirectResult {

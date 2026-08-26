@@ -83,6 +83,7 @@ VOLATILE: tuple[tuple[str, str, str], ...] = (
     ("v1-deck-import-csv", "response.json.deck_id", r"^\d+$"),
     ("mcp-call-prep_create_deck", _TOOL_TEXT, r'"id": \d+'),
     ("mcp-call-prep_import_csv", _TOOL_TEXT, r'"deck_id": \d+'),
+    ("mcp-call-prep_import_apkg", _TOOL_TEXT, r'"deck_id": \d+'),
     ("mcp-call-prep_add_card*", _TOOL_TEXT, r'"id": \d+'),
     ("mcp-call-prep_get_card", _TOOL_TEXT, r'"(id|deck_id)": \d+'),
     ("mcp-call-prep_update_card", _TOOL_TEXT, r'"id": \d+'),

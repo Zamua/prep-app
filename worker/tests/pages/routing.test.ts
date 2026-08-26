@@ -32,7 +32,7 @@ describe('the page route table', () => {
   // account and takes the instant-start product with it.
   it('keeps the signed-in gate to the surfaces that hold a credential', () => {
     const signedIn = pageRoutes.filter((r) => r.gate === 'signedIn').map((r) => r.pattern);
-    expect(signedIn.every((p) => p.startsWith('/settings/') || p.startsWith('/notify'))).toBe(true);
+    expect(signedIn.every((p) => p.startsWith('/settings/') || p.startsWith('/notify') || p.startsWith('/decks/import-'))).toBe(true);
     expect(pageRoutes.filter((r) => r.gate === 'user').length).toBeGreaterThan(signedIn.length);
   });
 

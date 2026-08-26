@@ -109,6 +109,8 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       cipher: c.cipher,
       openRouter: c.openRouter,
       webPush: c.webPush,
+      zip: c.zip,
+      apkg: c.apkg,
       authProvider: c.authProvider,
       authUrls: c.authUrls,
       freeTierConfigured: c.freeTierConfigured,

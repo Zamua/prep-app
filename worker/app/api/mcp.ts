@@ -1,8 +1,13 @@
 // The MCP-over-HTTP server, transcribed from prep/api/mcp.py: one
 // JSON-RPC 2.0 message per request, the tool catalog of tools.ts, and
 // the same user-scoped repositories the REST surface uses.
+import { parseIso } from '../../domain/py.js';
+import { ankiNotesToDeck } from '../decks/anki.js';
+import { buildApkg } from '../decks/ankiExport.js';
+import { MAX_IMPORT_ROWS, MAX_ZIP_ENTRY_BYTES } from '../decks/importLimits.js';
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
+import { NotAnApkg, ZipEntryTooLarge, type ApkgReader, type ApkgWriter } from '../ports.js';
 import { csvToDeck, deckToCsv, questionsForExport } from './deckIo.js';
 import { TOOLS } from './tools.js';
 import { cardJson, type V1Repos } from './v1.js';
@@ -222,25 +227,51 @@ const HANDLERS: Record<string, Handler> = {
     return toolText(dumps({ id: cardId, suspended }));
   },
 
-  prep_export_deck_apkg: (repos, args) => {
+};
+
+/** The two tools whose codec is WASM-backed, and so answers a promise. */
+const ASYNC_HANDLERS: Record<string, (repos: V1Repos, args: Record<string, unknown>, deps: McpDeps) => Promise<ToolResult>> = {
+  prep_export_deck_apkg: async (repos, args, deps) => {
     const name = arg(args, 'name');
     if (!name) return toolError('missing required arg: name');
-    if (repos.decks.findId(name) === null) return toolError(`deck not found: '${name}'`);
-    return toolError(APKG_PENDING);
+    const deckId = repos.decks.findId(name);
+    if (deckId === null) return toolError(`deck not found: '${name}'`);
+    const questions = questionsForExport(repos, deckId);
+    const nowMs = parseIso(deps.now).getTime();
+    const { col, notes, cards } = buildApkg(name, questions, deps.subject, nowMs, deps.now.slice(0, 10));
+    const blob = await deps.apkg.build(col, notes, cards);
+    return toolText(dumps({ filename: `${name}.apkg`, apkg_base64: base64(blob), byte_count: blob.length }));
   },
 
-  prep_import_apkg: (repos, args) => {
+  prep_import_apkg: async (repos, args, deps) => {
     const name = arg(args, 'name');
     if (!name) return toolError('missing required arg: name');
     const b64 = typeof args['apkg_base64'] === 'string' ? (args['apkg_base64'] as string) : '';
     if (!b64) return toolError('missing required arg: apkg_base64');
     if (!isStrictBase64(b64)) return toolError("apkg_base64 didn't decode: Only base64 data is allowed");
-    return toolError(APKG_PENDING);
+    let notes;
+    try {
+      notes = await deps.apkg.notes(unbase64(b64), { maxEntryBytes: MAX_ZIP_ENTRY_BYTES });
+    } catch (e) {
+      if (e instanceof NotAnApkg || e instanceof ZipEntryTooLarge) return toolError(e.message);
+      throw e;
+    }
+    return toolText(dumps(ankiNotesToDeck(repos, name, notes, { noteCap: MAX_IMPORT_ROWS })));
   },
 };
 
-/** The `.apkg` codecs land in phase 5; until then the tools refuse. */
-export const APKG_PENDING = 'apkg support is not available on this deploy';
+const base64 = (bytes: Uint8Array): string => {
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+};
+
+const unbase64 = (text: string): Uint8Array => {
+  const binary = atob(text);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+};
 
 /** `base64.b64decode(s, validate=True)`: alphabet-only, length a multiple of four. */
 function isStrictBase64(s: string): boolean {
@@ -261,8 +292,16 @@ function rpcError(id: unknown, code: number, message: string, data?: unknown) {
 export const PARSE_ERROR = () => json(rpcError(null, -32700, 'Parse error'), 400);
 export const INVALID_REQUEST = () => json(rpcError(null, -32600, 'Invalid Request'), 400);
 
+/** What the two `.apkg` tools need beyond the repositories. */
+export interface McpDeps {
+  apkg: ApkgReader & ApkgWriter;
+  /** The owner, whose first eight characters seed each exported note's guid. */
+  subject: string;
+  now: string;
+}
+
 /** One JSON-RPC message. `body` is the parsed request; parse failure is the caller's. */
-export function dispatch(repos: V1Repos, body: unknown): ApiResult {
+export async function dispatch(repos: V1Repos, body: unknown, deps: McpDeps): Promise<ApiResult> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return INVALID_REQUEST();
   const message = body as Record<string, unknown>;
   const id = message['id'] ?? null;
@@ -284,9 +323,10 @@ export function dispatch(repos: V1Repos, body: unknown): ApiResult {
     const name = params['name'];
     const args = (params['arguments'] ?? {}) as Record<string, unknown>;
     const handler = typeof name === 'string' ? HANDLERS[name] : undefined;
-    if (!handler) return json(rpcError(id, -32602, `unknown tool: ${pyRepr(name)}`));
+    const asyncHandler = typeof name === 'string' ? ASYNC_HANDLERS[name] : undefined;
+    if (!handler && !asyncHandler) return json(rpcError(id, -32602, `unknown tool: ${pyRepr(name)}`));
     try {
-      return json(rpcResult(id, handler(repos, args)));
+      return json(rpcResult(id, handler ? handler(repos, args) : await asyncHandler!(repos, args, deps)));
     } catch (e) {
       return json(rpcResult(id, toolError(`tool error: ${e instanceof Error ? e.message : String(e)}`)));
     }

@@ -454,6 +454,97 @@ export interface UserRepos {
   pins: ParityPins;
 }
 
+// ---- deck interchange codecs ----------------------------------------------
+
+export interface ZipEntry {
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** The archive container. `.prepdeck` is written through it, `.apkg` is read
+ * through it, and both are bounded before anything inflates. */
+export interface ZipCodec {
+  /** Entries in central-directory order. Throws `NotAZip`, or
+   * `ZipEntryTooLarge` when an entry declares more than `maxEntryBytes`
+   * inflated - the declaration is read first, so a bomb never expands. */
+  read(blob: Uint8Array, opts?: { maxEntryBytes?: number }): ZipEntry[];
+  /** Stored, no compression, fixed 1980 stamp: two exports of an unchanged
+   * deck are byte-identical. */
+  write(entries: readonly ZipEntry[]): Uint8Array;
+}
+
+export class NotAZip extends Error {}
+export class ZipEntryTooLarge extends Error {}
+/** The blob is not an Anki package: unreadable zip, or no collection inside. */
+export class NotAnApkg extends Error {}
+
+export interface ApkgNote {
+  id: number;
+  flds: string;
+}
+
+export interface ApkgReader {
+  /** Every `notes` row of the packaged collection, by id. Throws `NotAnApkg`. */
+  notes(blob: Uint8Array, opts?: { maxEntryBytes?: number }): Promise<ApkgNote[]>;
+}
+
+/** The `col` row. The four JSON columns arrive as values and are serialized
+ * by the adapter, so the app layer never names a wire encoding. */
+export interface ApkgCollection {
+  id: number;
+  crt: number;
+  mod: number;
+  scm: number;
+  ver: number;
+  dty: number;
+  usn: number;
+  ls: number;
+  conf: unknown;
+  models: unknown;
+  decks: unknown;
+  dconf: unknown;
+  tags: unknown;
+}
+
+export interface ApkgNoteRow {
+  id: number;
+  guid: string;
+  mid: number;
+  mod: number;
+  usn: number;
+  tags: string;
+  flds: string;
+  sfld: string;
+  csum: number;
+  flags: number;
+  data: string;
+}
+
+export interface ApkgCard {
+  id: number;
+  nid: number;
+  did: number;
+  ord: number;
+  mod: number;
+  usn: number;
+  type: number;
+  queue: number;
+  due: number;
+  ivl: number;
+  factor: number;
+  reps: number;
+  lapses: number;
+  left: number;
+  odue: number;
+  odid: number;
+  flags: number;
+  data: string;
+}
+
+export interface ApkgWriter {
+  build(col: ApkgCollection, notes: readonly ApkgNoteRow[], cards: readonly ApkgCard[]): Promise<Uint8Array>;
+}
+
 // ---- crypto, push, agents, jobs -------------------------------------------
 
 export interface Signer {

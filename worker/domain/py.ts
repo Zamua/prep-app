@@ -127,3 +127,47 @@ export function pyJsonDumps(value: JsonValue): string {
     .map(([k, v]) => `${pyJsonString(k)}: ${pyJsonDumps(v)}`)
     .join(', ')}}`;
 }
+
+/**
+ * `json.dumps(value, indent=n, sort_keys=True)`: the indented form uses the
+ * `','` item separator, so a line never ends in a trailing space.
+ */
+export function pyJsonDumpsIndent(value: JsonValue, indent: number, sortKeys = false): string {
+  const pad = (depth: number) => '\n' + ' '.repeat(indent * depth);
+  const walk = (v: JsonValue, depth: number): string => {
+    if (Array.isArray(v)) {
+      if (!v.length) return '[]';
+      return `[${v.map((item) => pad(depth + 1) + walk(item, depth + 1)).join(',')}${pad(depth)}]`;
+    }
+    if (v !== null && typeof v === 'object') {
+      let keys = Object.keys(v);
+      if (sortKeys) keys = keys.sort();
+      if (!keys.length) return '{}';
+      return `{${keys.map((k) => `${pad(depth + 1)}${pyJsonString(k)}: ${walk(v[k]!, depth + 1)}`).join(',')}${pad(depth)}}`;
+    }
+    return pyJsonDumps(v);
+  };
+  return walk(value, 0);
+}
+
+/**
+ * C's `%.<precision>g`, which is what Python's format spec compiles to:
+ * significant digits, trailing zeros dropped, and the exponent form outside
+ * `-4 <= exp < precision` with at least two exponent digits.
+ */
+export function pyFormatG(x: number, precision = 6): string {
+  if (!Number.isFinite(x)) return x > 0 ? 'inf' : x < 0 ? '-inf' : 'nan';
+  const p = precision === 0 ? 1 : precision;
+  if (x === 0) return '0';
+  // The exponent of the value already rounded to `p` digits, so a carry
+  // (9.999995 at p=6) picks the form its rounded self belongs in.
+  const exp = Number(x.toExponential(p - 1).split('e')[1]);
+  if (exp < -4 || exp >= p) {
+    const [mantissa] = x.toExponential(p - 1).split('e');
+    const trimmed = mantissa!.includes('.') ? mantissa!.replace(/\.?0+$/, '') : mantissa!;
+    const sign = exp < 0 ? '-' : '+';
+    return `${trimmed}e${sign}${String(Math.abs(exp)).padStart(2, '0')}`;
+  }
+  const fixed = x.toFixed(Math.max(0, p - 1 - exp));
+  return fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed;
+}

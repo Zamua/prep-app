@@ -69,17 +69,40 @@ Caps, enforced in `runtime/cells/routes/pages.ts` before any parsing:
 
 | limit | value | what the user sees |
 | --- | --- | --- |
-| request body, all three importers | 8 MiB | 413, the importer page re-rendered with `error` = `That file is too large. The limit is 8 MB.` |
+| request body, `.apkg` | 8 MiB | 413, the importer page re-rendered with `error` = `That file is too large. The limit is 8 MB.` |
+| request body, `.prepdeck` | 2 MiB | the same page, `The limit is 2 MB.` |
+| request body, `.csv` | 1.5 MiB | the same page, `The limit is 1.5 MB.` |
 | any single inflated zip entry | 32 MiB | 400, `error` = `That archive expands past 32 MB.`; read from the central directory before inflating, so a zip bomb never inflates |
 | notes per `.apkg` import, rows per CSV | 5,000 | everything up to the cap is inserted (Python's partial-insert semantics already), and `outcome.errors` gains `stopped at 5,000 rows; split the file and import again` |
 | questions per `.apkg` / `.prepdeck` export | 5,000 | 413 rendered from the export hub, `error` = `This deck is too large to export in this format.` |
 
 `Content-Length` is checked first; a chunked body is counted while read
-and aborted at the cap. The four numbers are provisional until A
-measures peak heap on the local node for a 5,000-note import and a
-5,000-question export of each format, records them here, and moves any
-cap whose peak exceeds 64 MiB (half the isolate, the renderer keeps the
-other half).
+and aborted at the cap.
+
+**Measured, on a local celld node at `CELLD_V8_HEAP_LIMIT_MB=64`** (the
+gate is half the 128 MB isolate, the renderer keeps the other half). Each
+row is the largest workload that answered; the row above the line for CSV
+refused with the isolate over its limit.
+
+| workload | body | inflated | rows | at 64 MiB |
+| --- | --- | --- | --- | --- |
+| `.apkg` import | 0.26 MiB | 29.34 MiB | 5,000 | 1.64 s |
+| `.apkg` import | 5.96 MiB | 9.80 MiB | 5,000 | 2.02 s |
+| `.prepdeck` import | 1.72 MiB | 1.72 MiB | 5,000 | 0.60 s |
+| `.csv` import | 1.53 MiB | - | 5,000 | 1.30 s |
+| `.csv` import | 2.06 MiB | - | 5,000 | over the limit |
+| `.csv` export | - | 1.56 MiB out | 5,000 | 0.11 s |
+| `.prepdeck` export | - | 1.72 MiB out | 5,000 | 0.15 s |
+| `.apkg` export | - | 0.31 MiB out | 5,000 | 0.36 s |
+
+So the body cap is per format rather than one number. The CSV importer is
+the small one because `splitPreamble` transcribes Python's
+`"\n".join(csv_text.splitlines()[i:])`, which materialises the whole
+document as an array of lines and then a second full copy: the line-ending
+normalisation is load-bearing (a CRLF inside a quoted cell becomes LF, and
+the `quoting` corpus profile pins it), so raising this cap means rewriting
+that pass to scan and slice rather than split and join. Left alone here:
+it is phase-3 code under its own gate.
 
 ### A3. Routes and pages
 

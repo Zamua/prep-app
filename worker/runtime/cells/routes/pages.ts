@@ -13,8 +13,9 @@ import * as openrouter from '../../../app/settings/openrouter.js';
 import * as srs from '../../../app/settings/srs.js';
 import * as shell from '../../../app/study/shell.js';
 import * as trivia from '../../../app/trivia/pages.js';
+import { MAX_APKG_UPLOAD_BYTES, MAX_CSV_UPLOAD_BYTES, MAX_PREPDECK_UPLOAD_BYTES, uploadTooLarge } from '../../../app/decks/importLimits.js';
 import type { UserRepos } from '../../../app/ports.js';
-import { route } from './adapt.js';
+import { route, uploadRoute } from './adapt.js';
 import type { CellPorts, Route } from '../router.js';
 
 const deckDeps = (ports: CellPorts) => ({ freeTierConfigured: ports.freeTierConfigured, random: ports.random, runner: ports.runner });
@@ -41,6 +42,21 @@ export const pageRoutes: readonly Route[] = [
   route('POST', '/decks/new/srs', 'user', (p, { repos, ports }) => decks.deckNewSrsCreate(repos, p, deckDeps(ports))),
   route('POST', '/decks/new/trivia', 'user', (p, { repos, ports }) => decks.deckNewTriviaCreate(repos, p, deckDeps(ports))),
 
+  // The three importers. Each POST takes a file, so the body is read under a
+  // ceiling before anything parses it: a cell has one heap and no disk.
+  route('GET', '/decks/import-csv', 'signedIn', () => decks.deckImportCsvForm()),
+  uploadRoute('POST', '/decks/import-csv', 'signedIn', 'deck_import_csv.html', uploadTooLarge(MAX_CSV_UPLOAD_BYTES), MAX_CSV_UPLOAD_BYTES, (p, { repos }) =>
+    decks.deckImportCsvSubmit(repos, p),
+  ),
+  route('GET', '/decks/import-prepdeck', 'signedIn', () => decks.deckImportPrepdeckForm()),
+  uploadRoute('POST', '/decks/import-prepdeck', 'signedIn', 'deck_import_prepdeck.html', uploadTooLarge(MAX_PREPDECK_UPLOAD_BYTES), MAX_PREPDECK_UPLOAD_BYTES, (p, { repos, ports }) =>
+    decks.deckImportPrepdeckSubmit(repos, p, { zip: ports.zip }),
+  ),
+  route('GET', '/decks/import-anki', 'signedIn', () => decks.deckImportAnkiForm()),
+  uploadRoute('POST', '/decks/import-anki', 'signedIn', 'deck_import_anki.html', uploadTooLarge(MAX_APKG_UPLOAD_BYTES), MAX_APKG_UPLOAD_BYTES, (p, { repos, ports }) =>
+    decks.deckImportAnkiSubmit(repos, p, { apkg: ports.apkg }),
+  ),
+
   // One deck. Every sub-resource is declared before `/deck/{name}` so a
   // path segment is never mistaken for a deck slug.
   route('POST', '/deck/{name}/delete', 'user', (p, { repos }) => decks.deckDelete(repos, p)),
@@ -55,6 +71,8 @@ export const pageRoutes: readonly Route[] = [
   route('POST', '/deck/{name}/notifications', 'user', (p, { repos }) => decks.deckNotifications(repos, p)),
   route('GET', '/deck/{name}/export', 'user', (p, { repos }) => decks.deckExportHub(repos, p)),
   route('GET', '/deck/{name}/export.csv', 'user', (p, { repos }) => decks.deckExportCsv(repos, p)),
+  route('GET', '/deck/{name}/export.prepdeck', 'user', (p, { repos, ports }) => decks.deckExportPrepdeck(repos, p, { zip: ports.zip })),
+  route('GET', '/deck/{name}/export.apkg', 'user', (p, { repos, ports, subject }) => decks.deckExportApkg(repos, p, { apkg: ports.apkg, subject })),
   route('GET', '/deck/{name}/question/new', 'user', (p, { repos }) => decks.questionNewForm(repos, p)),
   route('POST', '/deck/{name}/question/new', 'user', (p, { repos }) => decks.questionNewSubmit(repos, p)),
   route('GET', '/deck/{name}', 'user', (p, { repos }) => decks.deckView(repos, p)),

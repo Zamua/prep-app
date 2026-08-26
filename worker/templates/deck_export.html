@@ -16,6 +16,8 @@
   </p>
 </section>
 
+{% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
 {# Three format cards. Each card has the format name, a one-line
    description, a paragraph of detail, and an Export button that
    the deck-export.js module hooks. The hook prefers the Web Share
