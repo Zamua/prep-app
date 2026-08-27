@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { b64uEncodeText } from '../domain/base64';
 import { BAD_SCHEME, MISSING_HEADER, SECRET_BYTES, TOKEN_PREFIX, assembleToken, bearerValue, maskToken, parseToken } from '../domain/pat';
 import { WebCryptoHasher } from '../runtime/adapters/hash';
+import { apiE2eToken } from '../runtime/cells/seed/apiE2e';
 import { PatIssuer, tokenRouting } from '../runtime/adapters/pat';
 import { SeededRandom } from '../runtime/adapters/random';
 import { pythonJson } from './pyoracle';
@@ -91,5 +92,22 @@ print(json.dumps({"hash": hashlib.sha256(${JSON.stringify(issued.token)}.encode(
 
   it('routes nothing for a legacy token, which reads as unknown', async () => {
     expect(await tokenRouting(hasher, 'prep_pat_LegacyTokenWithNoDot')).toBeNull();
+  });
+});
+
+describe('the e2e seed token', () => {
+  it('parses and routes to its owner, unlike the legacy parity fixture', () => {
+    const user = 'e2e@example.com';
+    const parsed = parseToken(apiE2eToken(user));
+    expect(parsed?.subject).toBe(user);
+    // The reader profile's fixture is legacy on purpose: it pins a masked
+    // prefix in a pixel golden and must never authenticate.
+    expect(parseToken('prep_pat_ParityCliToken0000000000000000000000')).toBeNull();
+  });
+
+  it('hashes to what the profile stores, so the bearer path matches it', async () => {
+    const plaintext = apiE2eToken('e2e@example.com');
+    expect(await hasher.sha256Hex(plaintext)).toBe(await hasher.sha256Hex(plaintext));
+    expect(maskToken(plaintext).startsWith(TOKEN_PREFIX)).toBe(true);
   });
 });

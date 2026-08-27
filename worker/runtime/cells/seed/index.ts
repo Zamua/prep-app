@@ -3,6 +3,7 @@
 // profiles join them here: a cell has no database file to open, so what the
 // suite used to write with sqlite is a profile.
 import type { Hasher, UserRepos } from '../../../app/ports.js';
+import { profileApiE2e } from './apiE2e.js';
 import { profileDeviceWipe } from './deviceWipe.js';
 import { profileEmpty } from './empty.js';
 import { profileIo } from './io.js';
@@ -41,6 +42,7 @@ export const PROFILES: Record<string, SeedProfile> = {
   offline_e2e: profileOfflineE2e,
   device_wipe: profileDeviceWipe,
   merge_anon: profileMergeAnon,
+  api_e2e: profileApiE2e,
 };
 
 /** Profiles whose cell stands in for a pre-signup visitor. The merge reads

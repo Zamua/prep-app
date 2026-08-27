@@ -13,6 +13,7 @@ copy, so any difference at all is a defect.
 
 from __future__ import annotations
 
+import re
 import struct
 from dataclasses import dataclass, field
 
@@ -80,6 +81,26 @@ class Divergence:
         }
 
 
+_BITS = re.compile(r"\(bits ([0-9a-f]{16})\)")
+
+
+def ulp_gap(snapshot: str, cell: str) -> int | None:
+    """How many representable doubles separate two rendered floats, or None
+    if either side is not a float. Adjacent doubles differ by 1: celld's
+    SQLite bridge shifts that last bit on some values, and only that shift
+    is waivable."""
+    a, b = _BITS.search(snapshot), _BITS.search(cell)
+    if not a or not b:
+        return None
+    x, y = int(a.group(1), 16), int(b.group(1), 16)
+
+    def ordered(v: int) -> int:
+        """Sign-magnitude to a monotone ordering, so adjacency holds across zero."""
+        return -(v & 0x7FFFFFFFFFFFFFFF) if v >> 63 else v
+
+    return abs(ordered(x) - ordered(y))
+
+
 @dataclass
 class Report:
     """The verifier's whole answer. `checks` counts what was actually
@@ -87,6 +108,10 @@ class Report:
     clean."""
 
     divergences: list[Divergence] = field(default_factory=list)
+    # Tier-2 float divergences the operator waived: celld's SQLite bridge
+    # shifts the last bit of some doubles. Reported, never hidden, but they
+    # do not make a run dirty because tier 3 proves no schedule moved.
+    waived: list[Divergence] = field(default_factory=list)
     # Abort criteria the runbook gates on separately (docs/PHASE-6.md E),
     # reported here because the verifier is already looking. They do not
     # mean the copy is unfaithful, so they do not make a run dirty.
@@ -97,6 +122,19 @@ class Report:
 
     def add(self, *found: Divergence) -> None:
         self.divergences.extend(found)
+
+    def waive_ulp(self) -> int:
+        """Move single-ULP tier-2 float divergences out of the dirty set.
+        A gap wider than one representable double is a real corruption and
+        stays, which is what keeps the waiver from swallowing a bug."""
+        kept: list[Divergence] = []
+        for d in self.divergences:
+            if d.tier == 2 and ulp_gap(d.snapshot, d.cell) == 1:
+                self.waived.append(d)
+            else:
+                kept.append(d)
+        self.divergences = kept
+        return len(self.waived)
 
     def warn(self, *found: Divergence) -> None:
         self.warnings.extend(found)
@@ -114,7 +152,10 @@ class Report:
     def text(self, limit: int | None = None) -> str:
         if self.clean:
             checks = ", ".join(f"{k}={v}" for k, v in sorted(self.checks.items()))
-            return f"clean: {len(self.users)} users, {checks}"
+            head = f"clean: {len(self.users)} users, {checks}"
+            if self.waived:
+                head += f"\n  ({len(self.waived)} tier2 single-ULP float differences waived; see the JSON report)"
+            return head
         shown = self.divergences if limit is None else self.divergences[:limit]
         lines = [d.line() for d in shown]
         if limit is not None and len(self.divergences) > limit:
@@ -135,4 +176,5 @@ class Report:
             "notes": self.notes,
             "warnings": [d.as_json() for d in self.warnings],
             "divergences": [d.as_json() for d in self.divergences],
+            "waived": [d.as_json() for d in self.waived],
         }

@@ -157,22 +157,23 @@ def test_details_toggle_skips_close_on_action_taps(http: httpx.Client):
     )
 
 
-def test_metrics_exposes_threadpool_gauges(http: httpx.Client):
+def test_metrics_exposes_the_histogram_families(http: httpx.Client):
     """Prometheus scrape target. Must serve plain-text exposition with
     the prep-specific metrics. Catches a regression that drops the
-    /metrics route or breaks the registry serialization."""
+    /metrics route or breaks the registry serialization.
+
+    The threadpool gauges are deliberately absent: an isolate has no
+    threadpool to report on."""
     r = http.get("/metrics")
     assert r.status_code == 200, r.status_code
     assert r.headers.get("content-type", "").startswith("text/plain"), r.headers
     body = r.text
-    # Prep-specific signals — order doesn't matter, presence does.
-    assert "prep_anyio_threadpool_capacity" in body
-    assert "prep_anyio_threadpool_borrowed" in body
     # Histograms surface their _bucket / _count / _sum families. The
     # ai_grade histogram won't have observations from this test,
     # but the metric registration alone should produce a TYPE line.
     assert "prep_ai_grade_duration_seconds" in body
     assert "prep_http_request_duration_seconds" in body
+    assert "prep_anyio_threadpool" not in body
 
 
 def test_pin_toggle_floats_deck_to_top(http: httpx.Client, test_deck: dict):

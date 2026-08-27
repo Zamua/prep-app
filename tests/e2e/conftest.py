@@ -99,13 +99,19 @@ def http(base_url: str, deployed_target: str) -> Iterator[httpx.Client]:
     honoured it would hand any caller any user's data. A local target
     identifies by header plus `X-Internal-Token` instead
     (tests/e2e/celld_node.py). No token means the suite cannot create
-    its fixtures, so it skips rather than failing test by test."""
+    its fixtures. That skips when the target is the default, and FAILS
+    when E2E_BASE_URL named one deliberately: a silent skip against a
+    chosen deploy reads as coverage and is how these suites went months
+    testing nothing."""
     token = os.environ.get("E2E_API_TOKEN")
     if not token:
-        pytest.skip(
+        why = (
             "no credentials for the deployed target: set E2E_API_TOKEN "
             "(a prep_pat_ token from /settings/api)"
         )
+        if os.environ.get("E2E_BASE_URL"):
+            pytest.fail(f"{why}; E2E_BASE_URL={base_url} was named explicitly")
+        pytest.skip(why)
     headers = {"Authorization": f"Bearer {token}"}
     with httpx.Client(
         base_url=base_url,

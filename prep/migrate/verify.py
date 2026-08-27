@@ -822,6 +822,13 @@ def main(argv: list[str] | None = None) -> int:
         default=50,
         help="divergences printed before the report refers to --json",
     )
+    parser.add_argument(
+        "--waive-tier2-ulp",
+        action="store_true",
+        help="accept tier-2 float differences of exactly one representable "
+        "double: celld's SQLite bridge shifts that last bit on some values, "
+        "and tier 3 proves no schedule moved. A wider gap still fails",
+    )
     parser.add_argument("--timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
@@ -854,6 +861,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         conn.close()
 
+    if args.waive_tier2_ulp:
+        report.waive_ulp()
     if args.json is not None:
         Path(args.json).write_text(json.dumps(report.as_json(), indent=2) + "\n", encoding="utf-8")
     if report.warnings:
