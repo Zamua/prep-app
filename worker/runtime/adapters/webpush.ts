@@ -89,11 +89,16 @@ export async function encryptPayload(
   const authSecret = b64uDecode(subscription.auth.trim());
   if (uaPublic === null || uaPublic.length !== 65 || authSecret === null) throw new VapidKeyError('subscription keys are not valid base64url');
 
-  const uaKey = await crypto.subtle
-    .importKey('raw', uaPublic as BufferSource, { name: 'ECDH', namedCurve: 'P-256' }, false, [])
-    .catch((e) => {
-      throw new Error(`importKey(raw ECDH p256dh, ${uaPublic.length}B): ${e instanceof Error ? e.message : e}`);
-    });
+  // celld's WebCrypto has no `raw` import for ECDH, so the uncompressed
+  // P-256 point is split into its coordinates and imported as a JWK.
+  if (uaPublic[0] !== 0x04) throw new VapidKeyError('subscription p256dh is not an uncompressed P-256 point');
+  const uaKey = await crypto.subtle.importKey(
+    'jwk',
+    { kty: 'EC', crv: 'P-256', x: b64uEncode(uaPublic.slice(1, 33)), y: b64uEncode(uaPublic.slice(33, 65)), ext: true },
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    [],
+  );
   // workers-types spells ECDH's peer key `$public`; the runtime reads either.
   const ecdh = { name: 'ECDH', public: uaKey } as unknown as SubtleCryptoDeriveKeyAlgorithm;
   const shared = new Uint8Array(await crypto.subtle.deriveBits(ecdh, ephemeral.privateKey, 256));
