@@ -1,5 +1,4 @@
-"""The parity target (docs/PARITY-GATE.md C7): a base URL, seeded
-through `POST /_parity/seed`.
+"""The parity target: a base URL, seeded through `POST /_parity/seed`.
 
 `PARITY_BASE_URL` names it. A local run points at a celld node started
 by `worker/scripts/run-node.sh`; a deployed run points at the fleet.

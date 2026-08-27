@@ -1,4 +1,4 @@
-"""The per-user half of the export format (docs/PHASE-6.md A1, A2)."""
+"""The per-user half of the export format."""
 
 from __future__ import annotations
 

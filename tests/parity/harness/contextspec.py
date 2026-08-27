@@ -1,4 +1,4 @@
-"""Browser context for a parity capture (docs/PARITY-GATE.md C2)."""
+"""Browser context for a parity capture."""
 
 from __future__ import annotations
 
@@ -88,9 +88,8 @@ def new_context(
                         **request.headers,
                         "tailscale-user-login": identity,
                         "tailscale-user-name": PARITY_USER_NAME,
-                        # The TypeScript server trusts the identity headers
-                        # only beside this token (docs/CELLD-REWRITE.md 7.0);
-                        # the Python server ignores it.
+                        # The server trusts the identity headers only
+                        # beside this token.
                         "x-internal-token": internal_token(),
                     }
                 )

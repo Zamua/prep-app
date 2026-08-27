@@ -1,4 +1,4 @@
-"""The exporter never writes to the snapshot (docs/PHASE-6.md A0)."""
+"""The exporter never writes to the snapshot."""
 
 from __future__ import annotations
 

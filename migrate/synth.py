@@ -7,7 +7,7 @@ one, so this generates a file with the same shape: many users, one heavy
 enough to force the importer's chunking, one mid-merge, one anonymous
 with nothing at all, push subscriptions, a `claude-subscription` BYOK
 row, a PAT holder, `desired_retention` at both clamp ends, and cards in
-every FSRS state (docs/PHASE-6.md F1).
+every FSRS state.
 
 The schema comes from `migrate.legacy_schema`, the frozen copy of what
 the snapshot was written by. Rows go in by raw SQL:

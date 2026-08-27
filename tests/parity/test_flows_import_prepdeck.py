@@ -1,4 +1,4 @@
-"""Pixel flow `import-prepdeck` (docs/PARITY-GATE.md C5), one test per scheme."""
+"""Pixel flow `import-prepdeck`, one test per scheme."""
 
 import pytest
 

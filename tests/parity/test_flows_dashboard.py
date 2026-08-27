@@ -1,4 +1,4 @@
-"""Pixel flow `dashboard` (docs/PARITY-GATE.md C5), one test per scheme."""
+"""Pixel flow `dashboard`, one test per scheme."""
 
 import pytest
 

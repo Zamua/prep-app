@@ -1,4 +1,4 @@
-"""Pixel flow `sign-out` (docs/PARITY-GATE.md C5), one test per scheme."""
+"""Pixel flow `sign-out`, one test per scheme."""
 
 import pytest
 

@@ -1,4 +1,4 @@
-"""One (flow, scheme) run in golden or compare mode (docs/PARITY-GATE.md C7)."""
+"""One (flow, scheme) run in golden or compare mode."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Pixel flow `transform` (docs/PARITY-GATE.md C5), one test per scheme."""
+"""Pixel flow `transform`, one test per scheme."""
 
 import pytest
 

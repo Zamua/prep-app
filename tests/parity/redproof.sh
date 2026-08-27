@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The red proof (docs/PARITY-GATE.md section E): the knob must turn its
-# own check red. Exits 0 only when the failing set matches.
+# The red proof: the knob must turn its own check red. Exits 0 only
+# when the failing set matches.
 #
 #   PARITY_PERTURB_CSS=1   red: every pixel shot
 #

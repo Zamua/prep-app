@@ -1,4 +1,4 @@
-"""The pixel harness (docs/PARITY-GATE.md section C).
+"""The pixel harness.
 
 `compare` is the comparator, `registry` the flow table, `contextspec`
 and `capture` the browser side, `server` the local target, `runner`

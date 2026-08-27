@@ -1,4 +1,4 @@
-"""Pixel flow `trivia-generating` (docs/PARITY-GATE.md C5), one test per scheme."""
+"""Pixel flow `trivia-generating`, one test per scheme."""
 
 import pytest
 

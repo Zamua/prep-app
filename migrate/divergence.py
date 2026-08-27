@@ -112,9 +112,9 @@ class Report:
     # shifts the last bit of some doubles. Reported, never hidden, but they
     # do not make a run dirty because tier 3 proves no schedule moved.
     waived: list[Divergence] = field(default_factory=list)
-    # Abort criteria the runbook gates on separately (docs/PHASE-6.md E),
-    # reported here because the verifier is already looking. They do not
-    # mean the copy is unfaithful, so they do not make a run dirty.
+    # Abort criteria the runbook gates on separately, reported here because
+    # the verifier is already looking. They do not mean the copy is
+    # unfaithful, so they do not make a run dirty.
     warnings: list[Divergence] = field(default_factory=list)
     checks: dict[str, int] = field(default_factory=dict)
     users: list[str] = field(default_factory=list)

@@ -1,4 +1,4 @@
-"""Flow registry (docs/PARITY-GATE.md C5).
+"""Flow registry.
 
 One module per flow under `tests/parity/flows/` registers with
 `@flow(...)`. `covers` names templates (`landing.html`,

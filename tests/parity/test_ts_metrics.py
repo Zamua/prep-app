@@ -1,4 +1,4 @@
-"""`GET /metrics` on a running TypeScript node (docs/PHASE-5.md B).
+"""`GET /metrics` on a running TypeScript node.
 
 `worker/tests/metrics.test.ts` gates the encoder against
 `prometheus_client` byte for byte. This one gates the deployed route:

@@ -1,4 +1,4 @@
-"""Shared parity constants (docs/PARITY-GATE.md section 0)."""
+"""Shared parity constants."""
 
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 The exporter, importer and verifier are all built against this fixture
 until a real snapshot is authorised, so every shape the spec names has to
-be in it (docs/PHASE-6.md F1) and a seed has to fix the file.
+be in it and a seed has to fix the file.
 """
 
 from __future__ import annotations

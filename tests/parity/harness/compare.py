@@ -1,4 +1,4 @@
-"""Pixel comparator (docs/PARITY-GATE.md C4).
+"""Pixel comparator.
 
 A pixel fails when any RGB channel differs by more than `CHANNEL_TOL`.
 The image passes when the failing fraction is at most `MAX_FAIL_RATIO`

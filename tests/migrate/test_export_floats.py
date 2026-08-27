@@ -1,4 +1,4 @@
-"""REAL columns survive the export bit for bit (docs/PHASE-6.md A1).
+"""REAL columns survive the export bit for bit.
 
 `json.dumps` emits Python's shortest round-tripping repr and `JSON.parse`
 reads it back to the same double, so a copied card schedules off the same

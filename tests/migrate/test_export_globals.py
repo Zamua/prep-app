@@ -1,4 +1,4 @@
-"""The global half of the export format (docs/PHASE-6.md A3)."""
+"""The global half of the export format."""
 
 from __future__ import annotations
 

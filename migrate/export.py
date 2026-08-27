@@ -8,8 +8,7 @@ and immutable (`migrate.snapshot`). This module never imports
 the file it is supposed to be reading; `tests/migrate/test_export_is_pure.py`
 pins that as source, not as convention.
 
-Layout, orderings and table dispositions: `migrate.layout` and
-docs/PHASE-6.md A.
+Layout, orderings and table dispositions: `migrate.layout`.
 """
 
 from __future__ import annotations

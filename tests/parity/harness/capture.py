@@ -1,4 +1,4 @@
-"""Screenshot capture (docs/PARITY-GATE.md C3 and E)."""
+"""Screenshot capture."""
 
 from __future__ import annotations
 

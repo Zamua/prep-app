@@ -1,4 +1,4 @@
-"""Pixel flow `import-anki` (docs/PARITY-GATE.md C5), one test per scheme."""
+"""Pixel flow `import-anki`, one test per scheme."""
 
 import pytest
 
