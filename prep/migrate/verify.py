@@ -217,8 +217,10 @@ class Verifier:
                 fields=("id", "is_anonymous", "created_at", "idx"),
             )
         )
+        # Only a MIGRATED user is refused block 0. A parity host keeps its own
+        # seed there, and every rehearsal fleet is one.
         for row in cell_users:
-            if row.get("idx") == 0:
+            if row.get("id") in wanted and row.get("idx") == 0:
                 self.report.add(
                     Divergence(
                         tier=1,

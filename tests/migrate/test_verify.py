@@ -244,6 +244,22 @@ def test_block_zero_is_refused(snapshot, fleet, node_oracle):
     assert any(d.field == "idx" and "block 0" in d.note for d in report.divergences)
 
 
+def test_the_seed_at_block_zero_is_not_a_divergence(snapshot, fleet, node_oracle):
+    """A parity host holds its own seed at idx 0. Only a MIGRATED user may
+    never hold that block, so the seed row is not the migration's business."""
+    tables = copy.deepcopy(fleet)
+    tables[(DIRECTORY_CELL, "users")].append(
+        {
+            "id": "parity@example.com",
+            "is_anonymous": 0,
+            "created_at": "2026-03-14T15:00:00+00:00",
+            "idx": 0,
+        }
+    )
+    report = run(snapshot, tables, node_oracle)
+    assert report.clean, report.text()
+
+
 def test_a_lost_merge_audit_row_is_named(snapshot, fleet, node_oracle):
     tables = copy.deepcopy(fleet)
     lost = tables[(DIRECTORY_CELL, "account_merges")].pop()

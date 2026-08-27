@@ -218,8 +218,10 @@ second one changes what a golden renders.
 sufficient: a card can copy perfectly and still schedule differently if
 the retention resolution changes. For every migrated card, at a fixed
 clock, run `scheduleReview(state, verdict, now, {desiredRetention:
-resolve(deck, user), fuzz: false})` for all four verdicts on both
-sides - `py-fsrs` against the snapshot, `domain/fsrs` against the cell
+resolve(deck, user), fuzz: false})` for both verdicts prep exposes
+(`right` and `wrong`; the other half of the FSRS scale is not reachable
+from the study loop) on both sides - `py-fsrs` against the snapshot,
+`domain/fsrs` against the cell
 dump - and compare `stability` and `difficulty` at 1e-9, `next_due`,
 `fsrs_state`, `interval_seconds` and `step_bucket` exactly. This is the
 phase 4.2 corpus comparison re-aimed at real rows, and it is what proves
@@ -311,7 +313,12 @@ the contract below, and the runbook is not done until every line holds.
    run again on the same fleet: second-run insert counts all zero.
 2. **Verification clean**: tiers 1-3, zero mismatches, and the peak
    import heap under 64 MiB recorded.
-3. **The pixel sweep still green after the import**: the phase 3-5 flows
-   re-run against a migrated cell rather than a seeded one.
+3. **The pixel sweep still green**, run BEFORE the import or against a
+   fleet holding no migrated data. It cannot run after one: every flow
+   opens with `POST /_parity/seed`, which wipes the global limiter ledger
+   and, through `clearAnonymous`, wipes and deregisters **every**
+   anonymous account in the directory - migrated ones included. The sweep
+   is a check on the build, not on the migrated rows; the verifier is
+   what reads those.
 4. **e2e green**: the phase 5 suite, one file per invocation.
 5. **VAPID**: the two proofs in D.
