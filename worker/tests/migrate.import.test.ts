@@ -453,8 +453,8 @@ describe('the second pass', () => {
 
   it('carries an edit to every mutable table, not only to cards', async () => {
     const alice = exported[0]!;
-    const question = { ...alice.tables['questions']![0]!, prompt: 'edited during the window', suspended: 1 };
-    const deck = { ...alice.tables['decks']![0]!, name: 'renamed', notifications_enabled: 0 };
+    const question: Record<string, unknown> = { ...alice.tables['questions']![0]!, prompt: 'edited during the window', suspended: 1 };
+    const deck: Record<string, unknown> = { ...alice.tables['decks']![0]!, name: 'renamed', notifications_enabled: 0 };
     for (const [table, row] of [['questions', question], ['decks', deck]] as const) {
       const res = await post(env, '/_migrate/import', { user: ALICE, idx: 1, table, rows: [row] });
       expect([table, await res.json()]).toEqual([table, { idx: 1, inserted: { [table]: 1 }, dropped: 0 }]);
