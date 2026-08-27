@@ -114,6 +114,13 @@ export class WebCryptoWebPush implements WebPush {
   ) {}
 
   async send(subscription: PushSubscription, payload: string): Promise<PushOutcome> {
+    const host = (() => {
+      try {
+        return new URL(subscription.endpoint).host;
+      } catch {
+        return '<unparseable>';
+      }
+    })();
     let body: Uint8Array;
     let authorization: string;
     try {
@@ -121,7 +128,8 @@ export class WebCryptoWebPush implements WebPush {
       const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as CryptoKeyPair;
       body = await encryptPayload(subscription, TEXT.encode(payload), salt, ephemeral);
       authorization = await vapidHeader(this.keys, new URL(subscription.endpoint).origin, this.now().getTime() / 1000);
-    } catch {
+    } catch (e) {
+      console.error(`web push: could not build the request for ${host}: ${e instanceof Error ? e.message : e}`);
       return 'fail';
     }
     try {
@@ -136,8 +144,15 @@ export class WebCryptoWebPush implements WebPush {
         body: body as BodyInit,
       });
       if (res.status === 404 || res.status === 410) return 'gone';
-      return res.ok ? 'ok' : 'fail';
-    } catch {
+      if (!res.ok) {
+        // The push service's own words. Without them a rejected VAPID token
+        // and a network blip are the same bare 'fail'.
+        console.error(`web push: ${host} answered ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`);
+        return 'fail';
+      }
+      return 'ok';
+    } catch (e) {
+      console.error(`web push: ${host} unreachable: ${e instanceof Error ? e.message : e}`);
       return 'fail';
     }
   }
