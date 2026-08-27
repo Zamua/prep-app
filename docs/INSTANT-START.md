@@ -87,32 +87,26 @@ product.
 ### The anonymous landing
 
 `GET /` for an unauthenticated visitor keeps the same URL and
-branching logic (`prep/web/index.py:161-208`); only the template
-content changes. The hero section of `templates/landing.html:16-30`
-becomes the product:
+branching logic in the entry worker; only the template content
+differs. The hero section of `worker/templates/landing.html` is the
+product:
 
 - Eyebrow: `prep`. Headline: **"What do you want to learn today?"**
 - A single textarea (placeholder: a concrete example topic), a
   primary **Generate my deck** button, and one quiet disclosure line
   under the form (section 3.5).
 - The existing marketing sections (walkthrough, benefits, CTA band,
-  `templates/landing.html:35-163`) move below the fold, demoted, not
-  deleted. The masthead sign-in chip stays
-  (`templates/landing.html:10-12`).
-- The hero renders only when the deploy's free tier is configured
-  (`free_tier_configured()`, `prep/agent/selector.py:236-240`,
-  passed into the template context by the index route) AND the auth
-  provider exposes a sign-in URL (`get_provider().urls().sign_in`
-  is not None; only clerk mode does). Outside clerk mode there is
-  no self-serve sign-up for the nudge CTA to link, and on
-  tailscale-mode deploys unauthenticated requests are a dev-only
-  shape anyway. A deploy failing either condition renders today's
-  landing unchanged.
+  further down `landing.html`) sit below the fold, demoted, not
+  deleted. The masthead sign-in chip stays.
+- The hero renders only when the deploy configured a free tier AND
+  the identity provider exposes a sign-in URL (only Clerk does).
+  Without a sign-in URL there is no self-serve sign-up for the
+  nudge to link to. A deploy failing either condition renders the
+  plain landing page.
 
-Signed-in users never see any of this: the authenticated branch of
-`index()` (`prep/web/index.py:209-280`) is untouched, and so is the
-reauth-shell branch for dormant sessions
-(`prep/web/index.py:184-195`).
+Signed-in users never see any of this: the identified branch renders
+the dashboard in the user's own cell, and a dormant session gets the
+reauth shell instead.
 
 ### The generation loop (client)
 
@@ -174,8 +168,10 @@ the removal itself in sections 8 and 9.
 
 ### 3.1 The anonymous generation endpoint
 
-A new bounded context `prep/instant/` (`routes.py`, `service.py`,
-`repo.py`), following the per-context layout.
+The use case is `worker/app/instant/generate.ts`, the route is
+`worker/runtime/routes/instant.ts` (it is served by the entry worker,
+not a cell, because a visitor has none yet), and the pure parts are
+`worker/domain/instant/` (`cards.ts`, `limiter.ts`, `ip.ts`).
 
 **`POST /api/instant/generate`** - unauthenticated, JSON in/out.
 
@@ -205,59 +201,43 @@ Errors, all JSON with a `kind` the client branches on:
 | 503 | `not_configured` | free tier absent on this deploy |
 
 **Free-tier only, by construction.** The service resolves its
-adapter through `free_tier_agent()`
-(`prep/agent/selector.py:165-233`) directly, NEVER through
-`agent_for_user()`. This is load-bearing, not stylistic:
-`agent_for_user(None)` consults the deploy-wide subscription token
-on non-clerk deploys (`prep/agent/selector.py:369-372`), and an
-anonymous internet endpoint must never be able to spend a BYOK key
-or the operator's subscription pool under any deploy shape. The
-adapter is resolved per request (the factory is cheap and
-never-raising by contract); `None` means 503. A module-level test
-seam (`set_instant_agent_factory`, same pattern as
-`selector.set_user_agent_factory`,
-`prep/agent/selector.py:70-81`) lets tests inject `FakeAgent`.
+adapter from the free-tier configuration directly
+(`runtime/adapters/agents/freeTier.ts`), NEVER through the per-user
+selector. This is load-bearing, not stylistic: an anonymous internet
+endpoint must never be able to reach a stored BYOK key under any
+deploy shape. No free tier configured means 503 `not_configured`.
 
-**Output-capped, by construction.** `free_tier_agent()` builds its
-adapter with the transform-sized `_FREE_TIER_MAX_TOKENS = 32768`
-(`prep/agent/selector.py:162`), and `AgentPort.run()` exposes no
-per-call max_tokens, so reusing that adapter unchanged would let an
-adversarial topic pull 16x the output this endpoint budgets for on
-every call. `free_tier_agent()` therefore gains an optional
-`max_output_tokens` parameter (default `None` preserves 32768 for
-every existing caller), and the instant service passes
-`PREP_INSTANT_MAX_OUTPUT_TOKENS` (default 1024, roughly 4x an
-honest 5-card response, ~260 output tokens measured, so real decks
-never truncate). A response
+**Output-capped, by construction.** The shared tier's general cap is
+the transform-sized `FREE_TIER_MAX_OUTPUT_TOKENS` (32768). Reusing it
+here unchanged would let an adversarial topic pull 32x the output this
+endpoint budgets for, on every call, so instant passes
+`INSTANT_MAX_OUTPUT_TOKENS` (1024) instead: roughly 4x an honest
+5-card response, so real decks never truncate. A response
 cut off at the cap fails parsing or the 3-card floor and returns
 `generation_failed`; that outcome still counts as spend
 (section 3.2). The abuse arithmetic in 3.2 depends on this cap
 being ENFORCED per call, never assumed.
 
-**Synchronous single call, no plan step, no Temporal.** One prompt,
-one adapter call in the async route handler (non-blocking; the
-free-tier adapter is httpx-async). This is deliberately simpler
-than the signed-in plan flow: no workflow, no polling UI, no worker
-involvement. The SERVICE owns the 60s deadline (`asyncio.wait_for`)
-and hands the adapter a 75s transport backstop: the shared adapter
-maps its own transport timeout to `AgentBusy`, which section 3.2
-would misclassify as a free refusal, so the service deadline must
-fire first and classify the stall as spend
-(`generation_failed`). A timeout the adapter still surfaces
-arrives as `AgentTimeout` (an `AgentBusy` subclass meaning "the
-request WAS issued") and also counts as spend.
+**Synchronous single call, no job, no gate.** One prompt, one adapter
+call in the route handler. This is deliberately simpler than the
+signed-in plan flow: no `JobCell`, no polling UI, no alarm. The use
+case owns the deadline and hands the adapter a longer transport
+backstop: the shared adapter maps its own transport timeout to
+`AgentBusy`, which section 3.2 would otherwise misclassify as a free
+refusal, so the use case's deadline must fire first and classify the
+stall as spend (`generation_failed`). A timeout the adapter does
+surface arrives as `AgentTimeout`, an `AgentBusy` subclass meaning
+"the request WAS issued", and also counts as spend.
 
-**The prompt** reuses the trivia generation shape, which already
-produces exactly what the offline grader consumes. A new template in
-`prep/instant/service.py`, derived from `_GEN_PROMPT_TEMPLATE`
-(`prep/trivia/service.py:51-133`): "exactly 5" q/a/r items (the
+**The prompt** (`domain/instant/cards.ts::buildPrompt`) reuses the
+trivia generation shape, which already produces exactly what the
+offline grader consumes: "exactly 5" q/a/r items (the
 free-tier card cap, section 1), the same
 answer-length constraints, the REGEX GUIDANCE block with its
 regex-semantics rules intact but its grader-fallback lines
-rewritten (the trivia block tells the model "the grader has a
-separate path" for paraphrase / typo-tolerant matching and "the
-grader has fallbacks", `prep/trivia/service.py:115-119`; the
-offline grader has neither, a null regex means reveal +
+rewritten (the trivia block tells the model the grader has a
+separate path for paraphrase and typo-tolerant matching, and that it
+has fallbacks; the offline grader has neither, a null regex means reveal +
 self-verdict, so the instant prompt states exactly that and pushes
 the model to emit a regex whenever the answer shape allows one,
 because a verbatim copy would bias it toward omitting regexes
@@ -268,31 +248,26 @@ explanation surface in the offline app; smaller output also means a
 faster, cheaper call). No per-user context of any kind enters the
 prompt: topic text only.
 
-**Output parsing reuses the existing tolerant parser.**
-`_parse_qa_pairs` (`prep/trivia/service.py:142-161`) is promoted to
-a shared pure module (`prep/domain/qa_extract.py`), with
-`prep/trivia/service.py` importing it from there (no behavior
-change, pinned by the existing trivia tests). The instant service
-then applies the same per-item hygiene `generate_batch` does
-(`prep/trivia/service.py:184-215`): skip non-dict items, require
-non-empty q and a, validate each regex with
-`grading.validate_regex_update(r, expected_literal=a)`
-(`prep/domain/grading.py`) and drop to null on failure. Server-side
-caps on the response: at most 16 cards (truncate), prompt at most
-2000 chars, answer at most 500 (over-cap items skipped); fewer than
-3 surviving cards means degenerate output and returns
-`generation_failed`. Prompt-injection blast radius note: the model
+**Output parsing shares the tolerant parser.**
+`domain/instant/cards.ts::extractCards` is the same extraction the
+trivia path uses, plus the same per-item hygiene: skip non-object
+items, require non-empty q and a, validate each regex with
+`validateRegexUpdate` from `domain/grading/` and drop it to null on
+failure. The caps are constants in that module: `MAX_CARDS` truncates
+the list, `CARD_PROMPT_MAX_CHARS` (2000) and `CARD_ANSWER_MAX_CHARS`
+(500) skip over-cap items, and fewer than `MIN_CARDS` (3) survivors is
+degenerate output and returns `generation_failed`. Prompt-injection blast radius note: the model
 output never touches server state; it is parsed, validated, and
 returned to the requester's own device, so an adversarial topic can
 only produce a bad deck for its own author.
 
 `display_name` is derived server-side from the topic: whitespace
-collapsed, capped at 60 chars.
+collapsed, capped at `DISPLAY_NAME_MAX_CHARS` (60).
 
 **Metrics**: `prep_instant_generate_duration_seconds{outcome}`
 histogram (outcomes: `ok`, `rate_limited`, `busy`, `failed_spent`,
-`failed_free`, `invalid`), same registration pattern as the grade
-histogram in `prep/web/metrics.py:72-86`. This is the operator's
+`failed_free`, `invalid`), registered beside the grade histogram in
+`worker/app/metrics.ts`. This is the operator's
 abuse and saturation dial; the spend/free split is what makes a
 forced-failure campaign (section 3.2 outcome classes) visible as a
 `failed_spent` spike instead of hiding inside a generic failure
@@ -305,33 +280,23 @@ unauthenticated internet traffic; abuse control is the make-or-break
 of the feature. Layers, outermost first:
 
 **Client IP resolution, proxy-aware and verified.** The app runs
-behind an ingress that terminates TLS, and uvicorn currently runs
-with `--proxy-headers --forwarded-allow-ips "*"`
-(`docker/Procfile.docker`, app line). With every peer trusted,
-uvicorn's forwarded-header handling resolves `request.client.host`
-from the LEFTMOST `X-Forwarded-For` entry, which the client itself
-can supply; `request.client.host` is therefore SPOOFABLE under the
-current config and must not be the limiter key as-is. A helper
-`client_ip(request)` in `prep/instant/routes.py`:
+behind an ingress that terminates TLS. The leftmost `X-Forwarded-For`
+entry is client-supplied and must never be the limiter key. Header
+selection is the router's; the keying is `domain/instant/ip.ts`:
 
 - Reads the header named by `PREP_CLIENT_IP_HEADER` (default
   `x-real-ip`, the ingress-set header on both public deploys).
 - `PREP_CLIENT_IP_HEADER=x-forwarded-for-last` selects the LAST
   `X-Forwarded-For` entry (the one appended by the trusted ingress)
   for ingress setups that append rather than overwrite.
-- A missing header, or a value that does not parse as an IP
-  address, fails CLOSED: the request is keyed to a single shared
-  sentinel bucket subject to the same per-IP windows. It NEVER
-  falls back to `request.client.host`: per the uvicorn analysis
-  above, that value is client-supplied under the container's
-  always-on `--proxy-headers --forwarded-allow-ips "*"`
-  (`docker/Procfile.docker`), so no trustworthy socket-peer value
-  is reachable through it in ANY deploy shape, proxied or not; a
-  no-proxy deploy where clients connect directly is equally
-  spoofable because the client sends its own `X-Forwarded-For`.
-  Dev without an ingress lands in the sentinel bucket, a tight
-  shared allowance that is fine for manual poking; tests inject
-  the header.
+- A missing header, or a value that does not parse as an IP address,
+  fails CLOSED: the request is keyed to a single shared sentinel
+  bucket (`SENTINEL_BUCKET`) subject to the same per-IP windows. It
+  NEVER falls back to a socket peer: no trustworthy socket-peer value
+  is reachable in any deploy shape, proxied or not, because a
+  direct-connecting client sends its own `X-Forwarded-For` too. Dev
+  without an ingress lands in the sentinel bucket, a tight shared
+  allowance that is fine for manual poking; tests inject the header.
 - The derived address is normalized before keying: IPv4 keys on
   the exact address, IPv6 keys on its /64 prefix. One host
   trivially owns a /64, so exact-address v6 keys would let a
@@ -409,7 +374,8 @@ the price of failing closed; the error copy (section 2) promises a
 limit, not three successes.
 
 The global daily breaker protects the free tier's shared daily
-token quota for the whole deploy (AI-PROVIDERS.md section 2): 200
+token quota for the whole deploy (AI-PROVIDERS.md section 2, the
+shared tier): 200
 generations at the ENFORCED 1,024-token output cap (section 3.1)
 is at most ~205k output tokens/day, a bounded fraction of the
 quota that leaves the signed-in flows their headroom. That
@@ -426,18 +392,18 @@ upstream contention, which is honest: from the visitor's seat both
 mean "the shared capacity is spent, try later".
 
 **Check-and-reserve is one transaction.** The limiter check and the
-`pending` row INSERT happen inside a single sqlite transaction in
-`prep/instant/repo.py`, so concurrent requests cannot both pass a
-count they jointly exceed (the reserved row IS what the next
+`pending` row INSERT happen inside one synchronous transaction in the
+`InstantLimiterCell`, so concurrent requests cannot both pass a count
+they jointly exceed (the reserved row IS what the next
 request's count sees; the gate and its subject come from one read).
 The row's `outcome` resolves to `ok` / `failed_spent` /
 `failed_free` when the request completes. Rows older than 7 days
 are pruned opportunistically on insert.
 
-**Concurrency cap.** A module-level `asyncio.Semaphore(2)` around
-the upstream call; contention beyond it returns `busy` immediately
-rather than queueing (the reserved row resolves `failed_free`: no
-spend happened). Two concurrent 60s generations bound the
+**Concurrency cap.** A cap on in-flight upstream calls; contention
+beyond it returns `busy` immediately rather than queueing (the
+reserved row resolves `failed_free`: no spend happened). Two
+concurrent generations bound the
 endpoint's own resource use; the global per-minute cap above is
 what bounds the token rate.
 
@@ -470,7 +436,7 @@ the one-time wipe of devices still holding the old rows is section 9.
 ### 3.5 Privacy disclosure
 
 Anonymous prompts go to the deploy's shared free inference endpoint,
-a third-party service (AI-PROVIDERS.md section 4). The landing
+a third-party service (AI-PROVIDERS.md section 6). The landing
 carries one quiet line directly under the topic input, always
 rendered when the hero is:
 
@@ -499,11 +465,10 @@ The live parts of this flow keep their own sections: the endpoint is
 3.1, the abuse controls are 3.2, the disclosure line is 3.5, and the
 measurements that set the caps are section 1.
 
-What replaced the rest, and where it is specified now:
-[ANONYMOUS-ACCOUNTS.md](ANONYMOUS-ACCOUNTS.md) section 8 (what was
-deleted, per file), section 9 (the one-time wipe of devices still
-holding the old rows), and section 10 (the milestones that shipped
-the server-side account, its merge, its lifecycle and the removal).
+What replaced the rest is specified in
+[ANONYMOUS-ACCOUNTS.md](ANONYMOUS-ACCOUNTS.md): a generation mints a
+server-side anonymous account, the deck lives in that account's cell,
+and signing in merges it into the real one.
 
 ---
 
@@ -515,5 +480,4 @@ the server-side account, its merge, its lifecycle and the removal).
   landing conversion.
 - CAPTCHA escalation (section 3.2) if the metrics demand it.
 - A `retry_after_s`-aware auto-retry on the generating screen.
-- Redaction pattern for the free-tier key in `log_redaction.py`
-  (already tracked in AI-PROVIDERS.md section 5).
+- Redaction of the shared-tier key in log output.

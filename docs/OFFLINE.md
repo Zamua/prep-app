@@ -86,7 +86,7 @@ one-card-per-screen rhythm as the online session flow.
 
 | Type | Offline flow |
 | --- | --- |
-| `mcq` | Choices render, user picks one, graded locally (exact match against the answer, mirroring `prep/domain/grading.py`). Verdict + correct answer shown. |
+| `mcq` | Choices render, user picks one, graded locally (exact match against the answer, mirroring `worker/domain/grading/`). Verdict + correct answer shown. |
 | `multi` | Checkboxes render, graded locally by set equality, same as the online deterministic grader. |
 | `short` with `answer_regex` | User types an answer; the stored regex is applied (case-insensitive, whole-string, same semantics as `match_regex`). If the pattern is absent, fails to compile in the browser's regex engine, or is over the length cap, fall through to self-verdict. |
 | `short` without a usable regex | Reveal flow: user answers, taps "Show answer", the canonical answer (and rubric, if present) renders, user self-verdicts Right / Wrong. Same shape as the existing no-agent `self_grade.html` path. |
@@ -141,11 +141,11 @@ renegotiation here. Offline mode is a **self-contained client-rendered
 mini-app**: one page, its own JS modules, the shared stylesheet.
 
 - **Route**: `GET /offline`, registered alongside the PWA routes in
-  `prep/web/pwa.py`. Un-auth-gated, like `/manifest.json` and
+  `worker/runtime/sw.ts`. Un-auth-gated, like `/manifest.json` and
   `/sw.js`, for the same reason: it must be reachable and cacheable
   without a live session, and it renders nothing user-specific
   server-side. All data comes from IndexedDB client-side.
-- **Template**: `templates/offline.html`. It does NOT extend
+- **Template**: `worker/templates/offline.html`. It does NOT extend
   `base.html`. Base pulls in the identity provider's CDN script, the
   web-font stylesheet, htmx, and the user-chip masthead, all of which
   either require network or a server-resolved user. The offline
@@ -168,7 +168,7 @@ mini-app**: one page, its own JS modules, the shared stylesheet.
   - `store.js`: the IndexedDB layer (schema below), the only module
     that touches IDB.
   - `scheduler.js`: the local ladder (section 5). Pure functions,
-    no I/O, mirroring the shape discipline of `prep/domain/`.
+    no I/O, mirroring the shape discipline of `worker/domain/`.
   - `grader.js`: the deterministic grader port (mcq exact-match,
     multi set-equality, regex short-answer). Pure functions.
   - `sync.js`: outbox flush + snapshot refresh. This module is also
@@ -192,35 +192,31 @@ moves to `app.js` (always-on, idempotent, same scope-relative
 `/sw.js` URL); `notify-settings.js` keeps its `navigator.serviceWorker.ready`
 usage and drops the registration call.
 
-**The build token must be build-stable.** Today's asset versioning
-uses a boot-stamped token (`_STATIC_BUILD_VERSION` in
-`prep/web/templates.py` is the process start time, surfaced to
-templates as the css/importmap version). That is a per-process
-value, not a build identity. It was harmless when the token only
-busted HTTP caches; it is disqualifying once a service worker hangs
-on it. Every pod restart with the same image (a Recreate deploy, an
-OOM kill on the 2GB nodes, a node reboot) would mint a new token,
-byte-change `/sw.js`, and push every client through a full SW
-reinstall plus re-download of the entire CSS tree, JS, and icons for
-bytes that did not change; and with more than one replica the token
-would differ per pod, so `/sw.js` would flip-flop between tokens on
-every update check. Offline support therefore replaces the boot
-stamp with a deterministic build id: `PREP_BUILD_ID` (git SHA or
-image tag) baked in at image build time, with a fallback of hashing
-the static tree plus the offline template at boot when the env var
-is absent (dev). Identical bytes produce an identical token across
-restarts and replicas; the SW updates when and only when a new build
-ships. The versioned asset routes in `prep/app.py` must accept the
-new token format; they continue to treat the version segment as an
-opaque token and serve the current build's bytes for any value
-(which is what lets a page from the previous build keep resolving
-assets across a deploy), but offline consistency never leans on that
-behavior; it comes from the shell-token construction below.
+**The build token must be build-stable.** A service worker hangs on
+the token, so it has to be a build identity and not a per-process
+value. A boot stamp would mint a new token on every restart of the same
+build, byte-change `/sw.js`, and push every client through a full
+reinstall plus a re-download of the whole CSS tree, JS and icons for
+bytes that did not change; with more than one instance serving, the
+token would differ between them and `/sw.js` would flip-flop on every
+update check.
+
+`PREP_BUILD_ID` is therefore a deterministic build id baked in at build
+time, with a fallback of hashing the static tree plus the offline
+template when the var is absent (dev). Identical bytes produce an
+identical token everywhere; the SW updates when and only when a new
+build ships. `worker/runtime/tokenRules.ts` owns the accepted token
+shape and `worker/runtime/assets.ts` the versioned asset routes; those
+routes treat the version segment as opaque and serve the current
+build's bytes for any value, which is what lets a page from the
+previous build keep resolving assets across a deploy. Offline
+consistency never leans on that behavior: it comes from the
+shell-token construction below.
 
 **Getting the build token into the SW.** The `/sw.js` route in
-`prep/web/pwa.py` changes from a plain `FileResponse` to a rendered
-response: it reads `static/sw.js`, substitutes two placeholders, and
-serves the result with `Cache-Control: no-cache`:
+`worker/runtime/sw.ts` is a rendered response, not a static file: it
+reads `static/sw.js`, substitutes two placeholders, and serves the
+result with `Cache-Control: no-cache`:
 
 - `__BUILD__`: the current build token.
 - `__PRECACHE__`: a JSON array of scope-relative URLs, enumerated
@@ -279,7 +275,7 @@ replaces the cache wholesale.
 
 Two interactions with existing middleware, both deliberate:
 
-- The no-cache middleware in `prep/app.py` stamps
+- The no-cache wrapper applied at the composition root stamps
   `no-cache, no-store, must-revalidate` on all `text/html`, which
   includes the `/offline` shell. That header governs the HTTP cache
   and has **no effect on the Cache Storage API**: `cache.put` stores
@@ -354,7 +350,7 @@ failures instead of cached garbage.
 **Cold launch, precisely.** `start_url` is `/`. Offline, the
 navigation fetch to `/` rejects at the network layer (or hangs past
 the 4s window) and the SW serves the cached `/offline` shell. The
-server-side branching in `prep/web/index.py` (landing page for
+server-side branching in the entry worker (landing page for
 anonymous visitors, the reauth shell for dormant sessions, the
 dashboard for live ones) never enters the picture offline because
 all three are server renders: no response, no branch. Conversely,
@@ -524,12 +520,12 @@ removes the exit in the state where unsynced work is most likely.
 
 ## 4. Sync protocol
 
-Two JSON endpoints, both authenticated by the standard `current_user`
-dependency (session cookies; a fresh short-lived token is minted by
-the identity provider's script on the page doing the sync, which is
-why sync only runs from the online app). Both live in a new
-`prep/offline/` bounded context (`routes.py`, `service.py`,
-`repo.py`), following the existing per-context layout.
+Two JSON endpoints, both identified the normal way (session cookies; a
+fresh short-lived token is minted by the identity provider's script on
+the page doing the sync, which is why sync only runs from the online
+app). Both are served by the owner's `UserCell`: the use cases are
+`worker/app/offline/` (`snapshot.ts`, `sync.ts`) and the storage is
+`worker/runtime/adapters/sql/offlineRepo.ts`.
 
 ### `GET /api/offline/snapshot`
 
@@ -725,7 +721,7 @@ interval:  10m   1d   3d   7d   14d   30d
 
 `scheduler.js` implements this as pure functions with the table as a
 constant, so it is unit-testable in isolation, mirroring the
-discipline of `prep/domain/srs.py`.
+discipline of `worker/domain/fsrs/`.
 
 **Worked example (the day-1 to day-3 story).** A fresh card authored
 offline on day 1: answered right (step 0 to 1, due +1d), answered
@@ -767,149 +763,49 @@ lifetime of exactly one offline period.
 | Device clock ahead of server | Future `reviewed_at` clamped to server-now at sync; ordering preserved. |
 | Deploy while a user is offline | Old SW and old cache keep serving the old shell + assets (internally consistent build). The update lands on the next online navigation. |
 | Snapshot card deleted server-side while its review was queued | The review's `question_id` no longer resolves for this user: `rejected` with `unknown question_id`, surfaced in the needs-attention list. |
-| Regex differences between engines | The stored `answer_regex` was authored for the server's regex engine; the offline grader compiles it defensively (try/catch, length cap, anchored whole-string match, case-insensitive + dot-all flags) and any compile failure falls through to self-verdict. A locally "auto" verdict from a regex is replayed server-side as a verdict, not re-graded. Compile-failure divergence therefore only changes which grading UI the user saw. Patterns that compile in BOTH engines with different semantics (the shorthand classes: JS \w \d \b are ASCII-only even under the u flag, Python's are Unicode) could misgrade, so the offline grader refuses to auto-grade when a shorthand class meets non-ASCII content on either side and falls to self-verdict instead; the divergence is pinned in the parity fixtures. |
+| Regex differences between engines | The stored `answer_regex` was authored for the server's regex engine; the offline grader compiles it defensively (try/catch, length cap, anchored whole-string match, case-insensitive + dot-all flags) and any compile failure falls through to self-verdict. A locally "auto" verdict from a regex is replayed server-side as a verdict, not re-graded. Compile-failure divergence therefore only changes which grading UI the user saw. Patterns that compile in BOTH engines with different semantics (the shorthand classes: JS \w \d \b are ASCII-only even under the u flag, other engines' are Unicode) could misgrade, so the offline grader refuses to auto-grade when a shorthand class meets non-ASCII content on either side and falls to self-verdict instead; the divergence is pinned in the parity fixtures. |
 | Offline app opened online with a stale build | The shell is served by the SW only when the network fails; online, `/offline` comes from the server at the current build. |
 
 ---
 
-## 7. Testing strategy
+## 7. What pins this
 
-Following the existing pyramid (`make lint` / `make test` /
-`make e2e`):
+The offline surface is pinned in four places, and the interesting ones
+are the completeness checks rather than the happy paths.
 
-**Unit (pytest, in `tests/offline/`)**
+**The precache manifest** (`worker/tests/sw.test.ts`, plus the golden
+`worker/tests/fixtures/precache-*.json`). Two checks that matter:
 
-- Sync service: replay ordering across interleaved cards + reviews,
-  last-writer conflict rule, clock clamping, idempotent re-POST of
-  the same batch produces identical responses and zero new rows
-  (assert on `reviews` count and card FSRS state).
-- Snapshot repo: SRS-only, non-suspended-only, user-scoped (IDOR
-  test: user B's ids invisible to user A, same shape as existing
-  repo tests).
-- Replay math: feeding N reviews with explicit timestamps through
-  the sync service equals calling `schedule_review` N times directly
-  with those timestamps (the service adds no scheduling logic of its
-  own).
+- Every URL in the precache list actually resolves. This is what
+  catches a renamed CSS file breaking offline silently.
+- The reverse: every import specifier reachable from
+  `offline-app.js`, transitively through every module it pulls in and
+  resolving the `@/` importmap prefix, appears in the list. The
+  forward check only validates URLs already listed; this one catches
+  an import added to a shared module later, which would break the
+  offline cold launch (the module fetch rejects) while staying green
+  online and in every other test.
 
-**Route tests (pytest, same directory)**
+**The build token** (`worker/tests/buildToken.test.ts`,
+`assets.test.ts`). Identical bytes produce an identical token; the
+versioned asset routes treat the version segment as opaque and serve
+the current build for any value, which is what lets a page from the
+previous build keep resolving assets across a deploy.
 
-- `/offline` renders without auth, contains no identity-provider or
-  external-CDN references (regression-pin the self-containment).
-- `/sw.js` response carries the build token, valid JSON precache
-  list, `no-cache` header; every URL in the precache list actually
-  resolves 200 via the TestClient (the check that catches a renamed
-  CSS file breaking offline silently).
-- The reverse completeness check: statically parse the import
-  specifiers reachable from `offline-app.js` (transitively, through
-  every module it pulls in, resolving the `@/` importmap prefix) and
-  assert every resolved URL appears in the precache list. The
-  200-resolution test validates only URLs that are already listed;
-  this one catches the import added to a shared module later that
-  would break offline cold launch (the module fetch rejects offline)
-  while staying green online and in every other test. Precaching
-  `static/js/offline/` and `static/js/modules/` wholesale makes that
-  drift unlikely; this test makes it loud.
-- `/offline` echoes a valid `?build=` token into the stylesheet URL
-  and importmap prefix, and refuses (falls back to the current
-  token) when the query value is not token-shaped.
-- `/api/offline/sync` and `/snapshot`: auth required, caps enforced,
-  per-item validation errors surface as `rejected` not 4xx-on-batch.
+**The shell** (`worker/tests/api/offline.test.ts`). `/offline` renders
+with no identity, contains no identity-provider or external-CDN
+reference, and echoes only a token-shaped `?build=` value, falling back
+to the current token for anything else.
 
-**Offline JS logic (browser tests, `tests/e2e/`, marked `browser`)**
+**The sync protocol** (`worker/tests/api/offlineSync.test.ts`). Replay
+ordering across interleaved cards and reviews, the last-writer conflict
+rule, clock clamping, and idempotency: re-POSTing the same batch
+produces identical responses and zero new rows. Feeding N reviews with
+explicit timestamps through sync equals calling the scheduler N times
+directly with those timestamps, because sync adds no scheduling logic
+of its own.
 
-- `scheduler.js` and `grader.js` are pure modules: a Playwright page
-  imports them and asserts the ladder table, right/wrong
-  transitions, and grader parity against fixture cards (the same
-  fixtures the Python grader tests use, exported as JSON, so the two
-  implementations are pinned to each other).
-
-**End-to-end offline (browser tests)**
-
-The auth mechanism has to be chosen deliberately, because the
-existing browser harness cannot sign in to staging: the `page`
-fixture in `tests/e2e/conftest.py` authenticates by injecting the
-`Tailscale-User-Login` header (and its default base URL is the
-retired tailnet deploy), while staging runs `PREP_AUTH_MODE=clerk`,
-which that header does nothing for. The offline e2e suite therefore
-runs against a **tailscale-mode deploy of the same build**, using
-the existing header-injection fixture unchanged. Everything this
-suite exercises (SW install and precache, IndexedDB, the ladder,
-grading, the outbox flush) is auth-provider independent, so the
-coverage transfers. The Clerk-specific interplay (the reauth shell
-versus the offline fallback, standalone-PWA session state) is
-covered by the iOS-Simulator manual gate below, which runs against
-Clerk staging. If a scripted Clerk path is wanted later, Clerk
-testing tokens with a fixed-OTP test user are the mechanism; that is
-a follow-up, not a gate.
-
-- Prime: sign in, load dashboard (seeds snapshot + SW), then
-  `context.set_offline(True)`, navigate to start_url, assert the
-  offline app rendered (not an error, not the reauth shell), study
-  an mcq and a self-verdict card, author a card, assert queue and
-  ladder behavior.
-- Reconnect: `set_offline(False)`, navigate home, assert the outbox
-  flushes (poll the API for the review rows), assert snapshot
-  refresh cleared local overlays.
-- Airplane-mode cold launch on real WebKit (iOS Simulator) is the
-  manual verification gate before each milestone ships: install to
-  home screen, enable airplane mode, cold launch, study, disable,
-  sync. Chromium's offline emulation does not exercise Safari's
-  storage or standalone-PWA behavior, so it never counts as the
-  final word for this feature.
-
----
-
-## 8. Phased build plan
-
-Each milestone is independently shippable and goes through the
-staging gate before promotion. Order is dependency-driven.
-
-**M1: SW precache + offline shell (read-only).**
-The build-stable token (`PREP_BUILD_ID` replacing the boot stamp,
-plus the asset routes accepting the new format); unconditional SW
-registration in `app.js`; the rendered `/sw.js` route (build token +
-precache manifest + the `?build=` echo on `/offline`);
-install/activate/fetch handlers with the precache response checks
-and the navigation timeout; the `/offline` route + template +
-`store.js`; the snapshot endpoint + `sync.js` snapshot refresh +
-owner record. Shippable
-result: cold-launch offline shows your decks and due cards,
-read-only. Push behavior in the SW is untouched (regression-pinned
-by existing notify tests).
-
-**M2: sync endpoint, server side.**
-The `prep/offline/` context: sync route + service + idempotency
-table + FSRS replay + conflict/clock rules, fully covered by unit
-and route tests. `sync.js` gains the outbox flush (vacuously empty
-until M3). Shippable: the API contract is live and testable end to
-end with curl-shaped tests before any offline UI writes to it.
-
-**M3: offline study.**
-`scheduler.js` + `grader.js` + the card/verdict views; outbox
-writes; local ladder overlays; reconnect banner; toast on flush; and
-the owner-mismatch guard in `sync.js` (compare the server-resolved
-user id in the snapshot payload against `meta.owner.user_id` before
-ANY flush or snapshot write; on mismatch, do nothing). The guard
-ships in the same milestone as the first flush, not in hardening,
-because a flush without it fails the leaves-prod-no-worse bar on
-shared devices: user A studies and authors offline, user B signs in,
-and B's session would replay A's outbox (reviews bouncing into
-rejects as unknown ids, and once M4 lands, A's authored cards being
-created inside B's account). Shippable: the full
-study-offline-sync-later loop for existing cards. The e2e offline
-suite lands here.
-
-**M4: offline authoring.**
-The add-a-card form; `local_cards`; `card_client_id` reviews; the
-new-card ingestion path in the sync service (already contract-tested
-in M2); the `inbox` deck fallback. Shippable: the complete v1 story.
-
-**M5: hardening.**
-The confirm-then-wipe UX for the different-owner case (the
-refuse-to-sync guard itself shipped in M3; this milestone adds the
-dialog and the wipe-and-reseed so a legitimate second user gets a
-working device instead of a silently disabled sync);
-`navigator.storage.persist()` + estimate readout; needs-attention
-list for rejects; Safari-tab nudge; snapshot throttling tuning; the
-landing page's route into the snapshot. Shippable: the edges are as
-designed rather than accidental.
+The client-side scheduler and grader are pure modules, pinned against
+the same corpora as the server-side domain so the two implementations
+cannot drift. A regex that compiles in one engine and not the other is
+a known divergence class and is pinned explicitly; see section 6.

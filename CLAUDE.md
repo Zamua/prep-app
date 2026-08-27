@@ -1,904 +1,577 @@
-# prep — working notes for future Claude sessions
+# prep: working notes for future Claude sessions
 
-What this file is: the doc you read first when picking up work on
-prep. Skim it top-to-bottom, then dive into code. README.md is for
-humans; this is for the agent.
+What this file is: the doc you read first when picking up work on prep.
+Skim it top to bottom, then dive into code. README.md is for humans;
+this is for the agent. [`docs/architecture.md`](docs/architecture.md) is
+the longer prose tour of the same ground.
 
 ---
 
 ## What prep is
 
-A self-hosted spaced-repetition flashcard tool. Web app, runs in
-docker. Users describe a topic; Claude turns it into a deck; users
-study on an SRS schedule (10m → 1d → 3d → 7d → 14d → 30d).
-Multi-user via Tailscale identity. Installs as a PWA. AI features
-(generation, grading, transforms) are opt-in via a `claude setup-token`
-the user pastes through the UI.
+A spaced-repetition flashcard app. Users describe a topic, an LLM turns
+it into a deck, and FSRS schedules the reviews. Installs as a PWA and
+studies offline. AI is opt-in and always spends the user's own API key.
+
+It is **one TypeScript Worker on celld**, a self-hostable runtime for
+the Cloudflare Workers API. There is no application server process, no
+separate database, and no job queue.
 
 ---
 
 ## Architecture
 
 ```
-browser (PWA)
-   ↓ tailscale serve --set-path=/prep ---->  prep container :8082
-                                                 │
-                                  goreman supervises 3 procs:
-                                                 │
-                                    ┌────────────┼─────────────┐
-                                    ↓            ↓             ↓
-                                temporal      uvicorn       go worker
-                                start-dev   (FastAPI app)  (workflows)
-                                  :7233        :8082             │
-                                                                 ↓
-                                                       POST /api/agent/run
-                                                       (X-Internal-Token)
-                                                                 │
-                                                                 ↓
-                                                  prep.agent.sdk_adapter
-                                                  (claude-agent-sdk in-process)
-                                                  CLAUDE_CODE_OAUTH_TOKEN
-                                                       → anthropic
+                    browser (PWA)
+                          │
+                          ▼
+   ┌─────────────────────────────────────────────────────┐
+   │  entry worker (runtime/worker.ts)                   │
+   │    static assets, /manifest.json, /sw.js            │
+   │    landing, privacy, offline shell, error pages     │
+   │    /api/instant/generate, /webhooks/clerk, /metrics │
+   │    identity: Clerk session, anon cookie, or PAT     │
+   └───────────────┬─────────────────────────────────────┘
+                   │ identity asserted in x-prep-* headers
+                   ▼
+   ┌───────────────────────┐        ┌──────────────────┐
+   │ UserCell (per user)   │◀──────▶│ JobCell (per job)│
+   │  SQLite + every page  │ status │  step ledger     │
+   │  render + per-user    │  write │  alarm loop      │
+   │  alarm                │        │                  │
+   └──────┬────────────────┘        └──────────────────┘
+          ├──▶ DirectoryCell ("global"): enumeration, merges, reaper
+          └──▶ InstantLimiterCell ("global"): instant-generation windows
 ```
 
-**Single container, one compose project.** Everything runs inside
-`prep`: FastAPI (uvicorn) + Temporal devserver + Go worker, all under
-goreman. AI calls go through `prep/agent/`'s SDK adapter (the
-Python `claude-agent-sdk` package) — no separate agent container,
-no `claude` CLI binary, no HTTP hop to a sidecar.
+The entry worker is a translation layer. It resolves identity, strips
+any inbound copy of the `x-prep-*` headers, sets its own, and forwards.
+A request can only reach the cell its verified identity names, so
+per-user isolation is structural rather than a `WHERE user_id = ?` every
+query has to remember.
 
-The Go worker still needs to invoke AI work, but rather than calling
-out to a sidecar container it POSTs `/api/agent/run` against its own
-prep host (`http://localhost:8082/api/agent/run`). The route is gated
-by an `X-Internal-Token` header (shared secret in `PREP_INTERNAL_TOKEN`,
-fail-closed if unset) so the endpoint can't be hit from outside the
-container. Token + secret are unique-per-deploy; never overlap stag
-and prod.
+### The four cell classes
 
-OAuth token lives at `/data/claude-oauth-token` (0600) inside the
-single `${ENV_NAME}-data` volume — written by the `/settings/agent/connect`
-form when the user pastes a `claude setup-token` output, loaded into
-`CLAUDE_CODE_OAUTH_TOKEN` on app boot. Deleting the file (or hitting
-`/settings/agent/disconnect`) wipes auth in-place.
+Class names sit in the storage key path. The taxonomy is a **one-way
+door**; a fifth class is a decision, not a refactor.
 
-**History:** the architecture used to be two containers (prep + an
-`agent` sidecar running Node + Claude Code CLI + a Go HTTP wrapper at
-port 9999), but a migration to the in-process `claude-agent-sdk`
-collapsed it. The sidecar binary at `worker-go/cmd/agent-server/` is
-retired.
+| class | keyed by | holds |
+| --- | --- | --- |
+| `UserCell` | user id (Clerk `sub`, or `anon:<hex>`) | one SQLite per user: decks, questions, cards, reviews, sessions, trivia, notifications, push subs, BYOK credentials, PAT hashes, four idempotency ledgers, prefs, job status rows |
+| `DirectoryCell` | `"global"` | enumeration only: user id, `is_anonymous`, `created_at`, the merge audit, merge markers, tombstones. Owns the anonymous-retention sweep |
+| `InstantLimiterCell` | `"global"` | the instant-generation ledger and both breakers |
+| `JobCell` | job id | one durable job: its step ledger and its human gate |
+
+**No scheduler cell, and no per-request write to any global cell.**
+`last_seen_at` is bumped on every identified request, so it lives in the
+`UserCell`; in a global cell it would be a single-writer hot spot on the
+whole request path.
 
 ---
 
 ## Layout
 
-The python source is organized DDD-style — one package per bounded
-context, each with its own entities / repo / service / routes split.
-Domain logic (pure, I/O-free) lives under `prep/domain/`;
-infrastructure adapters under `prep/infrastructure/`.
-
 ```
-prep/
-├── app.py                   FastAPI() bootstrap + middleware + mount routers
-├── db.py                    re-export facade over prep.infrastructure.db +
-│                            per-table accessors not yet split into context repos
-├── icons.py                 Jinja `icon('name')` global → inlined Phosphor Light SVG
-├── chat_handoff.py          builds prefilled URLs for the "Discuss this card" popover
-├── temporal_client.py       Python helpers: start_grading, start_transform,
-│                            start_plan_generate, signals/queries
-├── notify/                  bounded context: web push + scheduler
-│   ├── push.py              VAPID bootstrap + _send_one + send_to_user fanout
-│   │                        + subscribe (the I/O side; no scheduling)
-│   ├── scheduler.py         periodic tick loop: per-user digest / when-ready
-│   │                        evaluation, quiet-hours, dispatch into trivia.tick
-│   ├── entities.py          NotificationPrefs, PushSubscription
-│   ├── repo.py              NotifyPrefsRepo, PushSubsRepo
-│   └── routes.py            /notify/* HTTP surface
-├── decks/                   bounded context: deck + question lifecycle
-│   ├── entities.py          Deck, DeckSummary, Question, DeckCard, NewQuestion
-│   ├── repo.py              DeckRepo, QuestionRepo
-│   ├── service.py           use cases (sync CRUD + temporal-orchestrated plan/transform)
-│   └── routes.py            /decks/*, /deck/*, /question/*, /transform/*, /plan/*
-├── study/                   bounded context: study sessions + reviews
-│   ├── entities.py          StudySession, RecentSession, Review, CardState
-│   ├── repo.py              SessionRepo, ReviewRepo (re-exports StaleVersionError)
-│   ├── service.py           start_session, submit_sync_answer, advance, abandon,
-│   │                        async start_grading + grading_landed
-│   └── routes.py            /study/*, /session/*, /grading/*
-├── agent/                   bounded context: AI integration
-│   ├── port.py              AgentPort Protocol + AgentResult dataclass +
-│   │                        AgentUnavailable / AgentBudgetExhausted exceptions
-│   ├── sdk_adapter.py       AgentPort impl via `claude-agent-sdk` (in-process,
-│   │                        no CLI binary). Late-imports the SDK.
-│   ├── fake.py              FakeAgent — test double; record calls, return canned text
-│   ├── token_store.py       atomic 0600 write/read of /data/claude-oauth-token
-│   ├── status.py            probe + structured status() + cached is_available
-│   └── routes.py            /settings/agent + connect/disconnect + /api/agent/run
-│                            (worker-callable, X-Internal-Token gated)
-├── auth/                    bounded context: identity + per-user prefs
-│   ├── identity.py          current_user FastAPI dependency, Tailscale headers
-│   ├── repo.py              UserRepo (upsert, editor_input_mode)
-│   └── routes.py            /settings/editor
-├── domain/                  PURE — no I/O, no DB, no FastAPI imports
-│   ├── srs.py               SRS state machine (LADDER_MINUTES, advance_step, Verdict)
-│   └── grading.py           deterministic mcq/multi/idk grader
-├── infrastructure/
-│   └── db.py                sqlite connection factory + cursor() + init() + now()
-├── web/                     cross-cutting HTTP layer
-│   ├── templates.py         Jinja2Templates instance + context processors
-│   ├── responses.py         redirect() helper (root_path-aware)
-│   ├── errors.py            friendly error pages + json-aware exception handlers
-│   ├── pwa.py               /manifest.json + /sw.js
-│   └── index.py             GET / (cross-cuts decks + study)
-└── dev/
-    └── preview.py           /dev/preview/* template fixtures (gated by PREP_DEV=1;
-                             never set in prod images)
+worker/
+├── domain/                PURE. No I/O, no framework, no clock of its own
+│   ├── fsrs/              FSRS-6 scheduler + fuzz
+│   ├── grading/           deterministic mcq/multi/idk grader, py-repr helpers
+│   ├── jobs/              graph algebra, ledger, schedule, refusal, ids
+│   ├── markdown/          the renderer (block, inline, links, tables, url)
+│   ├── instant/           card hygiene, limiter arithmetic, ip parsing
+│   ├── notify/wake.ts     when a user's next alarm should land
+│   ├── anonCookie.ts merge.ts limits.ts trivia.ts pat.ts py.ts …
+│   └── index.ts
+├── app/                   use cases and PORTS. Policy, not plumbing
+│   ├── ports.ts           every port in one file
+│   ├── pageContext.ts     what a page needs, built by the use case
+│   ├── viewmodels/        DTOs derived per template
+│   ├── auth/              resolve.ts (precedence), mergeSaga.ts, reaper.ts
+│   ├── agent/funding.ts   which credential funds a call, and whether any does
+│   ├── jobs/              graph.ts (the four workflows as data) + step handlers
+│   ├── decks/ study/ trivia/ notify/ offline/ settings/ dashboard/ instant/
+│   ├── api/               v1.ts, mcp.ts, csv.ts, deckIo.ts, tools.ts
+│   └── metrics.ts errors.ts http.ts entities.ts
+├── runtime/               the worker, the cells, and the ADAPTERS
+│   ├── worker.ts          the entry worker
+│   ├── compose.ts         THE COMPOSITION ROOT. Only file that names adapters
+│   ├── cells/             UserCell, DirectoryCell, InstantLimiterCell, JobCell
+│   │   ├── router.ts      the cell-side route table + identity gates
+│   │   ├── routes/        pages.ts, api.ts, jobs.ts, adapt.ts
+│   │   └── seed/          parity seed profiles
+│   ├── adapters/
+│   │   ├── sql/           one repo per aggregate + schema.ts + migrate.ts
+│   │   ├── agents/        anthropic, openaiCompat, byok, freeTier, select
+│   │   ├── nunjucks/      the renderer, its shims, the icon global
+│   │   └── clerk, anonCookie, pat, svix, byokCrypto, hkdf, webpush,
+│   │       alarmLedgerRunner, clock, random, apkg, zip, …
+│   ├── routes/            instant, metrics, openapi, legal, migrate
+│   ├── env.ts             the whole env contract, typed
+│   └── assets.ts sw.ts storage.ts buildToken.ts webhooks.ts
+├── templates/             nunjucks templates, precompiled at build time
+├── tests/                 vitest, mirroring the three layers
+├── scripts/               build.mjs, build-domain.mjs, build-pages.mjs,
+│                          run-node.sh, fsrs-oracle.mjs
+└── wrangler.{dev,staging,prod}.jsonc    deploy contracts, public values only
 
-tests/                       per-context test pyramid
-├── conftest.py              tmp-path sqlite, TestClient, initialized_db fixtures
-├── test_smoke.py            pre-refactor characterization tests (still green)
-├── domain/                  pure unit tests (SRS, grading)
-├── decks/                   entity + repo (real sqlite) + service (fake client) + routes
-├── study/                   same shape
-
-worker-go/                   Go Temporal worker
-├── agent/agent.go           Client interface + HTTPAgent (POSTs prep's
-│                            /api/agent/run with X-Internal-Token)
-├── workflows/               GradeAnswer, Transform, PlanGenerate
-├── activities/              GradeFreeText, ComputeTransform, ApplyTransform,
-│                            PlanCards, GenerateCardFromBrief, InsertCard
-└── shared/types.go          Workflow input/output schemas
-
-docker/
-├── Dockerfile.prep          multi-stage: golang:1.26 (worker+goreman), oven/bun:1.1.0
-│                            (cm-bundle), python:3.11-slim runtime with uv-installed
-│                            venv (incl. claude-agent-sdk) + temporal CLI baked
-└── Procfile.docker          temporal | uvicorn | worker, all under goreman in the prep
-                             container
-
-docker-compose.yml           single `prep` service, env-driven volume + image names
-.env.example                 per-deploy config template (PORT, ROOT_PATH, ENV_NAME, ...)
-deploy/{staging,prod}.env    tracked deploy-shape env files for `make deploy-{stag,prod}`
-.prod-version                single-line tag pinning what's running in prod
-.dockerignore                keeps build context lean (.venv, .git, build outputs, secrets out)
+static/                    BUILD INPUT for the worker, not a served tree
+├── css/                   index.css entry + @layer + components/
+├── js/                    the client modules (study, dashboard, offline, …)
+├── icons/                 Phosphor Light SVGs, baked into build/icons.js
+├── sw.js                  templated by the /sw.js route
+└── cm/                    CodeMirror bundle source
 ```
 
-**DDD invariants worth preserving as the codebase grows:**
-- `prep/domain/` imports nothing from bounded contexts or infrastructure.
-  Pure functions + value objects only.
-- Bounded-context modules import from each other only via entities or
-  via the public shape of another context's service. No reaching into
-  another context's repo directly.
-- Routes call services (or repos for trivial reads). They don't
-  call temporal_client or sqlite directly.
-- Repos return entities, not dicts. The conversion happens at the
-  boundary; templates and HTTP responses see entity-shape data.
-```
+### Layering, enforced
+
+**runtime -> app -> domain, and nothing imports upward.**
+`worker/tests/layering.test.ts` fails when:
+
+1. `domain/` imports from `app/`, `runtime/`, `cloudflare:` or `node:`.
+2. `app/` imports outside `domain/` + `app/`, or contains `fetch(`,
+   `new Response`, `.sql.exec`, `DurableObject` or `nunjucks`.
+3. Anything under `runtime/` other than `compose.ts` imports from
+   `runtime/adapters/`.
+4. Anything but the nunjucks adapter imports nunjucks or the compiled
+   templates.
+
+Cross-cutting concerns are wrappers at the composition root and in the
+router: anon-cookie refresh/clear on the response path, `no-cache` on
+HTML, request timing. A handler never touches them.
 
 ---
 
 ## Frontend architecture
 
-**Philosophy.** Server-rendered HTML + progressive-enhancement JS.
-Server is the source of truth, HTML is the API, JS is sprinkles. No
-SPA framework, no JS bundler, no Tailwind. Pages POST forms; JS adds
-polish. Most actions degrade to plain forms.
+**Philosophy.** Server-rendered HTML plus progressive-enhancement JS.
+Server is the source of truth, HTML is the API, JS is sprinkles. No SPA
+framework, no bundler, no Tailwind. Pages POST forms; JS adds polish.
 
-**The exception: the two surfaces that also run offline.** Each has
-to render with no server (from the IndexedDB snapshot), so a
-server-rendered version of it could not be the only one. Rather than
-keep two implementations of the same screens, each is a set of client
-components behind a port with two adapters, driven by their hosts:
+**Where rendering runs.** Several page contexts read the database per
+render, so every signed-in page renders **inside the `UserCell`**: one
+activation, synchronous SQLite reads, one `pageContext` from the use
+case. Unauthenticated pages (landing, privacy, offline shell, reauth
+shell, errors) render in the entry worker, which has no database.
+
+**The exception: the two surfaces that also run offline.** Each has to
+render with no server (from the IndexedDB snapshot), so a
+server-rendered version could not be the only one. Each is a set of
+client components behind a port with two adapters, driven by hosts:
 
 | surface | components | port | hosts | server renders |
 | --- | --- | --- | --- | --- |
-| study loop | `static/js/study/` | `CardSource` (`LocalSource` over IndexedDB + the JS grader/scheduler, `ServerSource` over `prep/study/api.py`) | `study/online-host.js`, `offline/offline-app.js` | `templates/study_shell.html`, `templates/offline.html` |
-| dashboard | `static/js/dashboard/` | `DeckSource` (`LocalSource` in `dashboard/local-source.js` over IndexedDB, `ServerSource` in `dashboard/source.js` over `prep/web/dashboard.py`) | `dashboard/online-host.js`, `offline/offline-app.js`, `dashboard/local-host.js` | `templates/index.html` (session strips + the embedded payload + the row menus), `templates/offline.html`, `templates/landing.html` |
+| study loop | `static/js/study/` | `CardSource` (`LocalSource` over IndexedDB + the JS grader/scheduler, `ServerSource` over `worker/app/study/api.ts`) | `study/online-host.js`, `offline/offline-app.js` | `study_shell.html`, `offline.html` |
+| dashboard | `static/js/dashboard/` | `DeckSource` (`LocalSource` in `dashboard/local-source.js`, `ServerSource` in `dashboard/source.js` over `worker/app/dashboard/`) | `dashboard/online-host.js`, `offline/offline-app.js`, `dashboard/local-host.js` | `index.html`, `offline.html`, `landing.html` |
 
-Consequences worth knowing, all of them accepted:
+Consequences, all accepted:
 
-- **Both surfaces require JS when signed in.** This is the one place
-  the progressive-enhancement rule above is deliberately broken. With
-  JS off, `/` renders the masthead, the session strips, and a line
-  saying the deck list needs JavaScript; there is no server-rendered
-  deck list to fall back to, because a second implementation of it is
-  exactly what these components exist to prevent. Re-adding one is a
-  design change, not a fix.
-- **A failed mount has to be visible.** The client-rendered region
-  ships with a fallback note as real markup (NOT a `<noscript>`: a
-  module that never loads fires nothing and scripting is on), which
-  the host clears by replacing the region's children. Keep it. Without
-  it, a broken import chain reads as "you have no decks".
-- Copy that only one surface can truthfully say is a per-call option
-  on the view, never a branch on the host; and anything the server
-  alone can compose (chat handoff URLs, a deck's overflow menu)
-  reaches a view through a documented seam (`extras`, `deckMenu`)
-  rather than being re-built in JS.
-- **The DATA needs no round trip; the SCREEN still waits for the
-  module chain.** The dashboard shell EMBEDS its first payload as JSON
-  (`#dashboard-overview`), so there is no fetch before the first
-  paint, but the deck list cannot render until the chain loads. Two
-  rules keep that window small: `LocalSource` lives in
-  `dashboard/local-source.js` so the signed-in page never pulls in the
-  offline stack, and `templates/index.html` declares the whole chain
-  in `{% block head_preload %}`. Adding an import to
-  `dashboard/components.js`, `dashboard/source.js`, or
-  `dashboard/online-host.js` means adding a `modulepreload` for it.
-- **The offline shell says so, in the status line.** It is a
-  service-worker navigation fallback, so the user asked for the live
-  page and got a degraded one; the line leads with "Offline." for that
-  reason. Everything else on it is the shared dashboard.
+- **Both surfaces require JS when signed in.** The one place the
+  progressive-enhancement rule is deliberately broken. Re-adding a
+  server-rendered deck list is a design change, not a fix: a second
+  implementation of it is exactly what these components prevent.
+- **A failed mount has to be visible.** The client-rendered region ships
+  a fallback note as real markup (NOT `<noscript>`: a module that never
+  loads fires nothing and scripting is on), which the host clears by
+  replacing the region's children. Without it, a broken import chain
+  reads as "you have no decks".
+- **The data needs no round trip; the screen still waits for the module
+  chain.** The dashboard shell embeds its first payload as JSON
+  (`#dashboard-overview`), so nothing fetches before first paint. Two
+  rules keep the window small: `LocalSource` lives in
+  `dashboard/local-source.js` so the signed-in page never pulls the
+  offline stack, and `index.html` declares the chain in
+  `{% block head_preload %}`. Adding an import under
+  `dashboard/components.js`, `source.js` or `online-host.js` means
+  adding a `modulepreload` for it.
 - **The landing page decides before it paints.** A visitor the server
-  cannot identify on a device that still holds their snapshot gets
-  the same dashboard, from `dashboard/local-host.js`, in place of the
-  splash. IndexedDB answers too late for that call, so `store.js`
-  mirrors "a snapshot is here" into `localStorage`
-  (`prep:offline_snapshot`), a classic inline script in the landing's
-  `<head>` reads it and stamps `data-local-decks` on the root, and
-  `landing.css` picks the region. Everything about that path is
-  keyed on the attribute, so a first-time visitor (the overwhelming
-  majority) runs one `getItem` and gets today's page unchanged.
-  Three rules keep this working:
-  - **The flag states what the stores HOLD, not that a sync ran.**
-    `sync.js` writes it only when the snapshot (or `local_cards`)
-    is non-empty and clears it otherwise; `wipeAll` clears it; the
-    host clears it and shows the splash when the stores turn out to
-    hold nothing. A flag written for an empty store paints the
-    fallback note where the splash belongs.
-  - **The host's module chain is preloaded from the head script, not
-    from markup.** A `<link rel=modulepreload>` in `landing.html`
-    would charge every visitor for a page almost none of them get, so
-    the file list lives in the head script's `CHAIN` and both callers
-    (the head script, `app.js`'s probe) inject it before importing
-    the host. Adding an import anywhere under `dashboard/local-host.js`
-    means adding it to `CHAIN`.
-  - **Signing out leaves the snapshot in place, by design.** The
-    device keeps rendering its decks on `/` until someone wipes it.
-    That is the feature: a session can expire and the cards stay
-    reachable. The cost is that on a shared machine the previous
-    user's deck names sit on the front page, so the wipe is the exit,
-    not sign-out. Both moments the user is leaving say so and offer
-    it: the sign-out control opens a three-way choice (cancel, keep
-    the cards, remove them) when this device holds a snapshot, and
-    the landing's status line carries the same removal inline. Every
-    destructive path goes through `static/js/offline/wipe.js`, which
-    flushes the outbox first and wipes only when the queues (and
-    `rejects`, which no flush can save) came back empty; see
-    docs/OFFLINE.md section 3, "Removing this device's data".
+  cannot identify, on a device that still holds a snapshot, gets the
+  dashboard from `dashboard/local-host.js` instead of the splash.
+  IndexedDB answers too late, so `store.js` mirrors "a snapshot is here"
+  into `localStorage` (`prep:offline_snapshot`); a classic inline script
+  in the landing `<head>` reads it and stamps `data-local-decks` on the
+  root, and `landing.css` picks the region. A first-time visitor runs
+  one `getItem` and gets the normal page.
+  - The flag states what the stores HOLD, not that a sync ran. A flag
+    written for an empty store paints the fallback note where the splash
+    belongs.
+  - The host's module chain is preloaded from the head script's `CHAIN`,
+    not from markup: a `modulepreload` in `landing.html` would charge
+    every visitor for a page almost none of them get.
+  - Signing out leaves the snapshot in place by design; the wipe is the
+    exit, not sign-out. Every destructive path goes through
+    `static/js/offline/wipe.js`, which flushes the outbox first and
+    wipes only when the queues came back empty. See
+    [`docs/OFFLINE.md`](docs/OFFLINE.md).
 
-Everything else stays server-rendered.
+### UX rails (do not violate without a reason)
 
-### UX rails (don't violate without a reason)
-
-- **No layout shift on interaction.** A control's bounding box should
-  not change when it's tapped. Buttons with two label states (e.g.
-  "pin" / "pinned") need `min-width` sized to the longer label so the
-  toggle doesn't reflow neighboring elements. Loading states swap
-  icon-for-spinner of equal size, not text-for-text of unequal width.
-  Inline content with growable elements (counters, chips that flip
-  state) should reserve their final width up front. We've been
-  burned by this twice with submit-pending.js textContent swaps —
-  if it shifts neighbors when toggled, fix the chrome, not the text.
-- **Every action must look responsive within ~50ms.** Tap → nothing
-  → page eventually reloads is bad UX even when the round-trip is
-  legitimately slow. Feedback options, in order of preference:
-  (1) `data-submit-pending` on the form so the button gets `is-loading`
-  immediately, (2) optimistic DOM update if the action is reversible,
-  (3) a brief disabled state with a spinner. The 303-redirect-to-
-  full-page-render flow is fine but ONLY when the button itself
-  shows pending state during the round-trip.
-- **Constant-size loading states.** When a button enters `is-loading`,
-  its width must not change. The shared CSS pattern is: hide the
-  current icon (`display: none`), render a `::before` spinner of the
-  same size; keep the label as-is. Do NOT replace the label with
-  "Working…" unless the button has `data-pending-label` AND the
-  caller has accepted the width change (e.g. full-width primary
-  CTAs where the row collapses anyway).
+- **No layout shift on interaction.** A control's bounding box must not
+  change when tapped. Two-state buttons need `min-width` sized to the
+  longer label. Loading states swap icon-for-spinner of equal size, not
+  text-for-text of unequal width.
+- **Every action must look responsive within ~50ms.** In order of
+  preference: `data-submit-pending` on the form, an optimistic DOM
+  update if the action is reversible, then a brief disabled state with a
+  spinner. A redirect-and-full-render flow is fine only when the button
+  itself shows pending state during the round trip.
+- **Constant-size loading states.** Hide the current icon
+  (`display: none`), render a `::before` spinner of the same size, keep
+  the label. Do not swap the label for "Working..." unless the button
+  has `data-pending-label` and the caller accepted the width change.
 
 ### CSS
 
-Single entry stylesheet (`static/css/index.css`) declares native
-`@layer` order and `@import`s the rest:
+`static/css/index.css` is the single entry: it declares the native
+`@layer` order and `@import`s everything else.
 
 ```
 static/css/
-├── index.css      — entry: @layer order + @import every other file
-├── reset.css      — minimal modern reset
-├── tokens.css     — :root design tokens (light + dark vars)
-├── base.css       — html / body / a / .icon / .icon-inline
-├── layout.css     — page chrome (.paper centered column)
-└── components/    — one file per UI component (~28 files); kebab-case
-                     names match the surface (buttons, deck-list,
-                     study-card, transform, trivia-card, …). mobile.css
-                     is imported LAST so its narrow-viewport overrides
-                     win. spinners.css holds shared keyframes
-                     (rise/stamp/pulse/blink) referenced by other
-                     component files.
+├── index.css      entry: @layer order + @import every other file
+├── reset.css      minimal modern reset
+├── tokens.css     :root design tokens (light + dark)
+├── base.css       html / body / a / .icon
+├── layout.css     page chrome (.paper centered column)
+└── components/    one file per UI surface, kebab-case. mobile.css is
+                   imported LAST so narrow-viewport overrides win.
+                   spinners.css holds the shared keyframes.
 ```
 
-**Layer order**: `reset, tokens, base, layout, components,
-utilities, overrides`. The pre-overhaul `legacy.css` is gone — every
-rule moved into a component file under `components/`.
+Layer order: `reset, tokens, base, layout, components, utilities,
+overrides`.
 
-**Adding a new component**: create `components/<name>.css`, add an
-`@import "./components/<name>.css" layer(components)` to `index.css`.
-For a narrow-viewport tightening, append rules to `mobile.css`
-instead of inlining a `@media` block in the component file —
-`mobile.css` is imported last and wins by source order.
-
-**Splitting a fat component file**: when a single file (e.g.
-deck-page.css at 622 LOC) covers multiple distinct surfaces, split
-when adding a sibling becomes easier than grep-locating in one. No
-hard cap — readability wins.
-
-**Inline `style="..."` attrs**: smell EXCEPT for CSS custom-prop
-data-binding (e.g. `style="--progress: {{ pct }}%"`). Anything else
-belongs in a class.
-
-**Naming**: simple kebab-case component classes (`.deck-card`,
-`.transform-panel`, `.session-card`). BEM (`__elem--mod`) is fine
-inside a component file but not required globally — `@layer`
-handles the specificity discipline BEM was invented for.
+- **Adding a component**: create `components/<name>.css` and add
+  `@import "./components/<name>.css" layer(components)` to `index.css`.
+- **Narrow-viewport tightening** goes in `mobile.css`, not a `@media`
+  block inside the component file.
+- **Inline `style="..."`** is a smell EXCEPT for custom-prop data
+  binding (`style="--progress: {{ pct }}%"`).
+- **Naming**: kebab-case component classes. BEM inside a component file
+  is fine but not required; `@layer` handles the specificity discipline
+  BEM was invented for.
 
 ### JS
 
-Native ES modules + importmap, no bundler. `templates/base.html`
-declares an importmap aliasing `@/` → `/static/js/` and loads a
-single bootstrap module:
+Native ES modules plus an importmap, no bundler. `templates/base.html`
+declares an importmap aliasing `@/` to a build-versioned
+`/static/js/v<token>/` and loads one bootstrap module, `app.js`.
 
-```
-static/js/
-├── app.js                    — bootstrap; initializes always-on
-│                                behaviors + lazy-imports per-feature
-│                                modules when their data-* hooks are
-│                                present on the page.
-└── modules/
-    ├── details-toggle.js     — iOS-26 pointerup-bound <details>
-    │                            toggle + outside-click + Esc close.
-    │                            Always on (registered in app.js).
-    ├── dialog.js             — backdrop-click close for
-    │                            <dialog data-dialog>.
-    ├── submit-pending.js     — disable + label-swap on submit for
-    │                            <form data-submit-pending>.
-    └── poller.js             — workflow polling helper (interval +
-                                 visibilitychange + cache-bust +
-                                 error backoff). Lazy-loaded.
-```
+**Convention**: app-wide behaviors register in `app.js`. Behaviors
+driven by `data-*` attributes go through their module's
+`attachDeclarative()`, so adding the attribute to a template wires the
+behavior with no per-page boilerplate. Per-page inline
+`<script type="module">` blocks are still allowed for logic that does
+not generalize; extract only when the same pattern appears in three or
+more templates.
 
-**Convention**: behaviors that always need to run app-wide register
-in `app.js`. Behaviors driven by data-* attrs go through their
-module's `attachDeclarative()` so adding the attribute to a template
-wires the behavior — no per-page boilerplate. Per-page modules with
-custom logic on top of a shared utility import the utility directly
-in a `<script type="module">` block.
-
-**Data-* hooks** (current set; document new ones here when added):
-
-| Attribute              | Module               | Behavior                              |
-| ---------------------- | -------------------- | ------------------------------------- |
-| `<dialog data-dialog>` | `dialog.js`          | backdrop click closes                 |
-| `<form data-submit-pending>` | `submit-pending.js` | disable + label-swap on submit |
-| `[data-poll-url]`      | `poller.js`          | poll URL on interval, dispatch handler|
-| `[data-details-body]`  | `details-toggle.js`  | mark a sibling popover body so the outside-click handler doesn't close the related details when the body is tapped (use when a `<details>` body must live OUTSIDE the `<details>` element for layout reasons — e.g. trivia card explore body) |
-| `[data-forget-device]` | `app.js` (inline)    | flush then wipe this device's offline snapshot before the forget-device POST, so the browser keeps no copy of decks it can no longer reach (`offline/wipe.js`) |
-| `[data-signout-guard]` | `app.js` (inline, delegated) | on a device holding a snapshot, open the sign-out choice (cancel / keep the cards / remove them) instead of navigating; a device holding nothing signs out with no dialog |
-| `[data-landing-decks]` | `dashboard/local-host.js` | landing-only: the region the device's own decks mount into. app.js probes IndexedDB for a snapshot older than the `prep:offline_snapshot` flag and mounts the host; the flagged case is started by the landing's pre-paint head script instead |
-
-**Per-page inline `<script>` blocks**: still allowed when the page
-has unique logic that doesn't generalize (e.g. card-preview filling,
-delete-deck-confirm typed-name match). Don't extract just to extract.
-Extract only when the same pattern shows up in 3+ templates.
+Document a new `data-*` hook here when you add one.
 
 ### Templates
 
-Jinja's macros are the right "component" primitive. No reach for
-django-cotton / django-components — Jinja's macro story is fine.
+nunjucks (the JavaScript port of Jinja2), precompiled by
+`scripts/build.mjs` into `build/templates.js`. Nothing is parsed at
+request time.
 
 ```
-templates/
-├── base.html         — masthead + footer + importmap + module bootstrap
-├── partials/         — _name.html → name.html, included verbatim
-│                       with {% include "partials/name.html" %}
-├── macros/           — parameterized "components" called as
-│                       {{ ns.foo(args) }} after
-│                       {% import "macros/<file>.html" as ns
-│                          with context %}
-├── trivia/           — bounded-context subfolder (mirrors prep/trivia/)
-├── notify/           — bounded-context subfolder
-└── *.html            — page templates (one per route)
+worker/templates/
+├── base.html      masthead + footer + importmap + bootstrap
+├── partials/      included verbatim: {% include "partials/name.html" %}
+├── macros/        parameterized components: {% import ... as ns with context %}
+├── trivia/ notify/  per-surface subfolders
+└── *.html         page templates
 ```
 
-**`with context` is required** when a macro references
-`request.scope.get('root_path','')` or any other Jinja global —
-imported macros are sandboxed by default, `with context` exposes
-the caller's context. Macros that don't touch globals can skip it.
-
-**Partial vs macro**: `{% include "partials/foo.html" %}` for static
-chrome; `{% import "macros/foo.html" as ns with context %}` when the
-component takes arguments. Macros are functions; partials aren't.
-
-**Page extension**: every page extends `base.html` and overrides
-`{% block title %}`, `{% block page_class %}`, `{% block main %}`.
-Don't introduce new top-level blocks unless multiple pages need
-them.
+- **`with context` is required** when a macro references a global such
+  as `root`. Imported macros are sandboxed by default.
+- **Partial vs macro**: `include` for static chrome, `import` when the
+  component takes arguments. Macros are functions; partials are not.
+- **Page extension**: every page extends `base.html` and overrides
+  `{% block title %}`, `{% block page_class %}`, `{% block main %}`.
+  Do not add a top-level block unless several pages need it.
+- The nunjucks shims (Python `%` formatting, slices, `tojson`,
+  banker's rounding, `items()`) live in `runtime/adapters/nunjucks/`.
+  A construct that silently evaluates to false or undefined in nunjucks
+  but worked in Jinja is the failure mode to watch for.
 
 ### PWA + service worker
 
-`static/sw.js` handles `push` and `notificationclick` events only —
-no fetch caching. App is on-tailnet with a fast server; an app-shell
-caching layer would mainly create stale-content debugging headaches.
-Add caching only when there's a concrete reason.
+`static/sw.js` has two jobs: push (`push` + `notificationclick`), and
+offline (precache the `/offline` shell and its styles, modules and
+icons at install; serve the shell as a navigation fallback when the
+network fails or hangs; serve precached subresources cache-first).
+Nothing else is intercepted, so the online app behaves byte-identically
+to a service-worker-less page.
 
-iOS gotchas (battle-tested in the codebase):
-- iOS 26 PWA standalone swallows the synthesized `click` event on
-  `<summary>` for the first ~5s after page load. Fix is in
-  `details-toggle.js`: bind to `pointerup`, suppress the late
-  compatibility click within 500ms.
-- `<dialog>` backdrop-click-to-close is not native; wired by
-  `dialog.js` via `data-dialog`.
+The `/sw.js` route substitutes two placeholders before serving: the
+deterministic build token and the JSON precache manifest. **Those
+placeholder spellings must appear only at their definition sites** in
+`sw.js`; substitution is a global string replace, so writing one out
+anywhere else (a comment included) embeds a second copy of the
+manifest.
+
+iOS gotchas, battle-tested here:
+
+- iOS 26 PWA standalone swallows the synthesized `click` on `<summary>`
+  for ~5s after page load. `details-toggle.js` binds `pointerup` and
+  suppresses the late compatibility click within 500ms.
+- `<dialog>` backdrop-click-to-close is not native; `dialog.js` wires it
+  via `data-dialog`.
 
 ---
 
 ## How AI work flows
 
-Generation example (the plan-first flow at `/decks/new` action=plan):
+Four job kinds, defined as **data** in `app/jobs/graph.ts`:
 
-1. FastAPI `/decks/new` POST creates deck row, then
-   `temporal_client.start_plan_generate` kicks off `PlanGenerateWorkflow`
-   on the worker.
-2. Workflow calls activity `PlanCards` → worker's `Cfg.Agent.Run(prompt)`
-   → POST `http://localhost:8082/api/agent/run` with `X-Internal-Token`
-   header → prep's FastAPI route hands off to `prep.agent.get_agent()`
-   (the `ClaudeAgentSdkAdapter`) → in-process `claude-agent-sdk` call →
-   returns text from `AssistantMessage` chunks + cost/usage from the
-   final `ResultMessage`.
-3. Workflow stores plan, query handler exposes it. UI polls
-   `/plan/<wid>/status` and renders the brief outline.
-4. User signals `feedback` (replan), `accept` (expand), or `reject`.
-5. On accept: workflow `ExecuteActivity` for each `PlanItem` in
-   parallel — N concurrent SDK calls through `/api/agent/run` —
-   gathers results, writes via `InsertCard` activity (idempotency
-   via `questions_idempotency` table).
+| kind | steps |
+| --- | --- |
+| `PlanGenerate` | `plan` (llm) -> `gate` (human) -> `expand` (llm, batch 4) -> `insert` (write, per item) |
+| `Transform` | `compute` (llm) -> `gate` (human) -> `apply` (write) |
+| `TriviaGenerate` | `generate` (llm) -> `insert` (write, per item) |
+| `GradeAnswer` | `grade` (llm) -> `record` (write) |
 
-**Two seams worth knowing:**
+A graph names each node's kind, retry policy, fanout mode, status string
+and error behavior, so a workflow's shape is reviewable as a table
+rather than as control flow. `app/jobs/index.ts` is the only file that
+knows all four exist; the runner imports the registry, never a handler.
 
-- **`AgentPort` (prep/agent/port.py)** — the Python-side abstraction.
-  `ClaudeAgentSdkAdapter` is the production impl; `FakeAgent` is the
-  test double. `get_agent()` returns the singleton; `set_agent()`
-  swaps for tests. Errors surface as `AgentUnavailable` (generic
-  failure → 502) or `AgentBudgetExhausted` (the user blew their
-  monthly credit pool → 429 + `kind: budget_exhausted` so the UI can
-  show a specific message).
-- **Worker's `HTTPAgent` (worker-go/agent/agent.go)** — the Go-side
-  HTTP client. Configured via `PREP_AGENT_URL` (host) +
-  `PREP_INTERNAL_TOKEN` (shared secret). It POSTs the same wire
-  format the old sidecar's `/run` accepted (`{prompt, session_id?,
-  resume_id?}` → `{stdout}`), so the worker stayed unchanged across
-  the SDK migration apart from a one-line env-var flip.
+**One `JobCell` per job, driven by its own alarm.** Every decision comes
+from the ledger rows, so an eviction, a node restart and a duplicate
+alarm all reach the same one. Two rules the shape rests on:
 
-**Auth model:** the user runs `claude setup-token` on a machine they
-control, pastes the resulting `sk-ant-oat01-…` token into
-`/settings/agent/connect`. Prep writes it to
-`/data/claude-oauth-token` (0600) and stamps `CLAUDE_CODE_OAUTH_TOKEN`
-into the live process env so the SDK adapter can use it without a
-restart. The token authenticates against the user's Claude
-subscription credit pool (Max 20x = ~$200/mo, post Anthropic's
-2026-06-15 SDK-credit-eligibility change), not a separate API-key
-billing account.
+- A caller-originated RPC (`start`, `signal`, `terminate`) never calls
+  back into the owner's cell. The owner is mid-request when it calls,
+  and a cell serves one request at a time. Everything that touches the
+  owner happens on the alarm.
+- The alarm is derived from the rows at the end of every RPC and in the
+  constructor, never held, so a rolled-back RPC still converges.
+
+**The status direction pays for the poll.** A `JobCell` writes into its
+owner's `UserCell` and never the reverse. The 2s progress fragment and
+the 5s badge read only `UserCell` rows, so a 300s LLM step blocks its
+own `JobCell` and nothing else. The one `UserCell -> JobCell` hop is the
+gate signal (accept / reject / feedback / apply), which happens on a
+click. Progress travels with the status write, already rendered by the
+job's partial.
+
+**No retry on an LLM step.** Re-running a long prompt hides the real
+failure for another long prompt, so the error reaches the user. Write
+steps do retry, and they are idempotent through the per-cell
+idempotency ledgers.
+
+### Periodic work
+
+Scheduled work is **per-user alarms**, not a fan-out over users. Each
+`UserCell` computes its own next wake from its own state (digest hour in
+its tz, the when-ready debounce against its next due card, each trivia
+deck's backed-off refill interval, quiet hours) and arms
+`storage.setAlarm`. It is re-derived on every prefs or deck write and on
+activation, from persisted state, so a duplicate fire is a no-op.
+
+`app/notify/wake.ts` keeps the reading and the doing separate:
+`nextWakeAt` re-derives the wake after a write, and `runWake` reads the
+same rows through the same function, so what the alarm is armed for and
+what it does when it fires cannot drift.
+
+**An alarm handler never calls the LLM.** The trivia refill dispatches a
+`TriviaGenerate` job per due deck and returns.
+
+The one remaining walk is the anonymous-retention sweep, in
+`DirectoryCell`, whose alarm is re-derived from the sweep's own row on
+every activation so an eviction resumes where it stopped.
 
 ---
 
-## Schema migrations
+## AI providers
 
-`db.init()` runs on every app boot and is idempotent. Add a column?
-Check `PRAGMA table_info(<table>)` first, then ALTER. Existing
-examples: `editor_input_mode`, `notification_prefs`, `context_prompt`.
+Every AI call is a `fetch` from a cell. No SDK, no subprocess, no
+sidecar.
 
-**FK CASCADE gotcha (fixed in v0.4.1).** If you ever rebuild a
-table that's referenced by an FK, follow the SQLite-recommended
-pattern: `PRAGMA foreign_keys=OFF` OUTSIDE any transaction, then
-`BEGIN; ...rebuild...; PRAGMA foreign_key_check; COMMIT;`. A naive
-`DROP TABLE decks` cascades through questions/cards/reviews and
-wipes user data. Don't regress.
+`app/agent/funding.ts` decides which credential funds a call (policy
+over rows, so it names no adapter); `runtime/adapters/agents/select.ts`
+turns that answer into an adapter.
+
+1. **BYOK**: the user's own Anthropic, OpenAI, or OpenRouter key,
+   AES-256-GCM encrypted in their cell. Precedence when several are held
+   and none is active: Anthropic, OpenRouter, OpenAI. OpenRouter also
+   supports OAuth PKCE sign-in, which mints a key on the user's own
+   account with no copy-paste.
+2. **Shared free tier**: one OpenAI-compatible endpoint configured by
+   env (`PREP_FREE_INFERENCE_*`), capped per generation. Optional.
+
+**BYOK is API keys only. Do not add a Claude-subscription provider.**
+A Claude Code OAuth token is rejected by the Messages API, and the one
+sanctioned path for it bundles and spawns a large executable per call.
+
+If a user holds BYOK rows but none yields a usable key, the call
+**refuses** rather than falling through to the shared tier: silently
+spending a credential the user opted out of is worse than an error. The
+key is decrypted in the isolate that will use it and never held past the
+call, so a revoked credential stops the next step.
 
 ---
 
 ## Auth
 
-Header-based via Tailscale Serve. The proxy injects
-`Tailscale-User-Login: user@tailnet`. `current_user(request)` reads
-that header, calls `db.upsert_user(...)`, returns the user dict.
+Precedence, stated once in `app/auth/resolve.ts`:
 
-For `make dev` and self-host single-user setups, `PREP_DEFAULT_USER`
-in `.env` makes every header-less request that user. **Don't set it in
-multi-user prod** — anyone hitting the URL becomes that user.
+**signed-in > dormant session > anonymous cookie > visitor.**
 
-All user-owned tables (decks, questions, study_sessions, cards,
-reviews, push_subscriptions) carry `user_id` and every db.py accessor
-takes user_id first. IDOR via guessed IDs is blocked by the WHERE
-clauses (cross-user lookups return None as if the row didn't exist).
+- **Clerk** when its five vars are set; otherwise `NoIdentityProvider`
+  and the deploy is anonymous-only with no sign-in page. Under parity
+  mode a `FakeIdentityProvider` reads a trusted header instead.
+- **The dormant step is load-bearing.** A returning user on a PWA cold
+  launch has an expired session token and durable evidence of one.
+  Falling through to a `prep_anon` cookie left on that browser would
+  serve them their old guest account and break every recovery path keyed
+  on "no user", so they get the reauth shell.
+- **`prep_anon`**: HMAC-SHA256 over an HKDF-derived key. An anonymous
+  visitor who generates a deck becomes a real user row with a real
+  `UserCell`. Anonymous accounts are anonymous, not ephemeral.
+- **PAT**: a bearer token for `/api/v1/*` and `/mcp`, matched against a
+  SHA-256 hash in the owner's cell.
 
----
+A signed-in request carrying an anonymous cookie triggers the **merge
+saga** (`app/auth/mergeSaga.ts`). It spans three cells and has to be
+resumable: markers in the `DirectoryCell`, rows copied between two
+`UserCell`s, tombstone at the end.
 
-## Common dev ops
-
-| You change | What runs |
-|---|---|
-| `app.py`, `db.py`, any `*.py` | uvicorn `--reload` picks it up (<1s) |
-| `templates/*.html` | jinja auto-reloads per request |
-| `static/*.css`, `static/icons/*` | hard-refresh browser |
-| `static/cm/` (CodeMirror source) | `cd static/cm && bun run build` |
-| `worker-go/**/*.go` | `Ctrl-C` make dev, `make build`, `make dev` |
-| `prep/agent/sdk_adapter.py` | uvicorn `--reload` (in-process; no separate container to rebuild) |
-| Schema change | edit `db.init()`, restart `make dev` |
-| New dep (python) | `mise exec -- uv add <pkg>` |
-| New dep (go) | `cd worker-go && mise exec -- go get <mod>` |
-| Lint / format | `make lint` (read-only) / `make format` (writes). Pre-commit hook runs the same checks against staged files. |
-| New icon | `curl -o static/icons/<n>.svg https://raw.githubusercontent.com/phosphor-icons/core/main/assets/light/<n>-light.svg` |
-
-To validate ad-hoc: `docker compose build && docker compose up -d`.
-For the staging-vs-prod two-stack split, use the operator's
-`make -C infra/prep deploy-devel` / `deploy-prod` (see below).
+Secrets never come from a wrangler file. They arrive at runtime as
+`CELLD_VAR_*`; `runtime/env.ts` is the typed contract for all of them.
 
 ---
 
-## Deploy model (two VPS deploys: staging + prod — hostthis-style)
+## Storage and migrations
 
-**As of 2026-06-24 prep follows the hostthis model: staging AND prod both
-run on the Hetzner fleet (k8s), and the two LOCAL macmini stacks are
-RETIRED.** A change is validated on `staging.prepcards.app`, then promoted
-to `prepcards.app` — the same staging gate hostthis uses. Operator deploy
-targets live in `infra/prep/` (invoked via
-`make -C ~/Dropbox/workspace/macmini/infra/prep <target>`).
+One SQLite per cell, behind repositories under `runtime/adapters/sql/`.
+Repos return entities, not rows.
 
-- **staging** — `staging.prepcards.app`, on the **Hetzner 3-node staging
-  cluster** (the same mirror hostthis stages on; kubeconfig
-  `infra/iac/ansible/.kube/staging.yaml`), namespace `prep-staging`, image
-  `ghcr.io/zamua/prep:staging`. **Clerk auth, multi-user** (mirrors prod, so
-  config like the agent path below is exercised here for real). This is the
-  gate: deploy + verify here before prod.
-- **prod** — `prepcards.app`, on **vps2** k8s, namespace `prep`, image
-  `ghcr.io/zamua/prep:<tag>` pinned by `.vps-version` (v0.42.5 at this
-  writing). **Clerk auth, multi-user.** Promote the SAME tag validated on
-  staging.
-
-**RETIRED 2026-06-24** (do not resurrect): the two local macmini docker
-stacks — `stag` (`prep:staging`, tailscale `/prep-staging`, :8082) and
-`prod-tailnet` (the operator's single-user `/prep`, :8081, `.prod-version`
-pin). Their tailscale-serve `/prep` + `/prep-staging` mounts are removed.
-`.prod-version` is dead; `.vps-version` is the only live pin now.
-
-**KNOWN DRIFT to reconcile:** `infra/prep/Makefile`'s `deploy-vps` still
-shells docker-compose, but live prod + staging are BOTH k8s now (the
-docker→k3s migration moved them). The live k8s manifests are in
-`infra/prep/k8s/` (+ overlays); rework the Makefile to the hostthis
-kubectl/overlay shape.
-
-**Agent model — BYOK + free tier on the public deploys (updated 2026-08-11):**
-The selector precedence is: user BYOK key first, then (single-user
-installs only) the deploy-wide subscription token, then the
-deploy-configured FREE TIER (a generic OpenAI-compatible endpoint via
-PREP_FREE_INFERENCE_BASE_URL/_API_KEY/_MODEL/_EXTRA_BODY; the public
-deploys point it at Hetzner's inference API), else a noop adapter.
-Two deploy-wide credentials, two policies, BOTH deliberate: the
-subscription token stays HARD-GATED off in clerk mode (operator's
-paid pool must never fund signups), while the free-tier key is
-deploy-wide on purpose (free, rate-limited per key, not
-operator-funded). A BYOK user whose key path fails gets Noop, never
-the free tier (privacy: BYOK is the opt-out from the shared
-endpoint). Full design: docs/AI-PROVIDERS.md.
-
-**Old framing (still true for the subscription path):**
-both staging + prod run `PREP_AUTH_MODE=clerk`, which HARD-GATES the
-deploy-wide subscription / app-wide token off
-(`prep/agent/selector.py::_subscription_path_allowed()`) — so a stray
-`CLAUDE_CODE_OAUTH_TOKEN` can NEVER fund random signups from the operator's
-pool. Every user is BYOK: their own Anthropic API key (`sk-ant-api03-…`) or a
-per-user `claude setup-token` (used via `ClaudeAgentSdkAdapter(token=…)`, NOT
-the deploy-wide env). The Go worker reaches the agent via
-`PREP_AGENT_URL=http://localhost:8082/api/agent` (the loopback to prep's own
-`/api/agent/run`); it threads `user_id` end-to-end so the selector picks THAT
-user's BYOK key at the endpoint. **`PREP_AGENT_URL` is REQUIRED on both
-deploys** (it was missing on prod → `ComputeTransform` failed `NoAgent`; set
-2026-06-24) and is NOT an app-wide token — just the worker→endpoint URL.
-
-**One pin file:** `.vps-version` → `prepcards.app` (prod). Staging tracks
-`prep:staging` (latest validated build), no pin.
-
-**Per-deploy config** lives in `deploy/staging.env` + `deploy/prod.env`
-(tracked, used by the local stacks) and an operator-managed `.env`
-at `$OPS_DEPLOY_DIR/.env` on the VPS (NOT in git, holds Clerk keys +
-PREP_AUTH_MODE=clerk + secrets). A local `.env` (gitignored) layers
-on top of the local stacks for per-machine overrides.
-`PREP_DEFAULT_USER` is deliberately unset in all three deploys: every
-request must authenticate.
-
-**Promote flow** (tag once, promote per-target):
-```bash
-# tag whatever's on main
-git tag -a v0.X.Y -m "..."
-git push origin --tags
-
-# promote to local /prep (tailnet, single-user): writes .prod-version,
-# commits, pushes, builds at the tag, brings up local prod stack.
-make promote v=v0.X.Y
-
-# promote to prepcards.app (public, multi-user): writes .vps-version,
-# commits, pushes, SSH'd build + up on the VPS.
-make promote-vps v=v0.X.Y
-```
-
-`make deploy-prod` / `make deploy-vps` (without `v=`) redeploy whatever
-the respective pin already says (idempotent). Use after editing the
-deploy env file or to recreate containers from the same tag.
-
-**"Promote to prepcards.app" = `make promote-vps`, not `make promote`.**
-The two are NOT interchangeable. `make promote` only updates the
-tailnet /prep instance; `make promote-vps` updates the public
-multi-user deploy. Past failure mode: confusing the two and believing
-the public deploy got a security-relevant change when only the
-tailnet instance did. When in doubt about which deploy the user
-means, check both pin files (`cat .prod-version .vps-version`) and
-the running images.
-
-**Important: wait for go-ahead before any prod deploy.** Default to
-`make deploy-stag` during a session; wait for the user to say "deploy
-prod" / "promote" / equivalent before running `make promote`,
-`make deploy-prod`, `make promote-vps`, or `make deploy-vps`. For
-security-relevant changes, prefer rolling out to prepcards.app FIRST
-(highest stakes, multi-user), confirm visually, then promote to the
-tailnet /prep too.
-
-Image tags are versioned (`prep:staging`, `prep:v0.13.3`) so all
-historical prod images coexist in the daemon's cache; running
-containers hold a reference to the image by ID, so a staging rebuild
-can't displace prod's bytes.
-
-Tailscale Serve direct mounts handle path routing (`tailscale serve
---set-path=/prep ...` and `--set-path=/prep-staging ...`) — no
-reverse proxy required.
+Migrations run in `runtime/adapters/sql/migrate.ts` on cell activation
+inside `blockConcurrencyWhile`, guarded and idempotent. There is a
+`schema_version` per cell class. Adding a column means adding a guarded
+step there plus the row mapping in the repo; the round-trip test catches
+a half-done change.
 
 ---
 
 ## Observability
 
-prep emits Prometheus metrics + structured logs to an operator-side
-LGTM-stack (Loki + Grafana + Tempo + Mimir) running on the same
-docker daemon.
+`GET /metrics` serves Prometheus text exposition with three histogram
+families: `prep_ai_grade_duration_seconds`,
+`prep_instant_generate_duration_seconds`, and
+`prep_http_request_duration_seconds`. Names, labels, buckets and help
+text are fixed: two targets in one scrape job that disagree on a
+family's HELP is an inconsistency Prometheus reports.
 
-**Metrics** (`prep/web/metrics.py`, exposed at `GET /metrics`):
-- `prep_anyio_threadpool_borrowed` / `_capacity` (gauge). Sampled
-  just-in-time on every scrape. **The leak/exhaustion canary** for
-  threadpool exhaustion: sustained borrowed approx. capacity means
-  sync handlers piling up on the threadpool (a known prod-down
-  failure mode).
-- `prep_claude_grade_duration_seconds{verdict}` — histogram. Labels:
-  `right`, `wrong`, `unknown`, `fallback_unavailable`, `fallback_bad_json`.
-  Buckets up to 30s so the 12s timeout tail is visible.
-- `prep_http_request_duration_seconds{method, route, status}` —
-  histogram. Route label is the FastAPI template form (`/deck/{name}`)
-  not the raw URL — keeps cardinality bounded.
+**The registry is module-level, which on this runtime means per
+isolate.** The counters belong to whichever isolate answered the scrape
+and go when it is recycled. Nothing is per cell and nothing survives an
+eviction. Do not write a query that assumes otherwise.
 
-The `/metrics` endpoint sits on the same port as the FastAPI surface
-(no separate process — single uvicorn = single registry). The HTTP
-middleware in `prep.web.metrics` records request latency before any
-router runs; `/metrics` itself is excluded so scrape calls don't
-pollute the histogram. `claude_grade` calls `observe_claude_grade()`
-directly from `prep.trivia.service`.
+Scrape configuration and dashboards are operator-side and are not in
+this repo.
 
-**Logs** flow to Loki automatically — Promtail in the obs-stack
-auto-discovers every docker container's stdout/stderr. Query in
-Grafana → Explore with `{compose_project="prod"}` (or `stag`).
+---
 
-The `prep` logger tree is configured in `prep/app.py` with a
-StreamHandler at INFO (override via `PREP_LOG_LEVEL`); use
-`logger = logging.getLogger(__name__)` in any module — info-level
-messages reach stdout (and thus Loki) by default.
+## Dev ops
 
-**Prometheus scrape config** is operator-side (lives in the obs
-stack's checkout, not this repo). The jobs target
-`host.docker.internal:8081` (prod) and `:8082` (staging) on
-`metrics_path: /metrics`.
+`make help` lists every target. The ones that matter:
 
-**Traces are NOT emitted yet.** Tempo/Jaeger isn't part of the
-obs-stack today; logs + metrics carry the load. If a future debug
-session needs request-level traces, OTel + Tempo is the canonical
-upgrade — hold off until there's a concrete need.
+```bash
+make setup       # mise install + npm install + uv sync + git hooks
+make build       # templates, icons, service worker, domain twins, dist/assets
+make typecheck   # tsc over the worker and its tests
+make test        # vitest
+make ci          # lint + typecheck + test + the migration tool's suite
+make dev         # build, deploy and start a local celld node on :8791
+make dev-stop
+make llm-stub    # the canned LLM a local node calls for AI flows
+```
+
+`worker/build/` and `worker/dist/` are generated and never committed.
+Each step in `build.mjs` is a function so `tests/build.test.ts` can run
+one against a scratch tree.
+
+**Python in this tree is not the application.** It is the migration tool
+(`migrate/`) and the browser and pixel harness (`tests/`), both driven by
+their own make targets (`test-migrate`, `e2e`, `parity`). New
+application code is TypeScript under `worker/`.
+
+The pre-commit hook gates staged TypeScript on typecheck plus the whole
+vitest suite. It runs in seconds; do not reach for `--no-verify` to get
+around a red suite.
+
+Deploy contracts are the three wrangler files. They carry **public
+values only**: durable-object bindings, the assets directory, Clerk's
+publishable configuration, and the timeout ceilings.
+`CELLD_FETCH_TIMEOUT_S` in a wrangler file must match the node's own
+setting; the worker takes the smaller of it and `PREP_JOB_LLM_TIMEOUT_S`
+minus headroom so an LLM step gets its full budget.
 
 ---
 
 ## Gotchas worth knowing
 
-**`tailscale serve --set-path=/prep` strips the prefix when
-forwarding.** uvicorn must be launched with `--root-path $ROOT_PATH`
-or static assets 404. Procfile.docker handles this; if you change
-the run command, keep the flag.
+**Parity mode is a local and staging-only switch.** `PREP_PARITY_MODE=1`
+enables a fake identity provider that trusts a header, a pinned clock, a
+seed endpoint and the probe job graphs. The composition root refuses it
+on prod. Never set it on a deploy that serves real users.
 
-**uvicorn `--no-access-log` is on in prod**, so per-request
-diagnostics need `docker compose logs -f` for app errors only. Add
-`--log-level debug` to Procfile.docker for verbose tracing.
+**Importmap MUST appear in `<head>`, before any module script.** The
+spec requires the importmap to be parsed before the first
+`<script type="module">` that uses a bare specifier from it. An
+importmap at the bottom of `<body>` silently kills every `import "@/..."`
+in an inline module higher in the page, taking the behaviors wired there
+with it. This has caused an outage. Keep it in `<head>`.
 
-**`claude setup-token` output prefix**: `sk-ant-oat01-…`. The
-`/settings/agent/connect` route validates that prefix. Other token
-shapes (API keys, OAuth URLs) are rejected with a friendly error.
+**Polling is htmx, not a JS state machine.** The progress partials
+(`transform_progress`, `plan_progress`, `trivia_generating_progress`,
+`workflow_badge`) carry `hx-get` plus `hx-trigger="every Ns"`. The
+server controls the lifecycle: a non-terminal fragment includes the
+trigger, a terminal fragment omits it and htmx stops. Do not reach for
+`setInterval` in a new wait-for-backend flow.
 
-**`/api/agent/run` is fail-closed without `PREP_INTERNAL_TOKEN`.**
-The route's `_require_internal_token` dependency raises 503 if the
-env var is unset, and 401 if the request's `X-Internal-Token` header
-doesn't match. Both stag and prod set the var via `deploy/<env>.env`;
-local dev (`make dev`) needs it too if you want the worker → prep
-path to work. NB stag and prod MUST use distinct values — never
-share secrets across environments.
+**Closed `<dialog>` rendering inline at the page bottom.** Setting
+`display: flex` on a dialog selector unconditionally overrides the UA's
+`dialog:not([open]) { display: none }`. Gate any non-default display on
+`[open]`.
 
-**Worker boots before temporal under goreman.** `dialTemporalWithRetry`
-in `worker-go/main.go` retries dial up to 60s with exponential
-backoff. If you change the worker startup, preserve that.
+**Modal scroll trap on iOS.** `100vh` includes the hidden URL bar. Use
+`100dvh`, plus `body:has(dialog[open]) { overflow: hidden }` and
+`overscroll-behavior: contain` to stop scroll chaining.
 
-**Volume mounts SHADOW Dockerfile RUN mkdir**. e.g. the prep image
-RUNs `mkdir /data/temporal` at build time, but compose mounts the
-`prep-data` volume on top of `/data` and erases that mkdir. Procfile.docker's
-temporal command does `sh -c 'mkdir -p /data/temporal && exec temporal …'`
-to compensate. Same pattern if you add other dirs in /data.
+**A tuple or a Python literal in a template evaluates silently wrong.**
+`x in ('a','b')` is false in nunjucks and `True` / `False` / `None`
+resolve to undefined. Use `['a','b']` and `true` / `false` / `null`. The
+shims cover the rest; a missing shim shows up as a blank branch, not an
+error.
 
-**Closed `<dialog>` elements rendering inline at page bottom.** If
-you set `display: flex` on a dialog selector unconditionally, you
-override the UA's `dialog:not([open]) { display: none }`. Always
-gate flex (or any non-default display) on `[open]`.
+**`app/` may not contain `fetch(`, `new Response`, `.sql.exec`,
+`DurableObject` or `nunjucks`.** The layering test greps for those
+strings, so even a comment mentioning one fails it.
 
-**Modal scroll trap on iOS.** `100vh` includes hidden URL bar;
-modals hit `100dvh` and use `body:has(dialog[open]) { overflow:
-hidden }` plus `overscroll-behavior: contain` to prevent
-scroll-chaining.
-
-**Anthropic prohibits embedding subscription OAuth in third-party
-apps** (Feb 2026 policy). prep uses `claude setup-token` (officially
-blessed) instead — user generates the token on a machine they
-control, pastes into the UI. Don't try to wrap `claude auth login`.
-
-**Importmap MUST appear in `<head>`, before any module script.**
-The HTML spec requires the importmap to be parsed before the first
-`<script type="module">` that uses one of its bare specifiers. If
-the importmap is at the bottom of `<body>` (legacy layout) and a
-page renders an inline module script higher in the body via
-`{% block main %}`, the inline script's `import "@/..."` silently
-dies at parse time — taking every behavior wired up in that block
-with it (polling, click handlers, etc.). This pattern has caused a
-production outage where htmx polling + refresh-link in transform.html
-stopped working entirely. Fix: keep importmap in `<head>` always.
-
-**Polling pattern is htmx, not JS modules.** `templates/transform.html`,
-`plan.html`, `grading.html`, `trivia/generating.html` use
-`hx-get="/<resource>/{wid}/fragment" hx-trigger="every 2s"` to poll
-status fragments. Server controls polling lifecycle: a non-terminal
-fragment includes `hx-trigger="every 2s"`, a terminal fragment omits
-it (htmx auto-stops). No client state machine. The dead pattern (a
-JS `startPoller` module + `setInterval` + `visibilitychange`) was
-removed. If you add a new "wait for backend, swap UI" flow, follow
-the htmx pattern; don't reach for `setInterval`.
-
-**Don't block HTTP routes on `await handle.result()`.** Temporal's
-`handle.result()` long-polls for workflow completion. Calling it
-from a request handler hangs the user's button-press until the
-workflow fully winds down (seconds, sometimes longer). Especially
-in apply/reject style routes: signal the workflow, then return the
-status fragment immediately (htmx swaps it in). The workflow
-exposes intermediate states (`applying`, `rejecting`) precisely so
-the UI shows truth-of-state without lying or blocking. If you need
-the result, query a stored row via the repo, not the live workflow.
-
-**Worker capacity starves under panic-loops.** A workflow whose
-definition changed in a non-deterministic way (e.g. you renamed a
-timer ID, reordered activities) will panic on replay and the SDK
-retries forever (attempt 500+, log spam). Each such workflow
-consumes a worker slot every retry. Two such workflows can starve
-the prep-generation task queue completely — new transforms sit in
-`ActivityTaskScheduled` for minutes. **Before you change workflow
-code that affects already-in-flight workflows: terminate them, or
-cordon the deploy until they finish.** `temporal -n <ns> workflow
-list` to see what's in flight; `temporal workflow terminate -w …`
-to clean up.
-
-**`prep.agent.status()` is file-presence-only.** The probe checks
-whether `CLAUDE_CODE_OAUTH_TOKEN` is in env OR the token file exists
-at `/data/claude-oauth-token` — NOT whether the token actually
-authenticates. To probe real auth, call the SDK once. Cheap
-end-to-end check from inside the container:
-`docker exec stag-prep-1 .venv/bin/python -c "import asyncio; from prep.agent import get_agent; print(asyncio.run(get_agent().run('hi')).text[:80])"`.
-
-**`/api/agent/run` is best-effort idempotent.** Each call makes a
-fresh SDK request — there's no de-dup. If the worker retries a
-failed activity, you'll pay credits twice. Workflow code that
-generates content uses an `idempotency_key` table to dedupe at the
-write side, not the agent-call side. Don't add free retries to AI
-activities without the dedupe shield.
+**A cell serves one request at a time.** Anything that would call back
+into the caller's own cell deadlocks. That constraint is why job work
+happens on alarms and why the status direction is one-way.
 
 ---
 
-## Testing + promote gates
+## What is intentionally NOT here
 
-**3-layer pyramid (in order of fastness, run by `make ci`):**
-
-1. **`make lint`** — `ruff format --check`, `ruff check`, `go vet`,
-   `gofmt -l`. <2s, no infra.
-2. **`make test`** — `pytest -x` against in-process FastAPI with
-   mocked temporal/claude. ~10s. The 396-test characterization +
-   route + service + repo + entity suite. **Catches**: shape
-   regressions, IDOR, contract drift between route + service. Does
-   NOT catch: anything requiring a real worker, real claude, real
-   browser JS execution.
-3. **`make e2e`** — `pytest tests/e2e/` against deployed staging.
-   Two flavors live side-by-side under `tests/e2e/`:
-   - **httpx tests** (test_smoke.py, test_ai_flows.py): full HTTP
-     round-trip — create-deck → study a card → grade → drive a
-     transform/plan to terminal. **Catches**: route-template-
-     temporal-claude integration, IDOR, redirect shape, htmx-trigger
-     leaks (server-side polling lifecycle).
-   - **browser tests** (test_browser_smoke.py, marked `slow` +
-     `browser`): drive Chromium via Playwright at iPhone-15-Pro
-     viewport. **Catches**: inline `<script type="module">` parse +
-     execute (the importmap-ordering bug class), htmx polling
-     actually firing client-side, in-place fragment swaps (no
-     navigation on accept/reject), `HX-Redirect` followed by the
-     browser. Without these, the server returning the right HTML is
-     a green light even when every page's JS is dead.
-
-**`make promote v=v0.X.Y`** chains: `deploy-stag-from-tag` →
-`make lint test e2e` → write `.prod-version` + commit + push →
-`make deploy-prod`. Any step failing aborts before mutating prod.
-The lint+test+e2e tail is also `make ci`.
-
-**Browser test prerequisites.** Playwright + chromium binary live
-in the dev venv (`uv sync --group dev` installs the python package;
-the chromium binary needs an explicit `uv run playwright install
-chromium` after install — it lives under `~/Library/Caches/ms-
-playwright/`). `make e2e` warns if either is missing. In CI / on
-the mac mini box both are already present. Browser tests can be
-skipped during fast iteration via `pytest -m "not browser"
-tests/e2e/`. Total wall time: 6 browser tests in ~36s on a warm
-mac mini against staging.
-
-**Browser-test fixture gotcha.** The `page` fixture in
-`tests/e2e/conftest.py` injects the `Tailscale-User-Login` header
-via `ctx.route()` rather than `extra_http_headers`. The latter
-applies to every request, including cross-origin asset fetches
-(Google Fonts etc.), which trip CORS preflight rejections because
-the upstream doesn't whitelist the header in
-`Access-Control-Allow-Headers`. Those preflight failures show up
-as `console error: Failed to load resource: net::ERR_FAILED` and
-trigger false positives in the inline-module-script test. Route-
-based injection scopes the header to the prep app's origin; don't
-revert that without a reason.
-
-**TDD invariant.** New routes get tests in the same commit. Tests
-go in the matching `tests/<bounded-context>/test_routes.py` (or
-`test_service.py`). E2e gets one test per user-visible flow in
-`tests/e2e/test_smoke.py`. If you add a status-bearing workflow,
-add an e2e that drives it to terminal — don't ship blind.
-
----
-
-## What's intentionally NOT here
-
-- Streaming AI responses. All flows are one-shot request/response
-  through AgentPort; the polling UX covers the wait.
-- Per-token usage tracking. We had a `agent_usage` table briefly,
-  but Anthropic meters per-account, not per-token, so the rollup
-  modeled the wrong thing — dropped. Now we just handle
-  `AgentBudgetExhausted` gracefully (429 + UI message) and wait for
-  Anthropic to expose a real per-token usage API.
-- A separate AI sidecar. The SDK migration pulled the agent
-  in-process; the old `worker-go/cmd/agent-server/` binary +
-  `Dockerfile.agent` are gone.
-- Cloud SaaS / multi-tenant auth. prep is single-tenant
-  per-deployment.
-- Mobile native apps. PWA covers it.
+- **Streaming AI responses.** Every flow is one-shot; the polling UX
+  covers the wait.
+- **Per-token usage tracking.** Providers meter per account, so a
+  per-token rollup models the wrong thing.
+- **A deploy-wide AI credential.** Only a user's own key, or the
+  optional shared free tier a deploy explicitly configures.
+- **Operator and deploy tooling.** This repo is application code. Compose
+  files, cluster manifests, deploy targets and secrets live in a private
+  repo by design, and no host, IP, path or credential belongs in a file
+  here.
+- **Native mobile apps.** The PWA covers it.
 
 ---
 
 ## Versioning
 
-Semver via git tags. Pre-1.0 we're permissive about minor-vs-patch
-boundaries. Tag from `main`, then use `make promote v=<tag>` (local
-tailnet /prep) or `make promote-vps v=<tag>` (prepcards.app) to build
-+ deploy at the tag.
-
-Current version visible via `git describe --tags`.
+Semver via git tags, cut from `main`. Pre-1.0 the minor/patch boundary is
+permissive. `git describe --tags` shows the current version.
