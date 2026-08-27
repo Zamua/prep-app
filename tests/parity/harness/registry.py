@@ -80,6 +80,8 @@ class Flow:
     service_workers: str = "block"
     schemes: tuple[str, ...] = SCHEMES
     anonymous: bool = False
+    #: Whether a local target has to run Temporal and the Go worker for it.
+    jobs: bool = False
     tags: tuple[str, ...] = field(default=())
 
 
@@ -100,6 +102,7 @@ def flow(
     service_workers: str = "block",
     schemes: tuple[str, ...] = SCHEMES,
     anonymous: bool = False,
+    jobs: bool = False,
 ):
     if not _NAME_RE.match(name):
         raise ValueError(f"flow name {name!r} must be a kebab-case slug")
@@ -118,6 +121,7 @@ def flow(
             service_workers=service_workers,
             schemes=tuple(schemes),
             anonymous=anonymous,
+            jobs=jobs,
         )
         _REGISTRY[name] = f
         return f

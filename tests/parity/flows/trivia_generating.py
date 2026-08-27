@@ -67,6 +67,7 @@ def _new_trivia_deck(ctx: FlowCtx, name: str, topic: str) -> None:
         "partials/trivia_generating_progress.html#done",
         "partials/trivia_generating_progress.html#failed",
     ),
+    jobs=True,
 )
 def trivia_generating(ctx: FlowCtx) -> None:
     llm = ctx.llm

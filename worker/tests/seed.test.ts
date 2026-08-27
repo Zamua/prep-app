@@ -99,6 +99,38 @@ describe('the parity seed profiles', () => {
     });
     expect(state.fake.rows('active_workflows')).toEqual([]);
   });
+
+  it('io: one SRS deck carrying every exportable field and one trivia deck', async () => {
+    const { state, seed } = seeded('io');
+    const ids = (await seed) as {
+      decks: Record<string, { id: number; slug: string; display: string }>;
+      questions: { srs: Record<string, number>; trivia: Record<string, number> };
+    };
+    expect(ids.decks).toEqual({
+      srs: { id: 1, slug: 'algorithms', display: 'Algorithms' },
+      trivia: { id: 2, slug: 'database-trivia', display: 'Database Trivia' },
+    });
+    // The split flow ticks the first two boxes, so insertion order is part
+    // of the contract.
+    expect(Object.keys(ids.questions.srs)).toEqual(['complexity', 'stability', 'binary', 'invariant']);
+    expect(Object.values(ids.questions.srs)).toEqual([1, 2, 3, 4]);
+    const questions = Object.fromEntries(state.fake.rows('questions').map((q) => [q['id'], q]));
+    // Every column an exporter writes, so a round trip has something to lose.
+    expect(questions[ids.questions.srs['binary']!]).toMatchObject({ type: 'code', language: 'python', topic: 'searching' });
+    expect(questions[ids.questions.srs['complexity']!]).toMatchObject({ choices: '["O(n)", "O(n log n)", "O(n^2)", "O(log n)"]' });
+    expect(questions[ids.questions.srs['stability']!]).toMatchObject({ answer_regex: '(?i)merge' });
+    expect(state.fake.rows('cards').find((c) => c['question_id'] === ids.questions.srs['binary'])).toMatchObject({
+      step: 3,
+      next_due: '2026-03-16T15:00:00+00:00',
+      last_review: '2026-03-09T15:00:00+00:00',
+    });
+    expect(state.fake.rows('reviews').map((r) => [r['question_id'], r['result']])).toEqual([
+      [1, 'right'],
+      [2, 'wrong'],
+    ]);
+    expect(state.fake.rows('decks')[1]).toMatchObject({ name: 'database-trivia', deck_type: 'trivia', notification_interval_minutes: 1440 });
+    expect(state.fake.rows('trivia_queue')).toHaveLength(3);
+  });
 });
 
 describe('the e2e seed profiles', () => {

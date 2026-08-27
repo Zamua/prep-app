@@ -89,6 +89,7 @@ def _plan(decks: dict, a_ids: dict, b_ids: dict) -> str:
         "partials/transform_progress.html#card_moves",
         "partials/transform_progress.html#deck_deletions",
     ),
+    jobs=True,
 )
 def reorganize(ctx: FlowCtx) -> None:
     page = ctx.page

@@ -323,17 +323,25 @@ class LocalCelldNode:
 - `start()` after a `stop()` uses `SKIP_BUILD=1 SKIP_DEPLOY=1`, and it
   is NOT enough to wait for `/healthz`. Cells are unreachable for 6-8 s
   after a node restart while the lease TTL expires (spike 6, 5.1), so
-  `start()` polls a real cell read (`GET /api/dashboard/overview`) until
-  it answers **200**, and nothing weaker counts. The probe presents an
-  anonymous cookie and no identity headers, because the two suites that
-  most need the wait (`landing_server`, `instant_server`) deploy the
-  clerk shape, where tailscale headers are refused by the router with a
-  401 before any cell is touched: accepting that answer would degrade
-  the wait to `/healthz` on exactly those nodes. Every provider resolves
-  a valid `prep_anon` to a cell, so one probe fits every shape. Budget
-  90 s: the deploy, the lease expiry, and a cold isolate on a loaded
-  box. Every `server.start()  # idempotent` call site in the instant
-  suite keeps working unchanged.
+  `start()` polls a real cell read, `GET /api/dashboard/overview` under
+  an anonymous cookie and no identity headers. Identity headers are
+  wrong here: the two suites that most need the wait (`landing_server`,
+  `instant_server`) deploy the clerk shape, where the router refuses an
+  unverifiable identity with a 401 before any cell is touched, so
+  accepting that answer degrades the wait to `/healthz` on exactly those
+  nodes. `prep_anon` reaches a cell under every provider.
+
+  Two answers count, and both are the cell's. A 200 is one. The other is
+  the probe's own account: `prep_anon` names an anonymous row that only
+  the instant mint creates, so on a fresh node the cell answers 410
+  tombstoned and the router turns that into a 401 that clears the
+  cookie. Nothing but a cell produces that clear on a cookie signed with
+  the node's own key, and holding out for a 200 a fresh node can never
+  give is a fixture that always times out. A 5xx, and a bare 401 or 303
+  with no clear, both mean not ready. `router.test.ts` pins the two
+  answers apart. Budget 90 s: the deploy, the lease expiry, and a cold
+  isolate on a loaded box. Every `server.start()  # idempotent` call site
+  in the instant suite keeps working unchanged.
 - Because a node is heavier than a uvicorn and the box is
   memory-constrained, e2e runs ONE file per invocation. Fixtures are
   lazy, so at most one node is live per run.
@@ -364,10 +372,20 @@ uvicorn renamed.
 
 Phase 4 recorded that a single local node runs its log ensemble degraded
 and occasionally answers 500 `DurabilityUnproven` on a write, and left
-open whether the ingress may retry. Lane C quantifies it (20 consecutive
-runs of `test_offline_study_e2e.py`, the failure rate recorded here) and
-either fixes it at the ingress or escalates. Retrying inside the fixture
-is forbidden: it would hide a defect a user meets as an error page.
+open whether the ingress may retry. Retrying inside the fixture is
+forbidden: it would hide a defect a user meets as an error page.
+
+**Measured: 20 consecutive runs of `test_offline_study_e2e.py` against a
+local node, 60 tests, 0 failures and 0 refusals.** The degradation is
+real and the node names it (`log ensemble degraded; acks ride the bucket
+... why="member append failed"`, twice per start), but the fallback path
+answered every write the suite makes. So neither of the two outcomes the
+lane named applies: there is no rate to fix at the ingress and nothing to
+escalate. What stays true is the shape of the risk, not a number: one
+node cannot form a quorum, so its acks ride the bucket, and a slower
+bucket is what would turn this into a refusal. The retry in
+`seed_profile` stays, because it covers the one write a suite makes
+before it has a page to show an error on.
 
 ## D. Gates, with numbers
 
@@ -385,14 +403,25 @@ is forbidden: it would hide a defect a user meets as an error page.
   (`E2E_BASE_URL=https://celld.staging.prepcards.app`), 16 against a
   local node, one file per invocation.
 - **D, pixel:** five flows registered at phase 5 (`import-csv`,
-  `import-prepdeck`, `import-anki`, `export`, `split`), both schemes,
-  at least 22 shots. Each importer flow carries its form state, an
-  outcome state and an error state; `export` carries the hub for an SRS
-  and a trivia deck. Goldens captured from the Python app on staging
-  first, then compared against the fleet. `test_registry.py` green with
-  `deck_import_csv.html`, `deck_import_prepdeck.html`,
-  `deck_import_anki.html`, `deck_export.html` and `deck_split.html`
-  covered.
+  `import-prepdeck`, `import-anki`, `export`, `split`) on the `io` seed
+  profile, both schemes, 28 shots. Each importer flow carries its form
+  state, an outcome state and an error state; `export` carries the hub
+  for an SRS and a trivia deck; `split` carries the form, the refusal a
+  selection-less post earns and a selection. The error state is reached
+  with a reserved deck name, not an empty file input: the input carries
+  `required`, so no browser posts that case.
+
+  Goldens are captured from the Python app, then compared against the
+  celld target. A flow now declares whether it needs the job stack
+  (`jobs=True` on the six phase-4 flows), so capturing these five against
+  a local Python target no longer demands a Temporal devserver and a
+  built Go worker for screens that touch no job.
+
+  `test_registry.py` resolves all five templates. Its
+  `test_every_page_template_and_partial_is_covered` stays `xfail`: three
+  templates from earlier phases (`partials/notif_edit.html`,
+  `partials/pin_form.html`, `settings_account.html`) still carry no flow,
+  and the reason string now names them instead of the phase.
 - **Integration, once:** `cd worker && npx vitest run && npm run
   typecheck`, then the pixel files one at a time against the fleet.
 

@@ -65,10 +65,15 @@ def parity_browser():
 
 
 def _wants_jobs() -> bool:
-    """Phase 4 and later read every job screen back out of Temporal, so a
-    local target needs the Procfile's other two processes."""
-    limit = registry.phase_limit()
-    return limit is not None and limit >= 4
+    """Whether this invocation needs the Procfile's other two processes.
+
+    A job screen reads its progress back out of Temporal, so a local target
+    running one has to run the devserver and the Go worker too. The question
+    is per flow, not per phase: a run of the phase-5 import and export flows
+    touches no job, and demanding the stack there skips the whole file on a
+    box that has no Go worker built.
+    """
+    return any(f.jobs for f, _ in registry.selected())
 
 
 @pytest.fixture(scope="session")

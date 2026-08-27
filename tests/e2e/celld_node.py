@@ -69,6 +69,28 @@ START_TIMEOUT = 90.0
 PROBE_ANON_ID = "anon:" + "00" * 16
 
 
+def _cell_answered(response: httpx.Response) -> bool:
+    """Whether the readiness probe's answer came from a cell.
+
+    Two answers do. A 200 is the ordinary one. The other is the probe's own
+    account: `prep_anon` names an anonymous row that only the instant mint
+    creates, so on a fresh node the cell answers 410 tombstoned and the
+    router turns that into a 401 that clears the cookie. Nothing but a cell
+    produces that clear on a cookie this key signs, and the alternative -
+    waiting for a 200 that a fresh node can never give - is a fixture that
+    always times out.
+
+    A 5xx (the lease still expiring) and a bare 401 or 303 (the router
+    refusing before any cell) both mean not ready.
+    """
+    if response.status_code == 200:
+        return True
+    if response.status_code != 401:
+        return False
+    set_cookie = response.headers.get("set-cookie") or ""
+    return "prep_anon=" in set_cookie and "Max-Age=0" in set_cookie
+
+
 def identity_headers(login: str, name: str | None = None) -> dict[str, str]:
     headers = {"tailscale-user-login": login, INTERNAL_TOKEN_HEADER: INTERNAL_TOKEN}
     if name:
@@ -208,11 +230,12 @@ class LocalCelldNode:
         """A cell read, not `/healthz`: the node answers liveness while its
         lease is still expiring and every cell refuses.
 
-        The probe presents an anonymous cookie and no identity headers. An
-        identity the node's provider cannot verify answers 401 from the
-        router without a cell being touched, so accepting one would degrade
-        this to `/healthz` on exactly the clerk-shaped nodes that need the
-        wait. Every provider resolves a valid `prep_anon` to a cell.
+        The probe presents an anonymous cookie and no identity headers,
+        because it has to prove the same thing on every provider shape. An
+        identity the provider cannot verify is refused by the router before
+        any cell is touched, so accepting that answer would degrade the wait
+        to `/healthz` on the clerk-shaped nodes it exists for; `prep_anon`
+        resolves to a cell under every provider.
         """
         deadline = time.time() + timeout
         cookie = {"cookie": f"prep_anon={mint_anon_cookie(PROBE_ANON_ID)}"}
@@ -222,10 +245,7 @@ class LocalCelldNode:
                 r = httpx.get(
                     f"{self.base_url}/api/dashboard/overview", headers=cookie, timeout=5.0
                 )
-                # Only a 200 proves a cell answered. Anything else is the
-                # router: a lease still expiring, or a shape this probe does
-                # not fit, and neither means the node is ready.
-                if r.status_code == 200:
+                if _cell_answered(r):
                     return
                 last = f"{r.status_code} {r.text[:200]}"
             except httpx.HTTPError as e:

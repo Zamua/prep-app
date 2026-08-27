@@ -119,7 +119,13 @@ def test_shots_number_themselves_in_call_order():
     assert ctx.url("/deck/a") == "http://x/deck/a"
 
 
-@pytest.mark.xfail(strict=True, reason="phases 1 to 5 are not all registered yet")
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "three templates from earlier phases carry no flow: "
+        "partials/notif_edit.html, partials/pin_form.html, settings_account.html"
+    ),
+)
 def test_every_page_template_and_partial_is_covered():
     covered = {_split_cover(c)[0] for f in registry.all_flows() for c in f.covers}
     expected = {

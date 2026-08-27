@@ -186,6 +186,7 @@ def _ask(ctx: FlowCtx, path: str, prompt: str) -> None:
         "partials/transform_progress.html#done",
         "partials/transform_diff_card.html",
     ),
+    jobs=True,
 )
 def transform(ctx: FlowCtx) -> None:
     page = ctx.page

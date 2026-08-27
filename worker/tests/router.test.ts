@@ -21,6 +21,8 @@ let seeded: { name: string; profile: string }[];
 let jobRows: Record<string, Record<string, unknown>[]>;
 let jobsWiped: string[];
 let forgotten: { owner: string; jobId: string }[];
+/** The cell's answer for an account whose row is gone. */
+let tombstoned: boolean;
 
 beforeEach(() => {
   forwarded = [];
@@ -28,10 +30,12 @@ beforeEach(() => {
   jobRows = {};
   jobsWiped = [];
   forgotten = [];
+  tombstoned = false;
   env = fakeEnv({
     USER: namespaceOf((name) => ({
       fetch: async (request: Request) => {
         forwarded.push({ request, name });
+        if (tombstoned) return new Response(null, { status: 410, headers: { 'x-prep-tombstoned': '1' } });
         return new Response('from cell', { headers: { 'content-type': 'text/html; charset=utf-8' } });
       },
       wipe: async (profile: string) => {
@@ -355,12 +359,14 @@ describe('the provider flows', () => {
     expect(signOut.headers.get('set-cookie')).toMatch(/^prep_anon=""; expires=/);
   });
 
-  // What the e2e readiness probe rests on: an identity a node's provider
-  // cannot verify is refused by the router before any cell is touched, so
-  // only the anonymous cookie proves the cells are up on every deploy shape.
-  it('routes an anonymous cookie to its own cell whatever the provider is', async () => {
-    const clerkish = fakeEnv({ USER: env.USER });
-    const c = composeWith(clerkish, {
+  // What the e2e readiness probe rests on. An identity a node's provider
+  // cannot verify is refused before any cell is touched, so only the
+  // anonymous cookie reaches a cell on every deploy shape; and the cookie's
+  // own account does not exist on a fresh node, so what the probe reads is
+  // the tombstone answer, which is still the cell's.
+  const clerkish = async () => {
+    const e = fakeEnv({ USER: env.USER });
+    const c = composeWith(e, {
       renderer,
       identity: {
         name: 'clerk',
@@ -371,10 +377,28 @@ describe('the provider flows', () => {
     });
     const id = `anon:${'00'.repeat(16)}`;
     const cookie = await mintCookie((await c.signer())!, id, Math.floor(c.clock.now().getTime() / 1000));
-    const res = await worker.fetch(req('/api/dashboard/overview', { headers: { cookie: `prep_anon=${cookie}` } }), clerkish);
+    return { env: e, id, header: `prep_anon=${cookie}` };
+  };
+
+  it('routes an anonymous cookie to its own cell whatever the provider is', async () => {
+    const { env: e, id, header } = await clerkish();
+    const res = await worker.fetch(req('/api/dashboard/overview', { headers: { cookie: header } }), e);
     expect(res.status).toBe(200);
     expect(forwarded.at(-1)?.name).toBe(id);
     expect(forwarded.at(-1)?.request.headers.get(KIND_HEADER)).toBe('anon');
+  });
+
+  it('turns the cell’s tombstone into a 401 that clears the cookie', async () => {
+    const { env: e, header } = await clerkish();
+    tombstoned = true;
+    const res = await worker.fetch(req('/api/dashboard/overview', { headers: { cookie: header } }), e);
+    expect(res.status).toBe(401);
+    expect(res.headers.get('set-cookie')).toMatch(/^prep_anon=""; expires=.*Max-Age=0/);
+    // Not the router's own refusal: with no cookie it redirects to the
+    // provider and clears nothing, having touched no cell.
+    const visitor = await worker.fetch(req('/api/dashboard/overview'), e);
+    expect(visitor.status).toBe(303);
+    expect(visitor.headers.get('set-cookie')).toBeNull();
   });
 
   it('forget-device redirects home and drops the cookie', async () => {

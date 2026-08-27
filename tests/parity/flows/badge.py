@@ -27,7 +27,13 @@ PLAN = json.dumps(
 )
 
 
-@flow("badge", phase=4, seed="workflows", covers=("partials/workflow_badge.html", "index.html"))
+@flow(
+    "badge",
+    phase=4,
+    seed="workflows",
+    covers=("partials/workflow_badge.html", "index.html"),
+    jobs=True,
+)
 def badge(ctx: FlowCtx) -> None:
     page = ctx.page
     llm = ctx.llm

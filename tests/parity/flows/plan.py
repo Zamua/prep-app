@@ -129,6 +129,7 @@ def _start(ctx: FlowCtx, name: str, description: str) -> None:
         "partials/plan_progress.html#failed",
         "partials/plan_progress.html#gone",
     ),
+    jobs=True,
 )
 def plan(ctx: FlowCtx) -> None:
     page = ctx.page

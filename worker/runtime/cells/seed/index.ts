@@ -5,6 +5,7 @@
 import type { Hasher, UserRepos } from '../../../app/ports.js';
 import { profileDeviceWipe } from './deviceWipe.js';
 import { profileEmpty } from './empty.js';
+import { profileIo } from './io.js';
 import { profileMergeAnon } from './mergeAnon.js';
 import { profileOfflineE2e } from './offlineE2e.js';
 import { profileReader } from './reader.js';
@@ -36,6 +37,7 @@ export const PROFILES: Record<string, SeedProfile> = {
   reader: profileReader,
   study: profileStudy,
   workflows: profileWorkflows,
+  io: profileIo,
   offline_e2e: profileOfflineE2e,
   device_wipe: profileDeviceWipe,
   merge_anon: profileMergeAnon,

@@ -20,7 +20,7 @@ VERDICT = json.dumps(
 )
 
 
-@flow("grading", phase=4, seed="workflows", covers=("study_shell.html",))
+@flow("grading", phase=4, seed="workflows", covers=("study_shell.html",), jobs=True)
 def grading(ctx: FlowCtx) -> None:
     page = ctx.page
     llm = ctx.llm

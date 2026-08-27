@@ -609,6 +609,120 @@ def profile_workflows(user: str) -> dict:
     }
 
 
+def profile_io(user: str) -> dict:
+    """The import, export and split screens.
+
+    One SRS deck whose cards carry every field an export writes, and one
+    trivia deck, because the export hub is the only page that renders
+    differently for the two. `import-*` starts from a deck name that does
+    not exist, so nothing here reserves one.
+    """
+    decks = DeckRepo()
+    qrepo = QuestionRepo()
+
+    srs = decks.create(
+        user,
+        "algorithms",
+        context_prompt="Sorting, searching and complexity.",
+        display_name="Algorithms",
+    )
+    srs_ids = _insert_cards(
+        user,
+        srs,
+        [
+            (
+                "complexity",
+                _q(
+                    "mcq",
+                    "What is the average-case time of quicksort?",
+                    "O(n log n)",
+                    choices=["O(n)", "O(n log n)", "O(n^2)", "O(log n)"],
+                    topic="complexity",
+                ),
+                {"due": at(hours=-2), "step": 2, "last_review": at(days=-2)},
+            ),
+            (
+                "stability",
+                _q(
+                    "short",
+                    "Name a comparison sort that is stable.",
+                    "Merge sort",
+                    answer_regex="(?i)merge",
+                    topic="sorting",
+                ),
+                {"due": at(hours=-1), "step": 1, "last_review": at(days=-1)},
+            ),
+            (
+                "binary",
+                _q(
+                    "code",
+                    "Return the index of `needle` in the sorted list `xs`, or -1.",
+                    "def find(xs, needle):\n    lo, hi = 0, len(xs) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if xs[mid] == needle:\n            return mid\n        if xs[mid] < needle:\n            lo = mid + 1\n        else:\n            hi = mid - 1\n    return -1\n",
+                    language="python",
+                    skeleton="def find(xs, needle):\n    ...\n",
+                    rubric="- Halves the range each step\n- Returns -1 on a miss",
+                    topic="searching",
+                ),
+                {"due": at(days=2), "step": 3, "last_review": at(days=-5)},
+            ),
+            (
+                "invariant",
+                _q(
+                    "short",
+                    "What does a loop invariant have to hold at?",
+                    "Before the loop, after every iteration, and after the loop.",
+                    topic="proofs",
+                ),
+                {"due": at(days=4), "step": 4, "last_review": at(days=-8)},
+            ),
+        ],
+    )
+    _add_review(srs_ids["complexity"], ts=at(days=-2), result="right", user_answer="O(n log n)")
+    _add_review(srs_ids["stability"], ts=at(days=-1), result="wrong", user_answer="Heap sort")
+
+    trivia = decks.create_trivia(
+        user,
+        "database-trivia",
+        topic="Storage engines, transactions and query planning.",
+        interval_minutes=1440,
+        display_name="Database Trivia",
+    )
+    tq = TriviaQueueRepo()
+    trivia_ids: dict[str, int] = {}
+    for key, prompt, answer, regex in [
+        (
+            "isolation",
+            "Which isolation level allows phantom reads?",
+            "Repeatable read",
+            "(?i)repeatable",
+        ),
+        (
+            "index",
+            "What structure does a clustered index store the rows in?",
+            "The index itself",
+            "(?i)index",
+        ),
+        (
+            "wal",
+            "What does a write-ahead log let a database skip on commit?",
+            "Flushing the data pages",
+            "(?i)flush",
+        ),
+    ]:
+        qid = qrepo.add(user, trivia, _q("short", prompt, answer, answer_regex=regex))
+        tq.append_card(qid, trivia)
+        trivia_ids[key] = qid
+    tq.mark_answered(trivia_ids["isolation"], True)
+
+    return {
+        "decks": {
+            "srs": {"id": srs, "slug": "algorithms", "display": "Algorithms"},
+            "trivia": {"id": trivia, "slug": "database-trivia", "display": "Database Trivia"},
+        },
+        "questions": {"srs": srs_ids, "trivia": trivia_ids},
+    }
+
+
 def _not_yet(name: str) -> Callable[[str], dict]:
     def build(user: str) -> dict:
         raise HTTPException(400, f"profile {name!r} is not implemented yet")
@@ -621,6 +735,7 @@ PROFILES: dict[str, Callable[[str], dict]] = {
     "reader": profile_reader,
     "study": profile_study,
     "workflows": profile_workflows,
+    "io": profile_io,
     "caps": _not_yet("caps"),
 }
 

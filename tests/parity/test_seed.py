@@ -27,6 +27,32 @@ def test_reseed_hands_out_the_same_ids(initialized_db):
     assert second == first
 
 
+def test_io_pins_what_the_import_export_and_split_flows_address(initialized_db):
+    """The split flow ticks the first two boxes and the export flow opens
+    both decks by slug, so the insertion order and the two slugs are part of
+    the profile's contract. `worker/tests/seed.test.ts` pins the same numbers
+    on the other side."""
+    with pin_clock():
+        ids = seed(PARITY_USER, "io")
+    assert ids["decks"] == {
+        "srs": {"id": 1, "slug": "algorithms", "display": "Algorithms"},
+        "trivia": {"id": 2, "slug": "database-trivia", "display": "Database Trivia"},
+    }
+    assert ids["questions"]["srs"] == {
+        "complexity": 1,
+        "stability": 2,
+        "binary": 3,
+        "invariant": 4,
+    }
+    assert list(ids["questions"]["trivia"]) == ["isolation", "index", "wal"]
+    with cursor() as c:
+        card = c.execute("SELECT * FROM cards WHERE question_id = 3").fetchone()
+        reviews = c.execute("SELECT question_id, result FROM reviews ORDER BY id").fetchall()
+    assert card["step"] == 3
+    assert card["next_due"] == "2026-03-16T15:00:00+00:00"
+    assert [tuple(r) for r in reviews] == [(1, "right"), (2, "wrong")]
+
+
 def test_workflows_pins_the_ids_the_job_flows_address(initialized_db):
     """The phase-4 flows author transform plans against these ids, so the
     profile's insertion order is part of its contract."""
