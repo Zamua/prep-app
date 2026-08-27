@@ -4,6 +4,7 @@
 import type { Directory, JobCellRpc, JobCells, Limiter, UserCellRpc, UserCells } from '../../app/ports.js';
 import { RowCapReached } from '../../domain/limits.js';
 import { ChunkRejected } from '../../domain/migrate.js';
+import { UnknownTable } from '../storage.js';
 
 export const GLOBAL = 'global';
 
@@ -33,7 +34,7 @@ export class NoRpcMethod extends TypeError {}
  * costs a lost write.
  */
 function decided(e: unknown): boolean {
-  return e instanceof RowCapReached || e instanceof NoRpcMethod || e instanceof ChunkRejected;
+  return e instanceof RowCapReached || e instanceof NoRpcMethod || e instanceof ChunkRejected || e instanceof UnknownTable;
 }
 
 export async function retrying<T>(fn: () => Promise<T>, policy: RetryPolicy = DEFAULT_RETRY): Promise<T> {

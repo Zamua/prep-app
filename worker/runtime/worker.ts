@@ -35,6 +35,7 @@ import { serveInstant } from './routes/instant.js';
 import { observe, serveMetrics } from './routes/metrics.js';
 import { servePublic } from './routes/openapi.js';
 import { serveMigrate } from './routes/migrate.js';
+import { serveMigrateDump } from './routes/migrateDump.js';
 import { serveParityJobs } from './routes/parityJobs.js';
 
 export { UserCell } from './cells/UserCell.js';
@@ -165,7 +166,7 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
   if (path === '/webhooks/clerk') return plain(request.method === 'POST' ? await clerkWebhook(request, c) : methodNotAllowed());
   // Outside the parity block on purpose: the migration runs where the data
   // goes. Its own token gate and the directory's seal are what bound it.
-  const migration = await serveMigrate(request, url, c);
+  const migration = (await serveMigrate(request, url, c)) ?? (await serveMigrateDump(request, url, c));
   if (migration) return plain(migration);
 
   if (c.parity) {
