@@ -5,17 +5,23 @@
 // parity mode: this has to run where the data goes, which is production.
 // The seal is what keeps that safe after the cutover - from then on every
 // route here answers 410.
-import { importChunk, type ImportDeps } from '../../app/migrate/import.js';
-import { ChunkRejected, isChunkRefusal, parseChunk, CHUNK_TOO_LARGE, MAX_CHUNK_BYTES, MIGRATION_SEALED } from '../../domain/migrate.js';
+import { importUserChunk } from '../../app/migrate/import.js';
+import { ChunkRejected, isChunkRefusal, parseChunk, CHUNK_TOO_LARGE, GLOBAL_TABLES, MAX_CHUNK_BYTES, MIGRATION_SEALED } from '../../domain/migrate.js';
 import { readCapped } from '../cells/routes/adapt.js';
 import type { Composition } from '../compose.js';
 
 export const MIGRATE_PREFIX = '/_migrate';
 const INTERNAL_TOKEN_HEADER = 'x-internal-token';
 
-/** The directory's fleet-wide flag; no port declares it because nothing in
- * the app reads it. */
-interface MigrationSeal {
+/** The migration-only surface of a global cell. No port declares any of it
+ * because nothing in the app reads it: the seal is the entry worker's gate,
+ * and the two copies are a straight row move with no policy in them. */
+interface GlobalMigration {
+  importMigrationRows(table: string, rows: readonly Record<string, unknown>[]): Promise<number>;
+  migrationCounts(tables: readonly string[]): Promise<Record<string, number>>;
+}
+
+interface MigrationSeal extends GlobalMigration {
   sealMigration(): Promise<void>;
   migrationSealed(): Promise<boolean>;
 }
@@ -44,13 +50,13 @@ export async function serveMigrate(request: Request, url: URL, c: Composition): 
   const refused = await migrationGate(request, c);
   if (refused) return refused;
 
-  if (rest === '/import') return serveImport(request, { directory: c.directory, cells: c.userCells }, c.dataTables);
+  if (rest === '/import') return serveImport(request, c);
   if (rest === '/status') return serveStatus(url, c);
   await (c.directory as unknown as MigrationSeal).sealMigration();
   return Response.json({ sealed: true });
 }
 
-async function serveImport(request: Request, deps: ImportDeps, tables: readonly string[]): Promise<Response> {
+async function serveImport(request: Request, c: Composition): Promise<Response> {
   // Before any parsing: `Content-Length` decides first and a chunked body is
   // counted as it arrives, so nothing past the cap is ever held.
   const raw = await readCapped(request, MAX_CHUNK_BYTES);
@@ -61,10 +67,14 @@ async function serveImport(request: Request, deps: ImportDeps, tables: readonly 
   } catch {
     return Response.json({ detail: 'bad json' }, { status: 400 });
   }
-  const chunk = parseChunk(body, tables);
+  const chunk = parseChunk(body, c.dataTables);
   if (isChunkRefusal(chunk)) return Response.json({ detail: chunk.detail }, { status: chunk.status });
   try {
-    return Response.json(await importChunk(deps, chunk));
+    if (chunk.kind === 'global') {
+      const inserted = await globalCell(c, chunk.cell).importMigrationRows(chunk.table, chunk.rows);
+      return Response.json({ inserted: inserted ? { [chunk.table]: inserted } : {}, dropped: 0 });
+    }
+    return Response.json(await importUserChunk({ directory: c.directory, cells: c.userCells }, chunk));
   } catch (e) {
     // A parent-before-child ordering mistake arrives here as the foreign key
     // failure, and the operator needs to read which one rather than a page.
@@ -73,8 +83,20 @@ async function serveImport(request: Request, deps: ImportDeps, tables: readonly 
   }
 }
 
+/** `?user=` for a cell, `?cell=` for one of the two globals. */
 async function serveStatus(url: URL, c: Composition): Promise<Response> {
+  const cell = url.searchParams.get('cell');
+  if (cell !== null) {
+    if (!(cell in GLOBAL_TABLES)) return Response.json({ detail: `unknown cell ${JSON.stringify(cell)}` }, { status: 422 });
+    // `users` rides along for the directory: it is what the per-user register
+    // writes, so a run resuming the globals still reads its own progress.
+    const tables = cell === 'directory' ? ['users', ...GLOBAL_TABLES[cell]!] : [...GLOBAL_TABLES[cell]!];
+    return Response.json({ tables: await globalCell(c, cell).migrationCounts(tables) });
+  }
   const user = url.searchParams.get('user');
-  if (!user) return Response.json({ detail: 'user is required' }, { status: 422 });
+  if (!user) return Response.json({ detail: 'user or cell is required' }, { status: 422 });
   return Response.json(await c.userCells.cell(user).migrationStatus());
 }
+
+const globalCell = (c: Composition, name: string): GlobalMigration =>
+  (name === 'directory' ? c.directory : c.limiter) as unknown as GlobalMigration;

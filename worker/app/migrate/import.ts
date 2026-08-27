@@ -6,7 +6,7 @@
 // profile write is the same row twice, and the insert ignores a primary key
 // the cell already holds. Two runs of the same export therefore converge,
 // and so do two concurrent ones.
-import { applyDispositions, directoryEntry, profileForImport, type MigrationChunk } from '../../domain/migrate.js';
+import { applyDispositions, directoryEntry, profileForImport, type UserChunk } from '../../domain/migrate.js';
 import type { Directory, UserCells } from '../ports.js';
 
 export interface ImportDeps {
@@ -24,7 +24,7 @@ export interface ImportResult {
   dropped: number;
 }
 
-export async function importChunk(deps: ImportDeps, chunk: MigrationChunk): Promise<ImportResult> {
+export async function importUserChunk(deps: ImportDeps, chunk: UserChunk): Promise<ImportResult> {
   const profile = chunk.profile ? profileForImport(chunk.profile) : null;
   let idx = chunk.idx;
   if (profile) {

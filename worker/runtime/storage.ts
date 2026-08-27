@@ -31,6 +31,56 @@ export interface CellStorage {
   deleteAlarm(): Promise<void>;
 }
 
+/** One bounded page of a table, and where the next one resumes. */
+export interface DumpPage {
+  rows: Row[];
+  /** The last row's rowid, or null when this page was the last. */
+  next: number | null;
+}
+
+/** A table or column the cell does not have. Identifiers cannot be bound,
+ * so every name is checked against the cell's own catalogue first. */
+export class UnknownTable extends Error {}
+
+export function cellTables(sql: Sql): Set<string> {
+  const rows = sql
+    .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+    .toArray();
+  return new Set(rows.map((r) => String(r.name)));
+}
+
+/**
+ * The migration verifier's read: rows in rowid order after a cursor, capped.
+ * Paging by rowid rather than by each table's own key is what lets one
+ * argument bound both the import and the dump, whatever a table is keyed by.
+ */
+export function pageByRowid(
+  sql: Sql,
+  table: string,
+  opts: { after?: number | null; limit: number; columns?: readonly string[] },
+): DumpPage {
+  if (!cellTables(sql).has(table)) throw new UnknownTable(`no such table: ${table}`);
+  const known = new Set(
+    sql
+      .exec<{ name: string }>('SELECT name FROM pragma_table_info(?)', table)
+      .toArray()
+      .map((r) => String(r.name)),
+  );
+  const wanted = opts.columns?.length ? opts.columns : [...known];
+  for (const column of wanted) if (!known.has(column)) throw new UnknownTable(`${table} has no column ${column}`);
+  const projection = wanted.map((c) => `"${c}"`).join(', ');
+  const rows = sql
+    .exec<Row & { _rowid: number }>(
+      `SELECT rowid AS _rowid, ${projection} FROM "${table}" WHERE rowid > ? ORDER BY rowid LIMIT ?`,
+      opts.after ?? 0,
+      opts.limit,
+    )
+    .toArray();
+  const last = rows.length === opts.limit ? Number(rows[rows.length - 1]!._rowid) : null;
+  for (const row of rows) delete (row as Record<string, unknown>)['_rowid'];
+  return { rows, next: last };
+}
+
 /**
  * The same storage with one transaction depth across everything built on it.
  * celld refuses a second `BEGIN`, and most repository methods already open

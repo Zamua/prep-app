@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { CellSnapshot, MigrationStatus } from '../app/entities.js';
 import { applyDispositions, MAX_CHUNK_ROWS } from '../domain/migrate.js';
+import { GLOBAL } from '../runtime/adapters/cells.js';
 import { DATA_TABLES } from '../runtime/adapters/sql/schema.js';
 import type { Env } from '../runtime/env.js';
 import worker from '../runtime/worker.js';
@@ -406,6 +407,55 @@ describe('re-runnability', () => {
     expect(doomed.status).toBe(422);
     expect(String(((await doomed.json()) as { detail: string }).detail)).toMatch(/FOREIGN KEY/);
     expect((await getStatus(env, ALICE)).tables['questions']).toBe(0);
+  });
+});
+
+describe('the global cells', () => {
+  const MERGES = [
+    { id: 3, anon_user_id: 'anon:aa', target_user_id: ALICE, started_at: '2026-05-01T00:00:00+00:00', completed_at: '2026-05-01T00:00:01+00:00', status: 'completed', counts: '{}', error: null },
+    { id: 4, anon_user_id: 'anon:bb', target_user_id: ALICE, started_at: '2026-06-01T00:00:00+00:00', completed_at: null, status: 'started', counts: null, error: null },
+  ];
+  const LEDGER = [
+    { id: 71, ip: '1.2.3.0/24', created_at: '2026-08-25T00:00:00+00:00', outcome: 'ok', cards: 5, topic_chars: 12, user_id: null },
+    { id: 72, ip: '1.2.3.0/24', created_at: '2026-08-25T01:00:00+00:00', outcome: 'failed_free', cards: null, topic_chars: 9, user_id: ALICE },
+  ];
+
+  it('carries account_merges and the limiter ledger with their ids, and a replay adds nothing', async () => {
+    const env = replayEnv().env;
+    await runImport(env, fixture());
+    const merges = await post(env, '/_migrate/import', { cell: 'directory', table: 'account_merges', rows: MERGES });
+    expect(await merges.json()).toEqual({ inserted: { account_merges: 2 }, dropped: 0 });
+    const ledger = await post(env, '/_migrate/import', { cell: 'limiter', table: 'instant_generations', rows: LEDGER });
+    expect(await ledger.json()).toEqual({ inserted: { instant_generations: 2 }, dropped: 0 });
+
+    // `previous_ids` reads the completed row and nothing else; the row still
+    // `started` at export has no marker here and never resumes.
+    const directory = env.DIRECTORY.get(env.DIRECTORY.idFromName(GLOBAL)) as unknown as {
+      previousIds(id: string): Promise<string[]>;
+      dumpTables(): Promise<Record<string, Row[]>>;
+    };
+    expect(await directory.previousIds(ALICE)).toEqual(['anon:aa']);
+    expect((await directory.dumpTables())['account_merges']).toEqual(MERGES);
+
+    expect(await (await post(env, '/_migrate/import', { cell: 'directory', table: 'account_merges', rows: MERGES })).json()).toEqual({ inserted: {}, dropped: 0 });
+    expect(await (await post(env, '/_migrate/import', { cell: 'limiter', table: 'instant_generations', rows: LEDGER })).json()).toEqual({ inserted: {}, dropped: 0 });
+
+    const status = await worker.fetch(request('/_migrate/status?cell=directory'), env);
+    expect(await status.json()).toEqual({ tables: { users: 2, account_merges: 2 } });
+    const limiter = await worker.fetch(request('/_migrate/status?cell=limiter'), env);
+    expect(await limiter.json()).toEqual({ tables: { instant_generations: 2 } });
+  });
+
+  it('refuses a global table its cell does not own', async () => {
+    const env = replayEnv().env;
+    // The directory's `users` rows are the per-user register's, which is also
+    // what hands out the id block.
+    const users = await post(env, '/_migrate/import', { cell: 'directory', table: 'users', rows: [] });
+    expect([users.status, await users.json()]).toEqual([422, { detail: '"users" is not a table the directory cell takes' }]);
+    const wrong = await post(env, '/_migrate/import', { cell: 'limiter', table: 'account_merges', rows: [] });
+    expect(wrong.status).toBe(422);
+    const nowhere = await post(env, '/_migrate/import', { cell: 'jobs', table: 'x', rows: [] });
+    expect([nowhere.status, await nowhere.json()]).toEqual([422, { detail: 'unknown cell "jobs"' }]);
   });
 });
 

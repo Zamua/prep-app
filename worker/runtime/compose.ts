@@ -61,7 +61,9 @@ import { createRenderer } from './adapters/nunjucks/index.js';
 import { ParitySessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from './adapters/random.js';
 import { DATA_TABLES } from './adapters/sql/schema.js';
 import {
+  countRows,
   DIRECTORY_MIGRATIONS,
+  insertOrIgnore,
   JOB_MIGRATIONS,
   LIMITER_MIGRATIONS,
   migrate,
@@ -178,6 +180,10 @@ export interface Composition {
   /** The user-cell tables an import may name, in insert order. The schema is
    * an adapter's, so the routes read it from here. */
   dataTables: readonly string[];
+  /** The migration's copy of a global cell's table, keyed by the ids it
+   * preserves. Used by the two global cells, which own no repository for it. */
+  importGlobalRows(storage: CellStorage, table: string, rows: readonly Record<string, unknown>[]): number;
+  countRows(storage: CellStorage, table: string): number;
   resetIdBlock(storage: CellStorage): void;
 }
 
@@ -409,6 +415,8 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     migrateLimiter: (storage) => migrate(storage.sql, LIMITER_MIGRATIONS),
     migrateJobCell: (storage) => migrate(storage.sql, JOB_MIGRATIONS),
     dataTables: DATA_TABLES,
+    importGlobalRows: (storage, table, rows) => insertOrIgnore(storage.sql, table, rows),
+    countRows: (storage, table) => countRows(storage.sql, table),
     seedIdBlock: (storage, idx) => seedSequences(storage.sql, idx),
     resetIdBlock: (storage) => resetSequences(storage.sql),
   };

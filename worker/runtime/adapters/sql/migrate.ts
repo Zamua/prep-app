@@ -2,7 +2,7 @@
 // re-runnable (IF NOT EXISTS, column checks) and the version is written
 // last, so a step that fails mid-way replays on the next activation.
 import { AUTOINCREMENT_TABLES, DIRECTORY_SCHEMA, JOB_SCHEMA, LIMITER_SCHEMA, USER_SCHEMA } from './schema.js';
-import { Db, type Sql } from './storage.js';
+import { Db, type Sql, type SqlValue } from './storage.js';
 
 export interface Migration {
   version: number;
@@ -99,6 +99,33 @@ export function seedSequences(sql: Sql, idx: number): void {
       db.run('UPDATE sqlite_sequence SET seq = ? WHERE name = ?', base, table);
     }
   }
+}
+
+/**
+ * Rows into a global cell's table, keyed by the primary key they carry, so a
+ * replay inserts nothing. Column names are checked against the catalogue
+ * first: an identifier cannot be bound.
+ */
+export function insertOrIgnore(sql: Sql, table: string, rows: readonly Record<string, unknown>[]): number {
+  const db = new Db(sql);
+  const columns = db.columns(table);
+  if (columns.size === 0) throw new RangeError(`no such table: ${table}`);
+  let inserted = 0;
+  for (const row of rows) {
+    const keys = Object.keys(row).filter((k) => columns.has(k));
+    if (keys.length === 0) continue;
+    inserted += db.run(
+      `INSERT OR IGNORE INTO "${table}" (${keys.map((k) => `"${k}"`).join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`,
+      ...keys.map((k) => row[k] as SqlValue),
+    );
+  }
+  return inserted;
+}
+
+export function countRows(sql: Sql, table: string): number {
+  const db = new Db(sql);
+  if (db.columns(table).size === 0) throw new RangeError(`no such table: ${table}`);
+  return Number(db.first<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table}"`)?.n ?? 0);
 }
 
 /** Drops every counter so ids restart at 1: the parity seed pins block 0. */

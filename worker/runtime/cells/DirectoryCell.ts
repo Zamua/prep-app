@@ -85,6 +85,19 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
     return (await this.storage.get<boolean>(MIGRATION_SEAL_KEY)) === true;
   }
 
+  /** The migration's copy of a global table this cell owns: `account_merges`,
+   * ids preserved because they are the source of `previous_ids`. Keyed by
+   * that id, so a replay inserts nothing. */
+  async importMigrationRows(table: string, rows: readonly Record<string, unknown>[]): Promise<number> {
+    return this.storage.transactionSync(() => this.c.importGlobalRows(this.storage, table, rows));
+  }
+
+  async migrationCounts(tables: readonly string[]): Promise<Record<string, number>> {
+    const out: Record<string, number> = {};
+    for (const table of tables) out[table] = this.c.countRows(this.storage, table);
+    return out;
+  }
+
   async register(id: string, isAnonymous: boolean, at: string, opts?: { idx?: number }): Promise<{ idx: number }> {
     return this.repo.register(id, isAnonymous, at, opts);
   }

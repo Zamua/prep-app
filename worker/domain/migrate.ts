@@ -30,11 +30,23 @@ export const DROPPED_BYOK_PROVIDERS: readonly string[] = ['claude-subscription']
  */
 export const RESET_TABLES: readonly string[] = ['active_workflows', 'job_progress'];
 
+/**
+ * The global tables a chunk may carry, by the cell that owns them.
+ * `DirectoryCell.users` is deliberately absent: those rows are written by
+ * the per-user register, which is also what hands out the id block, so a
+ * second writer could hand the same user two.
+ */
+export const GLOBAL_TABLES: Readonly<Record<string, readonly string[]>> = {
+  directory: ['account_merges'],
+  limiter: ['instant_generations'],
+};
+
 /** Python's primary key for the row the cell keys by `id`. */
 const PY_PROFILE_KEY = 'tailscale_login';
 
 /** One user, one table, the rows of it that fit under the caps. */
-export interface MigrationChunk {
+export interface UserChunk {
+  kind: 'user';
   user: string;
   /** The exporter's rank, which seeds this cell's id block. Never 0: block 0
    * is the parity seed's. */
@@ -45,6 +57,16 @@ export interface MigrationChunk {
   rows: readonly Record<string, unknown>[];
   profile: Record<string, unknown> | null;
 }
+
+/** One global cell's table: a straight copy, ids preserved. */
+export interface GlobalChunk {
+  kind: 'global';
+  cell: string;
+  table: string;
+  rows: readonly Record<string, unknown>[];
+}
+
+export type MigrationChunk = UserChunk | GlobalChunk;
 
 export interface ChunkRefusal {
   status: number;
@@ -86,6 +108,7 @@ export function parseChunk(body: unknown, knownTables: readonly string[]): Migra
   // The whole-snapshot shape. One chunk carries one table so the cell never
   // holds a second table's rows while inserting the first.
   if ('tables' in b) return refuse(422, 'one table per chunk');
+  if ('cell' in b) return parseGlobal(b);
   if (typeof b['user'] !== 'string' || !b['user']) return refuse(422, 'user is required');
   const idx = b['idx'];
   if (typeof idx !== 'number' || !Number.isInteger(idx) || idx < 1) return refuse(422, 'idx must be an integer above 0');
@@ -110,20 +133,37 @@ export function parseChunk(body: unknown, knownTables: readonly string[]): Migra
     table = rawTable;
   }
 
-  const rawRows = b['rows'] ?? [];
-  if (!Array.isArray(rawRows)) return refuse(422, 'rows must be an array');
-  if (rawRows.length > MAX_CHUNK_ROWS) return refuse(413, CHUNK_TOO_MANY_ROWS);
-  if (table === null && rawRows.length > 0) return refuse(422, 'rows without a table');
+  const rows = parseRows(b['rows']);
+  if ('status' in rows) return rows;
+  if (table === null && rows.rows.length > 0) return refuse(422, 'rows without a table');
   if (table === null && profile === null) return refuse(422, 'a chunk carries a table or a profile');
+  return { kind: 'user', user: b['user'], idx, table, rows: rows.rows, profile };
+}
+
+function parseGlobal(b: Record<string, unknown>): GlobalChunk | ChunkRefusal {
+  const cell = b['cell'];
+  if (typeof cell !== 'string' || !(cell in GLOBAL_TABLES)) return refuse(422, `unknown cell ${JSON.stringify(cell)}`);
+  const table = b['table'];
+  if (typeof table !== 'string' || !GLOBAL_TABLES[cell]!.includes(table)) {
+    return refuse(422, `${JSON.stringify(table ?? null)} is not a table the ${cell} cell takes`);
+  }
+  const rows = parseRows(b['rows']);
+  return 'status' in rows ? rows : { kind: 'global', cell, table, rows: rows.rows };
+}
+
+function parseRows(raw: unknown): { rows: Record<string, unknown>[] } | ChunkRefusal {
+  const list = raw ?? [];
+  if (!Array.isArray(list)) return refuse(422, 'rows must be an array');
+  if (list.length > MAX_CHUNK_ROWS) return refuse(413, CHUNK_TOO_MANY_ROWS);
   const rows: Record<string, unknown>[] = [];
-  for (const [i, raw] of rawRows.entries()) {
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return refuse(422, `rows[${i}] is not an object`);
-    const row = raw as Record<string, unknown>;
+  for (const [i, item] of list.entries()) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return refuse(422, `rows[${i}] is not an object`);
+    const row = item as Record<string, unknown>;
     const bad = badValue(row);
     if (bad) return refuse(422, `rows[${i}].${bad} is not a column value`);
     rows.push(row);
   }
-  return { user: b['user'], idx, table, rows, profile };
+  return { rows };
 }
 
 /** Rows the cell may hold, and how many the policy took out. */
