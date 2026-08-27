@@ -1,6 +1,6 @@
 """One synthetic snapshot for the whole migration suite.
 
-Session-scoped: `prep.migrate.synth` runs the app's schema bootstrap, and
+Session-scoped: `migrate.synth` materialises the frozen schema, and
 the exporter tests only ever read the file. Small counts, prod shape: the
 roles the spec names (heavy user, mid-merge, PAT holder, subscription
 row, both retention clamp ends, an anonymous account with no rows) are
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from prep.migrate import synth
+from migrate import synth
 
 SEED = 7
 NOW = datetime(2026, 8, 26, 14, 0, 0, tzinfo=timezone.utc)
@@ -53,7 +53,7 @@ def plan(fixture: tuple[Path, synth.Plan]) -> synth.Plan:
 
 @pytest.fixture(scope="session")
 def exported(snapshot: Path, tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict]:
-    from prep.migrate.export import export
+    from migrate.export import export
 
     out = tmp_path_factory.mktemp("export")
     return out, export(snapshot, out, now=NOW)

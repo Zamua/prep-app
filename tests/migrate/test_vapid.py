@@ -13,9 +13,10 @@ import json
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from py_vapid import Vapid01
 
-from prep.migrate.vapid import (
+from migrate.vapid import (
     PRIVATE_SCALAR_BYTES,
     PUBLIC_POINT_BYTES,
     UNCOMPRESSED_POINT_TAG,
@@ -24,7 +25,16 @@ from prep.migrate.vapid import (
     main,
     recorded_public_key,
 )
-from prep.notify.push import _public_key_b64url
+
+
+def recorded_b64url(vapid: Vapid01) -> str:
+    """The public key in the shape the recorded `vapid-keys.json` holds:
+    the uncompressed X9.62 point, base64url, unpadded."""
+    raw = vapid.public_key.public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def unb64u(value: str) -> bytes:
@@ -33,19 +43,19 @@ def unb64u(value: str) -> bytes:
 
 @pytest.fixture
 def keypair(tmp_path: Path) -> tuple[Path, Path, str]:
-    """A `py_vapid` keypair on disk, exactly as `prep.notify.push` writes
-    one on first boot."""
+    """A `py_vapid` keypair on disk, in the shape the pre-cutover deploy
+    wrote on first boot."""
     vapid = Vapid01()
     vapid.generate_keys()
     pem = tmp_path / "vapid-private.pem"
     keys = tmp_path / "vapid-keys.json"
     pem.write_bytes(vapid.private_pem())
-    public = _public_key_b64url(vapid)
+    public = recorded_b64url(vapid)
     keys.write_text(json.dumps({"public_b64": public}, indent=2))
     return pem, keys, public
 
 
-def test_the_derived_public_key_is_the_app_s_own_byte_for_byte(keypair):
+def test_the_derived_public_key_is_the_recorded_one_byte_for_byte(keypair):
     pem, _keys, public = keypair
     pair = convert_pem(pem.read_bytes())
     assert pair.public_key == public
@@ -89,7 +99,7 @@ def test_a_keys_file_that_disagrees_with_the_pem_aborts(keypair, tmp_path, capsy
     pem, keys, _public = keypair
     other = Vapid01()
     other.generate_keys()
-    keys.write_text(json.dumps({"public_b64": _public_key_b64url(other)}))
+    keys.write_text(json.dumps({"public_b64": recorded_b64url(other)}))
     assert main(["--pem", str(pem), "--keys", str(keys)]) == 1
     assert "vapid-keys.json" in capsys.readouterr().err
 

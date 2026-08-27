@@ -1,192 +1,132 @@
-# prep — contributor entrypoints.
+# prep: contributor entrypoints.
 #
 # Quick start (macOS):
-#   brew bundle && mise install && make setup && make dev
+#   brew bundle && mise install && make setup && make test
 #
-# Linux: see CONTRIBUTING.md (one-line mise install + temporal CLI from
-# GitHub releases) then `mise install && make setup && make dev`.
+# Linux: install mise (see CONTRIBUTING.md), then the same three.
 #
-# Deploy targets (deploy-devel, deploy-prod, deploy-vps, promote,
-# promote-vps, logs-*, down-*) are operator-only and live in the
-# operator's PRIVATE infra repo at infra/prep/Makefile — they reference
-# operator-owned paths (VPS host, sudo, /home/admin, /home/apps). Self-
-# hosters: see README.md "Day-to-day" for the plain `docker compose`
-# workflow; the operator's Makefile is an automation layer over that.
+# The application is the TypeScript worker under worker/. Python remains
+# for the migration tool (migrate/) and the browser test harness
+# (tests/); `make setup` provisions both.
+#
+# Deploy targets are operator-only and live in a private repo. This
+# Makefile never deploys anything.
 
-# `mise exec` runs commands with .tool-versions tools on PATH without
-# requiring shell activation. Set MISE_BIN to override (e.g., for users
-# not on macOS Homebrew).
-MISE     ?= mise
-RUN      := $(MISE) exec --
-WORKER   := worker-go/bin/worker
+# `mise exec` puts the .tool-versions toolchain on PATH without shell
+# activation. Set MISE to override.
+MISE ?= mise
+RUN  := $(MISE) exec --
+NPM  := $(RUN) npm --prefix worker
+PY   := $(RUN) .venv/bin/python
 
-# Dev-bypass user: `make dev` boots with this set so a contributor sees a
-# working app immediately on http://127.0.0.1:8081/ without needing
-# Tailscale Serve installed. For a real auth flow, unset and set up
-# Tailscale (see CLAUDE.md).
-export PREP_DEFAULT_USER ?= dev@example.com
-# Surface the /dev/preview/* template-fixture routes for the UI sweep.
-# Never set this in prod images — prep/app.py gates registration on it.
-export PREP_DEV ?= 1
-
-.PHONY: help setup tools deps build dev run-app run-worker run-temporal \
-        lint format hooks clean wipe-temporal-state test e2e ci
+.PHONY: help setup tools node-deps py-deps build test typecheck \
+        test-migrate lint format hooks dev dev-stop llm-stub e2e parity \
+        ci clean
 
 help:
-	@echo "Local dev (no docker):"
-	@echo "  make setup    — mise install + uv sync (incl. dev tools) + build worker + install hooks"
-	@echo "  make dev      — start temporal + app + worker via goreman (Procfile)"
-	@echo "  make build    — Go worker build only"
-	@echo "  make lint     — ruff check + go vet (read-only)"
-	@echo "  make format   — ruff format + gofmt (writes)"
-	@echo "  make test     — pytest (python unit + integration tests)"
-	@echo "  make e2e      — Playwright/httpx smoke against a DEPLOYED \$$E2E_BASE_URL (needs credentials; see the e2e section)"
-	@echo "  make e2e-local— browser + offline coverage against a local server (no deploy, no credentials)"
-	@echo "  make ci       — lint + test + e2e."
-	@echo "  make hooks    — install pre-commit hook (idempotent; runs as part of \`make setup\`)"
-	@echo "  make clean    — kill stray dev processes; preserve data"
+	@echo "Setup:"
+	@echo "  make setup       mise install + npm install + uv sync + git hooks"
 	@echo ""
-	@echo "Deploy targets are operator-only (infra/prep/Makefile in the private infra repo)."
-	@echo "Self-hosters: see README.md 'Day-to-day' for plain docker-compose."
+	@echo "The worker (the application):"
+	@echo "  make build       templates, icons, service worker, dist/assets"
+	@echo "  make test        vitest"
+	@echo "  make typecheck   tsc over the worker and its tests"
+	@echo "  make dev         build, deploy and start a local celld node"
+	@echo "  make dev-stop    stop the node this checkout started"
+	@echo "  make llm-stub    the canned LLM a local node calls for AI flows"
+	@echo ""
+	@echo "Python tools:"
+	@echo "  make test-migrate  the migration tool's suite (migrate/)"
+	@echo "  make e2e           browser suites against PARITY_BASE_URL"
+	@echo "  make parity        pixel flows against PARITY_BASE_URL"
+	@echo ""
+	@echo "Both:"
+	@echo "  make lint        ruff format-check + check, read-only"
+	@echo "  make format      ruff format + fix (writes)"
+	@echo "  make hooks       install the pre-commit hook (part of setup)"
+	@echo "  make ci          lint + typecheck + test + test-migrate"
+	@echo "  make clean       drop generated build output"
 
-setup: tools deps build hooks
+setup: tools node-deps py-deps hooks
 
 tools:
 	@command -v $(MISE) >/dev/null 2>&1 || { \
-	  echo "mise not found — \`brew install mise\` (or curl https://mise.run | sh)"; exit 1; }
+	  echo "mise not found: \`brew install mise\` (or curl https://mise.run | sh)"; exit 1; }
 	$(MISE) install --quiet
 
-deps: tools
+node-deps: tools
+	$(NPM) install --silent
+
+py-deps: tools
 	$(RUN) uv sync --group dev --quiet
 
-build: $(WORKER)
+# ----- the worker -----
 
-$(WORKER): $(shell find worker-go -name '*.go' 2>/dev/null) worker-go/go.mod tools
-	cd worker-go && $(RUN) go build -o bin/worker .
+build: node-deps
+	$(NPM) run build
 
-dev: tools
-	@mkdir -p temporal-data
-	$(RUN) goreman start
+typecheck: node-deps
+	$(NPM) run typecheck
 
-# Helpers if you want to run one process at a time (e.g. for debugging):
-run-app: tools
-	$(RUN) .venv/bin/uvicorn prep.app:app --host 127.0.0.1 --port 8081 --reload
+test: node-deps
+	cd worker && $(RUN) npx vitest run
 
-run-worker: build
-	$(WORKER)
+# A local celld node: builds, deploys to the scratch bucket, starts on
+# 127.0.0.1:8791. Needs the celld binary and the scratch MinIO
+# credentials; the script names what is missing and refuses.
+dev: node-deps
+	worker/scripts/run-node.sh
 
-run-temporal:
-	@mkdir -p temporal-data
-	temporal server start-dev --db-filename ./temporal-data/temporal.db --namespace prep --log-level warn
+dev-stop:
+	worker/scripts/run-node.sh stop
 
-# ----- lint / format -----
-# `make lint` is read-only — fails if drift exists. CI / pre-commit hook
-# territory. `make format` rewrites files in place.
+# The canned LLM the parity corpus was recorded against. A local node is
+# configured to call it, so AI flows need it running.
+llm-stub: py-deps
+	$(PY) -m tests.parity.llm_stub --port 8089
 
-lint: tools
-	$(RUN) .venv/bin/ruff format --check .
-	$(RUN) .venv/bin/ruff check .
-	cd worker-go && $(RUN) go vet ./...
-	@cd worker-go && bad=$$($(RUN) gofmt -l .); \
-	  if [ -n "$$bad" ]; then echo "gofmt drift in:"; echo "$$bad"; exit 1; fi
+# ----- python tools -----
 
-format: tools
-	$(RUN) .venv/bin/ruff format .
-	$(RUN) .venv/bin/ruff check --fix .
-	cd worker-go && $(RUN) gofmt -w .
+# The migration tool exports a pre-cutover snapshot, imports it and
+# verifies the two agree. Tier 3 bundles worker/domain/fsrs, so the
+# worker's node_modules has to be installed.
+test-migrate: py-deps node-deps
+	$(PY) -m pytest tests/migrate
 
-test: tools
-	$(RUN) .venv/bin/pytest -x
+# Browser suites against a running target. PARITY_BASE_URL names it; the
+# suites skip with the reason when it is unset.
+e2e: py-deps
+	$(PY) -m pytest tests/e2e
 
-# ----- e2e -----
-# Drives Playwright + an httpx client against a DEPLOYED prep instance.
-# Each session creates a throwaway `e2e-test-deck` via the app's HTTP
-# routes, runs assertions, then deletes it, so create + delete +
-# cascade are themselves under test. Tests live under tests/e2e/
-# (excluded from `make test` via pyproject's norecursedirs).
-#
-# Credentials, because the public deploys use Clerk:
-#   E2E_API_TOKEN     a `prep_pat_…` from /settings/api, for the httpx
-#                     setup fixtures.
-#   E2E_CLERK_EMAIL   a `+clerk_test` account and its password, for the
-#   E2E_CLERK_PASSWORD  browser fixtures (signed in once per session).
-# Missing either makes the deployed suites SKIP with the reason rather
-# than pass while testing nothing.
-#
-# `make e2e-local` needs none of this: it runs the browser coverage
-# that does not require a deployed worker against a local server.
-#
-# Pre-flight: the deployed instance has to be up. We check `/` returns
-# 200 first; bail with a clear error otherwise rather than wasting
-# minutes on per-test timeouts.
-E2E_BASE_URL ?= https://staging.prepcards.app
+# The pixel goldens under tests/parity/goldens/. PARITY_PHASE selects
+# which flows run; `all` is every phase. One file per invocation on
+# purpose: each holds a browser session for its whole scope.
+PARITY_PHASE ?= all
 
-e2e: tools
-	@echo "→ e2e against $(E2E_BASE_URL)"
-	@code=$$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 $(E2E_BASE_URL)/ 2>/dev/null || echo 000); \
-	  if [ "$$code" != "200" ]; then \
-	    echo "  FAIL: $(E2E_BASE_URL)/ returned $$code (expected 200). bring it up first."; exit 1; fi
-	@# Pre-flight: playwright + chromium binary must be installed for the
-	@# browser tests in test_browser_smoke.py. The python package alone
-	@# isn't enough — the headless chromium binary lives under
-	@# ~/Library/Caches/ms-playwright and needs an explicit
-	@# `playwright install chromium` to download. We surface a friendly
-	@# hint here instead of letting tests skip silently via the
-	@# pytest.skip() wired into conftest.
-	@if ! $(RUN) .venv/bin/python -c "import playwright" 2>/dev/null; then \
-	  echo "  WARN: playwright not installed in venv — \`make setup\` (or \`uv sync --group dev\`)"; \
-	  echo "        browser tests will skip"; \
-	fi
-	E2E_BASE_URL=$(E2E_BASE_URL) $(RUN) .venv/bin/pytest -x tests/e2e
-
-# Browser + offline coverage that boots its own local server: no
-# deploy, no credentials. Run it on any machine, any time.
-#
-# One file at a time on purpose: each file starts its own uvicorn, and
-# under memory pressure a multi-file run produces false navigation
-# timeouts that look like product failures.
-E2E_LOCAL_FILES = \
-	tests/e2e/test_local_browser_smoke.py \
-	tests/e2e/test_online_study_e2e.py \
-	tests/e2e/test_online_host_e2e.py \
-	tests/e2e/test_study_components_e2e.py \
-	tests/e2e/test_dashboard_components_e2e.py \
-	tests/e2e/test_dashboard_parity_e2e.py \
-	tests/e2e/test_offline_study_e2e.py \
-	tests/e2e/test_offline_author_e2e.py \
-	tests/e2e/test_offline_m5_e2e.py \
-	tests/e2e/test_offline_wipe_e2e.py \
-	tests/e2e/test_device_wipe_e2e.py \
-	tests/e2e/test_merge_offline_e2e.py \
-	tests/e2e/test_offline_parity.py \
-	tests/e2e/test_markdown_parity.py \
-	tests/e2e/test_instant_start_e2e.py \
-	tests/e2e/test_landing_local_decks_e2e.py
-
-e2e-local: tools
-	@for f in $(E2E_LOCAL_FILES); do \
-	  echo "→ $$f"; \
-	  $(RUN) .venv/bin/pytest -q $$f || exit 1; \
+parity: py-deps
+	@for f in tests/parity/test_flows_*.py; do \
+	  echo "-> $$f"; \
+	  PARITY_PHASE=$(PARITY_PHASE) $(PY) -m pytest -q $$f || exit 1; \
 	done
 
-# ----- CI bundle -----
-# Lint + test (in-process) + e2e (against devel). Each step exits
-# non-zero on failure. The operator's `promote` / `promote-vps` targets
-# (infra/prep/Makefile) re-run these before tagging prod.
-ci: lint test e2e
+# ----- both -----
 
-# Wire .githooks/ as the git hooks dir for this checkout. Idempotent.
-# Contributors get this for free via `make setup`. To bypass for a
-# single commit, use `git commit --no-verify`.
+lint: py-deps
+	$(RUN) .venv/bin/ruff format --check .
+	$(RUN) .venv/bin/ruff check .
+
+format: py-deps
+	$(RUN) .venv/bin/ruff format .
+	$(RUN) .venv/bin/ruff check --fix .
+
+# Wire .githooks/ as this checkout's hooks dir. Idempotent. Bypass a
+# single commit with `git commit --no-verify`.
 hooks:
 	@git config core.hooksPath .githooks
 	@echo "git hooks installed (.githooks/pre-commit)"
 
-clean:
-	@-pkill -f "uvicorn prep.app:app" 2>/dev/null || true
-	@-pkill -f "worker-go/bin/worker" 2>/dev/null || true
-	@-pkill -f "temporal server start-dev" 2>/dev/null || true
-	@echo "stopped (data.sqlite + vapid keys preserved)"
+ci: lint typecheck test test-migrate
 
-wipe-temporal-state:
-	rm -rf temporal-data/
+clean:
+	rm -rf worker/build worker/dist artifacts
+	@echo "generated output removed"

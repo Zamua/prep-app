@@ -1,32 +1,27 @@
 #!/bin/sh
 # Pre-commit hook for prep.
 #
-# What it does:
-#   - Runs `ruff format --check` and `ruff check` against staged Python files
-#   - Runs `gofmt -l` against staged Go files
-#
-# How it's wired up:
-#   `git config core.hooksPath .githooks` (run once per checkout — `make
-#   hooks` in this repo, also called by `make setup`).
-#
-# Bypass (intentionally): `git commit --no-verify`. Use sparingly.
+# Staged TypeScript in worker/ gates on the worker's typecheck and its
+# vitest suite; staged Python gates on ruff. Wired up with
+# `git config core.hooksPath .githooks` (`make hooks`, also part of
+# `make setup`). Bypass with `git commit --no-verify`; use sparingly.
 
 set -e
 
 # Stage list, NUL-delimited so spaces/specials don't break us. Includes
-# only ADDED, COPIED, MODIFIED — skips DELETED + RENAMED (no content).
+# only ADDED, COPIED, MODIFIED: skips DELETED + RENAMED (no content).
 staged_files() {
     git diff --cached --name-only --diff-filter=ACM -z | tr '\0' '\n'
 }
 
-py_files=$(staged_files | grep -E '\.py$' | grep -vE '^(\.venv/|ui-tools/\.venv/)' || true)
-go_files=$(staged_files | grep -E '\.go$' || true)
+py_files=$(staged_files | grep -E '\.py$' | grep -vE '^\.venv/' || true)
+ts_files=$(staged_files | grep -E '^worker/.*\.(ts|mts|mjs)$' || true)
 
 # ---- Python: ruff format-check + lint -----------------------------------
 
 if [ -n "$py_files" ]; then
     if [ ! -x .venv/bin/ruff ]; then
-        echo "pre-commit: .venv/bin/ruff not found — run \`uv sync --group dev\` first" >&2
+        echo "pre-commit: .venv/bin/ruff not found: run \`make setup\` first" >&2
         exit 1
     fi
 
@@ -34,7 +29,7 @@ if [ -n "$py_files" ]; then
     # shellcheck disable=SC2086  # word-split intended
     if ! .venv/bin/ruff format --check $py_files; then
         echo "" >&2
-        echo "pre-commit: formatting issues — run \`make format\` and re-stage." >&2
+        echo "pre-commit: formatting issues: run \`make format\` and re-stage." >&2
         exit 1
     fi
 
@@ -42,41 +37,45 @@ if [ -n "$py_files" ]; then
     # shellcheck disable=SC2086
     if ! .venv/bin/ruff check $py_files; then
         echo "" >&2
-        echo "pre-commit: lint issues — fix manually or run \`.venv/bin/ruff check --fix <files>\`." >&2
+        echo "pre-commit: lint issues: fix, or \`.venv/bin/ruff check --fix <files>\`." >&2
         exit 1
     fi
 fi
 
-# ---- Go: gofmt drift check ----------------------------------------------
-
-if [ -n "$go_files" ]; then
-    # gofmt -l prints any file that would change. Empty output = clean.
-    # We pipe through grep to keep only the staged files (gofmt -l . would
-    # walk the whole tree).
-    bad=$(echo "$go_files" | xargs -r gofmt -l 2>/dev/null)
-    if [ -n "$bad" ]; then
-        echo "pre-commit: gofmt drift in:" >&2
-        echo "$bad" >&2
-        echo "" >&2
-        echo "fix with \`make format\` and re-stage." >&2
-        exit 1
-    fi
-fi
-
-# ---- Python tests -------------------------------------------------------
+# ---- worker: typecheck + vitest -----------------------------------------
 #
-# Always run the test suite — fast (<2s today) and catches behavior
-# regressions earlier than CI would. Skip only if there's no python in
-# the change AND no test file changed (a pure-go or pure-doc commit).
+# The suite is the gate the deploy leans on and runs in seconds, so it
+# runs whole rather than filtered down to the staged files.
 
-test_files=$(staged_files | grep -E '^(tests/|prep/.*\.py$|.*\.py$)' || true)
+if [ -n "$ts_files" ]; then
+    if [ ! -d worker/node_modules ]; then
+        echo "pre-commit: worker/node_modules missing: run \`make setup\` first" >&2
+        exit 1
+    fi
 
-if [ -n "$test_files" ] && [ -x .venv/bin/pytest ]; then
+    echo "pre-commit: npm run typecheck"
+    if ! (cd worker && npm run --silent typecheck); then
+        echo "" >&2
+        echo "pre-commit: typecheck failing: fix before committing." >&2
+        exit 1
+    fi
+
+    echo "pre-commit: vitest run"
+    if ! (cd worker && npx vitest run --silent); then
+        echo "" >&2
+        echo "pre-commit: tests failing: fix or add coverage before committing." >&2
+        echo "(use \`git commit --no-verify\` to bypass for an emergency)" >&2
+        exit 1
+    fi
+fi
+
+# ---- Python tests --------------------------------------------------------
+
+if [ -n "$py_files" ] && [ -x .venv/bin/pytest ]; then
     echo "pre-commit: pytest -x"
     if ! .venv/bin/pytest -x --tb=short -q; then
         echo "" >&2
-        echo "pre-commit: tests failing — fix or add coverage before committing." >&2
-        echo "(use \`git commit --no-verify\` to bypass for an emergency)" >&2
+        echo "pre-commit: tests failing: fix or add coverage before committing." >&2
         exit 1
     fi
 fi

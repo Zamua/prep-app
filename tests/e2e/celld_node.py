@@ -9,7 +9,7 @@ assertions. What changed underneath it:
 - Every request the browser makes carries that token beside the tailscale
   headers: the fake provider verifies nothing else, so the token is what
   stops any caller reaching any user's cell (decision 7.0).
-- A node is heavier than a uvicorn, so a run drives ONE file. Fixtures are
+- A node is expensive to start, so a run drives ONE file. Fixtures are
   lazy and at most one node is live per invocation.
 
 `stop()` leaves the port refusing, which is what the offline suites need:

@@ -14,7 +14,7 @@ import subprocess
 import pytest
 
 from tests.parity.dom_diff import dom_diff
-from tests.parity.oracles import REPO_ROOT
+from tests.parity.harness.constants import REPO_ROOT
 
 HTML = REPO_ROOT / "tests" / "fixtures" / "parity" / "html"
 CONTEXTS = HTML / "contexts"
@@ -31,9 +31,7 @@ def goldens() -> list[str]:
 @pytest.fixture(scope="session")
 def rendered():
     assert BUNDLE.is_file(), f"{BUNDLE} is missing; run `npm run build` in worker/"
-    assert CONTEXTS.is_dir(), (
-        f"{CONTEXTS} is missing; run python -m tests.parity.oracles.render_templates"
-    )
+    assert CONTEXTS.is_dir(), f"{CONTEXTS} is missing"
     subprocess.run(["node", str(BUNDLE), str(CONTEXTS), str(OUT)], check=True, cwd=REPO_ROOT)
     return OUT
 

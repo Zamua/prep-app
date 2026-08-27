@@ -48,7 +48,7 @@ E2E_QUESTIONS = [
     {"prompt": "Capital of Egypt?", "answer": "Cairo"},
     {
         # Long-enough answer (>3 tokens, with sentence punctuation)
-        # forces ai_grade per prep.trivia.service.classify_grading.
+        # forces the ai_grade path rather than the deterministic grader.
         "prompt": "Briefly: what is the role of the GIL in CPython?",
         "answer": "It serializes Python bytecode execution so only one thread runs at a time.",
     },
@@ -434,9 +434,9 @@ def page(browser_session, base_url, default_user_header, clerk_storage_state):
 #   event themselves; the event is browser plumbing, not the contract
 #   under test.
 
-import subprocess as _subprocess
+import subprocess as _subprocess  # noqa: E402  belongs to the section above
 
-from tests.e2e.celld_node import (
+from tests.e2e.celld_node import (  # noqa: E402
     OFFLINE_E2E_LOGIN,
     OFFLINE_E2E_NAME,
     WORKER_DIR,

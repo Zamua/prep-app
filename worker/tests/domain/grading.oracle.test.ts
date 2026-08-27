@@ -28,7 +28,7 @@ interface Corpus {
 interface Case { id: string; module: string; fn: 'grade' | 'matchRegex'; args: unknown[]; expected: unknown }
 
 const corpus = read('tests/fixtures/parity/grading/corpus.json') as Corpus;
-const cases = (read('tests/offline/fixtures/grader_cases.json') as { cases: Case[] }).cases;
+const cases = (read('tests/fixtures/offline/grader_cases.json') as { cases: Case[] }).cases;
 
 describe('grade matches the corpus', () => {
   it('shares the pattern cap', () => {

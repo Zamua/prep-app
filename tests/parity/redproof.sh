@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# The red proof (docs/PARITY-GATE.md section E): each knob must turn
-# exactly its own check red. Exits 0 only when every failing set matches.
+# The red proof (docs/PARITY-GATE.md section E): the knob must turn its
+# own check red. Exits 0 only when the failing set matches.
 #
-#   PARITY_PERTURB_CSS=1   red: every pixel shot        green: oracles, domdiff
-#   PARITY_PERTURB_FSRS=1  red: test_oracles[fsrs]      green: everything else
-#   PARITY_PERTURB_DOM=1   red: test_oracles[html]      green: everything else
+#   PARITY_PERTURB_CSS=1   red: every pixel shot
 #
 # Usage: tests/parity/redproof.sh   (from the repo root; PARITY_PHASE
-# defaults to 1 for the pixel run). Pixel flow files run one per
-# pytest invocation, like tests/e2e.
+# defaults to 1 and PARITY_BASE_URL must name a running target). Pixel
+# flow files run one per pytest invocation, like tests/e2e.
 set -u
 cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
@@ -16,8 +14,6 @@ OUT="${PARITY_REDPROOF_OUT:-artifacts/parity/redproof}"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 export PARITY_PHASE="${PARITY_PHASE:-1}"
-
-ORACLES="tests/parity/oracles/test_oracles.py tests/parity/test_dom_diff.py"
 
 run() {  # name knob -- pytest args...
   local name="$1" knob="$2"; shift 2
@@ -29,9 +25,6 @@ for f in tests/parity/test_flows_*.py; do
   stem="$(basename "$f" .py)"
   run "css-${stem#test_flows_}" PARITY_PERTURB_CSS "$f"
 done
-run css-oracles PARITY_PERTURB_CSS $ORACLES
-run fsrs PARITY_PERTURB_FSRS $ORACLES tests/parity/harness
-run dom  PARITY_PERTURB_DOM  $ORACLES tests/parity/harness
 
 "$PY" - "$OUT" <<'PYEOF'
 import sys
@@ -54,21 +47,13 @@ def outcomes(prefix):
     return ran, failed
 
 
-ok = True
-for name, want in (
-    ("css", lambda n: "test_flows_" in n),
-    ("fsrs", lambda n: n.endswith("test_oracles[fsrs]")),
-    ("dom", lambda n: n.endswith("test_oracles[html]")),
-):
-    ran, failed = outcomes(name)
-    expected = {n for n in ran if want(n)}
-    if not expected:
-        print(f"{name}: nothing ran that the knob should redden")
-        ok = False
-    elif failed != expected:
-        print(f"{name}: red set mismatch\n  unexpected: {sorted(failed - expected)}\n  missing:    {sorted(expected - failed)}")
-        ok = False
-    else:
-        print(f"{name}: red exactly {len(expected)} of {len(ran)}")
-sys.exit(0 if ok else 1)
+ran, failed = outcomes("css")
+expected = {n for n in ran if "test_flows_" in n}
+if not expected:
+    print("css: nothing ran that the knob should redden")
+    sys.exit(1)
+if failed != expected:
+    print(f"css: red set mismatch\n  unexpected: {sorted(failed - expected)}\n  missing:    {sorted(expected - failed)}")
+    sys.exit(1)
+print(f"css: red exactly {len(expected)} of {len(ran)}")
 PYEOF

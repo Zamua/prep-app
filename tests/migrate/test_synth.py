@@ -10,8 +10,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from prep.migrate import layout, synth
-from prep.migrate.snapshot import has_sidecars, open_snapshot, sha256_file
+from migrate import layout, synth
+from migrate.snapshot import has_sidecars, open_snapshot, sha256_file
 
 from .conftest import ANONYMOUS, HEAVY_QUESTIONS, HEAVY_REVIEWS, NOW, SEED, USERS
 

@@ -1,6 +1,6 @@
 """The canned LLM: key stability, byte- and header-stable replay, the
-miss note, hold until release, latency, recording against a fake
-upstream, and prep's free-tier adapter speaking to it end to end."""
+miss note, hold until release, latency, and recording against a fake
+upstream."""
 
 from __future__ import annotations
 
@@ -12,10 +12,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import httpx
 import pytest
 
-from prep.instant import service
 from tests.parity.llm_stub import (
     DATE_HEADER,
-    FIXTURES_DIR,
     SERVER_HEADER,
     LLMStub,
     Upstream,
@@ -294,45 +292,3 @@ def test_ci_never_records(tmp_path, monkeypatch):
     monkeypatch.setenv("PARITY_LLM_UPSTREAM_MODEL", "m")
     with LLMStub(tmp_path / "llm") as s:
         assert _post(s, _MESSAGES).status_code == 404
-
-
-# ---- prep end to end ---------------------------------------------------------
-
-
-@pytest.fixture
-def _free_tier_at_stub(llm_stub: LLMStub, monkeypatch):  # noqa: F811
-    monkeypatch.setenv("PREP_FREE_INFERENCE_BASE_URL", llm_stub.base_url)
-    monkeypatch.setenv("PREP_FREE_INFERENCE_API_KEY", "parity-free-key")
-    monkeypatch.setenv("PREP_FREE_INFERENCE_MODEL", "parity-model")
-    monkeypatch.delenv("PREP_FREE_INFERENCE_EXTRA_BODY", raising=False)
-    monkeypatch.delenv("PREP_INSTANT_MAX_OUTPUT_TOKENS", raising=False)
-    llm_stub.reset()
-    yield llm_stub
-    llm_stub.reset()
-
-
-def test_committed_fixture_matches_the_current_instant_prompt():
-    key = request_key([{"role": "user", "content": service.build_prompt(PARITY_INSTANT_TOPIC)}])
-    path = fixture_path(FIXTURES_DIR, key)
-    assert path.is_file(), (
-        f"no fixture for the instant prompt on {PARITY_INSTANT_TOPIC!r} ({path.name}); "
-        "the prompt changed: re-record with PARITY_LLM_RECORD=1"
-    )
-
-
-async def test_instant_generation_gets_the_fixture_cards(_free_tier_at_stub: LLMStub):
-    agent = service.resolve_agent()
-    assert agent is not None
-    deck = await service.generate(agent, PARITY_INSTANT_TOPIC)
-    assert deck.display_name == PARITY_INSTANT_TOPIC
-    assert len(deck.cards) == 5
-    assert deck.cards[0] == {
-        "prompt": "What does MVCC stand for?",
-        "answer": "multiversion concurrency control",
-        "answer_regex": "(multi[- ]?version concurrency control|mvcc)",
-    }
-    assert all(card["answer_regex"] for card in deck.cards)
-    expected_key = request_key(
-        [{"role": "user", "content": service.build_prompt(PARITY_INSTANT_TOPIC)}]
-    )
-    assert _free_tier_at_stub.requests == [expected_key]

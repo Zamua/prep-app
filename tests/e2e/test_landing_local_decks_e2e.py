@@ -56,7 +56,7 @@ BUSY_BODY = {
 
 def _seed_records() -> dict:
     """One snapshot deck and its three due cards, in the shape
-    GET /api/offline/snapshot serves (prep/offline/entities.py)."""
+    GET /api/offline/snapshot serves."""
     due = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
     cards = [
         {

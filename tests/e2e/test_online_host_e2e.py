@@ -264,7 +264,7 @@ def test_code_cards_get_the_editor_back(offline_server, host_page):
 
     def _begin(_req):
         # The server seeds an untouched code card's draft with the
-        # skeleton (prep/study/api.py), so the mock does too.
+        # skeleton the study API serves, so the mock does too.
         return 200, {"card": _CODE_CARD, "draft": _CODE_CARD["skeleton"], "session": _SESSION}
 
     def _submit(req):

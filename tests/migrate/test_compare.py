@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from prep.migrate.compare import compare_count, compare_rows, normalise, same
-from prep.migrate.divergence import Divergence, Report, float_bits, render, row_key
+from migrate.compare import compare_count, compare_rows, normalise, same
+from migrate.divergence import Divergence, Report, float_bits, render, row_key
 
 
 def test_two_doubles_that_print_alike_still_differ():

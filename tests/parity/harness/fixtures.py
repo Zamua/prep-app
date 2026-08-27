@@ -10,12 +10,8 @@ import pytest
 
 from tests.parity.harness import browser as browser_pin
 from tests.parity.harness import registry, runner
-from tests.parity.harness.constants import INTERNAL_TOKEN_ENV, PARITY_INTERNAL_TOKEN
-from tests.parity.harness.server import (
-    BASE_URL_ENV,
-    LocalParityServer,
-    ParityTarget,
-)
+from tests.parity.harness.constants import INTERNAL_TOKEN_ENV
+from tests.parity.harness.server import BASE_URL_ENV, ParityTarget
 
 LLM_STUB_URL_ENV = "PARITY_LLM_STUB_URL"
 DEFAULT_LLM_STUB = "http://127.0.0.1:8089"
@@ -25,20 +21,15 @@ DEFAULT_LLM_STUB = "http://127.0.0.1:8089"
 def parity_llm():
     """The stub the target under test answers from.
 
-    A remote target was pointed at its stub when it was deployed, so the
-    knobs a flow turns have to reach that process; an in-process stub
-    would leave the server calling the other one. `PARITY_LLM_STUB_URL`
-    names it, default the port `worker/scripts/run-node.sh` documents.
+    The target was pointed at its stub when it was deployed, so the knobs
+    a flow turns have to reach that process; an in-process stub would
+    leave the server calling the other one. `PARITY_LLM_STUB_URL` names
+    it, default the port `worker/scripts/run-node.sh` documents.
     """
-    from tests.parity.llm_stub import FIXTURES_DIR, LLMStub, RemoteStub
+    from tests.parity.llm_stub import RemoteStub
 
-    remote = (os.environ.get(BASE_URL_ENV) or "").strip()
     origin = (os.environ.get(LLM_STUB_URL_ENV) or "").strip()
-    if origin or remote:
-        yield RemoteStub(origin or DEFAULT_LLM_STUB)
-        return
-    with LLMStub(FIXTURES_DIR) as stub:
-        yield stub
+    yield RemoteStub(origin or DEFAULT_LLM_STUB)
 
 
 @pytest.fixture(scope="session")
@@ -64,46 +55,12 @@ def parity_browser():
             browser.close()
 
 
-def _wants_jobs() -> bool:
-    """Whether this invocation needs the Procfile's other two processes.
-
-    A job screen reads its progress back out of Temporal, so a local target
-    running one has to run the devserver and the Go worker too. The question
-    is per flow, not per phase: a run of the phase-5 import and export flows
-    touches no job, and demanding the stack there skips the whole file on a
-    box that has no Go worker built.
-    """
-    return any(f.jobs for f, _ in registry.selected())
-
-
 @pytest.fixture(scope="session")
-def parity_target(tmp_path_factory, parity_llm) -> Iterator[ParityTarget]:
+def parity_target(parity_llm) -> Iterator[ParityTarget]:
     remote = (os.environ.get(BASE_URL_ENV) or "").strip()
-    if remote:
-        yield ParityTarget(remote, token=os.environ.get(INTERNAL_TOKEN_ENV))
-        return
-    root = tmp_path_factory.mktemp("parity")
-    db_path = root / "data.sqlite"
-    stack = None
-    if _wants_jobs():
-        from tests.parity.harness.jobs import JobsStack, MissingTool
-
-        try:
-            stack = JobsStack(db_path, root / "temporal")
-            stack.start_temporal()
-        except MissingTool as e:
-            pytest.skip(str(e))
-    server = LocalParityServer(db_path, parity_llm.base_url, stack.env if stack else None)
-    server.start()
-    if stack is not None:
-        stack.start_worker(app_base_url=server.base_url, internal_token=PARITY_INTERNAL_TOKEN)
-        server.jobs = stack
-    try:
-        yield server
-    finally:
-        server.stop()
-        if stack is not None:
-            stack.stop()
+    if not remote:
+        pytest.skip(f"set {BASE_URL_ENV} to a running parity target")
+    yield ParityTarget(remote, token=os.environ.get(INTERNAL_TOKEN_ENV))
 
 
 @pytest.fixture

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,8 @@ import pytest
 from tests.parity.harness import registry
 from tests.parity.harness.constants import REPO_ROOT, SCHEMES
 
-TEMPLATES = REPO_ROOT / "templates"
+TEMPLATES = REPO_ROOT / "worker" / "templates"
+SEED_PROFILES = REPO_ROOT / "worker" / "runtime" / "cells" / "seed" / "index.ts"
 
 # Pages a browser never renders as a document on their own.
 _NOT_PAGES = {"base.html"}
@@ -47,33 +49,21 @@ def test_every_cover_names_a_template_and_a_present_state():
                 assert state in path.read_text(), f"{f.name}: {state!r} not in {name}"
 
 
-def test_seed_profiles_exist():
-    from prep.dev.parity_seed import PROFILES
+def _target_profiles() -> set[str]:
+    """The seed profiles the target serves, read out of the `PROFILES`
+    object literal rather than a copy kept here."""
+    body = SEED_PROFILES.read_text(encoding="utf-8")
+    block = body[body.index("export const PROFILES") :]
+    block = block[block.index("{") : block.index("};")]
+    return set(re.findall(r"^\s*(\w+):", block, re.MULTILINE))
 
+
+def test_seed_profiles_exist():
+    profiles = _target_profiles()
+    assert profiles
     for f in registry.all_flows():
         if f.seed is not None:
-            assert f.seed in PROFILES, f"{f.name} seeds unknown profile {f.seed!r}"
-
-
-def test_seed_timezone_matches_the_shared_constant():
-    from prep.dev import parity_seed
-    from tests.parity.harness.constants import PARITY_TZ
-
-    assert parity_seed.PARITY_TZ == PARITY_TZ
-
-
-def test_seed_timestamps_follow_the_process_clock():
-    from datetime import datetime, timezone
-
-    from prep.dev.parity_seed import at
-    from prep.infrastructure import clock
-
-    pinned = datetime(2030, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
-    clock.set_clock(clock.FixedClock(pinned))
-    try:
-        assert at(hours=1) == "2030-01-02T04:04:05+00:00"
-    finally:
-        clock.reset_clock()
+            assert f.seed in profiles, f"{f.name} seeds unknown profile {f.seed!r}"
 
 
 def test_registering_a_name_twice_is_an_error():

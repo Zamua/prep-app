@@ -20,15 +20,8 @@ beforeAll(async () => {
 });
 
 describe("precacheUrls", () => {
-  it("matches the checked-in copy of the Python manifest for this tree", () => {
+  it("matches the recorded manifest for this tree", () => {
     const expected = JSON.parse(readFileSync(FIXTURE, "utf8")) as string[];
-    expect(sw.precacheUrls(tree, TOKEN)).toEqual(expected);
-  });
-
-  it("matches prep.web.pwa._precache_urls computed live for the same tree", () => {
-    const expected = pythonJson<string[]>(
-      "import json; from prep.web.pwa import _precache_urls; print(json.dumps(_precache_urls('ce11d0000000', '')))",
-    );
     expect(sw.precacheUrls(tree, TOKEN)).toEqual(expected);
   });
 

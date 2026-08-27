@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from prep.migrate.cellreader import (
+from migrate.cellreader import (
     INTERNAL_TOKEN_HEADER,
     CellSealed,
     CellUnreachable,
@@ -140,7 +140,7 @@ def test_an_unreachable_fleet_raises_rather_than_returning_nothing():
 
 class Looping:
     def page(self, **_kwargs):
-        from prep.migrate.cellreader import Page
+        from migrate.cellreader import Page
 
         return Page([{"id": 1}], 7)
 

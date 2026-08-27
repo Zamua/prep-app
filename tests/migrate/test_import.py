@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from prep.migrate import importer, layout
-from prep.migrate.export import DROPPED_BYOK_PROVIDER
+from migrate import importer, layout
+from migrate.export import DROPPED_BYOK_PROVIDER
 
 
 class FleetKilled(RuntimeError):

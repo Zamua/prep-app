@@ -42,8 +42,8 @@ PAIRS = json.dumps(
 )
 
 # An empty batch fails through the workflow's own fixed message. A parse
-# failure would render a Temporal activity error instead, which carries
-# the worker's `<pid>@<host>` identity and cannot be a golden.
+# failure would render the step's own error instead, which carries a
+# per-run identity and cannot be a golden.
 EMPTY_BATCH = "[]"
 
 

@@ -10,8 +10,8 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
-from prep.migrate import layout
-from prep.migrate.snapshot import open_snapshot
+from migrate import layout
+from migrate.snapshot import open_snapshot
 
 
 def _bits(value: float | None) -> bytes | None:

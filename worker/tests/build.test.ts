@@ -11,7 +11,6 @@ import {
   precompileTemplates,
   walk,
 } from "../scripts/build.mjs";
-import { pythonJson } from "./pyoracle";
 
 const scratch: string[] = [];
 function tmp(): string {
@@ -35,10 +34,6 @@ describe("walk", () => {
     const root = tmp();
     seed(root, { "a/b.css": "", "a-b.css": "", "a.css": "", "b/c/d.css": "", "b.css": "" });
     expect(walk(root)).toEqual(["a/b.css", "a-b.css", "a.css", "b/c/d.css", "b.css"]);
-    const py = pythonJson<string[]>(
-      `import json; from pathlib import Path; r = Path(${JSON.stringify(root)}); print(json.dumps([p.relative_to(r).as_posix() for p in sorted(r.rglob('*')) if p.is_file()]))`,
-    );
-    expect(walk(root)).toEqual(py);
   });
 });
 

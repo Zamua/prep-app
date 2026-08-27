@@ -2,7 +2,7 @@
 
 import struct
 
-from prep.migrate.divergence import Divergence, Report, render, ulp_gap
+from migrate.divergence import Divergence, Report, render, ulp_gap
 
 
 def _at(value: float, steps: int) -> float:

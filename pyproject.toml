@@ -1,130 +1,78 @@
 [project]
-name = "prep"
-version = "0.14.2"
-description = "Self-hosted spaced-repetition flashcards. Describe what you want to learn; Claude turns it into a deck. Study, refine, repeat."
+# The application is TypeScript (see worker/). Python remains for two
+# tools: the migration tool under migrate/, and the browser-driven test
+# harness under tests/. Neither ships to a deploy.
+#
+# The repo's version is its git tag, not this field.
+name = "prep-tools"
+version = "0"
+description = "Migration tool and browser test harness for prep."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
-# Runtime dependencies. We pin versions to keep contributor environments
-# reproducible — bumps go through the staging-first / tag-based deploy
-# convention like any other change. uv lock is the source of truth at
-# install time; this list is what humans edit.
 dependencies = [
-    "fastapi==0.141.1",
-    "uvicorn[standard]==0.52.3",
-    "jinja2==3.1.6",
-    "python-multipart==0.0.32",
-    "temporalio==1.31.0",
-    "mistune==3.3.4",
-    "pywebpush==2.4.0",
-    # pydantic is already a transitive dep via fastapi, but we use it
-    # directly for entities + value objects under prep/*/entities.py
-    # and prep/domain/, so pin it explicitly.
-    "pydantic==2.13.4",
-    # httpx — async HTTP client used by prep.trivia.agent_client.run_prompt_async
-    # for request-path grading. Was previously dev-only (FastAPI TestClient
-    # depends on it); promoted to runtime when async grading landed. Don't
-    # drop without rewiring grading or prep.app boot will crash.
-    "httpx==0.28.1",
-    # prometheus_client — exposes /metrics for scraping by the obs-stack
-    # Prometheus running on the same box. Emitted: anyio threadpool
-    # gauge, claude_grade histogram, http request duration.
-    # See prep/web/metrics.py for the registry + middleware.
-    "prometheus-client==0.26.0",
-    # claude-agent-sdk — Python SDK for in-process Claude invocations.
-    # Replaces the agent-server container (shelling out to `claude -p`).
-    # Auths via CLAUDE_CODE_OAUTH_TOKEN env var (subscription credits).
-    # Adapter at prep/agent/sdk_adapter.py wraps it behind AgentPort.
-    "claude-agent-sdk==0.2.139",
-    # clerk-backend-api + svix — Clerk identity provider for the public
-    # VPS deploy (PREP_AUTH_MODE=clerk). Mac-mini install stays on
-    # tailscale auth and never imports these at request time, but they
-    # ride in the wheel so a single image works for both deploys.
-    # Adapter at prep/auth/providers/clerk.py; webhook receiver uses
-    # svix for HMAC verification of the user.* events Clerk pushes.
-    "clerk-backend-api==7.0.0",
-    "svix==1.99.1",
-    "fsrs>=6.3.1",
+    # The frozen pre-cutover scheduler (migrate/legacy_srs.py) is one half
+    # of the migration tool's tier-3 comparison; worker/domain/fsrs is the
+    # other. Pinned: a scheduler bump would move the reference.
+    "fsrs==6.3.2",
+    # SEC1 parsing for the VAPID keypair conversion (migrate/vapid.py).
+    "cryptography==50.0.0",
 ]
 
 [tool.uv]
-# Don't auto-discover packages — this is an app, not a library, so there
-# are no importable packages to ship. Otherwise uv treats every directory
-# at the root as a candidate package and warns about the missing build
-# config.
+# An app, not a library: nothing here is importable from outside the
+# repo, so there is no build backend and no package discovery.
 package = false
 
 [dependency-groups]
-# Dev-only tooling. Installed by `uv sync --group dev` (or `--all-groups`).
-# Not pulled into the runtime image — the Dockerfile uses `uv sync`
-# without --group dev.
+# `uv sync --group dev`. The harness only; the migration tool runs on the
+# runtime dependencies above.
 dev = [
     "ruff==0.16.3",
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "httpx==0.28.1",
-    "freezegun==1.5.5",
-    # End-to-end tests (tests/e2e/) drive Chromium via Playwright against
-    # the deployed staging instance. `make promote` runs them before
-    # tagging prod, so this stays a dev-time install — production
-    # containers don't ship with playwright.
+    # Browser suites: tests/e2e and the pixel flows under tests/parity.
+    # The chromium binary is a separate `playwright install chromium`.
     "playwright==1.62.0",
     "pytest-playwright==0.9.0",
+    # Pixel comparison for the parity goldens.
     "pillow==12.1.1",
     "numpy==2.2.6",
+    # Generates the keypair tests/migrate/test_vapid.py converts, so the
+    # conversion is proved against the library that wrote the recorded
+    # shape rather than against a recorded answer.
+    "py-vapid==1.9.4",
+    # Decrypts a real push payload in tests/e2e/test_web_push_e2e.py.
+    "http-ece==1.2.1",
 ]
 
 [tool.pytest.ini_options]
-# `make test` runs the unit + integration suite — tests/ minus
-# tests/e2e/ (which needs a deployed instance and is run separately
-# via `make e2e`).
+# tests/e2e drives a browser against a running target and is invoked
+# explicitly; everything else runs in process.
 testpaths = ["tests"]
 norecursedirs = ["tests/e2e"]
 asyncio_mode = "auto"
 # Pins the current default; pytest-asyncio warns until it is explicit.
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = [
-    # fastapi's own testclient module imports the httpx-backed starlette
-    # TestClient; eliminating the warning at the source would need httpx2
-    # in the deps. Drop this entry when fastapi switches.
-    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
-]
-# Markers for the e2e suite. `slow` flags tests that make real claude
-# calls (transform / plan / trivia generation) — each runs ~30-90s.
-# `make e2e` includes them by default (they're the gate the promote
-# flow leans on); skip locally for fast iteration via
-# `pytest -m "not slow" tests/e2e`.
 markers = [
-    "slow: real-claude-driven AI workflow tests (~30-90s each); included in `make e2e`, skip with -m 'not slow'",
-    "browser: requires playwright + chromium; included in `make e2e`, skip with -m 'not browser' for fast iteration",
+    "slow: real-LLM workflow tests (~30-90s each); skip with -m 'not slow'",
+    "browser: requires playwright + chromium; skip with -m 'not browser'",
 ]
 
 [tool.ruff]
-# Codebase house style: 4-space indent, conservative line length.
-# Excludes generated artifacts that we don't lint or format.
 line-length = 100
-extend-exclude = [
-    ".venv",
-    "static/cm/node_modules",
-    "worker-go",
-    "ui-tools/.venv",
-]
+extend-exclude = [".venv", "static/cm/node_modules"]
 
 [tool.ruff.lint]
-# Default ruleset is `E,F` (pycodestyle errors + pyflakes). We add `I`
-# for import sorting and `B` for likely bugs. Skipping style rules
-# (line-too-long etc.) — the formatter handles that.
+# pycodestyle errors + pyflakes, plus import sorting and likely bugs.
+# Style rules are the formatter's job.
 select = ["E", "F", "I", "B"]
 ignore = [
     "E501", # long lines: formatter handles, and we wrap by intent
-    "E402", # late module-level imports: deliberate in app.py + db.py
-    "B008", # function-call default args (FastAPI Depends() is the canonical pattern)
-    "B904", # raise-from inside except: codebase translates to HTTP errors that embed `e` in the message
 ]
 
 [tool.ruff.format]
-# Match the codebase: 4-space indent, double quotes, trailing commas
-# in multi-line collections.
 quote-style = "double"
 indent-style = "space"

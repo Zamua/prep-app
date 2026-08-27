@@ -14,19 +14,19 @@ from pathlib import Path
 
 import pytest
 
-from prep.migrate import layout
-from prep.migrate.cellreader import (
+from migrate import layout
+from migrate.cellreader import (
     DIRECTORY_CELL,
     LIMITER_CELL,
     CellSealed,
     FixtureCellReader,
     Page,
 )
-from prep.migrate.divergence import Divergence, float_bits
-from prep.migrate.export import DROPPED_BYOK_PROVIDER
-from prep.migrate.fsrs_oracle import NodeFsrsOracle, ScheduleInput
-from prep.migrate.snapshot import open_snapshot, sha256_file
-from prep.migrate.verify import Fixed, VerificationImpossible, Verifier
+from migrate.divergence import Divergence, float_bits
+from migrate.export import DROPPED_BYOK_PROVIDER
+from migrate.fsrs_oracle import NodeFsrsOracle, ScheduleInput
+from migrate.snapshot import open_snapshot, sha256_file
+from migrate.verify import Fixed, VerificationImpossible, Verifier
 
 AT = "2026-09-01T12:00:00+00:00"
 GENERATED_AT = "2026-08-26T14:00:00+00:00"
@@ -446,7 +446,7 @@ def test_a_sealed_fleet_aborts_rather_than_reading_clean(snapshot, node_oracle):
 def test_the_two_oracles_agree_on_the_snapshot_itself(snapshot, node_oracle):
     """The port against its reference on real rows rather than a corpus:
     every card in the snapshot, both verdicts, at one clock."""
-    from prep.migrate.fsrs_oracle import PyFsrsOracle
+    from migrate.fsrs_oracle import PyFsrsOracle
 
     conn = open_snapshot(snapshot)
     try:

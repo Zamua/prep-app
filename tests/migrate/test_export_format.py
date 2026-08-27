@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from prep.migrate import layout
-from prep.migrate.export import DROPPED_BYOK_PROVIDER, _columns, _select, export
-from prep.migrate.snapshot import open_snapshot
+from migrate import layout
+from migrate.export import DROPPED_BYOK_PROVIDER, _columns, _select, export
+from migrate.snapshot import open_snapshot
 
 from .conftest import NOW
 
@@ -256,7 +256,7 @@ def test_text_is_written_as_ascii_and_decodes_back_unchanged(exported, plan):
     """A prompt with a non-ASCII character, a quote, a newline and a tab.
     The file stays pure ASCII so a lone surrogate could not break the
     encode, and JSON decoding restores the exact string."""
-    from prep.migrate.synth import AWKWARD_TEXT
+    from migrate.synth import AWKWARD_TEXT
 
     out, _ = exported
     path = layout.table_path(out, plan.heavy, "questions")
@@ -280,7 +280,7 @@ def test_a_blob_fails_the_export_rather_than_being_coerced(snapshot: Path, tmp_p
     for suffix in ("-wal", "-shm"):
         poisoned.with_name(poisoned.name + suffix).unlink(missing_ok=True)
 
-    from prep.migrate.export import ExportError
+    from migrate.export import ExportError
 
     with pytest.raises(ExportError, match="BLOB"):
         export(poisoned, tmp_path / "out", now=NOW)
@@ -303,7 +303,7 @@ def test_the_manifest_is_written_last(snapshot: Path, tmp_path: Path, monkeypatc
     export(snapshot, out, now=NOW)
     assert layout.manifest_path(out).is_file()
 
-    import prep.migrate.export as export_mod
+    import migrate.export as export_mod
 
     def boom(*args, **kwargs):
         raise RuntimeError("interrupted")

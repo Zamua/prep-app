@@ -1,17 +1,16 @@
 """Browser side of the offline grader/ladder parity pin.
 
-tests/offline/test_parity_fixtures.py pins the PYTHON domain to the
-shared fixture files in tests/offline/fixtures/; this module pins the
-JS ports (static/js/offline/grader.js and scheduler.js) to the same
-files by importing them into a real Chromium page and running every
-case. Together the two suites make it impossible for the online
-grader/ladder and their offline ports to drift apart silently: a
-semantic change on either side breaks a fixture case loudly.
+The JS ports (static/js/offline/grader.js and scheduler.js) run against
+the shared fixture files in tests/fixtures/offline/, imported into a
+real Chromium page one case at a time.
+`worker/tests/domain/grading.oracle.test.ts` holds the same grader
+corpus to the worker's own domain, so a semantic change on either side
+breaks a fixture case loudly.
 
 Cases are dispatched generically ({module, fn, args, expected}), so a
-new fixture case needs no test-code change on either side. `expected`
-is always the JS-side expectation; the deliberate Python/JS regex
-divergences carry `expected_py`, which only the Python suite reads.
+new fixture case needs no test-code change. `expected` is always the
+JS-side expectation; `expected_py` records where the recorded regex
+behaviour deliberately differed.
 
 The page context comes from the LOCAL offline-suite server (the
 /offline shell, whose importmap points at the versioned module URLs);
@@ -28,7 +27,7 @@ import pytest
 
 pytestmark = [pytest.mark.slow, pytest.mark.browser]
 
-FIXTURES_DIR = Path(__file__).resolve().parents[1] / "offline" / "fixtures"
+FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "offline"
 
 
 def _load(name: str) -> dict:
@@ -109,8 +108,7 @@ def test_grader_cases_in_browser(offline_server, offline_page):
 def test_ladder_cases_in_browser(offline_server, offline_page):
     """Every ladder fixture case against the real scheduler.js, plus
     the exported table itself: LADDER_MINUTES and TERMINAL_STEP must
-    equal the fixture header the Python suite pins to prep/domain/srs
-    (the browser side of the same three-way pin)."""
+    equal the fixture header."""
     cases = LADDER_FIXTURE["cases"]
     assert len(cases) >= 25
     offline_page.goto(offline_server.base_url + "/offline")

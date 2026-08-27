@@ -47,7 +47,7 @@ class FlowCtx:
         self.base_url = base_url
         self.seed = seed
         self.llm = llm
-        # The Temporal + worker stack behind a phase-4 target, when one runs.
+        # The target's parity job route, for the one screen no route can ask for.
         self.jobs = jobs
         self.scheme = scheme
         self._sink = sink
@@ -80,7 +80,8 @@ class Flow:
     service_workers: str = "block"
     schemes: tuple[str, ...] = SCHEMES
     anonymous: bool = False
-    #: Whether a local target has to run Temporal and the Go worker for it.
+    #: Whether the flow drives a job past the app, through the target's
+    #: own parity job route.
     jobs: bool = False
     tags: tuple[str, ...] = field(default=())
 

@@ -1,19 +1,11 @@
-# Language runtimes + dev-time tools, all managed by mise
-# (https://mise.jdx.dev/). Run `mise install` to materialize them.
-# mise itself comes from `brew install mise` (or the curl installer
-# linked in CONTRIBUTING.md for non-Homebrew users).
+# Language runtimes, all managed by mise (https://mise.jdx.dev/).
+# `mise install` materializes them; the Makefile runs commands through
+# `mise exec --` so no shell activation is required.
 #
-# These get reflected via shims when you `eval "$(mise activate <shell>)"`,
-# or you can prefix commands with `mise exec --` to run inside mise's
-# environment without shell activation. The Makefile uses the latter.
-
+# node  the worker: build, typecheck, vitest
+# python  the migration tool (migrate/) and the browser test harness
+# bun     rebuilds static/cm-bundle.js from static/cm/ when CodeMirror
+#         or its language modes move; not needed for a normal build
+node 26
 python 3.11
-go 1.22
 bun 1.1.0
-# mise's `temporal` shortcut maps to the temporal SERVER package; we want the
-# CLI (which embeds a server for `start-dev`). Spell out the aqua plugin.
-aqua:temporalio/cli 1.6.2
-# Procfile runner used by `make dev`. Pinned via aqua so a contributor's
-# `mise install` is the single command that gets the entire toolchain —
-# no extra `go install ... @latest` step.
-aqua:mattn/goreman 0.3.17

@@ -190,9 +190,8 @@ def plan(ctx: FlowCtx) -> None:
 
     # ---- job 3: every expansion comes back unparseable ---------------------
     # The failure has to be the workflow's own ("every card expansion
-    # failed"), not an activity's: a Temporal activity error carries the
-    # worker's `<pid>@<host>` identity into the rendered message, which is
-    # neither stable across runs nor fit for a committed golden.
+    # failed"), not a step's: a step error carries a per-run identity into
+    # the rendered message, which is not fit for a committed golden.
     llm.control.canned(PLAN_ONE)
     llm.hold()
     _start(ctx, "Broken", "A deck whose cards the model will not return as JSON.")

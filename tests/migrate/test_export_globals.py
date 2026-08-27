@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from prep.migrate import layout
-from prep.migrate.export import ExportError, export
-from prep.migrate.snapshot import open_snapshot
+from migrate import layout
+from migrate.export import ExportError, export
+from migrate.snapshot import open_snapshot
 
 from .conftest import NOW
 
@@ -225,7 +225,7 @@ def test_an_export_refuses_a_snapshot_that_moved_under_it(
     serving at that step."""
     import shutil
 
-    from prep.migrate import export as export_module
+    from migrate import export as export_module
 
     moving = tmp_path / "moving.sqlite"
     shutil.copyfile(snapshot, moving)

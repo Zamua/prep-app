@@ -108,18 +108,6 @@ def declared(body: str) -> dict[str, str]:
     }
 
 
-def bounds(body: str, family: str) -> list[str]:
-    prefix = f'{family}_bucket{{le="'
-    seen: list[str] = []
-    for series in samples(body):
-        if not series.startswith(prefix):
-            continue
-        le = series[len(prefix) :].split('"', 1)[0]
-        if le not in seen:
-            seen.append(le)
-    return seen
-
-
 @pytest.fixture(scope="module")
 def body() -> str:
     # Two requests the route table names differently, then a path it does
@@ -140,21 +128,6 @@ def test_the_scrape_is_the_exposition_and_is_not_cached():
 def test_the_three_kept_families_are_declared_as_histograms(body: str):
     types = declared(body)
     assert [name for name in KEPT if types.get(name) == "histogram"] == list(KEPT)
-
-
-def test_the_kept_families_keep_the_reference_bucket_boundaries(body: str):
-    from prometheus_client.utils import floatToGoString
-
-    from prep.web import metrics as reference
-
-    # The other two families have no caller yet, so a live node prints them
-    # with no bucket at all. That is the reference's shape for an unobserved
-    # family too, and it leaves this test only the one it can check.
-    served = bounds(body, "prep_http_request_duration_seconds")
-    assert served, "nothing observed the request histogram"
-    assert served == [floatToGoString(b) for b in reference._HTTP_DURATION._upper_bounds]
-    for family in ("prep_ai_grade_duration_seconds", "prep_instant_generate_duration_seconds"):
-        assert bounds(body, family) == [], family
 
 
 def test_the_series_a_cell_cannot_produce_are_gone(body: str):

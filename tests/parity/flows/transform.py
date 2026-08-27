@@ -9,11 +9,10 @@ No `gone` shot: the plan flow already holds it, and the two partials
 render the same branch. `awaiting_apply` is one shot, not three: the
 capture is full-page, so a single screenshot carries every diff card.
 
-No `failed` shot either. Every Transform failure path renders the
-activity's own error, and a Temporal activity error carries the worker's
-`<pid>@<host>` identity, so the text differs on every run and names the
-machine that captured it. The plan and trivia flows cover the failed
-branch through their workflows' fixed messages instead.
+No `failed` shot either. Every Transform failure path renders the step's
+own error, which carries a per-run identity, so the text differs on every
+run. The plan and trivia flows cover the failed branch through their
+workflows' fixed messages instead.
 """
 
 import json

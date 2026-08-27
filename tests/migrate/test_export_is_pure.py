@@ -9,15 +9,15 @@ from pathlib import Path
 
 import pytest
 
-import prep
-from prep.migrate import export as export_mod
-from prep.migrate import snapshot as snap
-from prep.migrate.export import export
-from prep.migrate.snapshot import SnapshotError, open_snapshot
+import migrate
+from migrate import export as export_mod
+from migrate import snapshot as snap
+from migrate.export import export
+from migrate.snapshot import SnapshotError, open_snapshot
 
 from .conftest import NOW
 
-_MIGRATE = Path(prep.__file__).resolve().parent / "migrate"
+_MIGRATE = Path(migrate.__file__).resolve().parent
 READ_PATH = (_MIGRATE / "export.py", _MIGRATE / "layout.py", _MIGRATE / "snapshot.py")
 
 
@@ -105,7 +105,7 @@ def test_a_live_database_is_refused(tmp_path: Path):
 
 @pytest.mark.parametrize("module", READ_PATH, ids=lambda p: p.name)
 def test_the_read_path_never_imports_the_app_schema_layer(module: Path):
-    """`prep.infrastructure.db.init()` runs 27 migrations against whatever
+    """`migrate.legacy_schema.init()` runs 27 migrations against whatever
     it is pointed at. Nothing on the export path may reach it."""
     tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
     imported: set[str] = set()
@@ -115,4 +115,4 @@ def test_the_read_path_never_imports_the_app_schema_layer(module: Path):
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
             imported.update(f"{node.module}.{alias.name}" for alias in node.names)
-    assert "prep.infrastructure.db" not in imported
+    assert "migrate.legacy_schema" not in imported
