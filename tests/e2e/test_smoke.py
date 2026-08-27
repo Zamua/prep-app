@@ -40,11 +40,12 @@ def test_static_css_serves(http: httpx.Client):
 
 
 def test_versioned_module_path_resolves(http: httpx.Client):
-    """Importmap base is /static/js/v<build>/. Every deploy gets a
-    fresh URL space; this catches the regression where the version
-    failed to bump and iOS PWA served stale modules."""
+    """Importmap base is /static/js/v<build>/, the build id being the
+    commit sha. Every deploy gets a fresh URL space; this catches the
+    regression where the version failed to bump and iOS PWA served stale
+    modules."""
     home = http.get("/").text
-    m = re.search(r"/static/js/v(\d+)/", home)
+    m = re.search(r"/static/js/v(\w+)/", home)
     assert m, "no versioned import path found in homepage HTML"
     base = f"/static/js/v{m.group(1)}/modules/details-toggle.js"
     r = http.get(base)
@@ -145,7 +146,7 @@ def test_details_toggle_skips_close_on_action_taps(http: httpx.Client):
     mid-tap. Symptoms: 'tap Next while Explain open does nothing';
     'tap back link while interval popover open does nothing'."""
     home = http.get("/").text
-    m = re.search(r"/static/js/v(\d+)/", home)
+    m = re.search(r"/static/js/v(\w+)/", home)
     assert m, "no versioned import path"
     js = http.get(f"/static/js/v{m.group(1)}/modules/details-toggle.js").text
     # Hard-coded substring assertion — the exemption must be present

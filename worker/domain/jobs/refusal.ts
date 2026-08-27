@@ -29,9 +29,15 @@ const REFUSAL_MESSAGES = [
 ];
 
 export function isRefusal(e: unknown): boolean {
-  if (!(e instanceof Error)) return false;
-  if (REFUSAL_NAMES.has(e.name)) return true;
-  return REFUSAL_MESSAGES.some((re) => re.test(e.message));
+  for (let cur: unknown = e, hops = 0; cur instanceof Error && hops < 8; cur = cur.cause, hops++) {
+    if (REFUSAL_NAMES.has(cur.name)) return true;
+    // celld re-raises a refusal wrapped, as `route failed: DurabilityUnproven`,
+    // where the name survives only inside the message and the prose patterns
+    // below do not match it.
+    if ([...REFUSAL_NAMES].some((n) => cur.message.includes(n))) return true;
+    if (REFUSAL_MESSAGES.some((re) => re.test(cur.message))) return true;
+  }
+  return false;
 }
 
 /** 250ms doubling to 8s. The unreachable window is 6-8s, so twelve refusals
