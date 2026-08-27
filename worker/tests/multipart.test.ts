@@ -78,6 +78,32 @@ describe('parseMultipart', () => {
     expect(parts.map((p) => p.bytes.length)).toEqual([0, 1]);
   });
 
+  it('keeps a file whose own bytes hold the boundary with no CRLF ahead of it', () => {
+    // The client picks the boundary, so a short one turns up inside a zip or
+    // a CSV by chance. Only `CRLF--boundary` delimits a part.
+    const short = 'ab';
+    const raw = new Uint8Array([1, 2, 3, ...enc.encode(`--${short}`), 9, 9, 9]);
+    const parts = parseMultipart(body(short, [file('file', 'x.apkg', raw)]), `multipart/form-data; boundary=${short}`);
+    expect(parts).toHaveLength(1);
+    expect(parts[0]!.bytes).toEqual(raw);
+  });
+
+  it('keeps every row of a CSV whose cells hold the boundary', () => {
+    const short = 'x';
+    const text = `prompt,answer\r\nwhat,--${short}\r\nsecond,row\r\n`;
+    const parts = parseMultipart(body(short, [file('file', 'deck.csv', enc.encode(text))]), `multipart/form-data; boundary=${short}`);
+    expect(new TextDecoder().decode(parts[0]!.bytes)).toBe(text);
+  });
+
+  it('skips a preamble ahead of the first delimiter', () => {
+    const preamble = enc.encode('ignored preamble\r\n');
+    const framed = body(B, [field('name', 'deck')]);
+    const withPreamble = new Uint8Array(preamble.length + framed.length);
+    withPreamble.set(preamble, 0);
+    withPreamble.set(framed, preamble.length);
+    expect(parseMultipart(withPreamble, type).map((p) => p.name)).toEqual(['name']);
+  });
+
   it('is not confused by a part whose bytes contain CRLF runs', () => {
     const raw = enc.encode('a\r\n\r\nb\r\n');
     expect(parseMultipart(body(B, [file('file', 'x', raw)]), type)[0]!.bytes).toEqual(raw);

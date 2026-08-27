@@ -1,11 +1,16 @@
 // The MCP endpoint: the catalog an external client negotiates against,
 // the JSON-RPC envelopes, and the tool-level refusals the corpus does not
 // reach. Driven through the entry worker so the bearer gate is real.
+import { zipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { MCP_PROTOCOL_VERSION } from '../../app/api/mcp.js';
+import { dispatch, MCP_PROTOCOL_VERSION } from '../../app/api/mcp.js';
 import { TOOLS } from '../../app/api/tools.js';
+import type { V1Repos } from '../../app/api/v1.js';
+import { ARCHIVE_TOO_LARGE, EXPORT_TOO_LARGE, MAX_APKG_UPLOAD_BYTES, MAX_EXPORT_QUESTIONS, uploadTooLarge } from '../../app/decks/importLimits.js';
+import { SqlJsApkg } from '../../runtime/adapters/apkg.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
+import { cell } from '../repos/setup.js';
 import { loadCorpus, mintToken, ORIGIN, PARITY_USER, replayEnv, seed } from './harness.js';
 
 let env: Env;
@@ -166,6 +171,51 @@ describe('the tool refusals', () => {
     expect(result.isError).toBe(true);
     expect(result.text).toContain('not a valid .apkg');
   });
+});
+
+// `/mcp` is the second door to both codecs and shares the isolate the page
+// caps exist for, so it carries the same ceilings. Dispatched directly: the
+// bearer gate is real above, and these need thousands of rows.
+describe('the apkg tools under the same ceilings the pages have', () => {
+  const deps = { apkg: new SqlJsApkg(), subject: 'someone', now: '2026-03-14T15:00:00+00:00' };
+
+  async function direct(repos: V1Repos, name: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }> {
+    const out = (await dispatch(repos, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, deps)) as {
+      json: { result: { content: { text: string }[]; isError: boolean } };
+    };
+    return { text: out.json.result.content[0]!.text, isError: out.json.result.isError };
+  }
+
+  it('refuses a payload past the body ceiling from its encoded length alone', async () => {
+    const c = cell();
+    const oversized = 'A'.repeat(Math.ceil((MAX_APKG_UPLOAD_BYTES + 1024) / 3) * 4);
+    const result = await direct(c.repos, 'prep_import_apkg', { name: 'restored', apkg_base64: oversized });
+    expect(result).toEqual({ isError: true, text: uploadTooLarge(MAX_APKG_UPLOAD_BYTES) });
+  });
+
+  it('refuses an archive past the inflated ceiling in the words the page uses', async () => {
+    const c = cell();
+    const bomb = zipSync({ 'collection.anki21': new Uint8Array(48 * 1024 * 1024) }, { level: 9 });
+    let binary = '';
+    for (const b of bomb) binary += String.fromCharCode(b);
+    const result = await direct(c.repos, 'prep_import_apkg', { name: 'restored', apkg_base64: btoa(binary) });
+    expect(result).toEqual({ isError: true, text: ARCHIVE_TOO_LARGE });
+  });
+
+  it('refuses to export a deck the export hub refuses', async () => {
+    const c = cell();
+    const deckId = c.repos.decks.create('too-big');
+    for (let i = 0; i <= MAX_EXPORT_QUESTIONS; i++) c.repos.questions.add(deckId, { type: 'short', prompt: `p${i}`, answer: 'a' });
+    const result = await direct(c.repos, 'prep_export_deck_apkg', { name: 'too-big' });
+    expect(result).toEqual({ isError: true, text: EXPORT_TOO_LARGE });
+  });
+
+  it('exports a deck at the cap', async () => {
+    const c = cell();
+    const deckId = c.repos.decks.create('exactly');
+    for (let i = 0; i < MAX_EXPORT_QUESTIONS; i++) c.repos.questions.add(deckId, { type: 'short', prompt: `p${i}`, answer: 'a' });
+    expect((await direct(c.repos, 'prep_export_deck_apkg', { name: 'exactly' })).isError).toBe(false);
+  }, 30_000);
 });
 
 describe('the tool writes', () => {

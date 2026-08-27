@@ -29,6 +29,10 @@ const QUESTION_TYPES: readonly string[] = ['code', 'mcq', 'multi', 'short'];
 
 const REQUIRED_ENTRIES = ['cards.csv', 'meta.json', 'reviews.csv'] as const;
 
+/** Every name the reader inflates. Anything else the archive carries stays
+ * compressed, the way one `zf.read(name)` per entry leaves it. */
+const ARCHIVE_ENTRIES = [...REQUIRED_ENTRIES, 'trivia_queue.csv'] as const;
+
 const enc = new TextEncoder();
 const dec = new TextDecoder('utf-8');
 
@@ -148,7 +152,7 @@ export function prepdeckToDeck(
   deckName: string,
   blob: Uint8Array,
   zip: ZipCodec,
-  opts: { rowCap?: number; maxEntryBytes?: number } = {},
+  opts: { rowCap?: number; reviewRowCap?: number; maxEntryBytes?: number; maxTotalBytes?: number } = {},
 ): PrepdeckImportOutcome {
   const errors: string[] = [];
 
@@ -162,7 +166,7 @@ export function prepdeckToDeck(
 
   let entries: ZipEntry[];
   try {
-    entries = zip.read(blob, { maxEntryBytes: opts.maxEntryBytes });
+    entries = zip.read(blob, { only: ARCHIVE_ENTRIES, maxEntryBytes: opts.maxEntryBytes, maxTotalBytes: opts.maxTotalBytes });
   } catch (e) {
     if (e instanceof NotAZip) return fail(deckName, `not a valid zip: ${e.message}`);
     throw e;
@@ -220,13 +224,13 @@ export function prepdeckToDeck(
   }
 
   const { inserted, skippedDuplicates, qidByPrompt } = importCards(repos, deckId, declaredType, dec.decode(byName.get('cards.csv')!), errors, opts.rowCap);
-  const reviewsInserted = importReviews(repos, dec.decode(byName.get('reviews.csv')!), qidByPrompt, errors);
+  const reviewsInserted = importReviews(repos, dec.decode(byName.get('reviews.csv')!), qidByPrompt, errors, opts.reviewRowCap);
 
   let queueRowsInserted = 0;
   if (declaredType === 'trivia') {
     const queue = byName.get('trivia_queue.csv');
     if (queue) {
-      queueRowsInserted = importTriviaQueue(repos, dec.decode(queue), qidByPrompt, errors);
+      queueRowsInserted = importTriviaQueue(repos, dec.decode(queue), qidByPrompt, errors, opts.rowCap);
     } else {
       // An archive written before the queue section: rebuild in cards.csv
       // order so the deck is at least studyable, and say what was lost.
@@ -279,7 +283,9 @@ function importCards(
       skippedDuplicates++;
       continue;
     }
-    const typeRaw = pyStrip(cell(row, 'type') || 'short').toLowerCase();
+    // The fallback reads the raw cell, so a whitespace-only one stays truthy
+    // and strips to a type no `QuestionType` names.
+    const typeRaw = pyStrip((row['type'] ?? '') || 'short').toLowerCase();
     if (!QUESTION_TYPES.includes(typeRaw)) {
       errors.push(`cards.csv row ${i}: unknown type ${pyRepr(row['type'] ?? null)}`);
       continue;
@@ -343,25 +349,31 @@ function restoreCardState(repos: UserRepos, qid: number, row: Record<string, str
   });
 }
 
-function importReviews(repos: UserRepos, csvText: string, qidByPrompt: Map<string, number>, errors: string[]): number {
+function importReviews(repos: UserRepos, csvText: string, qidByPrompt: Map<string, number>, errors: string[], rowCap: number | undefined): number {
   const { rows } = parseDict(csvText);
+  const cap = rowCap ?? Infinity;
   let inserted = 0;
-  rows.forEach((row, index) => {
+  for (let index = 0; index < rows.length; index++) {
+    if (index >= cap) {
+      errors.push(`reviews.csv: ${rowCapMessage(cap)}`);
+      break;
+    }
+    const row = rows[index]!;
     const i = index + 2;
     const prompt = cell(row, 'prompt');
     if (!prompt) {
       errors.push(`reviews.csv row ${i}: missing prompt`);
-      return;
+      continue;
     }
     const qid = qidByPrompt.get(prompt);
     if (qid === undefined) {
       errors.push(`reviews.csv row ${i}: prompt ${pyRepr(prompt.slice(0, 40))} not found in deck`);
-      return;
+      continue;
     }
     const result = cell(row, 'result').toLowerCase();
     if (result !== 'right' && result !== 'wrong') {
       errors.push(`reviews.csv row ${i}: bad result ${pyRepr(result)}`);
-      return;
+      continue;
     }
     try {
       repos.reviews.importReview(qid, row['ts'] || '', result as ReviewResult, row['user_answer'] || '', row['grader_notes'] || '');
@@ -369,11 +381,11 @@ function importReviews(repos: UserRepos, csvText: string, qidByPrompt: Map<strin
     } catch (e) {
       errors.push(`reviews.csv row ${i}: write failed — ${e instanceof Error ? e.message : String(e)}`);
     }
-  });
+  }
   return inserted;
 }
 
-function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<string, number>, errors: string[]): number {
+function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<string, number>, errors: string[], rowCap: number | undefined): number {
   const { rows } = parseDict(csvText);
   const pos = (row: Record<string, string | null>): number => {
     const raw = pyStrip(row['queue_position'] ?? '') || '0';
@@ -382,26 +394,34 @@ function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<s
   // Sorted so the rotation order survives, then numbered from row 2 the way
   // an enumerate over the sorted list does.
   const sorted = [...rows].sort((a, b) => pos(a) - pos(b));
+  // A queue row names a card, and the cards are capped, so the lowest
+  // positions up to the same cap are every row that could resolve.
+  const cap = rowCap ?? Infinity;
   let inserted = 0;
-  sorted.forEach((row, index) => {
+  for (let index = 0; index < sorted.length; index++) {
+    if (index >= cap) {
+      errors.push(`trivia_queue.csv: ${rowCapMessage(cap)}`);
+      break;
+    }
+    const row = sorted[index]!;
     const i = index + 2;
     const prompt = cell(row, 'prompt');
     const qid = qidByPrompt.get(prompt);
     if (qid === undefined) {
       errors.push(`trivia_queue.csv row ${i}: prompt ${pyRepr(prompt.slice(0, 40))} not in deck`);
-      return;
+      continue;
     }
     const rawPos = pyStrip(row['queue_position'] ?? '') || '0';
     if (!/^[+-]?\d+$/.test(rawPos)) {
       errors.push(`trivia_queue.csv row ${i}: bad queue_position`);
-      return;
+      continue;
     }
     const lacRaw = pyStrip(row['last_answered_correctly'] ?? '');
     let lastAnsweredCorrectly: number | null = null;
     if (lacRaw !== '') {
       if (!/^[+-]?\d+$/.test(lacRaw)) {
         errors.push(`trivia_queue.csv row ${i}: bad last_answered_correctly=${pyRepr(lacRaw)}`);
-        return;
+        continue;
       }
       lastAnsweredCorrectly = Number(lacRaw);
     }
@@ -411,6 +431,6 @@ function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<s
     } catch (e) {
       errors.push(`trivia_queue.csv row ${i}: write failed — ${e instanceof Error ? e.message : String(e)}`);
     }
-  });
+  }
   return inserted;
 }

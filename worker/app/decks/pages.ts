@@ -8,7 +8,15 @@ import { csvToDeck, deckToCsv, questionsForExport } from '../api/deckIo.js';
 import { ankiNotesToDeck } from './anki.js';
 import { buildApkg } from './ankiExport.js';
 import { deckToPrepdeck, prepdeckToDeck } from './archive.js';
-import { ARCHIVE_TOO_LARGE, EXPORT_TOO_LARGE, MAX_EXPORT_QUESTIONS, MAX_IMPORT_ROWS, MAX_ZIP_ENTRY_BYTES } from './importLimits.js';
+import {
+  ARCHIVE_TOO_LARGE,
+  EXPORT_TOO_LARGE,
+  MAX_EXPORT_QUESTIONS,
+  MAX_IMPORT_REVIEW_ROWS,
+  MAX_IMPORT_ROWS,
+  MAX_ZIP_ENTRY_BYTES,
+  MAX_ZIP_TOTAL_BYTES,
+} from './importLimits.js';
 import type { Question } from '../entities.js';
 import { AppError, badRequest, notFound } from '../errors.js';
 import { requireFundedWorkflow } from '../agent/funding.js';
@@ -289,7 +297,12 @@ export function deckImportPrepdeckSubmit(repos: UserRepos, req: PageRequest, dep
   const named = importDeckName(template, pyStrip(req.form.get('name') ?? ''));
   if ('refusal' in named) return named.refusal;
   try {
-    const outcome = prepdeckToDeck(repos, named.name, req.upload.bytes, deps.zip, { rowCap: MAX_IMPORT_ROWS, maxEntryBytes: MAX_ZIP_ENTRY_BYTES });
+    const outcome = prepdeckToDeck(repos, named.name, req.upload.bytes, deps.zip, {
+      rowCap: MAX_IMPORT_ROWS,
+      reviewRowCap: MAX_IMPORT_REVIEW_ROWS,
+      maxEntryBytes: MAX_ZIP_ENTRY_BYTES,
+      maxTotalBytes: MAX_ZIP_TOTAL_BYTES,
+    });
     return importPage(template, outcome, null);
   } catch (e) {
     if (e instanceof ZipEntryTooLarge) return importPage(template, null, ARCHIVE_TOO_LARGE, 400);
@@ -308,7 +321,7 @@ export async function deckImportAnkiSubmit(repos: UserRepos, req: PageRequest, d
   if ('refusal' in named) return named.refusal;
   let notes;
   try {
-    notes = await deps.apkg.notes(req.upload.bytes, { maxEntryBytes: MAX_ZIP_ENTRY_BYTES });
+    notes = await deps.apkg.notes(req.upload.bytes, { maxEntryBytes: MAX_ZIP_ENTRY_BYTES, maxTotalBytes: MAX_ZIP_TOTAL_BYTES });
   } catch (e) {
     if (e instanceof ZipEntryTooLarge) return importPage(template, null, ARCHIVE_TOO_LARGE, 400);
     if (e instanceof NotAnApkg) return importPage(template, null, e.message, 400);

@@ -19,10 +19,19 @@ print(json.dumps({
 }))
 `;
 
+// The bucket bounds and durations these families hold, plus the two places
+// the languages part company on their own: how wide an exponent is written,
+// and where each stops writing a number out in full.
 const GO_STRINGS = `
 import json
 from prometheus_client.utils import floatToGoString
-values = [0.0, 1.0, 0.001, 0.005, 0.012, 0.25, 1.012, 12.0, 41.5, 2.0, 30.0, 75.0, 123456.5, 1234567.5, 10000000.0]
+values = [
+    0.0, -0.0, 1.0, 0.001, 0.005, 0.012, 0.25, 1.012, 12.0, 41.5, 2.0, 30.0, 75.0,
+    123456.5, 1234567.5, 10000000.0, 12345678.0, 123456789.5,
+    1e-4, 1e-5, 1e-6, 1e-7, 1e-8,
+    1e14, 1e15, 1e16, 1e17, 1e21, 1.5e16,
+    -1.0, -1e15, -1e16, -0.001,
+]
 print(json.dumps({'values': values, 'rendered': [floatToGoString(v) for v in values]}))
 `;
 

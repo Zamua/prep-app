@@ -19,7 +19,23 @@ export const MAX_CSV_UPLOAD_BYTES = 1536 * 1024;
 /** Read from the central directory, so a bomb is refused before it inflates. */
 export const MAX_ZIP_ENTRY_BYTES = 32 * 1024 * 1024;
 
+/** The same ceiling over the entries a codec actually inflates. Per-entry
+ * alone bounds nothing: an archive may carry any number of entries, and any
+ * number of them under one name. */
+export const MAX_ZIP_TOTAL_BYTES = 32 * 1024 * 1024;
+
 export const MAX_IMPORT_ROWS = 5000;
+
+/**
+ * `reviews.csv` rows per `.prepdeck` import. A card carries many reviews, so
+ * this cannot be `MAX_IMPORT_ROWS`: the narrowest row a golden holds is 53
+ * bytes, so a 2 MiB body (prep's own writer stores, it does not deflate)
+ * tops out near 39,000 rows and an honest archive never reaches this. A
+ * hand-deflated one stops here instead of at the entry ceiling, which admits
+ * an order of magnitude more writes than one request should make.
+ */
+export const MAX_IMPORT_REVIEW_ROWS = 50_000;
+
 export const MAX_EXPORT_QUESTIONS = 5000;
 
 export const uploadTooLarge = (bytes: number): string => `That file is too large. The limit is ${megabytes(bytes)} MB.`;

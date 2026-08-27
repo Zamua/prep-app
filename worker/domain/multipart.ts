@@ -46,16 +46,34 @@ function disposition(headers: string): { name: string; filename: string | null }
   return null;
 }
 
+const startsAt = (haystack: Uint8Array, needle: Uint8Array, from: number): boolean => {
+  if (from + needle.length > haystack.length) return false;
+  for (let j = 0; j < needle.length; j++) if (haystack[from + j] !== needle[j]) return false;
+  return true;
+};
+
 /** The parts of a body, in order. A malformed body yields what it parsed. */
 export function parseMultipart(body: Uint8Array, contentType: string): MultipartPart[] {
   const boundary = boundaryOf(contentType);
   if (!boundary) return [];
-  const marker = new TextEncoder().encode(`--${boundary}`);
+  const enc = new TextEncoder();
+  // RFC 2046: the delimiter is CRLF followed by `--boundary`, and the CRLF is
+  // the delimiter's, not the part's. Scanning for `--boundary` alone ends a
+  // part wherever the uploaded bytes happen to hold that sequence, which
+  // silently truncates a file the client chose a short boundary for.
+  const opening = enc.encode(`--${boundary}`);
+  const delimiter = enc.encode(`\r\n--${boundary}`);
   const parts: MultipartPart[] = [];
 
-  let at = indexOf(body, marker, 0);
-  if (at < 0) return parts;
-  at += marker.length;
+  let at: number;
+  if (startsAt(body, opening, 0)) {
+    at = opening.length;
+  } else {
+    // A preamble ahead of the first part; its own CRLF opens the delimiter.
+    const first = indexOf(body, delimiter, 0);
+    if (first < 0) return parts;
+    at = first + delimiter.length;
+  }
 
   while (at < body.length) {
     // `--` closes the body; anything else is transport padding up to the CRLF.
@@ -71,15 +89,12 @@ export function parseMultipart(body: Uint8Array, contentType: string): Multipart
 
     const headers = decoder.decode(body.subarray(at, headerEnd));
     const start = headerEnd + 4;
-    const next = indexOf(body, marker, start);
+    const next = indexOf(body, delimiter, start);
     if (next < 0) break;
-    // The CRLF ahead of the delimiter belongs to it, not to the part.
-    let end = next;
-    if (end - 2 >= start && body[end - 2] === CR && body[end - 1] === LF) end -= 2;
 
     const where = disposition(headers);
-    if (where) parts.push({ name: where.name, filename: where.filename, bytes: body.slice(start, end) });
-    at = next + marker.length;
+    if (where) parts.push({ name: where.name, filename: where.filename, bytes: body.slice(start, next) });
+    at = next + delimiter.length;
   }
   return parts;
 }

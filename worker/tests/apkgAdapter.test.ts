@@ -108,6 +108,17 @@ describe('SqlJsApkg', () => {
     const built = await new SqlJsApkg().build(COL, [], []);
     expect(await new SqlJsApkg().notes(built)).toEqual([]);
   });
+
+  it('reads a media-heavy package without inflating any of the media', async () => {
+    const built = await new SqlJsApkg().build(COL, [note(1, 'a\x1fb')], []);
+    const collection = zip.read(built).find((e) => e.name === 'collection.anki21')!.bytes;
+    const files: Record<string, Uint8Array> = { 'collection.anki21': collection, media: enc.encode('{}') };
+    // What a real deck's audio and images weigh, past every ceiling inflated.
+    for (let i = 0; i < 6; i++) files[String(i)] = new Uint8Array(16 * 1024 * 1024);
+    const heavy = zipSync(files, { level: 9 });
+    const notes = await new SqlJsApkg().notes(heavy, { maxEntryBytes: 32 * 1024 * 1024, maxTotalBytes: 32 * 1024 * 1024 });
+    expect(notes.map((n) => n.id)).toEqual([1]);
+  });
 });
 
 describe('FflateZip', () => {
@@ -140,5 +151,26 @@ describe('FflateZip', () => {
   it('lets an entry inside the cap through', () => {
     const entries = [{ name: 'small', bytes: enc.encode('x'.repeat(1000)) }];
     expect(zip.read(zip.write(entries), { maxEntryBytes: 32 * 1024 * 1024 })).toEqual(entries);
+  });
+
+  it('refuses entries that each fit but together do not, before inflating past the sum', () => {
+    // Eight entries of 16 MiB deflate to a few kilobytes each, and each one
+    // is inside a 32 MiB per-entry ceiling. Their sum is the whole isolate.
+    const files: Record<string, Uint8Array> = {};
+    for (let i = 0; i < 8; i++) files[`pad_${i}`] = new Uint8Array(16 * 1024 * 1024);
+    const bomb = zipSync(files, { level: 9 });
+    expect(bomb.length).toBeLessThan(200 * 1024);
+    expect(() => zip.read(bomb, { maxEntryBytes: 32 * 1024 * 1024, maxTotalBytes: 32 * 1024 * 1024 })).toThrow(ZipEntryTooLarge);
+  });
+
+  it('inflates only the names asked for, and counts only those', () => {
+    const bomb = zipSync({ wanted: enc.encode('here'), unwanted: new Uint8Array(48 * 1024 * 1024) }, { level: 9 });
+    expect(zip.read(bomb, { only: ['wanted'], maxEntryBytes: 1024, maxTotalBytes: 1024 })).toEqual([{ name: 'wanted', bytes: enc.encode('here') }]);
+  });
+
+  it('names what overflowed, so a caller past the page has something to say', () => {
+    const bomb = zipSync({ 'media_3': new Uint8Array(64 * 1024) }, { level: 9 });
+    expect(() => zip.read(bomb, { maxEntryBytes: 1024 })).toThrow(/^media_3 expands to more than 1024 bytes$/);
+    expect(() => zip.read(bomb, { maxTotalBytes: 1024 })).toThrow(/^the archive expands to more than 1024 bytes$/);
   });
 });

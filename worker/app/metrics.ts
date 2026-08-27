@@ -10,6 +10,7 @@
 // The registry is module-level. On this runtime that means per isolate: the
 // counters belong to whichever isolate answered the scrape, and they go when
 // it is recycled. Nothing here is per cell and nothing survives an eviction.
+import { reprFloat } from '../domain/grading/pyrepr.js';
 
 /** One histogram family. */
 export interface HistogramSpec {
@@ -159,23 +160,22 @@ function sample(name: string, labels: readonly (readonly [string, string])[], va
 
 /**
  * A float as Go prints it, which is what the exposition format asks for and
- * what `prometheus_client.utils.floatToGoString` produces: an integral value
- * keeps its `.0`, and a large one switches to an exponent sooner than either
- * language would on its own.
- *
- * Faithful over the values these families hold: bucket bounds, counts, and
- * durations that are whole milliseconds. Outside that (below 1e-6, or at or
- * above 1e16) the two languages disagree on the shortest round-trip form.
+ * what `prometheus_client.utils.floatToGoString` produces: `repr(float)`,
+ * except that more than seven integer digits switch to an exponent. `repr`
+ * is itself where the two languages diverge - JavaScript reaches for an
+ * exponent at 1e21 and 1e-7, Python at 1e16 and 1e-5, and neither pads the
+ * exponent the way the other does - so the digits come from `reprFloat`
+ * rather than from `String(value)`.
  */
 export function goString(value: number): string {
   if (value === Infinity) return '+Inf';
   if (value === -Infinity) return '-Inf';
   if (Number.isNaN(value)) return 'NaN';
-  const s = /[.e]/.test(String(value)) ? String(value) : `${value}.0`;
+  const s = reprFloat(value);
   const dot = s.indexOf('.');
   if (value > 0 && dot > 6) {
     const mantissa = `${s[0]}.${s.slice(1, dot)}${s.slice(dot + 1)}`.replace(/[0.]+$/, '');
-    return `${mantissa}e+0${dot - 1}`;
+    return `${mantissa}e+${String(dot - 1).padStart(2, '0')}`;
   }
   return s;
 }

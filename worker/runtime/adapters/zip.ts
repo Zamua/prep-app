@@ -3,7 +3,10 @@
 // `zipfile.ZipFile(..., ZIP_STORED)` with a fixed `ZipInfo` byte for byte, so
 // `.prepdeck` is a byte-parity format rather than a merely equivalent one.
 import { unzipSync, zipSync, type Unzipped, type UnzipFileInfo } from 'fflate';
-import { NotAZip, ZipEntryTooLarge, type ZipCodec, type ZipEntry } from '../../app/ports.js';
+import { NotAZip, ZipEntryTooLarge, type ZipCodec, type ZipEntry, type ZipReadOptions } from '../../app/ports.js';
+
+const entryOverflow = (name: string, max: number): string => `${name} expands to more than ${max} bytes`;
+const totalOverflow = (max: number): string => `the archive expands to more than ${max} bytes`;
 
 /**
  * `date_time=(1980, 1, 1, 0, 0, 0)` written into the DOS fields. fflate reads
@@ -20,13 +23,25 @@ const EXTERNAL_ATTR = 0o600 << 16;
 const CREATE_SYSTEM = 3;
 
 export class FflateZip implements ZipCodec {
-  read(blob: Uint8Array, opts: { maxEntryBytes?: number } = {}): ZipEntry[] {
+  read(blob: Uint8Array, opts: ZipReadOptions = {}): ZipEntry[] {
     const max = opts.maxEntryBytes ?? Infinity;
+    const maxTotal = opts.maxTotalBytes ?? Infinity;
+    const only = opts.only ? new Set(opts.only) : null;
+    let declared = 0;
     let unzipped: Unzipped;
     try {
       unzipped = unzipSync(blob, {
         filter: (file: UnzipFileInfo) => {
-          if (file.originalSize !== undefined && file.originalSize > max) throw new ZipEntryTooLarge(file.name);
+          // An entry no codec reads is never inflated and never counted, so a
+          // media-heavy archive costs its collection and nothing else.
+          if (only !== null && !only.has(file.name)) return false;
+          if (file.originalSize !== undefined) {
+            if (file.originalSize > max) throw new ZipEntryTooLarge(entryOverflow(file.name, max));
+            declared += file.originalSize;
+            // Duplicate names collapse in the result but each one still
+            // inflates, so the running sum is what bounds the heap.
+            if (declared > maxTotal) throw new ZipEntryTooLarge(totalOverflow(maxTotal));
+          }
           return true;
         },
       });
@@ -35,9 +50,12 @@ export class FflateZip implements ZipCodec {
       throw new NotAZip(e instanceof Error ? e.message : String(e));
     }
     const out: ZipEntry[] = [];
+    let actual = 0;
     for (const [name, bytes] of Object.entries(unzipped)) {
       // A stream that lied about its declared size is caught on the way out.
-      if (bytes.length > max) throw new ZipEntryTooLarge(name);
+      if (bytes.length > max) throw new ZipEntryTooLarge(entryOverflow(name, max));
+      actual += bytes.length;
+      if (actual > maxTotal) throw new ZipEntryTooLarge(totalOverflow(maxTotal));
       out.push({ name, bytes });
     }
     return out;

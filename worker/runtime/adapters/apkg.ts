@@ -83,10 +83,12 @@ export function sqlEngine(): Promise<SqlModule> {
 
 const dec = new TextDecoder('utf-8');
 
-function collectionOf(blob: Uint8Array, maxEntryBytes: number | undefined): Uint8Array {
+function collectionOf(blob: Uint8Array, opts: { maxEntryBytes?: number; maxTotalBytes?: number }): Uint8Array {
   let entries;
   try {
-    entries = new FflateZip().read(blob, { maxEntryBytes });
+    // The media stays compressed in the central directory: a real `.apkg` is
+    // mostly media, and none of it is read.
+    entries = new FflateZip().read(blob, { ...opts, only: COLLECTION_NAMES });
   } catch (e) {
     if (e instanceof ZipEntryTooLarge) throw e;
     if (e instanceof NotAZip) throw new NotAnApkg(`not a valid .apkg (zip parse failed): ${e.message}`);
@@ -101,8 +103,8 @@ function collectionOf(blob: Uint8Array, maxEntryBytes: number | undefined): Uint
 }
 
 export class SqlJsApkg implements ApkgReader, ApkgWriter {
-  async notes(blob: Uint8Array, opts: { maxEntryBytes?: number } = {}): Promise<ApkgNote[]> {
-    const collection = collectionOf(blob, opts.maxEntryBytes);
+  async notes(blob: Uint8Array, opts: { maxEntryBytes?: number; maxTotalBytes?: number } = {}): Promise<ApkgNote[]> {
+    const collection = collectionOf(blob, opts);
     const SQL = await sqlEngine();
     let db: SqlDatabase;
     try {

@@ -1,9 +1,10 @@
 // The `.prepdeck` codec's refusals and its two order-sensitive sections. The
 // happy path is the byte gate in deckio.parity.test.ts; what is here is the
 // branches no corpus profile reaches.
+import { zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { deckToPrepdeck, prepdeckToDeck, FORMAT_VERSION } from '../app/decks/archive.js';
-import { MAX_ZIP_ENTRY_BYTES } from '../app/decks/importLimits.js';
+import { MAX_ZIP_ENTRY_BYTES, MAX_ZIP_TOTAL_BYTES } from '../app/decks/importLimits.js';
 import { ZipEntryTooLarge, type ZipEntry } from '../app/ports.js';
 import { FflateZip } from '../runtime/adapters/zip.js';
 import { cell } from './repos/setup.js';
@@ -84,7 +85,32 @@ describe('prepdeckToDeck refuses', () => {
 
   it('nothing on an entry inside the deployed cap', () => {
     const c = cell();
-    expect(prepdeckToDeck(c.repos, 'fresh', minimal(), zip, { maxEntryBytes: MAX_ZIP_ENTRY_BYTES }).errors).toEqual([]);
+    expect(prepdeckToDeck(c.repos, 'fresh', minimal(), zip, { maxEntryBytes: MAX_ZIP_ENTRY_BYTES, maxTotalBytes: MAX_ZIP_TOTAL_BYTES }).errors).toEqual([]);
+  });
+
+  it('entries each inside the per-entry cap whose sum is not', () => {
+    const c = cell();
+    const filler = 'x'.repeat(64);
+    const blob = archive({ 'meta.json': meta(), 'cards.csv': CARDS_HEADER + filler, 'reviews.csv': REVIEWS_HEADER + filler });
+    expect(() => prepdeckToDeck(c.repos, 'fresh', blob, zip, { maxEntryBytes: 4096, maxTotalBytes: 200 })).toThrow(ZipEntryTooLarge);
+  });
+});
+
+describe('prepdeckToDeck inflates only the sections it reads', () => {
+  it('leaves an entry no section names compressed, whatever it declares', () => {
+    const c = cell();
+    // 16 MiB of zeros, past every ceiling once inflated, under a name the
+    // reader never asks for. Deflated it is a few kilobytes.
+    const padded = zipSync({
+      'meta.json': enc.encode(meta()),
+      'cards.csv': enc.encode(CARDS_HEADER),
+      'reviews.csv': enc.encode(REVIEWS_HEADER),
+      'media/big.bin': new Uint8Array(16 * 1024 * 1024),
+    });
+    expect(padded.length).toBeLessThan(200 * 1024);
+    const outcome = prepdeckToDeck(c.repos, 'fresh', padded, zip, { maxEntryBytes: 4096, maxTotalBytes: 4096 });
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.deck_id).toBeGreaterThan(0);
   });
 });
 
@@ -170,6 +196,51 @@ describe('prepdeckToDeck restores', () => {
     const outcome = prepdeckToDeck(c.repos, 'fresh', blob, zip, { rowCap: 2 });
     expect(outcome.inserted).toBe(2);
     expect(outcome.errors).toEqual(['stopped at 2 rows; split the file and import again']);
+  });
+
+  it('stops at the review cap, which the card cap does not bound', () => {
+    const c = cell();
+    const reviews = Array.from({ length: 5 }, (_, i) => `card,2026-03-0${i + 1}T00:00:00+00:00,right,,\r\n`).join('');
+    const blob = archive({
+      'meta.json': meta(),
+      'cards.csv': CARDS_HEADER + 'short,,card,A,,,,,,,,,,,,\r\n',
+      'reviews.csv': REVIEWS_HEADER + reviews,
+    });
+    const outcome = prepdeckToDeck(c.repos, 'fresh', blob, zip, { rowCap: 5000, reviewRowCap: 2 });
+    expect(outcome.reviews_inserted).toBe(2);
+    expect(outcome.errors).toEqual(['reviews.csv: stopped at 2 rows; split the file and import again']);
+  });
+
+  it('stops at the queue cap, keeping the lowest positions', () => {
+    const c = cell();
+    const cards = Array.from({ length: 4 }, (_, i) => `short,,q${i},a${i},,,,,,,,,,,,\r\n`).join('');
+    const queue =
+      'prompt,queue_position,last_answered_at,last_answered_correctly\r\n' +
+      [3, 1, 2, 0].map((p, i) => `q${i},${p},,\r\n`).join('') +
+      'padding,4,,\r\n';
+    const blob = archive({
+      'meta.json': meta({}, { deck_type: 'trivia', notification_interval_minutes: 30 }),
+      'cards.csv': CARDS_HEADER + cards,
+      'reviews.csv': REVIEWS_HEADER,
+      'trivia_queue.csv': queue,
+    });
+    const outcome = prepdeckToDeck(c.repos, 'fresh', blob, zip, { rowCap: 4 });
+    expect(outcome.queue_rows_inserted).toBe(4);
+    const deckId = c.repos.decks.findId('fresh')!;
+    expect(c.repos.trivia.listQueueForDeck(deckId).map((e) => e.prompt)).toEqual(['q3', 'q1', 'q2', 'q0']);
+    expect(outcome.errors).toEqual(['trivia_queue.csv: stopped at 4 rows; split the file and import again']);
+  });
+
+  it('refuses a whitespace-only type the way an empty cell is not refused', () => {
+    const c = cell();
+    const blob = archive({
+      'meta.json': meta(),
+      'cards.csv': CARDS_HEADER + 'short,,typed,A,,,,,,,,,,,,\r\n"  ",,spaces,B,,,,,,,,,,,,\r\n,,blank,C,,,,,,,,,,,,\r\n',
+      'reviews.csv': REVIEWS_HEADER,
+    });
+    const outcome = prepdeckToDeck(c.repos, 'fresh', blob, zip);
+    expect(outcome.inserted).toBe(2);
+    expect(outcome.errors).toEqual(["cards.csv row 3: unknown type '  '"]);
   });
 });
 

@@ -461,13 +461,26 @@ export interface ZipEntry {
   bytes: Uint8Array;
 }
 
+export interface ZipReadOptions {
+  /** Inflate only these names. Everything else is skipped in the central
+   * directory, so an archive's unread bulk costs nothing. */
+  only?: readonly string[];
+  /** Ceiling on one inflated entry. */
+  maxEntryBytes?: number;
+  /** Ceiling on the sum of the inflated entries, which is what the heap
+   * actually holds; `maxEntryBytes` alone bounds nothing when an archive
+   * carries many entries, or many under one name. */
+  maxTotalBytes?: number;
+}
+
 /** The archive container. `.prepdeck` is written through it, `.apkg` is read
  * through it, and both are bounded before anything inflates. */
 export interface ZipCodec {
-  /** Entries in central-directory order. Throws `NotAZip`, or
-   * `ZipEntryTooLarge` when an entry declares more than `maxEntryBytes`
-   * inflated - the declaration is read first, so a bomb never expands. */
-  read(blob: Uint8Array, opts?: { maxEntryBytes?: number }): ZipEntry[];
+  /** Entries in central-directory order, restricted to `only` when given.
+   * Throws `NotAZip`, or `ZipEntryTooLarge` when an entry or the selection's
+   * total declares more than its ceiling - the declarations are read first,
+   * so a bomb never expands. */
+  read(blob: Uint8Array, opts?: ZipReadOptions): ZipEntry[];
   /** Stored, no compression, fixed 1980 stamp: two exports of an unchanged
    * deck are byte-identical. */
   write(entries: readonly ZipEntry[]): Uint8Array;
@@ -484,8 +497,10 @@ export interface ApkgNote {
 }
 
 export interface ApkgReader {
-  /** Every `notes` row of the packaged collection, by id. Throws `NotAnApkg`. */
-  notes(blob: Uint8Array, opts?: { maxEntryBytes?: number }): Promise<ApkgNote[]>;
+  /** Every `notes` row of the packaged collection, by id. Only the collection
+   * entry is inflated; the media an `.apkg` carries is never read. Throws
+   * `NotAnApkg`. */
+  notes(blob: Uint8Array, opts?: { maxEntryBytes?: number; maxTotalBytes?: number }): Promise<ApkgNote[]>;
 }
 
 /** The `col` row. The four JSON columns arrive as values and are serialized

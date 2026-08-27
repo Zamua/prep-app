@@ -79,7 +79,7 @@ function reprStr(s: string): string {
  * agree on them), fixed notation for exponents in [-4, 16), else scientific
  * with a two-digit exponent, and an integral value keeps its `.0`.
  */
-function reprFloat(x: number): string {
+export function reprFloat(x: number): string {
   if (Number.isNaN(x)) return 'nan';
   if (x === Infinity) return 'inf';
   if (x === -Infinity) return '-inf';

@@ -4,7 +4,16 @@
 import { parseIso } from '../../domain/py.js';
 import { ankiNotesToDeck } from '../decks/anki.js';
 import { buildApkg } from '../decks/ankiExport.js';
-import { MAX_IMPORT_ROWS, MAX_ZIP_ENTRY_BYTES } from '../decks/importLimits.js';
+import {
+  ARCHIVE_TOO_LARGE,
+  EXPORT_TOO_LARGE,
+  MAX_APKG_UPLOAD_BYTES,
+  MAX_EXPORT_QUESTIONS,
+  MAX_IMPORT_ROWS,
+  MAX_ZIP_ENTRY_BYTES,
+  MAX_ZIP_TOTAL_BYTES,
+  uploadTooLarge,
+} from '../decks/importLimits.js';
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
 import { NotAnApkg, ZipEntryTooLarge, type ApkgReader, type ApkgWriter } from '../ports.js';
@@ -237,6 +246,9 @@ const ASYNC_HANDLERS: Record<string, (repos: V1Repos, args: Record<string, unkno
     const deckId = repos.decks.findId(name);
     if (deckId === null) return toolError(`deck not found: '${name}'`);
     const questions = questionsForExport(repos, deckId);
+    // `/mcp` is the second door to both codecs and shares the isolate the
+    // page caps exist for, so it answers the export hub's refusal too.
+    if (questions.length > MAX_EXPORT_QUESTIONS) return toolError(EXPORT_TOO_LARGE);
     const nowMs = parseIso(deps.now).getTime();
     const { col, notes, cards } = buildApkg(name, questions, deps.subject, nowMs, deps.now.slice(0, 10));
     const blob = await deps.apkg.build(col, notes, cards);
@@ -248,21 +260,36 @@ const ASYNC_HANDLERS: Record<string, (repos: V1Repos, args: Record<string, unkno
     if (!name) return toolError('missing required arg: name');
     const b64 = typeof args['apkg_base64'] === 'string' ? (args['apkg_base64'] as string) : '';
     if (!b64) return toolError('missing required arg: apkg_base64');
+    // The encoded length bounds the decode, so an oversized payload is
+    // refused without ever being turned into bytes.
+    if (decodedLength(b64) > MAX_APKG_UPLOAD_BYTES) return toolError(uploadTooLarge(MAX_APKG_UPLOAD_BYTES));
     if (!isStrictBase64(b64)) return toolError("apkg_base64 didn't decode: Only base64 data is allowed");
     let notes;
     try {
-      notes = await deps.apkg.notes(unbase64(b64), { maxEntryBytes: MAX_ZIP_ENTRY_BYTES });
+      notes = await deps.apkg.notes(unbase64(b64), { maxEntryBytes: MAX_ZIP_ENTRY_BYTES, maxTotalBytes: MAX_ZIP_TOTAL_BYTES });
     } catch (e) {
-      if (e instanceof NotAnApkg || e instanceof ZipEntryTooLarge) return toolError(e.message);
+      if (e instanceof ZipEntryTooLarge) return toolError(ARCHIVE_TOO_LARGE);
+      if (e instanceof NotAnApkg) return toolError(e.message);
       throw e;
     }
     return toolText(dumps(ankiNotesToDeck(repos, name, notes, { noteCap: MAX_IMPORT_ROWS })));
   },
 };
 
+/** Bytes `atob` would produce, from the encoded length alone. */
+const decodedLength = (b64: string): number => {
+  const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.floor((b64.length * 3) / 4) - padding;
+};
+
+const B64_CHUNK = 8192;
+
 const base64 = (bytes: Uint8Array): string => {
   let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
+  // Chunked: one `+=` per byte builds a rope the length of the archive.
+  for (let at = 0; at < bytes.length; at += B64_CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + B64_CHUNK));
+  }
   return btoa(binary);
 };
 

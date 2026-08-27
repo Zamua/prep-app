@@ -64,11 +64,13 @@ const key = (method: string, pattern: string): Key => `${method} ${pattern}`;
  */
 const ENTRY_WORKER: readonly Key[] = ENTRY_ROUTES.map(([method, pattern]) => key(method, pattern));
 
-/** The two the rewrite defers past phase 5 (decision 7.6). */
-const DEBUG_ONLY: readonly Key[] = ['GET /_debug/auth', 'GET /debug/session'];
+/** A route the reference serves only for debugging. The assertion below reads
+ * the inventory through this, so a debug route the reference gains is a
+ * failure rather than a silent addition to the list. */
+const DEBUG_ROUTE = /^[A-Z]+ \/_?debug\//;
 
 /** Every route the phase does not own, with the phase that does (PHASE-3 G).
- * Phase 5 empties it down to these two. */
+ * Phase 5 empties it down to the debug pair (decision 7.6). */
 const OUT_OF_SCOPE: Record<Key, string> = {
   'GET /_debug/auth': 'decision 7.6',
   'GET /debug/session': 'decision 7.6',
@@ -147,8 +149,10 @@ describe('the cell route table against the Python inventory', () => {
     expect([...cell.keys()].filter((k) => k in REMOVED)).toEqual([]);
   });
 
-  it('ends the phase with only the two decision-7.6 routes out of scope', () => {
-    expect(Object.keys(OUT_OF_SCOPE).sort()).toEqual([...DEBUG_ONLY].sort());
+  it('ends the phase with only the reference’s own debug routes out of scope', () => {
+    const debug = [...python.keys()].filter((k) => DEBUG_ROUTE.test(k)).sort();
+    expect(debug).toEqual(['GET /_debug/auth', 'GET /debug/session']);
+    expect(Object.keys(OUT_OF_SCOPE).sort()).toEqual(debug);
   });
 
   it('answers the public routes it claims', () => {
