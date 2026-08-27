@@ -393,8 +393,16 @@ export interface ExportRepo {
   /** The named columns of the named tables, plus the profile: the merge's
    * read of an account that is not moving. */
   project(columns: Readonly<Record<string, readonly string[]>>): CellSnapshot;
-  /** Inserts rows the cell lacks by primary key; user columns are dropped. Returns rows inserted per table. */
-  importRows(snapshot: CellSnapshot, opts: { idempotentBy: 'id' }): Record<string, number>;
+  /**
+   * Writes rows keyed by their primary key; user columns are dropped.
+   * Returns rows written per table.
+   *
+   * `conflict: 'ignore'` keeps the row the cell already holds, which is the
+   * merge's rule: two cells mint from disjoint id blocks, so a collision is
+   * a bug. `conflict: 'update'` overwrites a row that differs, which is the
+   * migration's: the second pass exists to carry what the window changed.
+   */
+  importRows(snapshot: CellSnapshot, opts: { idempotentBy: 'id'; conflict: 'ignore' | 'update' }): Record<string, number>;
   /** The migrated `profile` row, columns verbatim. `last_seen_at` is the
    * anonymous reaper's only input, so the clock-stamped `prefs.upsert`
    * cannot stand in for this. Keyed by `id`: a replay writes the same row. */

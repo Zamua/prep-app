@@ -2,6 +2,7 @@
 // itself is pinned by tests/reaper.test.ts; what is pinned here is the
 // schedule around it, which is the part an eviction has to reconstruct.
 import { describe, expect, it } from 'vitest';
+import { MIGRATION_HOLD_MS, MIGRATION_RECHECK_MS } from '../domain/reaper.js';
 import { DirectoryCell } from '../runtime/cells/DirectoryCell.js';
 import { UserCell } from '../runtime/cells/UserCell.js';
 import { composeWith } from '../runtime/compose.js';
@@ -174,6 +175,45 @@ describe('the directory alarm', () => {
     // Nothing was due, so the fresh idle account survives until the sweep.
     expect(await h.ids()).toEqual(['anon:a1', 'anon:a2']);
     expect(h.storage.alarmAt).toBe(armed);
+  });
+
+  it('holds the sweep while a migration run is open, and lets it go at the seal', async () => {
+    // The account this protects: registered by the migration, its cell not
+    // written yet, carrying Python's years-old `created_at`. A sweep landing
+    // here tombstones it, and a tombstoned cell refuses every later chunk
+    // for it forever - there is no un-tombstone.
+    const h = harness();
+    await h.mint('anon:a1', IDLE);
+    await h.cell().beginMigrationRun('a'.repeat(64));
+    await settled();
+
+    await h.bus.settle();
+    expect(await h.ids()).toEqual(['anon:a1']);
+    expect(h.storage.alarmAt).toBe(h.clock.now().getTime() + MIGRATION_RECHECK_MS);
+
+    // Still held an hour later, and a day later.
+    await h.bus.settleThrough(h.clock.now().getTime() + DAY_MS);
+    expect(await h.ids()).toEqual(['anon:a1']);
+
+    await h.cell().sealMigration();
+    await h.bus.settleThrough(h.clock.now().getTime() + MIGRATION_RECHECK_MS + 1);
+    expect(await h.ids()).toEqual([]);
+  });
+
+  it('lets the sweep go again once a run that was never sealed ages out', async () => {
+    // A rollback leaves the flag set and the fleet idle. The hold covers the
+    // whole cutover, so it is days rather than minutes, but it is not
+    // forever: the retention policy has to come back on its own.
+    const h = harness();
+    await h.mint('anon:a1', IDLE);
+    await h.cell().beginMigrationRun('b'.repeat(64));
+    await settled();
+    await h.bus.settle();
+    expect(await h.ids()).toEqual(['anon:a1']);
+
+    h.clock.advance(MIGRATION_HOLD_MS + 1);
+    await h.bus.settleThrough(h.clock.now().getTime() + 1);
+    expect(await h.ids()).toEqual([]);
   });
 
   it('leaves the deleted cell tombstoned and scrubbed, as the walk does', async () => {

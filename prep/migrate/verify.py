@@ -2,19 +2,24 @@
 
     python -m prep.migrate.verify \\
       --snapshot <path> --base-url <url> --token-file <path> \\
-      [--users <file>] [--generated-at <iso>] [--at <iso>] [--json <report>]
+      --generated-at <iso> [--manifest <path>] [--users <file>] \\
+      [--at <iso>] [--json <report>]
 
-Standalone. It needs no export directory, no manifest and no state from a
-previous run: the snapshot is one side, `GET /_migrate/dump` is the other.
-Exit 0 clean, 1 with a report.
+The snapshot is one side and `GET /_migrate/dump` is the other. It holds
+no state from a previous run, but it will not compare a fleet to a
+snapshot the fleet was not built from: every import records the snapshot
+digest on the directory, and a run whose `--snapshot` does not match it
+aborts. Exit 0 clean, 1 with a report.
 
 Three tiers, and none of them may be skipped. A tier that could not run
 raises; a tier that ran and found nothing is the only thing that reads as
 clean.
 
-* **Tier 1, counts and rows.** Every per-user table, plus the directory,
-  the reset tables and the limiter's 48 h window. A count that differs is
-  reported by naming the rows one side holds and the other does not.
+* **Tier 1, every row and every field.** All fourteen per-user tables,
+  column by column, plus the directory both ways, the reset tables and
+  the limiter's 48 h window. A row one side holds and the other does not
+  is reported by its key, never folded into a count. The fields tier 2
+  owns are excluded here, so each one is compared once, at its own tier.
 * **Tier 2, FSRS state, field by field, as an exact oracle.** No tolerance
   anywhere: TEXT compares as bytes, REAL compares as bits. This is a copy,
   not a computation, and the 1e-9 the FSRS port is allowed would hide
@@ -33,7 +38,7 @@ import argparse
 import json
 import sqlite3
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -55,6 +60,7 @@ from prep.migrate.compare import (
     compare_count,
     compare_rows,
     compare_scalar,
+    compare_streams,
     index_by_key,
     suffix_by,
 )
@@ -64,7 +70,7 @@ from prep.migrate.divergence import TABLE_SCOPE, Divergence, Report, render, row
 # than restated: an export and a verification that disagree about which rows
 # belong to a user would cancel each other out silently.
 from prep.migrate.export import _SCOPE as USER_SCOPE
-from prep.migrate.export import DROPPED_BYOK_PROVIDER, plan_users
+from prep.migrate.export import DROPPED_BYOK_PROVIDER, carried_idx, plan_users
 from prep.migrate.fsrs_oracle import (
     VERDICTS,
     NodeFsrsOracle,
@@ -72,25 +78,10 @@ from prep.migrate.fsrs_oracle import (
     ScheduleInput,
     ScheduleOracle,
 )
-from prep.migrate.snapshot import open_snapshot
+from prep.migrate.snapshot import open_snapshot, sha256_file
 
 # The primary key each table is compared by, user columns already dropped.
-KEY_COLUMNS: dict[str, tuple[str, ...]] = {
-    "decks": ("id",),
-    "questions": ("id",),
-    "cards": ("question_id",),
-    "reviews": ("id",),
-    "grading_idempotency": ("idempotency_key",),
-    "offline_sync_idempotency": ("client_id",),
-    "study_sessions": ("id",),
-    "study_session_answers": ("session_id", "question_id"),
-    "trivia_sessions": ("id",),
-    "trivia_queue": ("question_id",),
-    "notifications_log": ("id",),
-    "push_subscriptions": ("endpoint",),
-    "byok_credentials": ("provider",),
-    "api_tokens": ("id",),
-}
+KEY_COLUMNS = layout.KEY_COLUMNS
 
 # Tier 2's fields, in the spec's order. `cards` has exactly these columns,
 # so the whole row is the FSRS state.
@@ -105,6 +96,15 @@ CARD_FIELDS: tuple[str, ...] = (
 )
 CARD_REAL_COLUMNS = frozenset({"stability", "difficulty"})
 
+# The fields tier 2 owns, by table. Tier 1 compares every other column of
+# every table, so each field is read exactly once and at the tier that owns
+# it. A field reported at both would make "tier 1 and tier 3 clean, tier 2
+# waived" unreadable, and that is the waiver the runbook may have to take.
+TIER2_FIELDS: dict[str, tuple[str, ...]] = {
+    "cards": CARD_FIELDS,
+    "decks": ("desired_retention",),
+}
+
 # Tier 3's tolerance, and the only one in the file: it belongs to the FSRS
 # port, on values both sides computed rather than copied.
 FSRS_TOLERANCE = 1e-9
@@ -117,6 +117,11 @@ EXACT_SCHEDULE_FIELDS: tuple[str, ...] = (
 
 PROFILE_ROW = "profile"
 
+# Tables held whole rather than streamed. `cards` because tier 2 compares it
+# field by field and tier 3 schedules both sides of it; `decks` and
+# `byok_credentials` because a later check re-reads them, and both are small.
+MATERIALISED: frozenset[str] = frozenset({"cards", "decks", "byok_credentials"})
+
 
 class VerificationImpossible(RuntimeError):
     """The verifier could not look. Never reported as clean."""
@@ -126,12 +131,13 @@ class VerificationImpossible(RuntimeError):
 class Fixed:
     """The two clocks the verifier is parameterised by. `at` is tier 3's,
     shared by both sides so the comparison is of implementations rather
-    than of instants. `generated_at` tightens the limiter window when the
-    operator knows it; without it the window is checked as a clean suffix,
-    which is exact but does not pin where the cut fell."""
+    than of instants. `generated_at` is the export's, and it is required:
+    it is what turns the limiter's trailing filter into a two-sided check,
+    where an in-window row the cell lacks is a lost row rather than a row
+    the filter is assumed to have dropped."""
 
     at: str
-    generated_at: str | None = None
+    generated_at: str
 
 
 def snapshot_real_columns(conn: sqlite3.Connection, table: str) -> frozenset[str]:
@@ -144,10 +150,46 @@ def snapshot_columns(conn: sqlite3.Connection, table: str) -> tuple[str, ...]:
     return tuple(r["name"] for r in info if r["name"] not in layout.USER_COLUMNS)
 
 
-def _scoped(conn: sqlite3.Connection, table: str, user: str, columns: Sequence[str]) -> list[dict]:
+class _SnapshotSide:
+    """The snapshot side of one table, streamed, with the rows a
+    disposition takes out set aside rather than compared. `kept` and
+    `dropped` are only final once the stream has been drained."""
+
+    def __init__(
+        self, conn: sqlite3.Connection, table: str, user: str, columns: Sequence[str]
+    ) -> None:
+        self.conn = conn
+        self.table = table
+        self.user = user
+        self.columns = columns
+        self.kept = 0
+        self.dropped: list[dict] = []
+
+    def __iter__(self) -> Iterator[dict]:
+        self.kept = 0
+        self.dropped = []
+        for row in _scoped_stream(self.conn, self.table, self.user, self.columns):
+            # Decision 7.4: the export is a faithful copy and the importer
+            # owns the policy, so the cell must not hold one.
+            if self.table == "byok_credentials" and row.get("provider") == DROPPED_BYOK_PROVIDER:
+                self.dropped.append(row)
+                continue
+            self.kept += 1
+            yield row
+
+
+def _scoped_stream(
+    conn: sqlite3.Connection, table: str, user: str, columns: Sequence[str]
+) -> Iterator[dict]:
+    """One user's rows of one table, in rowid order, a batch at a time. The
+    heaviest account's 50,000 reviews are compared without either side of
+    the comparison being materialised."""
     projection = ", ".join(f't."{c}"' for c in columns)
     sql = f"SELECT {projection} {USER_SCOPE[table]} ORDER BY t.rowid"
-    return [dict(zip(columns, row, strict=True)) for row in conn.execute(sql, (user,)).fetchall()]
+    cursor = conn.execute(sql, (user,))
+    while batch := cursor.fetchmany(1000):
+        for row in batch:
+            yield dict(zip(columns, row, strict=True))
 
 
 class Verifier:
@@ -157,12 +199,16 @@ class Verifier:
         reader: CellReader,
         *,
         fixed: Fixed,
+        snapshot_sha256: str,
+        carried: dict[str, int] | None = None,
         py_oracle: ScheduleOracle | None = None,
         ts_oracle: ScheduleOracle | None = None,
     ) -> None:
         self.conn = conn
         self.reader = reader
         self.fixed = fixed
+        self.snapshot_sha256 = snapshot_sha256
+        self.carried = carried
         self.py_oracle = py_oracle or PyFsrsOracle()
         self.ts_oracle = ts_oracle or NodeFsrsOracle()
         self.report = Report()
@@ -171,7 +217,8 @@ class Verifier:
     # ---- entry ------------------------------------------------------------
 
     def run(self, users: Sequence[str] | None = None) -> Report:
-        plans = plan_users(self.conn)
+        self.verify_provenance()
+        plans = plan_users(self.conn, self.carried)
         wanted = set(users) if users is not None else None
         if wanted is not None:
             missing = sorted(wanted - {p.id for p in plans})
@@ -182,38 +229,76 @@ class Verifier:
             plans = [p for p in plans if p.id in wanted]
         self.report.users = [p.id for p in plans]
         self.report.notes.append(f"tier 3 clock: {self.fixed.at}")
+        self.report.notes.append(f"limiter window pinned to {self.fixed.generated_at}")
         self.report.notes.append(
-            f"limiter window: {'pinned to ' + self.fixed.generated_at if self.fixed.generated_at else 'unpinned, checked as a clean suffix'}"
+            "idx carried from the manifest"
+            if self.carried
+            else "idx derived from the snapshot's own ranking"
         )
 
-        self.verify_directory(plans)
+        self.verify_directory(plans, scoped=wanted is not None)
         self.verify_limiter()
         for plan in plans:
             self.verify_user(plan.id)
         return self.report
 
+    def verify_provenance(self) -> None:
+        """Which snapshot this fleet was built from, before a single row is
+        compared.
+
+        The verifier takes a snapshot path and a base URL and nothing ties
+        them together; run it against the FIRST snapshot after the second
+        import and it compares the fleet to the file the fleet was built
+        from, reporting clean while the whole window's delta is missing.
+        The importer records the digest on the directory, so it can be read
+        back and refused."""
+        run = self.reader.run()
+        if run is None:
+            raise VerificationImpossible(
+                "the fleet does not say which snapshot it was built from. Every import "
+                "records one; a fleet with no record was written by something else, and "
+                "there is nothing to verify it against"
+            )
+        recorded = str(run.get("snapshot", ""))
+        if recorded != self.snapshot_sha256:
+            raise VerificationImpossible(
+                f"this fleet was built from snapshot {recorded}, not {self.snapshot_sha256}. "
+                "Verifying against the wrong snapshot would read clean while the second "
+                "pass's whole delta is missing"
+            )
+        self.report.notes.append(f"snapshot {recorded} (as the fleet records it)")
+        self.report.counted("provenance")
+
     # ---- the globals ------------------------------------------------------
 
-    def verify_directory(self, plans: Sequence) -> None:
-        """`DirectoryCell.users` against the exporter's own deterministic
-        ranking, and `account_merges` field by field: it is the source of
-        `previous_ids`, so a lost row silently orphans a device's queue."""
+    def verify_directory(self, plans: Sequence, *, scoped: bool) -> None:
+        """`DirectoryCell.users` against the exporter's own assignment, and
+        `account_merges` field by field: it is the source of `previous_ids`,
+        so a lost row silently orphans a device's queue."""
         expected_users = [
             {"id": p.id, "is_anonymous": p.is_anonymous, "created_at": p.created_at, "idx": p.idx}
             for p in plans
         ]
         cell_users = list(read_all(self.reader, table="users", cell=DIRECTORY_CELL))
         self.report.counted("directory_users", len(cell_users))
-        # A `--users` subset makes the directory a superset by design, so
-        # only the named accounts are compared row for row.
         wanted = {u["id"] for u in expected_users}
+        # A `--users` subset makes the directory a superset by design, so
+        # only the named accounts are compared. A whole-snapshot run compares
+        # BOTH ways: an account deleted between the two snapshots keeps its
+        # directory row and its entire cell - decks, questions, reviews, push
+        # subscriptions, BYOK ciphertext - and nothing else looks for it.
+        # A parity seed at block 0 is the one row that legitimately has no
+        # snapshot counterpart.
+        cell_rows = [
+            r for r in cell_users if r.get("id") in wanted or (not scoped and r.get("idx") != 0)
+        ]
         self.report.add(
             *compare_rows(
                 tier=1,
                 table="directory.users",
                 key_columns=("id",),
                 snapshot_rows=expected_users,
-                cell_rows=[r for r in cell_users if r.get("id") in wanted],
+                cell_rows=cell_rows,
                 fields=("id", "is_anonymous", "created_at", "idx"),
             )
         )
@@ -287,9 +372,14 @@ class Verifier:
     def verify_limiter(self) -> None:
         """The ledger is the limiter's window source, so a reset would hand
         every IP a fresh burst allowance at the moment of highest exposure.
-        The export keeps a trailing 48 h; the check is that the cell holds
-        exactly a suffix of the snapshot by `created_at`, every kept row
-        byte-identical."""
+        The export keeps a trailing 48 h, so the check is two-sided against
+        the pinned cutoff: every row inside the window is present and
+        byte-identical, every row outside it is absent.
+
+        Two-sided is the whole point. Filtering the snapshot down to the
+        rows the cell happens to hold and comparing that makes a missing row
+        vanish from both sides of the comparison, and an entirely empty
+        ledger - the import skipped, or refused - reads as clean."""
         table = "instant_generations"
         columns = snapshot_columns(self.conn, table)
         snapshot_rows = [
@@ -330,6 +420,35 @@ class Verifier:
             )
         )
 
+        cutoff = (
+            datetime.fromisoformat(self.fixed.generated_at)
+            - timedelta(hours=layout.LIMITER_WINDOW_HOURS)
+        ).isoformat()
+        for row in snapshot_rows:
+            inside = str(row["created_at"]) >= cutoff
+            present = row.get("id") in kept
+            if inside == present:
+                continue
+            self.report.add(
+                Divergence(
+                    tier=1,
+                    table="limiter.instant_generations",
+                    row=row_key(("id",), row),
+                    field="created_at",
+                    snapshot=render(row["created_at"]),
+                    cell="present" if present else "absent",
+                    note=(
+                        f"inside the {layout.LIMITER_WINDOW_HOURS} h window that starts at "
+                        f"{cutoff}, so the import lost it"
+                        if inside
+                        else f"outside the {layout.LIMITER_WINDOW_HOURS} h window that starts "
+                        f"at {cutoff}, so the export should not have carried it"
+                    ),
+                )
+            )
+
+        # A second, independent reading of the same filter: a clean trailing
+        # window is a suffix by `created_at`, whatever the cutoff was.
         oldest_kept, newest_dropped = suffix_by(snapshot_rows, kept, "id", "created_at")
         if (
             oldest_kept is not None
@@ -352,27 +471,6 @@ class Verifier:
                     note=f"the filter is not a trailing window: this dropped row is newer than the oldest kept one ({oldest_kept})",
                 )
             )
-        if self.fixed.generated_at is not None:
-            cutoff = (
-                datetime.fromisoformat(self.fixed.generated_at)
-                - timedelta(hours=layout.LIMITER_WINDOW_HOURS)
-            ).isoformat()
-            for row in snapshot_rows:
-                inside = str(row["created_at"]) >= cutoff
-                present = row.get("id") in kept
-                if inside == present:
-                    continue
-                self.report.add(
-                    Divergence(
-                        tier=1,
-                        table="limiter.instant_generations",
-                        row=row_key(("id",), row),
-                        field="created_at",
-                        snapshot=render(row["created_at"]),
-                        cell="present" if present else "absent",
-                        note=f"the {layout.LIMITER_WINDOW_HOURS} h window starts at {cutoff}; this row is on the wrong side of it",
-                    )
-                )
 
     # ---- one user ---------------------------------------------------------
 
@@ -383,44 +481,47 @@ class Verifier:
         self.verify_schedule(user, cards)
 
     def verify_tables(self, user: str) -> tuple[list[dict], list[dict]]:
-        """Tier 1 for the fourteen per-user tables, and tier 2 for `cards`
-        and `decks.desired_retention`. Returns both sides of `cards` so the
-        schedule oracle does not read them twice."""
+        """Tier 1 for the fourteen per-user tables, every column, and tier 2
+        for `cards` and `decks.desired_retention`. Returns both sides of
+        `cards` so the schedule oracle does not read them twice.
+
+        Every column, because a key-against-key comparison reads no data at
+        all: a mangled `questions.prompt`, a `push_subscriptions.p256dh`
+        that no longer decrypts, a `byok_credentials.ciphertext`, a question
+        moved to another deck - all of them verify clean when only the key
+        is read, and the verifier exists to refuse exactly that.
+
+        Streamed, so reading every column costs no more memory than reading
+        the key did: the fields tier 2 owns are excluded here, so each one
+        is compared once, at its own tier."""
         snapshot_cards: list[dict] = []
         cell_cards: list[dict] = []
         for table in layout.DATA_TABLES:
             keys = KEY_COLUMNS[table]
-            full = table in ("cards", "decks")
-            columns = snapshot_columns(self.conn, table) if full else keys
-            snapshot_rows = _scoped(self.conn, table, user, columns)
-            dropped_byok = []
-            if table == "byok_credentials":
-                # Decision 7.4: the export is a faithful copy and the
-                # importer owns the policy, so the cell must not hold one.
-                dropped_byok = [
-                    r for r in snapshot_rows if r.get("provider") == DROPPED_BYOK_PROVIDER
-                ]
-                snapshot_rows = [
-                    r for r in snapshot_rows if r.get("provider") != DROPPED_BYOK_PROVIDER
-                ]
-            cell_rows = list(
-                read_all(self.reader, table=table, user=user)
-                if full
-                else self._page_columns(user, table, keys)
-            )
-            self.report.counted(f"rows.{table}", len(snapshot_rows))
+            columns = snapshot_columns(self.conn, table)
+            owned = TIER2_FIELDS.get(table, ())
+            tier1_fields = tuple(c for c in columns if c not in owned or c in keys)
+            # `cards` is held whole: tier 2 compares it field by field and
+            # tier 3 schedules both sides of it, so streaming it would only
+            # mean reading it twice.
+            source = _SnapshotSide(self.conn, table, user, columns)
+            snapshot_rows = list(source) if table in MATERIALISED else source
+            cell_stream = read_all(self.reader, table=table, user=user)
+            cell_rows = list(cell_stream) if table in MATERIALISED else cell_stream
             self.report.add(
-                *compare_rows(
+                *compare_streams(
                     tier=1,
                     user=user,
                     table=table,
                     key_columns=keys,
                     snapshot_rows=snapshot_rows,
                     cell_rows=cell_rows,
-                    fields=keys,
+                    real_columns=snapshot_real_columns(self.conn, table),
+                    fields=tier1_fields,
                 )
             )
-            for row in dropped_byok:
+            self.report.counted(f"rows.{table}", source.kept)
+            for row in source.dropped:
                 if any(r.get("provider") == DROPPED_BYOK_PROVIDER for r in cell_rows):
                     self.report.add(
                         Divergence(
@@ -435,7 +536,7 @@ class Verifier:
                         )
                     )
             if table == "cards":
-                snapshot_cards, cell_cards = snapshot_rows, cell_rows
+                snapshot_cards, cell_cards = list(snapshot_rows), list(cell_rows)
                 self.report.add(
                     *compare_rows(
                         tier=2,
@@ -467,14 +568,20 @@ class Verifier:
         return snapshot_cards, cell_cards
 
     def _page_columns(self, user: str, table: str, columns: Sequence[str]):
-        """A projected dump: the key alone is all tier 1 needs, and a
-        50,000-review table should not cross the wire whole."""
+        """A projected dump, for a check that wants named columns rather
+        than whole rows. A page returning a cursor it has already returned
+        would spin forever; that is reported, not spun on, exactly as
+        `read_all` does it."""
         after: int | None = None
+        seen: set[int] = set()
         while True:
             page = self.reader.page(table=table, user=user, after=after, columns=list(columns))
             yield from page.rows
             if page.next is None:
                 return
+            if page.next in seen:
+                raise CellUnreachable(f"{table} paged back to cursor {page.next}")
+            seen.add(page.next)
             after = page.next
 
     def verify_profile(self, user: str) -> None:
@@ -696,7 +803,16 @@ def main(argv: list[str] | None = None) -> int:
         "--users", type=Path, help="one user id per line; the default is every user in the snapshot"
     )
     parser.add_argument(
-        "--generated-at", help="the export's generated_at, which pins the limiter's 48 h window"
+        "--generated-at",
+        required=True,
+        help="the export's generated_at, which pins the limiter's 48 h window. Required: "
+        "without it a missing ledger row cannot be told from one the filter dropped",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="the export's manifest.json. Its per-user idx is what the directory is "
+        "checked against, which a second pass carrying idx forward needs",
     )
     parser.add_argument("--at", help="tier 3's fixed clock (default: now, whole seconds)")
     parser.add_argument("--json", type=Path, help="write the full report here")
@@ -713,6 +829,11 @@ def main(argv: list[str] | None = None) -> int:
         reader = HttpCellReader(
             args.base_url, token_from_file(args.token_file), timeout=args.timeout
         )
+        carried = None
+        if args.manifest is not None:
+            with Path(args.manifest).open(encoding="utf-8") as fh:
+                carried = carried_idx(json.load(fh))
+        digest = sha256_file(args.snapshot)
         conn = open_snapshot(args.snapshot)
     except (OSError, CellUnreachable, RuntimeError) as e:
         print(f"ABORT: {e}", file=sys.stderr)
@@ -720,7 +841,11 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         verifier = Verifier(
-            conn, reader, fixed=Fixed(at=_fixed_clock(args.at), generated_at=args.generated_at)
+            conn,
+            reader,
+            fixed=Fixed(at=_fixed_clock(args.at), generated_at=args.generated_at),
+            snapshot_sha256=digest,
+            carried=carried,
         )
         report = verifier.run(_users_file(args.users))
     except (CellUnreachable, VerificationImpossible, RuntimeError) as e:

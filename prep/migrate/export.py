@@ -109,20 +109,48 @@ def schema_fingerprint(conn: sqlite3.Connection) -> tuple[dict, str]:
     return names, sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def plan_users(conn: sqlite3.Connection) -> list[UserPlan]:
+def carried_idx(manifest: dict) -> dict[str, int]:
+    """The `id -> idx` an earlier export handed out. Feeding it to the next
+    export is what makes `idx` sticky across the two passes."""
+    return {str(u["id"]): int(u["idx"]) for u in manifest.get("users") or ()}
+
+
+def plan_users(conn: sqlite3.Connection, carried: dict[str, int] | None = None) -> list[UserPlan]:
+    """Every user of the snapshot, with the id block its cell is seeded from.
+
+    A bare rank is only stable while the set of users is. An account deleted
+    between two snapshots renumbers everyone after it, and nothing on the
+    fleet can follow: `DirectoryCell.users.idx` is `NOT NULL UNIQUE` and
+    `register` returns the idx a user already has, so the second pass would
+    report one divergence per shifted user and no re-run could clear it.
+    `carried` is the previous export's assignment - a user in it keeps its
+    number, and a new one is allocated above every number handed out.
+    """
     rows = conn.execute(
         "SELECT tailscale_login, is_anonymous, created_at FROM users"
         " ORDER BY created_at, tailscale_login"
     ).fetchall()
-    return [
-        UserPlan(
-            id=r["tailscale_login"],
-            idx=n,
-            is_anonymous=int(r["is_anonymous"] or 0),
-            created_at=r["created_at"],
+    carried = carried or {}
+    nxt = max(carried.values(), default=0) + 1
+    plans: list[UserPlan] = []
+    for n, r in enumerate(rows, start=1):
+        user = r["tailscale_login"]
+        idx = n
+        if carried:
+            found = carried.get(user)
+            if found is None:
+                idx, nxt = nxt, nxt + 1
+            else:
+                idx = found
+        plans.append(
+            UserPlan(
+                id=user,
+                idx=idx,
+                is_anonymous=int(r["is_anonymous"] or 0),
+                created_at=r["created_at"],
+            )
         )
-        for n, r in enumerate(rows, start=1)
-    ]
+    return plans
 
 
 # ---- writing --------------------------------------------------------------
@@ -190,8 +218,17 @@ def export(
     *,
     now: datetime | None = None,
     limiter_window_hours: int = layout.LIMITER_WINDOW_HOURS,
+    carried: dict[str, int] | None = None,
+    assert_unchanged: bool = True,
 ) -> dict:
-    """Writes the export directory and returns the manifest."""
+    """Writes the export directory and returns the manifest.
+
+    `carried` is a previous export's `id -> idx`, which the second pass of a
+    cutover must supply. `assert_unchanged` re-hashes the snapshot on the way
+    out: spec E's abort criterion is the snapshot's sha256 differing before
+    and after the export, and the exporter is the only thing positioned to
+    check it.
+    """
     snapshot = Path(snapshot)
     out = Path(out)
     digest = sha256_file(snapshot)
@@ -208,7 +245,7 @@ def export(
     conn = open_snapshot(snapshot)
     try:
         schema, fingerprint = schema_fingerprint(conn)
-        plans = plan_users(conn)
+        plans = plan_users(conn, carried)
         signals = _signals(conn, cutoff)
         globals_counts = _export_globals(conn, out, plans, cutoff)
         users = [_export_user(conn, out, plan) for plan in plans]
@@ -216,6 +253,16 @@ def export(
         conn.close()
 
     _prune_stale_users(out, {layout.user_dir_name(p.id) for p in plans})
+
+    # The invariant, checked where it is claimed rather than argued for: the
+    # export is a pure read, so the file it read is the file it started from.
+    if assert_unchanged:
+        after = sha256_file(snapshot)
+        if after != digest:
+            raise ExportError(
+                f"the snapshot changed under the export: {digest} before, {after} after. "
+                "It is meant to be an immutable VACUUM INTO copy; something else is writing to it"
+            )
 
     manifest = {
         "tool_version": layout.TOOL_VERSION,
@@ -377,15 +424,33 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=layout.LIMITER_WINDOW_HOURS,
         help="trailing window of instant_generations to carry",
     )
+    parser.add_argument(
+        "--carry-idx-from",
+        type=Path,
+        help="a previous export's manifest.json; every user in it keeps the idx it was "
+        "given, which the second pass of a cutover requires",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     now = layout.parse_instant(args.now, flag="--now") if args.now else None
-    manifest = export(
-        args.snapshot, args.out, now=now, limiter_window_hours=args.limiter_window_hours
-    )
+    carried = None
+    if args.carry_idx_from is not None:
+        with Path(args.carry_idx_from).open(encoding="utf-8") as fh:
+            carried = carried_idx(json.load(fh))
+    try:
+        manifest = export(
+            args.snapshot,
+            args.out,
+            now=now,
+            limiter_window_hours=args.limiter_window_hours,
+            carried=carried,
+        )
+    except ExportError as e:
+        print(f"export failed: {e}", file=sys.stderr)
+        return 1
     signals = manifest["signals"]
     rows = sum(sum(u["counts"].values()) for u in manifest["users"])
     print(f"snapshot   {manifest['snapshot']['sha256']}  {manifest['snapshot']['bytes']} bytes")

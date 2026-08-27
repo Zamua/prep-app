@@ -391,7 +391,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   }
 
   async importRows(snapshot: CellSnapshot): Promise<Record<string, number>> {
-    return this.repos().export.importRows(snapshot, { idempotentBy: 'id' });
+    return this.repos().export.importRows(snapshot, { idempotentBy: 'id', conflict: 'ignore' });
   }
 
   /**
@@ -399,6 +399,10 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
    * leaves whole chunks and never half a row. The id block is raised before
    * the insert: a migrated row keeps its Python id, far below the block, and
    * seeding first is what stops a row minted later from taking the same one.
+   *
+   * A row already here is overwritten when it differs, which is what makes
+   * the second pass a delta rather than a no-op, and the count returned is
+   * rows inserted or changed.
    */
   async importChunk(write: MigrationWrite): Promise<Record<string, number>> {
     const repos = this.repos();
@@ -412,7 +416,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
           repos.prefs.setIdBase(write.idx);
         }
         if (!write.table || write.rows.length === 0) return {};
-        return repos.export.importRows({ profile: null, tables: { [write.table]: [...write.rows] } }, { idempotentBy: 'id' });
+        return repos.export.importRows({ profile: null, tables: { [write.table]: [...write.rows] } }, { idempotentBy: 'id', conflict: 'update' });
       });
     } catch (e) {
       // A refusal is the runtime declining and retries; anything else is the

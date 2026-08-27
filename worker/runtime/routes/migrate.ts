@@ -21,9 +21,16 @@ interface GlobalMigration {
   migrationCounts(tables: readonly string[]): Promise<Record<string, number>>;
 }
 
+interface MigrationRun {
+  snapshot: string;
+  openedAt: string;
+}
+
 interface MigrationSeal extends GlobalMigration {
   sealMigration(): Promise<void>;
   migrationSealed(): Promise<boolean>;
+  beginMigrationRun(snapshot: string): Promise<MigrationRun>;
+  migrationRun(): Promise<MigrationRun | null>;
 }
 
 /**
@@ -70,6 +77,10 @@ async function serveImport(request: Request, c: Composition): Promise<Response> 
   const chunk = parseChunk(body, c.dataTables);
   if (isChunkRefusal(chunk)) return Response.json({ detail: chunk.detail }, { status: chunk.status });
   try {
+    if (chunk.kind === 'run') {
+      const run = await (c.directory as unknown as MigrationSeal).beginMigrationRun(chunk.snapshot);
+      return Response.json({ run });
+    }
     if (chunk.kind === 'global') {
       const inserted = await globalCell(c, chunk.cell).importMigrationRows(chunk.table, chunk.rows);
       return Response.json({ inserted: inserted ? { [chunk.table]: inserted } : {}, dropped: 0 });
@@ -91,7 +102,12 @@ async function serveStatus(url: URL, c: Composition): Promise<Response> {
     // `users` rides along for the directory: it is what the per-user register
     // writes, so a run resuming the globals still reads its own progress.
     const tables = cell === 'directory' ? ['users', ...GLOBAL_TABLES[cell]!] : [...GLOBAL_TABLES[cell]!];
-    return Response.json({ tables: await globalCell(c, cell).migrationCounts(tables) });
+    const counts = await globalCell(c, cell).migrationCounts(tables);
+    // Which snapshot this fleet was built from rides with the directory's
+    // counts: the verifier reads it before it compares anything, so a run
+    // against the wrong snapshot aborts instead of reading clean.
+    if (cell !== 'directory') return Response.json({ tables: counts });
+    return Response.json({ tables: counts, run: await (c.directory as unknown as MigrationSeal).migrationRun() });
   }
   const user = url.searchParams.get('user');
   if (!user) return Response.json({ detail: 'user or cell is required' }, { status: 422 });

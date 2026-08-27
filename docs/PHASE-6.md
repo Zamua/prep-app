@@ -65,12 +65,24 @@ resume target.
 
 **`idx` is assigned by the exporter**, deterministically: rank in
 `ORDER BY created_at, tailscale_login`, starting at **1**. Never 0 (the
-parity seed owns block 0). A re-export of the same snapshot assigns the
-same idx, and `DirectoryCell.register` returns the existing idx for a
-user already there, so a re-run converges. Every imported row keeps its
-Python id, all far below `ID_BLOCK` (2^32); seeding the cell's sequences
-to `idx * 2^32` afterwards means no row minted after the cutover can
-collide with a migrated one in a later merge.
+parity seed owns block 0). Every imported row keeps its Python id, all
+far below `ID_BLOCK` (2^32); seeding the cell's sequences to `idx * 2^32`
+afterwards means no row minted after the cutover can collide with a
+migrated one in a later merge.
+
+**A rank is only stable while the set of users is**, and it is not: prod
+is still serving at the first snapshot, so an account can be deleted, or
+reaped by Python's own `IDLE_DAYS = 365` sweep, before the second. That
+renumbers every user after it, and nothing on the fleet can follow -
+`DirectoryCell.users.idx` is `NOT NULL UNIQUE` and `register` returns the
+idx a user already has, so the second pass would report one divergence per
+shifted user, a new signup would collide on the vacated number, and no
+re-run could clear either. So **the second export carries the first's
+assignment forward**: `export --carry-idx-from <manifest.json>`. A user in
+it keeps its number, a new one is allocated above every number handed out,
+and a deleted user's number is retired rather than reused.
+`register` refuses an idx another account holds with a 422 naming both,
+not a bare `UNIQUE constraint failed`.
 
 ### A2. Per-user tables
 
@@ -124,13 +136,56 @@ One chunk, one user, one table:
 ```
 
 **Idempotency key: the row's own primary key inside the cell.**
-`ExportRepo.importRows(snapshot, {idempotentBy:'id'})` is `INSERT OR
-IGNORE` per row under one `transactionSync`. Python ids are globally
-unique and preserved, so replaying any chunk inserts zero rows and
-returns zero counts. `directory.register`, `seedIdBlock` (raises a
-counter, never lowers it) and `prefs.upsert` are each idempotent on
-their own key. Nothing in the path is keyed by a run id, so two
-concurrent runs of the same export converge too.
+`ExportRepo.importRows(snapshot, {idempotentBy:'id', conflict:'update'})`
+is one upsert per row under one `transactionSync`:
+
+```sql
+INSERT INTO t (...) VALUES (...)
+ON CONFLICT(<primary key>) DO UPDATE SET <every other column> = excluded....
+WHERE <any of them differs>   -- `IS NOT`, so NULL compares
+```
+
+`INSERT OR IGNORE` would be idempotent for a **replay** and inert for a
+**changed row**, and the second pass exists for changed rows. `cards` is
+the table that makes this load-bearing: it is never inserted into after
+creation and always rewritten, so every review moves `stability`,
+`difficulty`, `next_due`, `step` and `fsrs_state`. An import that could
+only insert would put a studying user's pre-window schedule on the fleet,
+and **no re-run of the same import could repair it** - the key is already
+there. The same holds for `study_sessions`, `trivia_queue`,
+`trivia_sessions.queue/done`, `decks.pinned_at` and its notification
+columns, `questions.suspended`, `notifications_log.seen_at`,
+`push_subscriptions.last_seen_at`, `byok_credentials.last_used_at`,
+`api_tokens.last_used_at`, and `account_merges.status` in the directory.
+
+The `WHERE` guard is what keeps the count meaningful: a row re-sent
+unchanged writes nothing, so `inserted` is **rows inserted or changed**
+and a replay of an unchanged export still reports zero. The runbook reads
+the second pass's total as the window's writes, and that is what it is.
+
+`conflict:'ignore'` stays the merge's mode: two cells mint from disjoint
+id blocks, so a collision there is a bug and the target's row is the one
+to keep.
+
+`directory.register`, `seedIdBlock` (raises a counter, never lowers it)
+and `prefs.upsert` are each idempotent on their own key. Nothing in the
+path is keyed by a run id, so two concurrent runs of the same export
+converge too.
+
+**The run header.** A run opens with one chunk of its own,
+`{"snapshot":"<sha256>"}`, before any user. It does two things. It records
+on the `DirectoryCell` which snapshot this fleet is being built from, so
+the verifier can refuse to compare a fleet against a snapshot it was not
+built from (C). And it **holds the fleet's anonymous-retention sweep off**
+until `POST /_migrate/seal`, with a 30-day backstop for a run that was
+rolled back and never sealed. Without that hold, `importUserChunk`
+registers an account into the directory one RPC before its cell is
+written, and the sweep reads a profileless cell's Python `created_at` -
+years old - as idle and destroys it. That damage is permanent:
+`UserCell.importChunk` refuses every chunk for a tombstoned cell and
+nothing un-tombstones one. The reaper carries the same rule
+independently: a cell with no profile and no tombstone is skipped, never
+judged by the directory's date.
 
 **Order per user**, all idempotent: `register(id, isAnonymous,
 created_at, {idx})` → `seedIdBlock(idx)` → profile upsert (with
@@ -142,13 +197,22 @@ or not at all. A user abandoned halfway keeps the chunks that landed and
 holds no half-row. The re-run replays from the start of that user and
 every landed chunk applies nothing.
 
-**Resume point, server-side.** `GET /_migrate/status?user=<id>` returns
-`{table: COUNT(*)}` for every data table plus the profile's presence.
-The migrator compares it against the manifest's counts and restarts at
-the first short table; because `INSERT OR IGNORE` is order-independent,
-re-sending a whole table is always safe. A local `progress.ndjson` next
-to the export is an optimisation only, and losing it costs one status
-call per user.
+**Resume point, server-side, and NOT the default.** `GET
+/_migrate/status?user=<id>` returns `{table: COUNT(*)}` for every data
+table plus the profile's presence. `--resume` compares it against the
+manifest's counts and restarts at the first short table; because the
+write is order-independent, re-sending a whole table is always safe.
+
+**But counts cannot say whether a table is up to date**, only whether it
+is short, and the second pass's whole job is rows whose count did not
+move. So a run sends every chunk by default, `--resume` is the explicit
+opt-in for restarting a killed run, and the profile chunk goes every time
+even under `--resume`: it is the only carrier of `display_name`, `email`,
+`notification_prefs`, `editor_input_mode`, `active_byok_provider`,
+`desired_retention` and `last_seen_at`. The globals are sent every run for
+the same reason - a count-based skip compares totals, not identities, so a
+fleet holding a ledger row of its own would reach the expected count and
+skip the real import.
 
 **Bounded against the 128 MB isolate**, the phase 5 A2 way: caps
 enforced before any parsing, `Content-Length` first and a chunked body
@@ -260,7 +324,12 @@ PEM generated by `py_vapid`, assert the derived public key equals
 `public_key_b64()`'s output byte for byte, and that `vapidHeader`
 produces a JWT that verifies under that same public key via WebCrypto.
 Then on staging, after the import, an actual push to a subscription row
-created under the Python app returns 201.
+created under the Python app is **delivered and rendered**, not merely
+answered 201. A 201 proves the VAPID half only: the push service accepts
+a JWT signed by the matching private key without ever looking at
+`p256dh`, so a mangled subscription key still returns 201 and the browser
+then silently fails to decrypt. `p256dh` and `auth` compared byte for
+byte in tier 1 (C) is the other half of that proof.
 
 **If the conversion is skipped** and the fleet mints a fresh keypair,
 every migrated subscription breaks: push services answer 403 to a JWT

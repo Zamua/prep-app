@@ -66,7 +66,22 @@ export interface GlobalChunk {
   rows: readonly Record<string, unknown>[];
 }
 
-export type MigrationChunk = UserChunk | GlobalChunk;
+/**
+ * The run's own header, sent once before any user: the sha256 of the
+ * snapshot being replayed. It is what ties a fleet to a snapshot, so the
+ * verifier cannot read a fleet as clean against a file the fleet was never
+ * built from, and it is what holds the retention sweep off for the length of
+ * the cutover.
+ */
+export interface RunChunk {
+  kind: 'run';
+  snapshot: string;
+}
+
+export type MigrationChunk = UserChunk | GlobalChunk | RunChunk;
+
+/** A snapshot digest, as `sha256_file` writes it. */
+const SHA256 = /^[0-9a-f]{64}$/;
 
 export interface ChunkRefusal {
   status: number;
@@ -108,6 +123,11 @@ export function parseChunk(body: unknown, knownTables: readonly string[]): Migra
   // The whole-snapshot shape. One chunk carries one table so the cell never
   // holds a second table's rows while inserting the first.
   if ('tables' in b) return refuse(422, 'one table per chunk');
+  if ('snapshot' in b) {
+    const snapshot = b['snapshot'];
+    if (typeof snapshot !== 'string' || !SHA256.test(snapshot)) return refuse(422, 'snapshot must be a sha256 hex digest');
+    return { kind: 'run', snapshot };
+  }
   if ('cell' in b) return parseGlobal(b);
   if (typeof b['user'] !== 'string' || !b['user']) return refuse(422, 'user is required');
   const idx = b['idx'];

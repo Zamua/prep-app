@@ -2,17 +2,23 @@
 
 `POST /_migrate/import` takes one user's one table, under the same 4 MiB
 and 2,000 rows the cell was measured against. Nothing here is keyed by a
-run id: every write keys on data the export already carries, so a second
-run of the same export inserts nothing, and a run killed halfway resumes
-from `GET /_migrate/status`, which is the fleet's own count of what it
-holds rather than a local file this tool could lose.
+run id: every write keys on data the export already carries, and a row
+already in the cell is overwritten only when it differs, so a second run
+of the same export writes nothing and a second run of a LATER export
+writes exactly what changed.
 
-    .venv/bin/python -m prep.migrate.importer \
+    .venv/bin/python -m prep.migrate.importer \\
         --export <dir> --base-url <url> --token-file <path> [--users <file>]
 
-`--no-resume` sends the whole export again against a fleet that already
-has it. That is the rehearsal's second pass: every insert count zero is
-what proves the run is re-runnable.
+**A run sends every chunk by default**, which is what makes the cutover's
+second pass a delta: a table whose row count has not moved can still have
+had every row rewritten (`cards` is only ever rewritten), so counts cannot
+say whether a table is up to date.
+
+`--resume` is the exception, for restarting a run that was killed: it asks
+`GET /_migrate/status` per user and starts at the first table the fleet
+holds fewer rows of. Never use it for the second pass - a table whose
+count already matches would be skipped along with the window's writes.
 
 No local progress file: a status call is one request per user, and a
 progress file that disagrees with the fleet is worse than no progress
@@ -192,6 +198,10 @@ def expected_counts(out: Path, user: str, counts: dict) -> dict[str, int]:
 
 @dataclasses.dataclass
 class Report:
+    """What the run did. `inserted` is the endpoint's own field name and it
+    counts rows INSERTED OR CHANGED: an unchanged row writes nothing, so on
+    the second pass this total is the window's writes and nothing else."""
+
     users: int = 0
     complete: int = 0
     chunks: int = 0
@@ -215,25 +225,34 @@ def import_user(
     entry: dict,
     report: Report,
     *,
-    resume: bool = True,
+    resume: bool = False,
     max_rows: int = MAX_CHUNK_ROWS,
 ) -> None:
     """One user, in the order the cell needs: the profile chunk registers
-    the user and seeds its id block, then the tables parents first."""
+    the user and seeds its id block, then the tables parents first.
+
+    The profile chunk goes every time. It is one small upsert, and it is
+    the only carrier of `display_name`, `email`, `notification_prefs`,
+    `editor_input_mode`, `active_byok_provider`, `desired_retention` and
+    `last_seen_at`; skipping it because a profile row already exists drops
+    every profile edit the window made, and `desired_retention` reshapes
+    every future due date."""
     user, idx = entry["id"], int(entry["idx"])
     expected = expected_counts(out, user, entry.get("counts") or {})
     status = writer.status(user=user) if resume else None
     report.users += 1
 
-    if status is None or not status.get("profile"):
-        chunk = {
-            "user": user,
-            "idx": idx,
-            "table": None,
-            "rows": [],
-            "profile": layout.read_profile(out, user),
-        }
-        report.record(writer.send(chunk))
+    report.record(
+        writer.send(
+            {
+                "user": user,
+                "idx": idx,
+                "table": None,
+                "rows": [],
+                "profile": layout.read_profile(out, user),
+            }
+        )
+    )
 
     if status is None:
         start: str | None = layout.DATA_TABLES[0]
@@ -255,24 +274,21 @@ def import_user(
 def import_globals(
     writer: CellWriter,
     out: Path,
-    manifest: dict,
     report: Report,
     *,
-    resume: bool = True,
     max_rows: int = MAX_CHUNK_ROWS,
 ) -> None:
     """`account_merges` into the directory and the limiter's window, ids
     preserved. Both are the source of a decision nothing else can rebuild:
     `previous_ids` for an offline device's old owner, and the burst
-    allowance at the moment of highest exposure."""
-    counts = manifest.get("globals") or {}
+    allowance at the moment of highest exposure.
+
+    Always sent, whatever the fleet already holds. Both tables are small,
+    both writes are keyed, and a count-based skip compares totals rather
+    than identities: a fleet holding a ledger row of its own - a smoke
+    test, a rehearsal - would reach the expected count and skip the real
+    import, leaving the window's rows out with nothing to say so."""
     for cell, table in GLOBALS:
-        expected = int(counts.get(table, 0))
-        if (
-            resume
-            and int(((writer.status(cell=cell).get("tables")) or {}).get(table, 0)) >= expected
-        ):
-            continue
         path = (
             layout.directory_path(out, table) if cell == "directory" else layout.limiter_path(out)
         )
@@ -288,20 +304,23 @@ def run(
     writer: CellWriter,
     *,
     users: Sequence[str] | None = None,
-    resume: bool = True,
+    resume: bool = False,
     max_rows: int = MAX_CHUNK_ROWS,
 ) -> Report:
     out = Path(out)
     manifest = layout.read_manifest(out)
     wanted = set(users) if users is not None else None
     report = Report()
+    # First, so a run killed halfway still says which snapshot the rows on
+    # this fleet came from, and so the fleet's retention sweep is held off
+    # before the first account is registered into it.
+    report.record(writer.send({"snapshot": manifest["snapshot"]["sha256"]}))
     for entry in manifest["users"]:
         if wanted is None or entry["id"] in wanted:
             import_user(writer, out, entry, report, resume=resume, max_rows=max_rows)
     # After the users, so a run killed in the middle leaves the audit for
     # the resume rather than a directory that names accounts with no cells.
-    if wanted is None:
-        import_globals(writer, out, manifest, report, resume=resume, max_rows=max_rows)
+    import_globals(writer, out, report, max_rows=max_rows)
     return report
 
 
@@ -328,10 +347,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--users", type=Path, help="one user id per line; the default is the whole manifest"
     )
     parser.add_argument(
-        "--no-resume",
-        dest="resume",
-        action="store_false",
-        help="send every chunk again instead of starting from the fleet's counts",
+        "--resume",
+        action="store_true",
+        help="restart a killed run from the fleet's own counts instead of sending every "
+        "chunk. NEVER for the cutover's second pass: a table whose count already matches "
+        "would be skipped along with the window's writes",
     )
     parser.add_argument(
         "--chunk-rows",
@@ -363,7 +383,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     print(f"users      {report.users} ({report.complete} already complete)")
     print(f"chunks     {report.chunks}")
-    print(f"rows       {report.rows} inserted, {report.dropped} dropped by a disposition")
+    print(f"rows       {report.rows} written, {report.dropped} dropped by a disposition")
     for table in sorted(report.inserted):
         print(f"  {table:<26} {report.inserted[table]}")
     return 0

@@ -76,7 +76,9 @@ export function pageByRowid(
       opts.limit,
     )
     .toArray();
-  const last = rows.length === opts.limit ? Number(rows[rows.length - 1]!._rowid) : null;
+  // A full page carries a cursor; an empty one never does, whatever the limit
+  // was, or a `limit=0` read indexes off the end of the array.
+  const last = rows.length > 0 && rows.length === opts.limit ? Number(rows[rows.length - 1]!._rowid) : null;
   for (const row of rows) delete (row as Record<string, unknown>)['_rowid'];
   return { rows, next: last };
 }

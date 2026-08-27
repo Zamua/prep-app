@@ -22,6 +22,10 @@ export interface ReapReport {
   reaped: number;
   /** Already tombstoned: an earlier delete that never reached the directory. */
   cleaned: number;
+  /** Registered with nothing in its cell yet, so there is no date to judge
+   * it by. Counted rather than folded into `scanned`: a number that stays up
+   * across sweeps is registrations whose first write never landed. */
+  skipped: number;
   failed: number;
   /** Where the next walk resumes; null when the list is exhausted. */
   cursor: string | null;
@@ -39,6 +43,7 @@ export async function reapIdleAnonymous(deps: ReapDeps, opts: ReapOptions = {}):
   const page = await deps.directory.listAnonymous(opts.after ?? null, limit);
   let reaped = 0;
   let cleaned = 0;
+  let skipped = 0;
   let failed = 0;
   for (const user of page) {
     try {
@@ -51,9 +56,23 @@ export async function reapIdleAnonymous(deps: ReapDeps, opts: ReapOptions = {}):
       // leave the saga reading an empty cell and recording a merge that
       // moved nothing, with the cookie that could have retried deleted.
       if (await deps.directory.marker(user.id)) continue;
-      // A cell with no profile yet is an account minted between the register
-      // and its first write; its directory row is the only date there is.
-      const lastSeen = (await deps.cells.cell(user.id).lastSeenAt()) ?? user.created_at;
+      // The cell's own date, or nothing. The directory row's `created_at` is
+      // not a stand-in for it: a migrated account carries Python's, years
+      // old, while its cell is still being written, and reaping is one-way.
+      const lastSeen = await deps.cells.cell(user.id).lastSeenAt();
+      if (lastSeen === null) {
+        // No profile is two different accounts. A tombstoned cell is a
+        // delete that stopped before the directory and has to finish; an
+        // untombstoned one is a register whose first write has not landed,
+        // and there is no date to judge it by.
+        if (!(await deps.cells.cell(user.id).precheck()).tombstoned) {
+          skipped++;
+          continue;
+        }
+        await destroyAccount(user.id, 'reaped', deps);
+        reaped++;
+        continue;
+      }
       if (!isIdle(lastSeen, cutoff)) continue;
       await destroyAccount(user.id, 'reaped', deps);
       reaped++;
@@ -61,5 +80,5 @@ export async function reapIdleAnonymous(deps: ReapDeps, opts: ReapOptions = {}):
       failed++;
     }
   }
-  return { scanned: page.length, reaped, cleaned, failed, cursor: page.length < limit ? null : (page[page.length - 1]?.id ?? null) };
+  return { scanned: page.length, reaped, cleaned, skipped, failed, cursor: page.length < limit ? null : (page[page.length - 1]?.id ?? null) };
 }

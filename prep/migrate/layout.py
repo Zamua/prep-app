@@ -70,6 +70,27 @@ DATA_TABLES: tuple[str, ...] = (
     "api_tokens",
 )
 
+# The primary key each per-user table is keyed by inside a cell, user
+# columns already dropped. One home, because the cell's upsert, the
+# verifier's comparison and any fleet standing in for one all have to agree:
+# a disagreement would hide a lost row rather than report it.
+KEY_COLUMNS: dict[str, tuple[str, ...]] = {
+    "decks": ("id",),
+    "questions": ("id",),
+    "cards": ("question_id",),
+    "reviews": ("id",),
+    "grading_idempotency": ("idempotency_key",),
+    "offline_sync_idempotency": ("client_id",),
+    "study_sessions": ("id",),
+    "study_session_answers": ("session_id", "question_id"),
+    "trivia_sessions": ("id",),
+    "trivia_queue": ("question_id",),
+    "notifications_log": ("id",),
+    "push_subscriptions": ("endpoint",),
+    "byok_credentials": ("provider",),
+    "api_tokens": ("id",),
+}
+
 # Exported to nothing on purpose: every row names a Temporal execution that
 # stops existing with the Go worker, and the badge is a 60 s read model.
 RESET_TABLES: tuple[str, ...] = ("active_workflows",)

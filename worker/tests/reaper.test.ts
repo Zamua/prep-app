@@ -71,7 +71,7 @@ describe('the reaper walk', () => {
     await mint(f, 'anon:a2', FRESH);
     await mint(f, 'anon:a3', IDLE);
 
-    expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 3, reaped: 2, cleaned: 0, failed: 0, cursor: null });
+    expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 3, reaped: 2, cleaned: 0, skipped: 0, failed: 0, cursor: null });
     expect([...f.directory.users.keys()]).toEqual(['anon:a2']);
     expect(await f.cells.cell('anon:a2').lastSeenAt()).toBe(FRESH);
   });
@@ -82,7 +82,7 @@ describe('the reaper walk', () => {
     await mint(f, 'anon:a2', IDLE);
     await f.directory.beginMerge('anon:a1', 'reader@example.com', IDLE);
 
-    expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 2, reaped: 1, cleaned: 0, failed: 0, cursor: null });
+    expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 2, reaped: 1, cleaned: 0, skipped: 0, failed: 0, cursor: null });
     expect([...f.directory.users.keys()]).toEqual(['anon:a1']);
     expect(f.cells.entry('anon:a1').storage.rows('decks')).toHaveLength(1);
   });
@@ -113,7 +113,7 @@ describe('the reaper walk', () => {
     const second = await reapIdleAnonymous(f.deps, { after: first.cursor, limit: 2 });
     expect(second).toMatchObject({ scanned: 2, reaped: 2, cursor: 'anon:a4' });
     const third = await reapIdleAnonymous(f.deps, { after: second.cursor, limit: 2 });
-    expect(third).toEqual({ scanned: 1, reaped: 1, cleaned: 0, failed: 0, cursor: null });
+    expect(third).toEqual({ scanned: 1, reaped: 1, cleaned: 0, skipped: 0, failed: 0, cursor: null });
     expect(f.directory.users.size).toBe(0);
   });
 
@@ -147,13 +147,6 @@ describe('the reaper walk', () => {
     expect(await f.directory.tombstoneOf('anon:a1')).toMatchObject({ reason: 'reaped' });
   });
 
-  it('reaps an account whose cell never got a profile, on its directory date', async () => {
-    const f = fixture();
-    await f.directory.register('anon:a1', true, IDLE);
-    expect(await reapIdleAnonymous(f.deps)).toMatchObject({ reaped: 1 });
-    expect(await f.directory.lookup('anon:a1')).toBeNull();
-  });
-
   it('costs one account, not the batch, when one fails', async () => {
     const f = fixture();
     for (const n of [1, 2, 3]) await mint(f, `anon:a${n}`, IDLE);
@@ -170,11 +163,35 @@ describe('the reaper walk', () => {
     expect(await reapIdleAnonymous(f.deps)).toMatchObject({ scanned: 1, reaped: 1, failed: 0 });
   });
 
+  it('skips an account whose cell holds no profile rather than judging it by the directory', async () => {
+    // A migration registers an account before its cell is written, and a
+    // migrated `created_at` is Python's, years old. Falling back to it reads
+    // a live account as idle and destroys it, and a reaped cell refuses
+    // every later migration chunk forever.
+    const f = fixture();
+    await f.directory.register('anon:migrating', true, '2023-01-01T00:00:00+00:00');
+    await mint(f, 'anon:idle', IDLE);
+
+    expect(await reapIdleAnonymous(f.deps)).toMatchObject({ scanned: 2, reaped: 1, skipped: 1 });
+    expect([...f.directory.users.keys()]).toEqual(['anon:migrating']);
+    expect(await f.directory.tombstoneOf('anon:migrating')).toBeNull();
+
+    // Once its cell holds something, the ordinary rule applies again.
+    await f.cells.cell('anon:migrating').importChunk({
+      idx: 7,
+      table: null,
+      rows: [],
+      profile: { id: 'anon:migrating', created_at: '2023-01-01T00:00:00+00:00', last_seen_at: IDLE, is_anonymous: 1 },
+    });
+    expect(await reapIdleAnonymous(f.deps)).toMatchObject({ reaped: 1, skipped: 0 });
+    expect([...f.directory.users.keys()]).toEqual([]);
+  });
+
   it('is a no-op once the sweep has caught up', async () => {
     const f = fixture();
     await mint(f, 'anon:a1', IDLE);
     await reapIdleAnonymous(f.deps);
-    expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 0, reaped: 0, cleaned: 0, failed: 0, cursor: null });
+    expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 0, reaped: 0, cleaned: 0, skipped: 0, failed: 0, cursor: null });
   });
 
   it('defaults to the policy batch', async () => {

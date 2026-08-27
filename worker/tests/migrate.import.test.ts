@@ -410,6 +410,118 @@ describe('re-runnability', () => {
   });
 });
 
+describe('the second pass', () => {
+  let env: Env;
+  let exported: UserExport[];
+  beforeEach(async () => {
+    env = replayEnv().env;
+    exported = fixture();
+    await runImport(env, exported);
+  });
+
+  /** The window: the user studies, so the whole FSRS state of one card
+   * moves. Nothing about the row's identity changes. */
+  function studied(u: UserExport): Row {
+    const card = u.tables['cards']![1]!;
+    return { ...card, step: Number(card['step']) + 5, next_due: '2026-12-01T00:00:00+00:00', last_review: '2026-08-27T10:00:00+00:00', stability: 42.5, difficulty: 6.25, fsrs_state: 2 };
+  }
+
+  it('carries a changed row, which is the only reason the pass exists', async () => {
+    // `cards` is never inserted into after creation and always rewritten, so
+    // an import that could only insert would put a studying user's PRE-window
+    // schedule on the fleet - and no re-run of the same import could repair
+    // it, because the key is already there.
+    const alice = exported[0]!;
+    const moved = studied(alice);
+    const res = await post(env, '/_migrate/import', { user: ALICE, idx: 1, table: 'cards', rows: [moved] });
+    expect([res.status, await res.json()]).toEqual([200, { idx: 1, inserted: { cards: 1 }, dropped: 0 }]);
+
+    const landed = (await dump(env, ALICE)).tables['cards']!.find((r) => r['question_id'] === moved['question_id']);
+    expect(landed).toEqual(moved);
+  });
+
+  it('counts rows written, so an unchanged row is not one', async () => {
+    // The runbook reads this count as the window's writes. A row re-sent
+    // unchanged has to cost nothing, or the number means only "rows sent".
+    const alice = exported[0]!;
+    const same = await post(env, '/_migrate/import', { user: ALICE, idx: 1, table: 'cards', rows: alice.tables['cards'] });
+    expect(await same.json()).toEqual({ idx: 1, inserted: {}, dropped: 0 });
+
+    const mixed = await post(env, '/_migrate/import', { user: ALICE, idx: 1, table: 'cards', rows: [alice.tables['cards']![0], studied(alice)] });
+    expect(await mixed.json()).toEqual({ idx: 1, inserted: { cards: 1 }, dropped: 0 });
+  });
+
+  it('carries an edit to every mutable table, not only to cards', async () => {
+    const alice = exported[0]!;
+    const question = { ...alice.tables['questions']![0]!, prompt: 'edited during the window', suspended: 1 };
+    const deck = { ...alice.tables['decks']![0]!, name: 'renamed', notifications_enabled: 0 };
+    for (const [table, row] of [['questions', question], ['decks', deck]] as const) {
+      const res = await post(env, '/_migrate/import', { user: ALICE, idx: 1, table, rows: [row] });
+      expect([table, await res.json()]).toEqual([table, { idx: 1, inserted: { [table]: 1 }, dropped: 0 }]);
+    }
+    const held = await dump(env, ALICE);
+    expect(held.tables['questions']!.find((r) => r['id'] === question['id'])).toMatchObject({ prompt: 'edited during the window', suspended: 1 });
+    expect(held.tables['decks']!.find((r) => r['id'] === deck['id'])).toMatchObject({ name: 'renamed', notifications_enabled: 0 });
+  });
+
+  it('carries a profile edit, because the upsert is the only route those columns have', async () => {
+    const alice = exported[0]!;
+    const edited = { ...alice.profile, display_name: 'Alice II', desired_retention: 0.8, last_seen_at: '2026-08-27T09:00:00+00:00' };
+    await post(env, '/_migrate/import', { user: ALICE, idx: 1, table: null, rows: [], profile: edited });
+    expect(await dump(env, ALICE)).toMatchObject({ profile: { display_name: 'Alice II', desired_retention: 0.8, last_seen_at: '2026-08-27T09:00:00+00:00' } });
+  });
+});
+
+describe('the run header', () => {
+  const SNAPSHOT = 'a'.repeat(64);
+
+  it('records the snapshot the fleet is being built from, and the status hands it back', async () => {
+    const env = replayEnv().env;
+    const res = await post(env, '/_migrate/import', { snapshot: SNAPSHOT });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { run: { snapshot: string } }).toMatchObject({ run: { snapshot: SNAPSHOT } });
+
+    const status = await worker.fetch(request('/_migrate/status?cell=directory'), env);
+    expect((await status.json()) as { run: { snapshot: string } }).toMatchObject({ run: { snapshot: SNAPSHOT } });
+  });
+
+  it('refuses anything that is not a sha256 digest', async () => {
+    const env = replayEnv().env;
+    for (const snapshot of ['', 'nope', 'A'.repeat(64), 'a'.repeat(63)]) {
+      const res = await post(env, '/_migrate/import', { snapshot });
+      expect([snapshot, res.status, await res.json()]).toEqual([snapshot, 422, { detail: 'snapshot must be a sha256 hex digest' }]);
+    }
+  });
+
+  it('is cleared by the seal, which is what puts the retention sweep back on', async () => {
+    const env = replayEnv().env;
+    await post(env, '/_migrate/import', { snapshot: SNAPSHOT });
+    await post(env, '/_migrate/seal', {});
+    const directory = env.DIRECTORY.get(env.DIRECTORY.idFromName(GLOBAL)) as unknown as { migrationRun(): Promise<unknown> };
+    expect(await directory.migrationRun()).toBeNull();
+  });
+});
+
+describe('the id block', () => {
+  it('refuses an idx another account already holds instead of throwing a 500', async () => {
+    // A deleted account renumbers a bare rank, and `users.idx` is UNIQUE, so
+    // a second pass that re-derived the rank would collide. The answer names
+    // both accounts rather than being an HTML error page the RPC layer also
+    // spends its whole backoff on.
+    const env = replayEnv().env;
+    const [alice, bob] = fixture();
+    await post(env, '/_migrate/import', { user: alice!.user, idx: 1, table: null, rows: [], profile: alice!.profile });
+    const clash = await post(env, '/_migrate/import', { user: bob!.user, idx: 1, table: null, rows: [], profile: bob!.profile });
+    expect(clash.status).toBe(422);
+    expect(String(((await clash.json()) as { detail: string }).detail)).toBe(`idx 1 already belongs to ${ALICE}, not ${BOB}`);
+
+    // Alice keeps hers, and a re-register of an account already there is
+    // still the idx it was minted against.
+    const again = await post(env, '/_migrate/import', { user: alice!.user, idx: 9, table: null, rows: [], profile: alice!.profile });
+    expect(await again.json()).toMatchObject({ idx: 1 });
+  });
+});
+
 describe('the global cells', () => {
   const MERGES = [
     { id: 3, anon_user_id: 'anon:aa', target_user_id: ALICE, started_at: '2026-05-01T00:00:00+00:00', completed_at: '2026-05-01T00:00:01+00:00', status: 'completed', counts: '{}', error: null },
@@ -441,9 +553,28 @@ describe('the global cells', () => {
     expect(await (await post(env, '/_migrate/import', { cell: 'limiter', table: 'instant_generations', rows: LEDGER })).json()).toEqual({ inserted: {}, dropped: 0 });
 
     const status = await worker.fetch(request('/_migrate/status?cell=directory'), env);
-    expect(await status.json()).toEqual({ tables: { users: 2, account_merges: 2 } });
+    expect(await status.json()).toEqual({ tables: { users: 2, account_merges: 2 }, run: null });
     const limiter = await worker.fetch(request('/_migrate/status?cell=limiter'), env);
     expect(await limiter.json()).toEqual({ tables: { instant_generations: 2 } });
+  });
+
+  it('carries a merge that completed during the window, rather than keeping the started row', async () => {
+    // `account_merges` is not append-only: a merge `started` at the first
+    // snapshot is `completed` at the second, and `previous_ids` reads the
+    // completed row.
+    const env = replayEnv().env;
+    await runImport(env, fixture());
+    await post(env, '/_migrate/import', { cell: 'directory', table: 'account_merges', rows: MERGES });
+    const finished = { ...MERGES[1]!, status: 'completed', completed_at: '2026-06-01T00:00:02+00:00', counts: '{"decks":1}' };
+
+    const second = await post(env, '/_migrate/import', { cell: 'directory', table: 'account_merges', rows: [MERGES[0], finished] });
+    expect(await second.json()).toEqual({ inserted: { account_merges: 1 }, dropped: 0 });
+    const directory = env.DIRECTORY.get(env.DIRECTORY.idFromName(GLOBAL)) as unknown as {
+      previousIds(id: string): Promise<string[]>;
+      dumpTables(): Promise<Record<string, Row[]>>;
+    };
+    expect((await directory.dumpTables())['account_merges']).toEqual([MERGES[0], finished]);
+    expect(await directory.previousIds(ALICE)).toEqual(['anon:aa', 'anon:bb']);
   });
 
   it('refuses a global table its cell does not own', async () => {

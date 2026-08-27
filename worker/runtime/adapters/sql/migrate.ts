@@ -2,7 +2,7 @@
 // re-runnable (IF NOT EXISTS, column checks) and the version is written
 // last, so a step that fails mid-way replays on the next activation.
 import { AUTOINCREMENT_TABLES, DIRECTORY_SCHEMA, JOB_SCHEMA, LIMITER_SCHEMA, USER_SCHEMA } from './schema.js';
-import { Db, type Sql, type SqlValue } from './storage.js';
+import { Db, writeStatement, type Sql, type SqlValue } from './storage.js';
 
 export interface Migration {
   version: number;
@@ -103,23 +103,30 @@ export function seedSequences(sql: Sql, idx: number): void {
 
 /**
  * Rows into a global cell's table, keyed by the primary key they carry, so a
- * replay inserts nothing. Column names are checked against the catalogue
- * first: an identifier cannot be bound.
+ * replay writes nothing and the second pass carries what changed: a merge
+ * that was `started` at the first snapshot and `completed` at the second has
+ * to arrive as the second one. Column names are checked against the
+ * catalogue first: an identifier cannot be bound.
  */
-export function insertOrIgnore(sql: Sql, table: string, rows: readonly Record<string, unknown>[]): number {
+export function importGlobalRows(sql: Sql, table: string, rows: readonly Record<string, unknown>[]): number {
   const db = new Db(sql);
   const columns = db.columns(table);
   if (columns.size === 0) throw new RangeError(`no such table: ${table}`);
-  let inserted = 0;
+  const primaryKey = db.primaryKey(table);
+  const statements = new Map<string, string>();
+  let written = 0;
   for (const row of rows) {
     const keys = Object.keys(row).filter((k) => columns.has(k));
     if (keys.length === 0) continue;
-    inserted += db.run(
-      `INSERT OR IGNORE INTO "${table}" (${keys.map((k) => `"${k}"`).join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`,
-      ...keys.map((k) => row[k] as SqlValue),
-    );
+    const cacheKey = keys.join(',');
+    let statement = statements.get(cacheKey);
+    if (statement === undefined) {
+      statement = writeStatement(table, keys, primaryKey, 'update');
+      statements.set(cacheKey, statement);
+    }
+    written += db.run(statement, ...keys.map((k) => row[k] as SqlValue));
   }
-  return inserted;
+  return written;
 }
 
 export function countRows(sql: Sql, table: string): number {

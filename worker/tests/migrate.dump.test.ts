@@ -136,6 +136,13 @@ describe('one bounded page at a time', () => {
     expect((await get(env, `user=${ALICE}&table=reviews&after=-1`)).status).toBe(400);
     expect((await get(env, `user=${ALICE}&table=reviews&limit=1.5`)).status).toBe(400);
   });
+
+  it('refuses a zero limit rather than answering that the table is empty', async () => {
+    const { env } = replayEnv();
+    await seed(env);
+    const res = await get(env, `user=${ALICE}&table=reviews&limit=0`);
+    expect([res.status, await res.json()]).toEqual([400, { detail: 'limit must be a positive integer' }]);
+  });
 });
 
 describe('what a page carries', () => {

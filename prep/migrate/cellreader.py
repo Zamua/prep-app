@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Protocol
 
 DUMP_PATH = "/_migrate/dump"
+STATUS_PATH = "/_migrate/status"
 INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 PAGE_LIMIT = 2000
 
@@ -59,6 +60,13 @@ class CellReader(Protocol):
         limit: int = PAGE_LIMIT,
         columns: Sequence[str] | None = None,
     ) -> Page: ...
+
+    def run(self) -> dict | None:
+        """The migration run this fleet is under: `{snapshot, openedAt}`, or
+        None if no run ever opened one. It is the only thing tying a fleet to
+        the snapshot it was built from, so the verifier reads it before it
+        compares a single row."""
+        ...
 
 
 def read_all(
@@ -115,10 +123,25 @@ class HttpCellReader:
         if columns:
             query["columns"] = ",".join(columns)
         url = f"{self.base_url}{DUMP_PATH}?{urllib.parse.urlencode(query)}"
+        body = self._get(url)
+        rows = body.get("rows")
+        if not isinstance(rows, list):
+            raise CellUnreachable(f"{url} answered without a rows array")
+        cursor = body.get("next")
+        if cursor is not None and not isinstance(cursor, int):
+            raise CellUnreachable(f"{url} answered a non-integer cursor {cursor!r}")
+        return Page(rows, cursor)
+
+    def run(self) -> dict | None:
+        body = self._get(f"{self.base_url}{STATUS_PATH}?cell={DIRECTORY_CELL}")
+        found = body.get("run")
+        return found if isinstance(found, dict) else None
+
+    def _get(self, url: str) -> dict:
         request = urllib.request.Request(url, headers={INTERNAL_TOKEN_HEADER: self._token})
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
+                return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:400]
             if e.code == 410:
@@ -128,13 +151,6 @@ class HttpCellReader:
             raise CellUnreachable(f"{url} answered {e.code}: {detail}") from e
         except (urllib.error.URLError, TimeoutError, ValueError) as e:
             raise CellUnreachable(f"{url}: {e}") from e
-        rows = body.get("rows")
-        if not isinstance(rows, list):
-            raise CellUnreachable(f"{url} answered without a rows array")
-        cursor = body.get("next")
-        if cursor is not None and not isinstance(cursor, int):
-            raise CellUnreachable(f"{url} answered a non-integer cursor {cursor!r}")
-        return Page(rows, cursor)
 
 
 class FixtureCellReader:
@@ -143,11 +159,19 @@ class FixtureCellReader:
     reported divergence without a fleet."""
 
     def __init__(
-        self, tables: dict[tuple[str, str], list[dict]], *, page_size: int = PAGE_LIMIT
+        self,
+        tables: dict[tuple[str, str], list[dict]],
+        *,
+        page_size: int = PAGE_LIMIT,
+        run: dict | None = None,
     ) -> None:
         self.tables = tables
         self.page_size = page_size
+        self._run = run
         self.calls: list[tuple[str, str, int | None]] = []
+
+    def run(self) -> dict | None:
+        return self._run
 
     def page(
         self,

@@ -10,6 +10,7 @@ import type { Directory, Sync } from '../../app/ports.js';
 import type { DirectoryUser, MergeAudit, MergeMarker, TombstoneReason } from '../../app/entities.js';
 import { reapIdleAnonymous } from '../../app/auth/reaper.js';
 import { isoUtc, parseIso } from '../../domain/py.js';
+import { MIGRATION_RECHECK_MS, migrationHolds } from '../../domain/reaper.js';
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
@@ -22,6 +23,11 @@ const REAP_STATE_KEY = 'reap';
  * a stale runbook step or a second run of the migrator must not be able to
  * write into a fleet that is already serving. */
 const MIGRATION_SEAL_KEY = 'migration_sealed';
+/** Which snapshot this fleet is being built from, and when that run opened.
+ * The verifier reads it back so it cannot compare a fleet against a snapshot
+ * the fleet was not built from, and the sweep reads it so it cannot destroy
+ * an account the run has registered but not yet written. */
+const MIGRATION_RUN_KEY = 'migration_run';
 const DAY_MS = 86_400_000;
 /** A wake is never asked for the past. */
 const ALARM_FLOOR_MS = 1;
@@ -37,6 +43,14 @@ interface ReapState {
   /** Where the current walk resumes; null between sweeps. */
   cursor: string | null;
   lastReapAt: string | null;
+}
+
+/** The migration run this fleet is under, as the verifier and the sweep
+ * both read it. */
+export interface MigrationRun {
+  /** sha256 of the snapshot the run is replaying. */
+  snapshot: string;
+  openedAt: string;
 }
 
 export class DirectoryCell extends DurableObject<Env> implements Directory {
@@ -79,10 +93,28 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
    * flag is fleet-wide. */
   async sealMigration(): Promise<void> {
     await this.storage.put<boolean>(MIGRATION_SEAL_KEY, true);
+    // The cutover is over, so the retention sweep goes back on.
+    await this.storage.delete(MIGRATION_RUN_KEY);
   }
 
   async migrationSealed(): Promise<boolean> {
     return (await this.storage.get<boolean>(MIGRATION_SEAL_KEY)) === true;
+  }
+
+  /**
+   * Opens a run against one snapshot: the digest the verifier reads back,
+   * and the instant that holds the retention sweep off until the seal. Sent
+   * once per run, before any user, so a run killed halfway still says which
+   * snapshot the rows on this fleet came from.
+   */
+  async beginMigrationRun(snapshot: string): Promise<MigrationRun> {
+    const run: MigrationRun = { snapshot, openedAt: isoUtc(this.c.clock.now()) };
+    await this.storage.put<MigrationRun>(MIGRATION_RUN_KEY, run);
+    return run;
+  }
+
+  async migrationRun(): Promise<MigrationRun | null> {
+    return (await this.storage.get<MigrationRun>(MIGRATION_RUN_KEY)) ?? null;
   }
 
   /** The migration's copy of a global table this cell owns: `account_merges`,
@@ -171,6 +203,15 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
     const state = await this.reapState();
     const now = this.c.clock.now();
     if (parseIso(state.nextAt).getTime() > now.getTime()) {
+      await this.ensureAlarm();
+      return;
+    }
+    // A run in flight registers accounts whose cells are not written yet,
+    // against Python `created_at` values years old. Sweeping now would read
+    // them as idle and destroy them, and a reaped cell refuses every later
+    // chunk forever, so the walk waits for the seal.
+    if (migrationHolds((await this.migrationRun())?.openedAt ?? null, now)) {
+      await this.storage.put<ReapState>(REAP_STATE_KEY, { ...state, nextAt: isoUtc(new Date(now.getTime() + MIGRATION_RECHECK_MS)) });
       await this.ensureAlarm();
       return;
     }

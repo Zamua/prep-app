@@ -25,11 +25,12 @@ from prep.migrate.cellreader import (
 from prep.migrate.divergence import Divergence, float_bits
 from prep.migrate.export import DROPPED_BYOK_PROVIDER
 from prep.migrate.fsrs_oracle import NodeFsrsOracle, ScheduleInput
-from prep.migrate.snapshot import open_snapshot
+from prep.migrate.snapshot import open_snapshot, sha256_file
 from prep.migrate.verify import Fixed, VerificationImpossible, Verifier
 
 AT = "2026-09-01T12:00:00+00:00"
 GENERATED_AT = "2026-08-26T14:00:00+00:00"
+OPENED_AT = "2026-08-26T14:05:00+00:00"
 
 
 @pytest.fixture(scope="session")
@@ -76,13 +77,26 @@ def fleet(exported: tuple[Path, dict]) -> dict[tuple[str, str], list[dict]]:
     return cell_from_export(out, manifest)
 
 
-def run(snapshot: Path, tables: dict, node_oracle, users=None, generated_at=GENERATED_AT):
+def run(
+    snapshot: Path,
+    tables: dict,
+    node_oracle,
+    users=None,
+    generated_at=GENERATED_AT,
+    run_record=None,
+    carried=None,
+):
     conn = open_snapshot(snapshot)
+    digest = sha256_file(snapshot)
+    if run_record is None:
+        run_record = {"snapshot": digest, "openedAt": OPENED_AT}
     try:
         verifier = Verifier(
             conn,
-            FixtureCellReader(tables),
+            FixtureCellReader(tables, run=run_record),
             fixed=Fixed(at=AT, generated_at=generated_at),
+            snapshot_sha256=digest,
+            carried=carried,
             ts_oracle=node_oracle,
         )
         return verifier.run(users)
@@ -296,20 +310,22 @@ def test_a_row_outside_the_window_is_named_with_the_cutoff(snapshot, fleet, node
     report = run(snapshot, tables, node_oracle)
     found = [d for d in report.divergences if d.table == "limiter.instant_generations"]
     assert found
-    assert any("48 h window starts at" in d.note for d in found)
+    assert any("48 h window that starts at" in d.note for d in found)
 
 
-def test_an_unpinned_window_still_refuses_a_hole(snapshot, fleet, node_oracle):
-    """Without `--generated-at` the cut point is unknown, but the filter is
-    still a suffix by `created_at`, so a hole in the middle is exact."""
+def test_a_hole_in_the_middle_of_the_window_is_two_divergences(snapshot, fleet, node_oracle):
+    """One from the cutoff check (an in-window row the cell lacks) and one
+    from the suffix check (a dropped row newer than the oldest kept one).
+    Two independent readings of the same filter."""
     tables = copy.deepcopy(fleet)
     rows = tables[(LIMITER_CELL, "instant_generations")]
     if len(rows) < 3:
         pytest.skip("the fixture's window is too short to hole")
     rows.pop(len(rows) // 2)
-    report = run(snapshot, tables, node_oracle, generated_at=None)
+    report = run(snapshot, tables, node_oracle)
     found = [d for d in report.divergences if d.table == "limiter.instant_generations"]
     assert any("not a trailing window" in d.note for d in found)
+    assert any("so the import lost it" in d.note for d in found)
 
 
 # ---- tier 3: the schedule oracle -----------------------------------------
@@ -407,11 +423,20 @@ class SealedReader:
     def page(self, **_kwargs) -> Page:
         raise CellSealed("the fleet is sealed")
 
+    def run(self) -> dict | None:
+        raise CellSealed("the fleet is sealed")
+
 
 def test_a_sealed_fleet_aborts_rather_than_reading_clean(snapshot, node_oracle):
     conn = open_snapshot(snapshot)
     try:
-        verifier = Verifier(conn, SealedReader(), fixed=Fixed(at=AT), ts_oracle=node_oracle)
+        verifier = Verifier(
+            conn,
+            SealedReader(),
+            fixed=Fixed(at=AT, generated_at=GENERATED_AT),
+            snapshot_sha256=sha256_file(snapshot),
+            ts_oracle=node_oracle,
+        )
         with pytest.raises(CellSealed):
             verifier.run()
     finally:
@@ -443,3 +468,177 @@ def test_the_two_oracles_agree_on_the_snapshot_itself(snapshot, node_oracle):
     ]
     assert cards
     assert PyFsrsOracle().schedule(cards, AT) == node_oracle.schedule(cards, AT)
+
+
+# ---- tier 1 reads every column -------------------------------------------
+
+
+# One non-key field per table: the thing the row is FOR. `cards` is absent
+# because tier 2 owns every one of its columns.
+MANGLED = {
+    "decks": "name",
+    "questions": "prompt",
+    "reviews": "result",
+    "grading_idempotency": "next_due",
+    "offline_sync_idempotency": "status",
+    "study_sessions": "state",
+    "study_session_answers": "result",
+    "trivia_sessions": "queue",
+    "trivia_queue": "queue_position",
+    "notifications_log": "seen_at",
+    "push_subscriptions": "p256dh",
+    "byok_credentials": "ciphertext",
+    "api_tokens": "token_hash",
+}
+
+
+def first_holder(fleet: dict, table: str) -> tuple[str, dict] | None:
+    for (owner, held), rows in fleet.items():
+        if held == table and rows and owner not in (DIRECTORY_CELL, LIMITER_CELL):
+            return owner, rows[0]
+    return None
+
+
+def mangle(value):
+    """A different value of the same shape, so the comparison is of the
+    field rather than of a type mismatch."""
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, (int, float)):
+        return value + 1
+    if value is None:
+        return "2026-08-26T14:00:00+00:00"
+    return f"{value}-mangled"
+
+
+def test_a_mangled_non_key_column_is_refused(snapshot, fleet, node_oracle):
+    """The whole class a key-against-key tier 1 cannot see. Every field
+    here is the thing its row is FOR - the flashcard, the review, the RFC
+    8291 encryption key, the encrypted credential - and none of them is
+    part of a primary key, so comparing keys against keys reads no data at
+    all."""
+    tables = copy.deepcopy(fleet)
+    expected = set()
+    for table, field in MANGLED.items():
+        holder = first_holder(tables, table)
+        assert holder is not None, f"the fixture carries no {table} row"
+        owner, row = holder
+        assert field in row, f"{table}.{field} is not a column"
+        row[field] = mangle(row[field])
+        expected.add((owner, table, field))
+
+    report = run(snapshot, tables, node_oracle)
+    found = {(d.user, d.table, d.field) for d in report.divergences if d.tier == 1}
+    assert expected <= found, sorted(expected - found)
+    assert not report.clean
+
+
+def test_a_question_moved_to_another_deck_is_refused(snapshot, fleet, node_oracle):
+    tables = copy.deepcopy(fleet)
+    owner = next(
+        u
+        for (u, t), rows in tables.items()
+        if t == "decks" and len(rows) > 1 and u not in (DIRECTORY_CELL, LIMITER_CELL)
+    )
+    question = tables[(owner, "questions")][0]
+    other = next(d for d in tables[(owner, "decks")] if d["id"] != question["deck_id"])
+    question["deck_id"] = other["id"]
+    report = run(snapshot, tables, node_oracle, users=[owner])
+    assert by_field(report, 1, "questions", "deck_id")
+
+
+def test_the_fields_tier_two_owns_are_not_reported_twice(snapshot, fleet, node_oracle, plan):
+    """Each field belongs to exactly one tier. A `stability` reported at
+    both would make "tier 1 and tier 3 clean, tier 2 waived" unreadable,
+    and that waiver is the one the rehearsal may force."""
+    tables = copy.deepcopy(fleet)
+    card = next(c for c in tables[(plan.heavy, "cards")] if c["stability"] is not None)
+    card["stability"] = card["stability"] * (1 + 2**-52)
+    tables[(plan.retention_high, "decks")][0]["desired_retention"] = 0.71
+    report = run(snapshot, tables, node_oracle)
+    assert by_field(report, 2, "cards", "stability")
+    assert by_field(report, 1, "cards", "stability") == []
+    assert by_field(report, 2, "decks", "desired_retention")
+    assert by_field(report, 1, "decks", "desired_retention") == []
+
+
+# ---- the ledger ----------------------------------------------------------
+
+
+def test_a_ledger_the_import_never_wrote_is_refused(snapshot, fleet, node_oracle):
+    """The import skipped, refused, or never scoped to the globals at all.
+    Every in-window row is named, rather than both sides being filtered
+    down to the empty set the cell happens to hold."""
+    tables = copy.deepcopy(fleet)
+    kept = tables[(LIMITER_CELL, "instant_generations")]
+    assert kept, "the fixture carries a windowed ledger"
+    tables[(LIMITER_CELL, "instant_generations")] = []
+    report = run(snapshot, tables, node_oracle)
+    found = [d for d in report.divergences if d.table == "limiter.instant_generations"]
+    assert {d.row for d in found} >= {f"id={r['id']}" for r in kept}
+    assert all("the import lost it" in d.note for d in found)
+
+
+# ---- the directory, both ways --------------------------------------------
+
+
+def test_an_account_the_snapshot_no_longer_has_is_refused(snapshot, fleet, node_oracle):
+    """A user deleted between the two snapshots keeps its directory row and
+    its whole cell. Nothing else on the fleet looks for it."""
+    tables = copy.deepcopy(fleet)
+    tables[(DIRECTORY_CELL, "users")].append(
+        {
+            "id": "ghost@example.com",
+            "is_anonymous": 0,
+            "created_at": "2026-03-14T15:00:00+00:00",
+            "idx": 9_001,
+        }
+    )
+    report = run(snapshot, tables, node_oracle)
+    found = by_field(report, 1, "directory.users", "<row>")
+    assert [d.row for d in found] == ["id='ghost@example.com'"]
+    assert found[0].snapshot == "absent"
+
+
+def test_a_scoped_run_leaves_the_rest_of_the_directory_alone(snapshot, fleet, node_oracle, plan):
+    """`--users` makes the directory a superset by design."""
+    tables = copy.deepcopy(fleet)
+    report = run(snapshot, tables, node_oracle, users=[plan.heavy])
+    assert by_field(report, 1, "directory.users", "<row>") == []
+    assert report.clean
+
+
+# ---- the fleet names the snapshot it was built from ----------------------
+
+
+def test_a_fleet_built_from_another_snapshot_aborts(snapshot, fleet, node_oracle):
+    """Run against the FIRST snapshot after the second import and every row
+    matches, because it is the snapshot the fleet was built from - while the
+    whole window's delta is missing. The digest is what refuses it."""
+    with pytest.raises(VerificationImpossible, match="was built from snapshot"):
+        run(
+            snapshot,
+            copy.deepcopy(fleet),
+            node_oracle,
+            run_record={"snapshot": "0" * 64, "openedAt": OPENED_AT},
+        )
+
+
+def test_a_fleet_that_names_no_snapshot_aborts(snapshot, fleet, node_oracle):
+    class Nameless(FixtureCellReader):
+        def run(self) -> dict | None:
+            return None
+
+    conn = open_snapshot(snapshot)
+    try:
+        verifier = Verifier(
+            conn,
+            Nameless(copy.deepcopy(fleet)),
+            fixed=Fixed(at=AT, generated_at=GENERATED_AT),
+            snapshot_sha256=sha256_file(snapshot),
+            ts_oracle=node_oracle,
+        )
+        with pytest.raises(VerificationImpossible, match="does not say which snapshot"):
+            verifier.run()
+    finally:
+        conn.close()

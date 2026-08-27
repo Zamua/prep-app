@@ -2,6 +2,7 @@
 // delete, the merge audit (the source of `previous_ids`), markers and
 // tombstones.
 import type { DirectoryUser, MergeAudit, MergeMarker, TombstoneReason } from '../../../app/entities.js';
+import { ChunkRejected } from '../../../domain/migrate.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 
 const toUser = (r: Row): DirectoryUser => ({
@@ -34,6 +35,13 @@ export class SqlDirectoryRepo {
       if (idx === undefined) {
         const row = this.db.first<{ m: number | null }>('SELECT MAX(idx) AS m FROM users');
         idx = Number(row?.m ?? 0) + 1;
+      } else {
+        // `idx` is UNIQUE, so a caller naming one another account holds would
+        // raise a bare SqliteError: a 500 with an HTML body, and one the RPC
+        // layer spends its whole backoff on. Named instead, because which two
+        // accounts collided is the entire diagnosis.
+        const taken = this.db.first<{ id: string }>('SELECT id FROM users WHERE idx = ?', idx);
+        if (taken) throw new ChunkRejected(`idx ${idx} already belongs to ${String(taken.id)}, not ${id}`);
       }
       this.db.run('INSERT INTO users (id, is_anonymous, created_at, idx) VALUES (?, ?, ?, ?)', id, isAnonymous ? 1 : 0, at, idx);
       return { idx };

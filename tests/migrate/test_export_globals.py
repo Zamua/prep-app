@@ -139,3 +139,110 @@ def test_a_non_utc_now_is_normalised_before_it_reaches_the_cutoff(snapshot: Path
     manifest = export(snapshot, tmp_path / "berlin", now=berlin)
     assert manifest["generated_at"] == NOW.isoformat()
     assert manifest["limiter"]["cutoff"].endswith("+00:00")
+
+
+# ---- idx is carried, not re-derived --------------------------------------
+
+
+def _second_snapshot(snapshot: Path, tmp_path: Path, drop: str) -> Path:
+    """The snapshot the window's second pass reads: the same database with
+    one account gone, which is what a delete or Python's own anonymous
+    reaper leaves behind."""
+    import shutil
+    import sqlite3
+
+    copy = tmp_path / "second.sqlite"
+    shutil.copyfile(snapshot, copy)
+    conn = sqlite3.connect(copy)
+    try:
+        conn.execute("DELETE FROM users WHERE tailscale_login = ?", (drop,))
+        conn.commit()
+    finally:
+        conn.close()
+    return copy
+
+
+def test_a_deleted_account_renumbers_everyone_after_it(snapshot: Path, tmp_path: Path, exported):
+    """The defect, stated: `idx` is a dense rank over a mutable set."""
+    out, manifest = exported
+    dropped = manifest["users"][1]["id"]
+    second = _second_snapshot(snapshot, tmp_path, dropped)
+    fresh = export(second, tmp_path / "fresh", now=NOW)
+    moved = [
+        u["id"]
+        for u in fresh["users"]
+        if u["idx"] != next(o["idx"] for o in manifest["users"] if o["id"] == u["id"])
+    ]
+    assert len(moved) == len(fresh["users"]) - 1
+
+
+def test_carrying_the_idx_forward_holds_every_account_still(
+    snapshot: Path, tmp_path: Path, exported
+):
+    """`DirectoryCell.users.idx` is NOT NULL UNIQUE and `register` returns
+    the idx a user already has, so nothing on the fleet can follow a
+    renumbering: the second pass would report one divergence per shifted
+    user and no re-run could clear it."""
+    out, manifest = exported
+    before = {u["id"]: u["idx"] for u in manifest["users"]}
+    dropped = manifest["users"][1]["id"]
+    second = _second_snapshot(snapshot, tmp_path, dropped)
+
+    carried = export(second, tmp_path / "carried", now=NOW, carried=before)
+    after = {u["id"]: u["idx"] for u in carried["users"]}
+    assert dropped not in after
+    assert all(after[u] == before[u] for u in after)
+    # And the number the deleted account held is not handed to anyone else.
+    assert before[dropped] not in after.values()
+
+
+def test_a_new_account_is_allocated_above_every_number_handed_out(
+    snapshot: Path, tmp_path: Path, exported
+):
+    out, manifest = exported
+    before = {u["id"]: u["idx"] for u in manifest["users"]}
+    # As if one account signed up while the first pass was running.
+    ceiling = max(before.values())
+    carried = export(
+        snapshot, tmp_path / "grown", now=NOW, carried={**before, "ghost": ceiling + 7}
+    )
+    after = {u["id"]: u["idx"] for u in carried["users"]}
+    assert all(after[u] == before[u] for u in before)
+
+    trimmed = {u: n for u, n in before.items() if u != manifest["users"][0]["id"]}
+    grown = export(snapshot, tmp_path / "grown2", now=NOW, carried=trimmed)
+    fresh = {u["id"]: u["idx"] for u in grown["users"]}
+    assert fresh[manifest["users"][0]["id"]] == max(trimmed.values()) + 1
+
+
+def test_an_export_refuses_a_snapshot_that_moved_under_it(
+    snapshot: Path, tmp_path: Path, monkeypatch
+):
+    """Spec E's abort criterion, checked where it is claimed rather than
+    argued for. The snapshot is meant to be an immutable VACUUM INTO copy;
+    hashing the LIVE database before and after instead fires on every run
+    that overlaps a write, which is every run, because prod is still
+    serving at that step."""
+    import shutil
+
+    from prep.migrate import export as export_module
+
+    moving = tmp_path / "moving.sqlite"
+    shutil.copyfile(snapshot, moving)
+    real = export_module._export_user
+    touched: list[int] = []
+
+    def touch_then_export(conn, out, plan):
+        if not touched:
+            touched.append(1)
+            with moving.open("r+b") as fh:
+                fh.seek(-1, 2)
+                last = fh.read(1)
+                fh.seek(-1, 2)
+                fh.write(bytes([last[0] ^ 0xFF]))
+        return real(conn, out, plan)
+
+    monkeypatch.setattr(export_module, "_export_user", touch_then_export)
+    with pytest.raises(ExportError, match="changed under the export"):
+        export(moving, tmp_path / "out", now=NOW)
+    assert touched

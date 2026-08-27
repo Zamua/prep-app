@@ -49,21 +49,58 @@ describe('ExportRepo', () => {
       profile: snap.profile,
       tables: Object.fromEntries(Object.entries(snap.tables).map(([t, rows]) => [t, rows.map((r) => ({ ...r, user_id: 'anon:x', user_login: 'anon:x' }))])),
     };
-    const counts = target.repos.export.importRows(withUserColumns, { idempotentBy: 'id' });
+    const counts = target.repos.export.importRows(withUserColumns, { idempotentBy: 'id', conflict: 'ignore' });
     expect(counts).toEqual({ decks: 1, questions: 1, cards: 1, reviews: 1, offline_sync_idempotency: 1, notifications_log: 1, push_subscriptions: 1, byok_credentials: 1, api_tokens: 1, active_workflows: 1 });
-    expect(target.repos.export.importRows(withUserColumns, { idempotentBy: 'id' })).toEqual({});
+    expect(target.repos.export.importRows(withUserColumns, { idempotentBy: 'id', conflict: 'ignore' })).toEqual({});
     expect(target.repos.decks.listSummaries().map((d) => d.name).sort()).toEqual(['d', 'other']);
     expect(target.storage.rows('questions')).toEqual(snap.tables['questions']);
     expect(target.repos.export.dump().profile?.tailscale_login).toBe('parity@example.com');
   });
 
-  it('a row whose primary key the target already holds is skipped, never rewritten', () => {
+  it("under 'ignore', a row whose primary key the target holds is skipped, never rewritten", () => {
+    // The merge's rule: the two cells mint from disjoint id blocks, so a
+    // collision is a bug and the target's row is the one to keep.
     const { c } = populated();
     const target = cell();
     target.repos.decks.create('mine', { displayName: 'Mine' });
-    const counts = target.repos.export.importRows(c.repos.export.dump(), { idempotentBy: 'id' });
+    const counts = target.repos.export.importRows(c.repos.export.dump(), { idempotentBy: 'id', conflict: 'ignore' });
     expect(counts['decks']).toBeUndefined();
     expect(target.repos.decks.findName(1)).toBe('mine');
+  });
+
+  it("under 'update', a row that differs is rewritten and one that does not costs nothing", () => {
+    // The migration's rule. `cards` is only ever rewritten, so an import
+    // that could only insert would carry a studying user's pre-window
+    // schedule forward with no re-run able to repair it.
+    const { c } = populated();
+    const target = cell();
+    const first = c.repos.export.dump();
+    const update = { idempotentBy: 'id', conflict: 'update' } as const;
+    expect(target.repos.export.importRows(first, update)['cards']).toBe(1);
+    expect(target.repos.export.importRows(first, update)['cards']).toBeUndefined();
+
+    const card = first.tables['cards']![0]!;
+    const moved = { ...card, step: 8, next_due: '2026-12-01T00:00:00+00:00', stability: 42.5, difficulty: 6.25, fsrs_state: 2 };
+    const counts = target.repos.export.importRows({ profile: null, tables: { cards: [moved] } }, update);
+    expect(counts).toEqual({ cards: 1 });
+    expect(target.storage.rows('cards')).toEqual([moved]);
+
+  });
+
+  it("under 'update', a composite key is matched on the whole key", () => {
+    const { c, d, q } = populated();
+    const target = cell();
+    target.repos.export.importRows(c.repos.export.dump(), { idempotentBy: 'id', conflict: 'update' });
+    const at = '2026-03-14T15:00:00+00:00';
+    const session = { id: 's1', deck_id: d, created_at: at, last_active: at, status: 'active', state: 'awaiting-answer', version: 1 };
+    const answer = { session_id: 's1', question_id: q, answered_at: at, result: 'wrong', workflow_id: null };
+    const update = { idempotentBy: 'id', conflict: 'update' } as const;
+    target.repos.export.importRows({ profile: null, tables: { study_sessions: [session], study_session_answers: [answer] } }, update);
+
+    const changed = { ...answer, result: 'right', workflow_id: 'wf-2' };
+    expect(target.repos.export.importRows({ profile: null, tables: { study_session_answers: [changed] } }, update)).toEqual({ study_session_answers: 1 });
+    expect(target.storage.rows('study_session_answers')).toEqual([changed]);
+    expect(target.repos.export.importRows({ profile: null, tables: { study_session_answers: [changed] } }, update)).toEqual({});
   });
 
   it('wipe empties every data table and keeps the profile and the id counters', () => {

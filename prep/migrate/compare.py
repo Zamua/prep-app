@@ -21,7 +21,7 @@ its bits are taken. Every other type mismatch is reported.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 
 from prep.migrate.divergence import TABLE_SCOPE, Divergence, float_bits, render, row_key
 
@@ -119,37 +119,154 @@ def compare_rows(
         )
 
     for key in sorted(left.keys() & right.keys(), key=repr):
-        srow, crow = left[key], right[key]
-        columns = list(fields) if fields is not None else list(srow.keys())
-        identity = row_key(keys, srow)
-        for column in columns:
-            if column not in crow:
-                found.append(
-                    Divergence(
-                        tier=tier,
-                        user=user,
-                        table=table,
-                        row=identity,
-                        field=column,
-                        snapshot=render(srow.get(column)),
-                        cell="<column absent>",
-                        note="the cell dump has no such column",
-                    )
+        found.extend(
+            _compare_pair(
+                tier=tier,
+                user=user,
+                table=table,
+                keys=keys,
+                srow=left[key],
+                crow=right[key],
+                real_columns=real_columns,
+                fields=fields,
+            )
+        )
+    return found
+
+
+def compare_streams(
+    *,
+    tier: int,
+    table: str,
+    key_columns: Sequence[str],
+    snapshot_rows: Iterable[dict],
+    cell_rows: Iterable[dict],
+    real_columns: frozenset[str] = frozenset(),
+    fields: Sequence[str] | None = None,
+    user: str | None = None,
+) -> Iterator[Divergence]:
+    """`compare_rows` over two iterators rather than two lists.
+
+    Both sides arrive in rowid order, which for a faithful import is the
+    same order, so a matched pair is compared and dropped as it goes and
+    the working set stays empty. Only rows the two sides disagree about
+    are held, so the cost is the size of the divergence rather than the
+    size of the table: a 50,000-review account is compared field by field
+    without either side ever being materialised.
+    """
+    keys = tuple(key_columns)
+    left_pending: dict[tuple, dict] = {}
+    right_pending: dict[tuple, dict] = {}
+
+    def pair(srow: dict, crow: dict) -> list[Divergence]:
+        return _compare_pair(
+            tier=tier,
+            user=user,
+            table=table,
+            keys=keys,
+            srow=srow,
+            crow=crow,
+            real_columns=real_columns,
+            fields=fields,
+        )
+
+    left, right = iter(snapshot_rows), iter(cell_rows)
+    lrow, rrow = next(left, None), next(right, None)
+    while lrow is not None or rrow is not None:
+        if lrow is not None and rrow is not None and _key_of(keys, lrow) == _key_of(keys, rrow):
+            yield from pair(lrow, rrow)
+            lrow, rrow = next(left, None), next(right, None)
+            continue
+        if lrow is not None:
+            key = _key_of(keys, lrow)
+            held = right_pending.pop(key, None)
+            if held is None:
+                left_pending[key] = lrow
+            else:
+                yield from pair(lrow, held)
+            lrow = next(left, None)
+        if rrow is not None:
+            key = _key_of(keys, rrow)
+            held = left_pending.pop(key, None)
+            if held is None:
+                right_pending[key] = rrow
+            else:
+                yield from pair(held, rrow)
+            rrow = next(right, None)
+
+    for key in sorted(left_pending, key=repr):
+        yield Divergence(
+            tier=tier,
+            user=user,
+            table=table,
+            row=row_key(keys, left_pending[key]),
+            field="<row>",
+            snapshot="present",
+            cell="absent",
+            note="the import did not land this row",
+        )
+    for key in sorted(right_pending, key=repr):
+        yield Divergence(
+            tier=tier,
+            user=user,
+            table=table,
+            row=row_key(keys, right_pending[key]),
+            field="<row>",
+            snapshot="absent",
+            cell="present",
+            note="the cell holds a row the snapshot does not",
+        )
+
+
+def _key_of(keys: tuple[str, ...], row: dict) -> tuple:
+    return tuple(row.get(c) for c in keys)
+
+
+def _compare_pair(
+    *,
+    tier: int,
+    user: str | None,
+    table: str,
+    keys: tuple[str, ...],
+    srow: dict,
+    crow: dict,
+    real_columns: frozenset[str],
+    fields: Sequence[str] | None,
+) -> list[Divergence]:
+    """Two rows the two sides agree on the identity of, field by field. A
+    snapshot column the cell row lacks is itself a divergence: the cell
+    schema may add columns, never drop one."""
+    columns = list(fields) if fields is not None else list(srow.keys())
+    identity = row_key(keys, srow)
+    found: list[Divergence] = []
+    for column in columns:
+        if column not in crow:
+            found.append(
+                Divergence(
+                    tier=tier,
+                    user=user,
+                    table=table,
+                    row=identity,
+                    field=column,
+                    snapshot=render(srow.get(column)),
+                    cell="<column absent>",
+                    note="the cell dump has no such column",
                 )
-                continue
-            real = column in real_columns
-            if not same(srow.get(column), crow.get(column), real=real):
-                found.append(
-                    Divergence(
-                        tier=tier,
-                        user=user,
-                        table=table,
-                        row=identity,
-                        field=column,
-                        snapshot=render(normalise(srow.get(column), real=real)),
-                        cell=render(normalise(crow.get(column), real=real)),
-                    )
+            )
+            continue
+        real = column in real_columns
+        if not same(srow.get(column), crow.get(column), real=real):
+            found.append(
+                Divergence(
+                    tier=tier,
+                    user=user,
+                    table=table,
+                    row=identity,
+                    field=column,
+                    snapshot=render(normalise(srow.get(column), real=real)),
+                    cell=render(normalise(crow.get(column), real=real)),
                 )
+            )
     return found
 
 

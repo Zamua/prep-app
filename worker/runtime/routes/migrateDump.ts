@@ -39,8 +39,10 @@ export async function serveMigrateDump(request: Request, url: URL, c: Compositio
 
   const after = numeric(url.searchParams.get('after'));
   if (after === undefined) return Response.json({ detail: 'after must be a non-negative integer' }, { status: 400 });
+  // Zero is refused rather than served: an empty page reads as an empty
+  // table, and a verifier that believed one would call a lost table clean.
   const limit = numeric(url.searchParams.get('limit'));
-  if (limit === undefined) return Response.json({ detail: 'limit must be a non-negative integer' }, { status: 400 });
+  if (limit === undefined || limit === 0) return Response.json({ detail: 'limit must be a positive integer' }, { status: 400 });
   const columns = url.searchParams.get('columns');
 
   const target = cellFor(c, cell, user);

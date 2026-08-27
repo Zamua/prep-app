@@ -63,7 +63,7 @@ import { DATA_TABLES } from './adapters/sql/schema.js';
 import {
   countRows,
   DIRECTORY_MIGRATIONS,
-  insertOrIgnore,
+  importGlobalCellRows,
   JOB_MIGRATIONS,
   LIMITER_MIGRATIONS,
   migrate,
@@ -415,7 +415,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     migrateLimiter: (storage) => migrate(storage.sql, LIMITER_MIGRATIONS),
     migrateJobCell: (storage) => migrate(storage.sql, JOB_MIGRATIONS),
     dataTables: DATA_TABLES,
-    importGlobalRows: (storage, table, rows) => insertOrIgnore(storage.sql, table, rows),
+    importGlobalRows: (storage, table, rows) => importGlobalCellRows(storage.sql, table, rows),
     countRows: (storage, table) => countRows(storage.sql, table),
     seedIdBlock: (storage, idx) => seedSequences(storage.sql, idx),
     resetIdBlock: (storage) => resetSequences(storage.sql),
