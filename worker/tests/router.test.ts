@@ -5,6 +5,7 @@ import type { Env } from '../runtime/env.js';
 import { corpusPage, fakeEnv, fakeState, IDENTIFIED, namespaceOf, req, spyRenderer } from './helpers.js';
 import { EMAIL_HEADER, KIND_HEADER, PAT_HASH_HEADER, PICTURE_HEADER } from '../runtime/cells/router.js';
 import { assembleToken } from '../domain/pat.js';
+import { mintCookie } from '../runtime/adapters/anonCookie.js';
 import { WebCryptoHasher } from '../runtime/adapters/hash.js';
 
 interface Forwarded {
@@ -352,6 +353,28 @@ describe('the provider flows', () => {
     expect(renderer.calls.at(-1)?.context.redirect_url).toBe('/');
     // Provider sign-out leaves the anonymous cookie, so the app clears it.
     expect(signOut.headers.get('set-cookie')).toMatch(/^prep_anon=""; expires=/);
+  });
+
+  // What the e2e readiness probe rests on: an identity a node's provider
+  // cannot verify is refused by the router before any cell is touched, so
+  // only the anonymous cookie proves the cells are up on every deploy shape.
+  it('routes an anonymous cookie to its own cell whatever the provider is', async () => {
+    const clerkish = fakeEnv({ USER: env.USER });
+    const c = composeWith(clerkish, {
+      renderer,
+      identity: {
+        name: 'clerk',
+        identify: async () => null,
+        hasDormantSession: () => false,
+        urls: () => ({ sign_in: 'https://accounts.test/sign-in', sign_up: null, sign_out: null, account: null }),
+      },
+    });
+    const id = `anon:${'00'.repeat(16)}`;
+    const cookie = await mintCookie((await c.signer())!, id, Math.floor(c.clock.now().getTime() / 1000));
+    const res = await worker.fetch(req('/api/dashboard/overview', { headers: { cookie: `prep_anon=${cookie}` } }), clerkish);
+    expect(res.status).toBe(200);
+    expect(forwarded.at(-1)?.name).toBe(id);
+    expect(forwarded.at(-1)?.request.headers.get(KIND_HEADER)).toBe('anon');
   });
 
   it('forget-device redirects home and drops the cookie', async () => {

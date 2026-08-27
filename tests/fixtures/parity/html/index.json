@@ -110,6 +110,11 @@
   "template": "deck_export.html"
  },
  {
+  "context": "trivia",
+  "file": "deck_export@trivia.html",
+  "template": "deck_export.html"
+ },
+ {
   "context": "form",
   "file": "deck_import_anki@form.html",
   "template": "deck_import_anki.html"

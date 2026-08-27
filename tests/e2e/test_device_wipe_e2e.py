@@ -74,9 +74,7 @@ def wipe_server(celld_build):
     sign-out URL, which is what makes the masthead render the row under
     test. The URL is the parity interstitial the entry worker already
     serves."""
-    node = LocalCelldNode(
-        "wipe", vars={"PREP_PARITY_SIGN_OUT_URL": PROVIDER_SIGN_OUT_PATH}, probe_user=FAKE_LOGIN
-    )
+    node = LocalCelldNode("wipe", vars={"PREP_PARITY_SIGN_OUT_URL": PROVIDER_SIGN_OUT_PATH})
     node.start()
     try:
         node.seed = node.seed_profile(FAKE_LOGIN, "device_wipe")

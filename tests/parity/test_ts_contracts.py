@@ -46,10 +46,14 @@ def base_url() -> str:
 
 @pytest.fixture(scope="module")
 def replayed() -> dict:
+    # The skip decides first. The stub only runs beside a parity server, so
+    # reaching for it before this answers a connection refusal where the
+    # suite means "not configured".
+    url = base_url()
     stub = StubControl(os.environ.get(LLM_STUB_ENV) or DEFAULT_LLM_STUB)
     stub.canned(INSTANT_DECK)
     try:
-        return json.loads(extract(remote_app(base_url(), internal_token(None)))["pairs.json"])
+        return json.loads(extract(remote_app(url, internal_token(None)))["pairs.json"])
     finally:
         stub.canned(None)
 

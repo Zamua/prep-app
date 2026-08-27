@@ -1103,6 +1103,7 @@ def all_contexts() -> list[Ctx]:
             {"deck_name": "history-trivia", "deck_type": "trivia", "error": "The AI is busy."},
         ),
         Ctx("deck_export.html", "srs", {"deck_name": "capitals", "deck_type": "srs"}),
+        Ctx("deck_export.html", "trivia", {"deck_name": "history-trivia", "deck_type": "trivia"}),
         Ctx("deck_import_anki.html", "form", {"outcome": None, "error": None}),
         Ctx("deck_import_anki.html", "error", {"outcome": None, "error": "Pick a file to upload."}),
         Ctx(

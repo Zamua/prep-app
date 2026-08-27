@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { BUILD, STATIC, TEMPLATES, WORKER, bakeIcons, precompileTemplates } from "../scripts/build.mjs";
 import { buildEnvironment, prepareContext, rendererOver } from "../runtime/adapters/nunjucks/environment";
 import { derive } from "../app/viewmodels/derive";
+import { EXPORT_TOO_LARGE } from "../app/decks/importLimits";
 
 const NOW = new Date("2026-03-14T15:00:00Z");
 const clock = { now: () => NOW };
@@ -115,6 +116,16 @@ describe("the renderer", () => {
     const html = renderer.render("error.html", { ...baseContext({ user: null }), status_code: 404, headline: "Not found.", blurb: "", path: "/x" });
     expect(html).toContain("<svg");
     expect(html).toMatch(/class="icon icon-inline" aria-hidden="true"/);
+  });
+
+  // The one block the reference template does not have, so no golden
+  // compares it: the export hub's 413.
+  it("shows the export refusal on the hub, with the other formats still offered", () => {
+    const context = { ...baseContext({}), deck_name: "capitals", deck_type: "srs", error: EXPORT_TOO_LARGE };
+    const html = renderer.render("deck_export.html", context);
+    expect(html).toContain(`<p class="form-error">${EXPORT_TOO_LARGE}</p>`);
+    expect(html).toContain('data-export-url="/deck/capitals/export.csv"');
+    expect(renderer.render("deck_export.html", { ...context, error: null })).not.toContain("form-error");
   });
 
   it("reads the derived groupings in the reorganize plan", () => {

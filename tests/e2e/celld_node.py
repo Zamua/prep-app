@@ -54,9 +54,19 @@ MASTER_KEY = "ab" * 32
 OFFLINE_E2E_LOGIN = "offline-e2e@example.com"
 OFFLINE_E2E_NAME = "Offline Tester"
 
+# Where a node keeps its working directory. Short on purpose: celld opens
+# unix sockets under it, and macOS caps a socket path at 104 bytes, which the
+# per-user temp directory alone can eat most of.
+STATE_ROOT = Path(os.environ.get("PREP_E2E_STATE_ROOT") or "/tmp")
+
 # Enough for the deploy plus the restart's lease expiry (6-8 s) with room for
 # a cold isolate on a loaded box.
 START_TIMEOUT = 90.0
+
+# The id whose cell the readiness probe reads. Anonymous, because a probe has
+# to work under every provider shape a suite deploys, and only the anonymous
+# cookie is provider-independent.
+PROBE_ANON_ID = "anon:" + "00" * 16
 
 
 def identity_headers(login: str, name: str | None = None) -> dict[str, str]:
@@ -104,7 +114,6 @@ class LocalCelldNode:
         *,
         vars: dict[str, str] | None = None,
         script_env: dict[str, str] | None = None,
-        probe_user: str = OFFLINE_E2E_LOGIN,
     ):
         self.name = name
         self.port = _free_port()
@@ -115,8 +124,7 @@ class LocalCelldNode:
         # every one of them. Unpinned unless a suite says otherwise.
         self.vars: dict[str, str] = {"PREP_FAKE_NOW": "", **(vars or {})}
         self.script_env: dict[str, str] = dict(script_env or {})
-        self.probe_user = probe_user
-        self.state_dir = Path("/private/tmp") / f"prep-e2e-{name}"
+        self.state_dir = STATE_ROOT / f"prep-e2e-{name}"
         self.bucket = f"{S3_BUCKET}/e2e-{name}"
         self._deployed = False
 
@@ -198,20 +206,26 @@ class LocalCelldNode:
 
     def _await_cells(self, timeout: float) -> None:
         """A cell read, not `/healthz`: the node answers liveness while its
-        lease is still expiring and every cell refuses."""
+        lease is still expiring and every cell refuses.
+
+        The probe presents an anonymous cookie and no identity headers. An
+        identity the node's provider cannot verify answers 401 from the
+        router without a cell being touched, so accepting one would degrade
+        this to `/healthz` on exactly the clerk-shaped nodes that need the
+        wait. Every provider resolves a valid `prep_anon` to a cell.
+        """
         deadline = time.time() + timeout
+        cookie = {"cookie": f"prep_anon={mint_anon_cookie(PROBE_ANON_ID)}"}
         last = ""
         while time.time() < deadline:
             try:
                 r = httpx.get(
-                    f"{self.base_url}/api/dashboard/overview",
-                    headers=identity_headers(self.probe_user),
-                    timeout=5.0,
+                    f"{self.base_url}/api/dashboard/overview", headers=cookie, timeout=5.0
                 )
-                # Anything but a 5xx means the router answered: a 401 or a
-                # 303 to the identity host is a node in a shape this
-                # identity does not fit, not a node whose cells refuse.
-                if r.status_code < 500:
+                # Only a 200 proves a cell answered. Anything else is the
+                # router: a lease still expiring, or a shape this probe does
+                # not fit, and neither means the node is ready.
+                if r.status_code == 200:
                     return
                 last = f"{r.status_code} {r.text[:200]}"
             except httpx.HTTPError as e:

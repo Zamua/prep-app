@@ -73,11 +73,29 @@ Caps, enforced in `runtime/cells/routes/pages.ts` before any parsing:
 | request body, `.prepdeck` | 2 MiB | the same page, `The limit is 2 MB.` |
 | request body, `.csv` | 1.5 MiB | the same page, `The limit is 1.5 MB.` |
 | any single inflated zip entry | 32 MiB | 400, `error` = `That archive expands past 32 MB.`; read from the central directory before inflating, so a zip bomb never inflates |
+| every inflated zip entry together | 32 MiB | the same 400; per-entry alone bounds nothing, because an archive may hold any number of entries and any number of them under one name |
 | notes per `.apkg` import, rows per CSV | 5,000 | everything up to the cap is inserted (Python's partial-insert semantics already), and `outcome.errors` gains `stopped at 5,000 rows; split the file and import again` |
+| `reviews.csv` rows per `.prepdeck` import | 50,000 | the same partial insert, `outcome.errors` gains `reviews.csv: stopped at 50,000 rows; ...`. Higher than the card cap because a card carries many reviews: a 2 MiB body of the narrowest rows a golden holds is about 39,000, so an honest archive never reaches it |
+| `trivia_queue.csv` rows per `.prepdeck` import | 5,000 | the card cap, because a queue row names a card. Sorted first, so the lowest positions survive |
 | questions per `.apkg` / `.prepdeck` export | 5,000 | 413 rendered from the export hub, `error` = `This deck is too large to export in this format.` |
 
 `Content-Length` is checked first; a chunked body is counted while read
 and aborted at the cap.
+
+**A codec inflates only the entries it reads.** `zip.read` takes the
+names its caller wants and returns `false` from the central-directory
+filter for every other one, so `.apkg` inflates the collection and never
+the media, and `.prepdeck` inflates its four sections and nothing else.
+This is what `zf.read(name)` per entry already gave the reference for
+free, and without it the per-entry ceiling is the only bound on a body
+that can carry hundreds of entries.
+
+**The export refusal is a rewrite-only page state.** The reference caps
+no export, so `deck_export.html` gains `{% if error %}` with no
+counterpart, no golden and no DOM comparison; `templates.test.ts` renders
+it instead. The hub is re-rendered rather than replaced by the error page
+because CSV has no ceiling, so the format that still works stays one tap
+away.
 
 **Measured, on a local celld node at `CELLD_V8_HEAP_LIMIT_MB=64`** (the
 gate is half the 128 MB isolate, the renderer keeps the other half). Each
@@ -192,6 +210,15 @@ still resolves: `prep_http_request_duration_seconds` (`method`, `route`,
 `status`), `prep_ai_grade_duration_seconds` (`verdict`),
 `prep_instant_generate_duration_seconds` (`outcome`).
 
+Only the first of the three has a caller. `prep_ai_grade_*` and
+`prep_instant_generate_*` are declared and exposed, so a query against
+them resolves to a family rather than to nothing, but a deployed
+`/metrics` prints their `# HELP` and `# TYPE` and no samples. Both labels
+are finer than the value their use case returns, so observing them means
+a port the composition root wraps rather than a call inside the use case,
+and that wrapper is not part of this phase. Nothing may alert on either
+until it has a sample.
+
 **Gone, and this is the documented reduction:**
 
 - `prep_anyio_threadpool_borrowed`, `prep_anyio_threadpool_capacity`.
@@ -203,6 +230,11 @@ still resolves: `prep_http_request_duration_seconds` (`method`, `route`,
   `process_virtual_memory_bytes`, `process_start_time_seconds`,
   `process_open_fds`, `process_max_fds`. A cell has no process to
   report on.
+- `prep_*_duration_seconds_created`, one per histogram child.
+  `prometheus_client` emits a `_created` gauge beside every histogram
+  unless `disable_created_metrics()` is called, and the reference does
+  not call it. The byte gate narrows the oracle with that call rather
+  than reproducing a timestamp series with no reader.
 
 **What it can and cannot say.** Module-level state is per isolate and
 shared by every cell of the worker on that node (spike 5, 5.1). The
@@ -213,17 +245,19 @@ and phantom counter resets: worse than no target. The honest reading is
 per-isolate sampling; a scrape config must target node addresses
 directly with a per-node `instance` label.
 
-Lane B also closes the inventory: `routeTable.test.ts` gains
-`expect(Object.keys(OUT_OF_SCOPE).sort()).toEqual(['GET /_debug/auth',
-'GET /debug/session'])`.
+Lane B also closes the inventory: `routeTable.test.ts` asserts
+`OUT_OF_SCOPE` holds exactly the routes the Python inventory itself
+serves under `/_debug/` or `/debug/`, so a debug route added to the
+reference fails the gate rather than joining a hand-written list.
 
 **Operator note**, in `infra/prep/DEPLOY-CELLD.md` under a new
 `## Observability, after the rewrite` heading: the three surviving
-metric families and their labels; the twelve series that are gone and
-why; the per-isolate semantics; the rule that a scrape targets nodes,
-never the ingress. Nothing scrapes prep today (no prep target exists
-under `infra/observability/prometheus/`), so this is a requirement for
-whenever one is wired, not a migration. Commit in `infra`, no push.
+metric families and their labels, and which of them has a caller; the
+series that are gone and why; the per-isolate semantics; the rule that a
+scrape targets nodes, never the ingress. Nothing scrapes prep today (no
+prep target exists under `infra/observability/prometheus/`), so this is a
+requirement for whenever one is wired, not a migration. Commit in
+`infra`, no push.
 
 ## C. The e2e suite
 
@@ -269,7 +303,7 @@ class LocalCelldNode:
     def __init__(self, name, *, vars: dict[str, str] | None = None)
     base_url: str
     seed: dict
-    def start(self, timeout: float = 45.0) -> None
+    def start(self, timeout: float = 90.0) -> None
     def stop(self) -> None
 ```
 
@@ -289,10 +323,17 @@ class LocalCelldNode:
 - `start()` after a `stop()` uses `SKIP_BUILD=1 SKIP_DEPLOY=1`, and it
   is NOT enough to wait for `/healthz`. Cells are unreachable for 6-8 s
   after a node restart while the lease TTL expires (spike 6, 5.1), so
-  `start()` polls a real cell read (`GET /api/dashboard/overview` with
-  the identity headers) until it answers 200, budget 45 s. Every
-  `server.start()  # idempotent` call site in the instant suite keeps
-  working unchanged.
+  `start()` polls a real cell read (`GET /api/dashboard/overview`) until
+  it answers **200**, and nothing weaker counts. The probe presents an
+  anonymous cookie and no identity headers, because the two suites that
+  most need the wait (`landing_server`, `instant_server`) deploy the
+  clerk shape, where tailscale headers are refused by the router with a
+  401 before any cell is touched: accepting that answer would degrade
+  the wait to `/healthz` on exactly those nodes. Every provider resolves
+  a valid `prep_anon` to a cell, so one probe fits every shape. Budget
+  90 s: the deploy, the lease expiry, and a cold isolate on a loaded
+  box. Every `server.start()  # idempotent` call site in the instant
+  suite keeps working unchanged.
 - Because a node is heavier than a uvicorn and the box is
   memory-constrained, e2e runs ONE file per invocation. Fixtures are
   lazy, so at most one node is live per run.
