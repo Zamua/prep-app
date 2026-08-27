@@ -38,7 +38,7 @@ _DESIRED_RETENTION = DEFAULT_DESIRED_RETENTION  # legacy name; kept for any exte
 class Verdict(str, Enum):
     """Outcome of grading a single review.
 
-    Maps to FSRS's 4-rating scale — prep currently only emits two
+    Maps to FSRS's 4-rating scale: prep currently only emits two
     verdicts so the other half of the FSRS scale (Hard / Easy) is
     unused. Future trivia-grader work could surface a wider rating
     set; the wire shape stays a `str` so SQL TEXT columns keep their
@@ -59,7 +59,7 @@ class Verdict(str, Enum):
 class CardSRSState:
     """Every field the scheduler needs to compute the next review.
 
-    `stability` / `difficulty` are None on a fresh card — FSRS
+    `stability` / `difficulty` are None on a fresh card: FSRS
     initializes them on the first review. `fsrs_state` is the
     library's phase enum (Learning=1, Review=2, Relearning=3); we
     store it as an int.
@@ -103,7 +103,7 @@ class ScheduledReview:
 
 # Scheduler cache keyed on retention. The upstream Scheduler is
 # parameter-bag-only (immutable weights + retention) so it's safe to
-# reuse across threads — but each distinct retention value needs its
+# reuse across threads: but each distinct retention value needs its
 # own instance. Small footprint (most installs only have a handful
 # of distinct values across all users), zero allocation on the hot
 # path once warm.
@@ -229,7 +229,7 @@ def seed_state_from_ladder_step(step: int, *, now: datetime) -> CardSRSState:
     )
 
 
-# TERMINAL_STEP — kept for the few templates / aggregations that
+# TERMINAL_STEP: kept for the few templates / aggregations that
 # still ask "is this card at the top of the ladder." Equivalent to
 # the highest bucket step_for_stability emits.
 TERMINAL_STEP: int = 5

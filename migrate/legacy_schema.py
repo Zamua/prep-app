@@ -197,7 +197,7 @@ def init() -> None:
         # Multi-user migration: thread `user_id` through user-owned tables.
         # Only fires when a pre-multi-user DB is detected (no user_id column
         # on any of the user-owned tables). Modern DBs short-circuit and
-        # the inheriting-user upsert never runs — important so a deleted
+        # the inheriting-user upsert never runs: important so a deleted
         # "owner@local" doesn't get auto-resurrected on every boot.
         user_owned = ("decks", "questions", "study_sessions")
         needs_legacy_migration = False
@@ -251,7 +251,7 @@ def init() -> None:
             # (FK: questions.deck_id → decks.id ON DELETE CASCADE), which
             # in turn cascades through cards and reviews. v0.3.0 shipped
             # without this guard and silently wiped a real user's deck on
-            # the first prod migration — never again. SQLite's blessed
+            # the first prod migration: never again. SQLite's blessed
             # pattern for table rebuilds:
             # https://sqlite.org/lang_altertable.html#otheralter
             #
@@ -287,7 +287,7 @@ def init() -> None:
             finally:
                 c.execute("PRAGMA foreign_keys = ON")
 
-        # 4. user_id-dependent indexes — created last, after every table has
+        # 4. user_id-dependent indexes: created last, after every table has
         #    the column. CREATE IF NOT EXISTS so re-running is a no-op.
         c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON study_sessions(user_id, status)")
         c.execute(
@@ -331,7 +331,7 @@ def init() -> None:
         #    the new trivia flow ('trivia'). Trivia decks fire a periodic
         #    web push at `notification_interval_minutes` carrying the next
         #    queued question; tapping the push opens the card. No SRS
-        #    `cards` row exists for trivia questions — their queue/answer
+        #    `cards` row exists for trivia questions: their queue/answer
         #    state lives in `trivia_queue` keyed by question_id, with the
         #    rotation rule "answered → back of queue, regardless of
         #    correct/wrong".
@@ -375,7 +375,7 @@ def init() -> None:
         # 8b. Pinned decks float to the top of the index. The column
         #     stores the timestamp the user pinned the deck (NULL =
         #     unpinned), so within the pinned group we can show
-        #     most-recently-pinned first — same UX pattern as Slack
+        #     most-recently-pinned first: same UX pattern as Slack
         #     channel pins or Apple Notes.
         if "pinned_at" not in cols:
             c.execute("ALTER TABLE decks ADD COLUMN pinned_at TEXT")
@@ -404,7 +404,7 @@ def init() -> None:
         # 11. Trivia session persistence: server-side state for the
         #     URL-encoded mini-sessions so they survive interruptions
         #     (closed tabs, app restarts, cross-device handoff). One
-        #     active row per (user, deck) — enforced by the repo, not
+        #     active row per (user, deck): enforced by the repo, not
         #     a unique index, since abandoned/completed rows for the
         #     same (user, deck) are common. `queue` and `done` mirror
         #     the URL params (`?cards=...&done=...`); the URL stays
@@ -455,7 +455,7 @@ def init() -> None:
             CREATE INDEX IF NOT EXISTS idx_trivia_queue_pos ON trivia_queue(queue_position);
         """)
 
-        # 12. Active workflows registry — one row per in-flight or
+        # 12. Active workflows registry: one row per in-flight or
         #     recently-terminal Temporal workflow per user. Powers the
         #     masthead "running operations" badge + drives push
         #     notifications on awaiting-action / terminal transitions.
@@ -491,8 +491,7 @@ def init() -> None:
 
         # 13. Snooze + mute (Continue-list triage). Pushed through the
         #     session-card overflow menu. Snooze hides a single session
-        #     from the index Continue strip until a timestamp passes —
-        #     no underlying status change, the session just doesn't
+        #     from the index Continue strip until a timestamp passes: #     no underlying status change, the session just doesn't
         #     surface. Mute silences a trivia deck's push notifications
         #     for a window (NULL = not muted, ISO UTC string = muted
         #     until). Both columns are nullable + default NULL so the
@@ -528,7 +527,7 @@ def init() -> None:
 
         # 15. BYOK credentials. Per-user AI provider API keys stored
         #     AES-256-GCM-encrypted with the deploy's master key.
-        #     One row per (user, provider) — if a user updates their
+        #     One row per (user, provider): if a user updates their
         #     key we INSERT OR REPLACE so there's only ever a single
         #     active blob per provider. ON DELETE CASCADE means the
         #     credentials disappear with the user (Clerk user.deleted
@@ -545,10 +544,10 @@ def init() -> None:
             );
         """)
 
-        # 16. Active BYOK provider — when a user has keys for multiple
+        # 16. Active BYOK provider: when a user has keys for multiple
         #     providers, this column records which one they explicitly
         #     picked. NULL means "no preference, fall back to selector
-        #     precedence" — the original behavior. The selector reads
+        #     precedence": the original behavior. The selector reads
         #     this first; on a stale value (provider had a key, user
         #     deleted it) it gracefully falls back, then we clear the
         #     column on the next /settings/agent render.
@@ -581,7 +580,7 @@ def init() -> None:
         #     how hard for the learner), and an FSRS phase
         #     (1=Learning, 2=Review, 3=Relearning). `last_review` was
         #     already on cards. Existing rows get seeded from their
-        #     ladder step so in-flight cards keep working — anyone at
+        #     ladder step so in-flight cards keep working: anyone at
         #     step ≥ 1 lands with a stability matching their old
         #     interval, difficulty=5 (the FSRS paper midpoint),
         #     state=Review.
@@ -638,8 +637,7 @@ def init() -> None:
         # 21. Per-deck FSRS desired-retention override. NULL means "use
         #     the user's default" (which itself falls back to the
         #     algorithm default 0.90). Lets a user push a single hard
-        #     deck to 95% while the rest of their decks stay at 90 —
-        #     mirrors Anki's deck-options model. Resolution order at
+        #     deck to 95% while the rest of their decks stay at 90: #     mirrors Anki's deck-options model. Resolution order at
         #     review time: deck.desired_retention -> users.desired_retention
         #     -> the scheduler default.
         dcols2 = {r["name"] for r in c.execute("PRAGMA table_info(decks)").fetchall()}

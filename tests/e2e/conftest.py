@@ -1,9 +1,9 @@
 """Pytest fixtures for the e2e suite.
 
-The e2e suite drives a deployed prep instance over HTTP — staging by
+The e2e suite drives a deployed prep instance over HTTP: staging by
 default, overridable via E2E_BASE_URL. Each test session creates a
 throwaway deck (`e2e-test-deck`) via the app's normal HTTP routes,
-runs assertions, then deletes it via the same routes — so the
+runs assertions, then deletes it via the same routes: so the
 fixture itself exercises create + delete + cascade. Failures don't
 leak the deck into staging because teardown runs in a `yield`-style
 fixture's `finally`.
@@ -143,12 +143,12 @@ def test_deck(http: httpx.Client) -> Iterator[dict]:
         "/decks/new/srs",
         data={
             "name": E2E_DECK_NAME,
-            "context_prompt": "e2e test deck — created + torn down per run",
+            "context_prompt": "e2e test deck: created + torn down per run",
             "action": "empty",  # no AI generation
         },
     )
     assert r.status_code == 303, f"deck create returned {r.status_code}: {r.text[:300]}"
-    # /deck/<slug> — strip the redirect to learn the slug.
+    # /deck/<slug>: strip the redirect to learn the slug.
     location = r.headers.get("location", "")
     slug = location.rstrip("/").split("/deck/", 1)[-1].split("/")[0].split("?")[0]
     assert slug, f"could not parse slug from redirect {location!r}"
@@ -188,7 +188,7 @@ def test_deck(http: httpx.Client) -> Iterator[dict]:
 
 
 def _delete_one_deck(http: httpx.Client, slug: str) -> None:
-    """Delete a single deck by slug. Best-effort — non-200/303/404
+    """Delete a single deck by slug. Best-effort: non-200/303/404
     responses are reported but don't raise so teardown failures
     don't mask earlier real failures."""
     r = http.post(f"/deck/{slug}/delete", data={"confirm": slug})
@@ -250,7 +250,7 @@ def _browser_session_factory():
         from playwright.sync_api import sync_playwright
     except ImportError as e:
         pytest.skip(
-            "playwright not installed — `uv sync --group dev` then "
+            "playwright not installed: `uv sync --group dev` then "
             "`uv run playwright install chromium`. Original error: "
             f"{e}",
             allow_module_level=False,
@@ -356,7 +356,7 @@ def page(browser_session, base_url, default_user_header, clerk_storage_state):
     doesn't whitelist `tailscale-user-login` in
     `Access-Control-Allow-Headers`. Those CORS failures pollute the
     console-error assertion in test_browser_smoke.py (and they're not
-    a real app issue — staging behind Tailscale Serve injects the
+    a real app issue: staging behind Tailscale Serve injects the
     header server-side, never on cross-origin asset fetches). Route-
     based injection scopes the header to the prep app's origin.
 
@@ -381,7 +381,7 @@ def page(browser_session, base_url, default_user_header, clerk_storage_state):
     ctx.set_default_navigation_timeout(15_000)
 
     # Inject the Tailscale identity header on requests to the prep
-    # app's origin only. `urljoin` would be overkill — base_url is
+    # app's origin only. `urljoin` would be overkill: base_url is
     # already a clean origin+path prefix from the fixture above; we
     # match on the host+root-path prefix.
     from urllib.parse import urlparse
