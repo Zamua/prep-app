@@ -50,7 +50,11 @@ function vapidJwk(keys: VapidKeys): JsonWebKey {
 }
 
 export async function vapidHeader(keys: VapidKeys, audience: string, nowSeconds: number): Promise<string> {
-  const key = await crypto.subtle.importKey('jwk', vapidJwk(keys), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const key = await crypto.subtle
+    .importKey('jwk', vapidJwk(keys), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
+    .catch((e) => {
+      throw new Error(`importKey(jwk ECDSA vapid): ${e instanceof Error ? e.message : e}`);
+    });
   const header = b64uEncode(TEXT.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
   const payload = b64uEncode(TEXT.encode(JSON.stringify({ aud: audience, exp: Math.floor(nowSeconds) + JWT_TTL_SECONDS, sub: keys.subject })));
   const signing = `${header}.${payload}`;
@@ -85,7 +89,11 @@ export async function encryptPayload(
   const authSecret = b64uDecode(subscription.auth.trim());
   if (uaPublic === null || uaPublic.length !== 65 || authSecret === null) throw new VapidKeyError('subscription keys are not valid base64url');
 
-  const uaKey = await crypto.subtle.importKey('raw', uaPublic as BufferSource, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const uaKey = await crypto.subtle
+    .importKey('raw', uaPublic as BufferSource, { name: 'ECDH', namedCurve: 'P-256' }, false, [])
+    .catch((e) => {
+      throw new Error(`importKey(raw ECDH p256dh, ${uaPublic.length}B): ${e instanceof Error ? e.message : e}`);
+    });
   // workers-types spells ECDH's peer key `$public`; the runtime reads either.
   const ecdh = { name: 'ECDH', public: uaKey } as unknown as SubtleCryptoDeriveKeyAlgorithm;
   const shared = new Uint8Array(await crypto.subtle.deriveBits(ecdh, ephemeral.privateKey, 256));
@@ -123,13 +131,19 @@ export class WebCryptoWebPush implements WebPush {
     })();
     let body: Uint8Array;
     let authorization: string;
+    // Names the failing primitive: celld's WebCrypto does not accept every
+    // import shape Node does, and a bare message cannot say which one.
+    let step = 'start';
     try {
       const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+      step = 'generateKey(ECDH)';
       const ephemeral = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as CryptoKeyPair;
+      step = 'encryptPayload';
       body = await encryptPayload(subscription, TEXT.encode(payload), salt, ephemeral);
+      step = 'vapidHeader';
       authorization = await vapidHeader(this.keys, new URL(subscription.endpoint).origin, this.now().getTime() / 1000);
     } catch (e) {
-      console.error(`web push: could not build the request for ${host}: ${e instanceof Error ? e.message : e}`);
+      console.error(`web push: ${step} failed for ${host}: ${e instanceof Error ? `${e.name}: ${e.message}` : e}`);
       return 'fail';
     }
     try {
