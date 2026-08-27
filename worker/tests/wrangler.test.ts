@@ -132,3 +132,23 @@ describe('the three wrangler files', () => {
     }
   });
 });
+
+describe('the authorized parties cover every host the ingress serves', () => {
+  // A host that reaches the app but is not authorized fails Clerk at
+  // sign-in, and only for the users who happen to be on it.
+  // dev is absent: it runs without Clerk, so it defines no parties.
+  const SERVED: Record<string, string[]> = {
+    staging: ['https://staging.prepcards.app', 'https://celld.staging.prepcards.app'],
+    prod: ['https://prepcards.app', 'https://www.prepcards.app'],
+  };
+
+  for (const env of Object.keys(SERVED)) {
+    it(`${env} authorizes every host it answers on`, () => {
+      const cfg = JSON.parse(
+        readFileSync(join(ROOT, `wrangler.${env}.jsonc`), 'utf8').replace(/^\s*\/\/.*$/gm, ''),
+      );
+      const parties = String(cfg.vars.CLERK_AUTHORIZED_PARTIES).split(',').map((s) => s.trim());
+      for (const host of SERVED[env]!) expect(parties).toContain(host);
+    });
+  }
+});
