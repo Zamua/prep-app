@@ -152,3 +152,18 @@ describe('the authorized parties cover every host the ingress serves', () => {
     });
   }
 });
+
+describe('the accounts URL is the account portal, not the frontend API', () => {
+  // The FAPI host serves no /sign-in, so pointing the portal at it turns
+  // every sign-in into a 404 while the rest of the app looks healthy.
+  for (const env of ['staging', 'prod'] as const) {
+    it(`${env} does not point the portal at its own FAPI host`, () => {
+      const cfg = JSON.parse(
+        readFileSync(join(ROOT, `wrangler.${env}.jsonc`), 'utf8').replace(/^\s*\/\/.*$/gm, ''),
+      );
+      const accounts = new URL(String(cfg.vars.CLERK_ACCOUNTS_URL)).host;
+      expect(accounts).not.toBe(frontendApiHost(String(cfg.vars.CLERK_PUBLISHABLE_KEY)));
+      expect(accounts.startsWith('clerk.')).toBe(false);
+    });
+  }
+});

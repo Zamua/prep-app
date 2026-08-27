@@ -27,7 +27,7 @@
     // every other credential arrive as CELLD_VAR_*, never from this file.
     "CLERK_ISSUER": "https://perfect-bengal-99.clerk.accounts.dev",
     "CLERK_JWKS_URL": "https://perfect-bengal-99.clerk.accounts.dev/.well-known/jwks.json",
-    "CLERK_ACCOUNTS_URL": "https://perfect-bengal-99.clerk.accounts.dev",
+    "CLERK_ACCOUNTS_URL": "https://perfect-bengal-99.accounts.dev",
     "CLERK_AUTHORIZED_PARTIES": "https://staging.prepcards.app,https://celld.staging.prepcards.app",
     "CLERK_PUBLISHABLE_KEY": "pk_test_cGVyZmVjdC1iZW5nYWwtOTkuY2xlcmsuYWNjb3VudHMuZGV2JA"
   }
