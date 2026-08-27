@@ -72,6 +72,24 @@ const concat = (...parts: Uint8Array[]): Uint8Array => {
   return out;
 };
 
+/** The 65-byte uncompressed P-256 point `04 || x || y`.
+ *
+ * celld's `exportKey('raw')` answers SPKI DER for an EC key, not the point
+ * RFC 8291 puts in the `keyid`; a 91-byte DER blob there encrypts fine and
+ * decrypts nowhere, so the browser drops the notification in silence. The
+ * JWK coordinates are the same key in a shape both runtimes agree on.
+ */
+async function uncompressedPoint(key: CryptoKey): Promise<Uint8Array> {
+  const jwk = (await crypto.subtle.exportKey('jwk', key)) as JsonWebKey;
+  const x = b64uDecode(jwk.x ?? '');
+  const y = b64uDecode(jwk.y ?? '');
+  if (x === null || y === null || x.length !== 32 || y.length !== 32) {
+    throw new VapidKeyError('the ephemeral key did not export as a P-256 point');
+  }
+  return concat(new Uint8Array([0x04]), x, y);
+}
+
+
 const hkdf = (salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> =>
   hkdfSha256(ikm, info, length, salt);
 
@@ -102,7 +120,7 @@ export async function encryptPayload(
   // workers-types spells ECDH's peer key `$public`; the runtime reads either.
   const ecdh = { name: 'ECDH', public: uaKey } as unknown as SubtleCryptoDeriveKeyAlgorithm;
   const shared = new Uint8Array(await crypto.subtle.deriveBits(ecdh, ephemeral.privateKey, 256));
-  const asPublic = new Uint8Array((await crypto.subtle.exportKey('raw', ephemeral.publicKey)) as ArrayBuffer);
+  const asPublic = await uncompressedPoint(ephemeral.publicKey);
 
   // RFC 8291 section 3.4: the auth secret salts the ECDH secret, and the
   // two public keys bind the derivation to this exact pair.
