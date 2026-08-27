@@ -325,6 +325,23 @@ export interface CellSnapshot {
   tables: Record<string, Record<string, unknown>[]>;
 }
 
+/** One migration chunk as the cell applies it: one table's rows, plus the
+ * profile on the chunk that opens a user. */
+export interface MigrationWrite {
+  idx: number;
+  table: string | null;
+  rows: readonly Record<string, unknown>[];
+  profile: Record<string, unknown> | null;
+}
+
+/** What a cell already holds, which is what a killed run resumes from. */
+export interface MigrationStatus {
+  profile: boolean;
+  /** The cell's id block; 0 until a profile chunk lands. */
+  idx: number;
+  tables: Record<string, number>;
+}
+
 export interface DirectoryUser {
   id: string;
   is_anonymous: boolean;

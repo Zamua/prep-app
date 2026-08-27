@@ -12,12 +12,16 @@ import { reapIdleAnonymous } from '../../app/auth/reaper.js';
 import { isoUtc, parseIso } from '../../domain/py.js';
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
-import type { CellStorage } from '../storage.js';
+import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
 
 /** What a parity dump of the directory carries. */
 const DUMP_TABLES = ['users', 'account_merges', 'merge_markers', 'tombstones'] as const;
 
 const REAP_STATE_KEY = 'reap';
+/** The migration's one-way flag. Never cleared: once the cutover verifies,
+ * a stale runbook step or a second run of the migrator must not be able to
+ * write into a fleet that is already serving. */
+const MIGRATION_SEAL_KEY = 'migration_sealed';
 const DAY_MS = 86_400_000;
 /** A wake is never asked for the past. */
 const ALARM_FLOOR_MS = 1;
@@ -62,6 +66,23 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
       tables[table] = this.storage.sql.exec(`SELECT * FROM "${table}" ORDER BY rowid`).toArray();
     }
     return tables;
+  }
+
+  /** The verifier's read of the directory: `users` against the exporter's
+   * own ranking, `account_merges` field by field. */
+  async dumpPage(table: string, after: number | null, limit: number, columns: readonly string[] | null): Promise<DumpPage> {
+    return pageByRowid(this.storage.sql, table, { after, limit, columns: columns ?? undefined });
+  }
+
+  /** The migration seal, which the entry worker reads before every
+   * `/_migrate/*` call. It lives here because there is one directory and the
+   * flag is fleet-wide. */
+  async sealMigration(): Promise<void> {
+    await this.storage.put<boolean>(MIGRATION_SEAL_KEY, true);
+  }
+
+  async migrationSealed(): Promise<boolean> {
+    return (await this.storage.get<boolean>(MIGRATION_SEAL_KEY)) === true;
   }
 
   async register(id: string, isAnonymous: boolean, at: string, opts?: { idx?: number }): Promise<{ idx: number }> {

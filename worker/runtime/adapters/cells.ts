@@ -3,6 +3,7 @@
 // idempotent calls retry with backoff; the one non-idempotent call does not.
 import type { Directory, JobCellRpc, JobCells, Limiter, UserCellRpc, UserCells } from '../../app/ports.js';
 import { RowCapReached } from '../../domain/limits.js';
+import { ChunkRejected } from '../../domain/migrate.js';
 
 export const GLOBAL = 'global';
 
@@ -32,7 +33,7 @@ export class NoRpcMethod extends TypeError {}
  * costs a lost write.
  */
 function decided(e: unknown): boolean {
-  return e instanceof RowCapReached || e instanceof NoRpcMethod;
+  return e instanceof RowCapReached || e instanceof NoRpcMethod || e instanceof ChunkRejected;
 }
 
 export async function retrying<T>(fn: () => Promise<T>, policy: RetryPolicy = DEFAULT_RETRY): Promise<T> {

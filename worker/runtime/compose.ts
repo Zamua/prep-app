@@ -59,6 +59,7 @@ import { SqlJsApkg } from './adapters/apkg.js';
 import { FflateZip } from './adapters/zip.js';
 import { createRenderer } from './adapters/nunjucks/index.js';
 import { ParitySessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from './adapters/random.js';
+import { DATA_TABLES } from './adapters/sql/schema.js';
 import {
   DIRECTORY_MIGRATIONS,
   JOB_MIGRATIONS,
@@ -174,6 +175,9 @@ export interface Composition {
   migrateJobCell(storage: CellStorage): number;
   /** The cell's autoincrement counters at `idx * 2^32`; block 0 restarts at 1. */
   seedIdBlock(storage: CellStorage, idx: number): void;
+  /** The user-cell tables an import may name, in insert order. The schema is
+   * an adapter's, so the routes read it from here. */
+  dataTables: readonly string[];
   resetIdBlock(storage: CellStorage): void;
 }
 
@@ -404,6 +408,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     migrateDirectory: (storage) => migrate(storage.sql, DIRECTORY_MIGRATIONS),
     migrateLimiter: (storage) => migrate(storage.sql, LIMITER_MIGRATIONS),
     migrateJobCell: (storage) => migrate(storage.sql, JOB_MIGRATIONS),
+    dataTables: DATA_TABLES,
     seedIdBlock: (storage, idx) => seedSequences(storage.sql, idx),
     resetIdBlock: (storage) => resetSequences(storage.sql),
   };

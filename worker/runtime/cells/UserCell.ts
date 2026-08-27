@@ -2,7 +2,7 @@
 // the parity seed and the three-step deletion. Until lanes C and D land
 // their routes, an unmatched request replays the recorded Python page.
 import { DurableObject } from 'cloudflare:workers';
-import type { CellSnapshot, InstantCard, InstantDeckResult, Profile, ProfileClaims, TombstoneReason } from '../../app/entities.js';
+import type { CellSnapshot, InstantCard, InstantDeckResult, MigrationStatus, MigrationWrite, Profile, ProfileClaims, TombstoneReason } from '../../app/entities.js';
 import type { AgentConfig, CarriedPreferences, Clock, JobStatusWrite, JobStepRequest, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
 import { agentConfig as agentConfigFor } from '../../app/agent/funding.js';
 import { deliverJobStatus } from '../../app/jobs/status.js';
@@ -10,13 +10,15 @@ import { canGenerate, nextWakeAt, runWake, type WakeDeps } from '../../app/notif
 import type { StepOutput, WriteStepContext } from '../../app/jobs/registry.js';
 import { derive } from '../../app/viewmodels/derive.js';
 import { RowCapReached } from '../../domain/limits.js';
+import { isRefusal } from '../../domain/jobs/refusal.js';
+import { ChunkRejected } from '../../domain/migrate.js';
 import { BAD_TOKEN, NO_USER } from '../../domain/pat.js';
 import { carryPreferences, TARGET_COLUMNS, type Row } from '../../domain/merge.js';
 import { appBase } from '../appBase.js';
 import { ANON_COOKIE_HEADER, clockFor, compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { errorPage } from '../errors.js';
-import type { CellStorage } from '../storage.js';
+import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
 import { isoUtc } from '../../domain/py.js';
 import { pageContext } from '../../app/pageContext.js';
 import {
@@ -378,12 +380,53 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     return this.repos().export.dump();
   }
 
+  /** The verifier's read: one bounded page, so a 50,000-review account is
+   * compared without either side holding it whole. */
+  async dumpPage(table: string, after: number | null, limit: number, columns: readonly string[] | null): Promise<DumpPage> {
+    return pageByRowid(this.storage.sql, table, { after, limit, columns: columns ?? undefined });
+  }
+
   async mergeView(): Promise<CellSnapshot> {
     return this.repos().export.project(TARGET_COLUMNS);
   }
 
   async importRows(snapshot: CellSnapshot): Promise<Record<string, number>> {
     return this.repos().export.importRows(snapshot, { idempotentBy: 'id' });
+  }
+
+  /**
+   * One migration chunk under one transaction, so a run killed mid-user
+   * leaves whole chunks and never half a row. The id block is raised before
+   * the insert: a migrated row keeps its Python id, far below the block, and
+   * seeding first is what stops a row minted later from taking the same one.
+   */
+  async importChunk(write: MigrationWrite): Promise<Record<string, number>> {
+    const repos = this.repos();
+    const tomb = repos.tombstone.get();
+    if (tomb) throw new ChunkRejected(`this account was ${tomb.reason}`);
+    try {
+      return repos.tx.sync(() => {
+        this.c.seedIdBlock(this.storage, write.idx);
+        if (write.profile) {
+          repos.export.importProfile(write.profile);
+          repos.prefs.setIdBase(write.idx);
+        }
+        if (!write.table || write.rows.length === 0) return {};
+        return repos.export.importRows({ profile: null, tables: { [write.table]: [...write.rows] } }, { idempotentBy: 'id' });
+      });
+    } catch (e) {
+      // A refusal is the runtime declining and retries; anything else is the
+      // rows themselves, usually a child sent before its parent.
+      if (isRefusal(e)) throw e;
+      throw new ChunkRejected(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async migrationStatus(): Promise<MigrationStatus> {
+    const repos = this.repos();
+    if (repos.tombstone.get()) return { profile: false, idx: 0, tables: {} };
+    const { profile, tables } = repos.export.counts();
+    return { profile, idx: profile ? repos.prefs.getIdBase() : 0, tables };
   }
 
   /** The COPY-IF-NULL carry, decided by the domain against this cell's own

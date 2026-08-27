@@ -3,7 +3,7 @@
 import type { ExportRepo, TombstoneRepo } from '../../../app/ports.js';
 import type { CellSnapshot, Tombstone, TombstoneReason } from '../../../app/entities.js';
 import { rowToProfile } from './prefsRepo.js';
-import { DATA_TABLES } from './schema.js';
+import { DATA_TABLES, PROFILE_TABLE } from './schema.js';
 import { Db, type CellStorage, type SqlValue } from './storage.js';
 
 const SCRUB_CHUNK = 1 << 20;
@@ -59,6 +59,29 @@ export class SqlExportRepo implements ExportRepo {
       }
     });
     return counts;
+  }
+
+  /**
+   * The migrated row, columns verbatim and keyed by `id`. `id_base` is never
+   * written here: a chunk does not carry one, and the importer sets it from
+   * the exporter's idx, which a replay must not undo.
+   */
+  importProfile(row: Readonly<Record<string, unknown>>): void {
+    const columns = this.db.columns(PROFILE_TABLE);
+    const keys = Object.keys(row).filter((k) => columns.has(k) && k !== 'id_base');
+    if (!keys.includes('id')) throw new TypeError('a profile row needs an id');
+    const updates = keys.filter((k) => k !== 'id').map((k) => `"${k}" = excluded."${k}"`);
+    this.db.run(
+      `INSERT INTO "${PROFILE_TABLE}" (${keys.map((k) => `"${k}"`).join(', ')}) VALUES (${keys.map(() => '?').join(', ')})
+       ON CONFLICT(id) DO UPDATE SET ${updates.join(', ')}`,
+      ...keys.map((k) => row[k] as SqlValue),
+    );
+  }
+
+  counts(): { profile: boolean; tables: Record<string, number> } {
+    const tables: Record<string, number> = {};
+    for (const table of DATA_TABLES) tables[table] = Number(this.db.first<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table}"`)?.n ?? 0);
+    return { profile: this.db.first(`SELECT id FROM "${PROFILE_TABLE}" LIMIT 1`) !== null, tables };
   }
 
   wipe(): void {

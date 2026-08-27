@@ -26,6 +26,8 @@ import type {
   InstantDeckResult,
   MergeAudit,
   MergeMarker,
+  MigrationStatus,
+  MigrationWrite,
   NewQuestion,
   NextCard,
   NotificationLogEntry,
@@ -393,6 +395,12 @@ export interface ExportRepo {
   project(columns: Readonly<Record<string, readonly string[]>>): CellSnapshot;
   /** Inserts rows the cell lacks by primary key; user columns are dropped. Returns rows inserted per table. */
   importRows(snapshot: CellSnapshot, opts: { idempotentBy: 'id' }): Record<string, number>;
+  /** The migrated `profile` row, columns verbatim. `last_seen_at` is the
+   * anonymous reaper's only input, so the clock-stamped `prefs.upsert`
+   * cannot stand in for this. Keyed by `id`: a replay writes the same row. */
+  importProfile(row: Readonly<Record<string, unknown>>): void;
+  /** Rows per data table and whether the profile is there: the resume point. */
+  counts(): { profile: boolean; tables: Record<string, number> };
   /** Every data row, the profile kept. */
   wipe(): void;
 }
@@ -838,6 +846,11 @@ export interface UserCellRpc {
   /** What a merge into this cell reads of it: the policy's target columns. */
   mergeView(): Promise<CellSnapshot>;
   importRows(snapshot: CellSnapshot): Promise<Record<string, number>>;
+  /** One migration chunk, in one transaction: it lands whole or not at all,
+   * so a run killed mid-user leaves no half-row. Returns rows inserted. */
+  importChunk(write: MigrationWrite): Promise<Record<string, number>>;
+  /** What this cell already holds, for the importer's resume point. */
+  migrationStatus(): Promise<MigrationStatus>;
   /** COPY-IF-NULL of the merge's carried profile columns; counts what moved. */
   carryPreferences(carried: CarriedPreferences): Promise<Record<string, number>>;
   destroy(reason: TombstoneReason, at: string): Promise<void>;
