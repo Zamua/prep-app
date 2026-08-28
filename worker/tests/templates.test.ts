@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BUILD, STATIC, TEMPLATES, WORKER, bakeIcons, precompileTemplates } from "../scripts/build.mjs";
@@ -63,8 +63,9 @@ describe("the templates", () => {
 describe("the renderer", () => {
   const renderer = makeRenderer();
 
+  // A missing directory has to fail: the sweep is the only thing that renders
+  // these contexts, so a silent skip would green-light moving them away.
   it("renders every committed context without throwing", () => {
-    if (!existsSync(CONTEXTS)) return;
     const files = walk(CONTEXTS, ".json");
     expect(files.length).toBeGreaterThan(100);
     for (const rel of files) {

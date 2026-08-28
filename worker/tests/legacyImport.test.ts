@@ -1,8 +1,10 @@
 // An archive a user exported from an earlier build still imports.
 //
-// `tests/fixtures/legacy/` holds real export bytes, unreadable by any writer
-// in this tree: `.prepdeck` whose meta.json escapes non-ASCII and whose float
-// cells carry six significant digits, and `.apkg` from Anki itself. The
+// `tests/fixtures/legacy/` holds `.prepdeck` bytes no writer in this tree can
+// produce: meta.json escapes non-ASCII and the float cells carry six
+// significant digits. The `.apkg` pair is hand-built rather than exported from
+// Anki, and holds a bare `notes` table under each of the two collection names
+// the reader looks for, since that one query is all the reader runs. The
 // readers are the compatibility surface, so this pins what they accept, not
 // what the exporters emit.
 import { readFileSync } from 'node:fs';

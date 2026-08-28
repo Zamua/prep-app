@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { createHmac } from 'node:crypto';
 import { TOLERANCE_SECONDS, signSvix, svixHeaders, verifySvix } from '../runtime/adapters/svix';
 import { req } from './helpers';
 
-const SECRET = 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw';
+// Svix's own published example of the scheme, secret and all. A vector from
+// the sender's side is the only thing that catches a wrong reading of it: a
+// signature this code both writes and checks agrees with itself regardless.
+const VECTOR = {
+  secret: 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw',
+  id: 'msg_p5jXN8AQM9LWM0D4loKWxJek',
+  timestamp: '1614265330',
+  body: '{"test": 2432232314}',
+  signature: 'v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=',
+};
+
+const SECRET = VECTOR.secret;
 const OTHER = 'whsec_' + Buffer.from('a-different-key-32-bytes-long!!!').toString('base64');
-const ID = 'msg_p5jXN8AQM9LWM0D4loKWxJek';
+const ID = VECTOR.id;
 const NOW = new Date('2026-03-14T15:00:00Z');
 const TS = String(Math.floor(NOW.getTime() / 1000));
 const BODY = JSON.stringify({ type: 'user.created', data: { id: 'user_2abc' } });
@@ -22,18 +32,11 @@ async function signed(over: Parameters<typeof headers>[0] = {}, secret = SECRET)
 }
 
 describe('the signature', () => {
-  // The svix scheme: base64 of HMAC-SHA256 over `<id>.<timestamp>.<body>`,
-  // keyed by the base64 body of the `whsec_` secret.
-  it('is the base64 HMAC of `<id>.<timestamp>.<body>`', async () => {
-    const key = Buffer.from(SECRET.slice('whsec_'.length), 'base64');
-    const mac = createHmac('sha256', key).update(`${ID}.${TS}.${BODY}`, 'utf8').digest('base64');
-    expect(await signSvix(SECRET, ID, TS, BODY)).toBe(`v1,${mac}`);
-  });
-
-  it('verifies a header computed that way', async () => {
-    const key = Buffer.from(SECRET.slice('whsec_'.length), 'base64');
-    const mac = createHmac('sha256', key).update(`${ID}.${TS}.${BODY}`, 'utf8').digest('base64');
-    expect(await verifySvix(SECRET, { id: ID, timestamp: TS, signature: `v1,${mac}` }, BODY, NOW)).toBeNull();
+  it('reproduces svix’s published vector, and verifies it', async () => {
+    const { secret, id, timestamp, body, signature } = VECTOR;
+    expect(await signSvix(secret, id, timestamp, body)).toBe(signature);
+    const sentAt = new Date(Number(timestamp) * 1000);
+    expect(await verifySvix(secret, { id, timestamp, signature }, body, sentAt)).toBeNull();
   });
 
   it('accepts any listed v1 entry, so a rotated secret verifies during the overlap', async () => {

@@ -35,7 +35,23 @@ describe('the master key', () => {
   });
 });
 
+// AES-256-GCM under the master key above, nonce and all, base64 of
+// `nonce || ct || tag`. Independently computed, so they hold the layout and
+// the cipher still: a round trip alone agrees with itself whatever it does,
+// and every stored credential is unreadable if either moves.
+const VECTORS: readonly [string, string][] = [
+  ['sk-ant-api03-test-fixture-key-0000', 'AAAAAAAAAAAAAAAAt6EzBo/bsPhxc4029oa//IVN6feA0CueHMgo/n1woG6QzbHl939J4psRiyXKP6dGNxQ='],
+  ['clé-é中文-🔑', 'AAAAAAAAAAAAAAABqufLYSXglvTBlB3TGCqKT7Dflrj80QmrLwMZ35R4hMW93A=='],
+];
+
 describe('AES-256-GCM round trips', () => {
+  it('reads the committed vectors, and writes them back byte for byte', async () => {
+    for (const [plaintext, blob] of VECTORS) expect(await cipher().decrypt(blob), plaintext).toBe(plaintext);
+    // The counter starts where the vectors' nonces do, so encrypt reproduces them.
+    const writer = new AesGcmCipher(MASTER, counterRandom());
+    for (const [plaintext, blob] of VECTORS) expect(await writer.encrypt(plaintext), plaintext).toBe(blob);
+  });
+
   it('nonce, ciphertext and tag concatenated under base64', async () => {
     const blob = await cipher().encrypt(SECRET);
     const raw = b64Decode(blob)!;

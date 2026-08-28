@@ -54,28 +54,35 @@ describe("serviceWorkerScript", () => {
 });
 
 describe("manifestDocument", () => {
-  // The install prompt reads these; a changed id or scope makes the browser
-  // treat it as a different app and lose the installed one.
-  it("names the app, its scope and both icons at the root", () => {
-    expect(sw.manifestDocument("")).toMatchObject({
+  // The whole document, because the browser keys the installed app on the
+  // scope and paints its splash from the two colours.
+  it("is the app's name, scope, colours and both icons at the root", () => {
+    expect(sw.manifestDocument("")).toEqual({
       name: "prep \u00b7 a commonplace book",
       short_name: "prep",
+      description: "Spaced-repetition flashcards. Learn anything.",
+      display: "standalone",
       scope: "/",
       start_url: "/",
-      display: "standalone",
+      background_color: "#f4ecdc",
+      theme_color: "#f5efe6",
+      icons: [
+        { src: "/static/pwa/icon-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/static/pwa/icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
     });
-    const doc = sw.manifestDocument("") as { icons: { src: string; sizes: string }[] };
-    expect(doc.icons.map((i) => [i.src, i.sizes])).toEqual([
-      ["/static/pwa/icon-192.png", "192x192"],
-      ["/static/pwa/icon-512.png", "512x512"],
-    ]);
   });
 
-  it("labels a staging root", () => {
-    const doc = sw.manifestDocument("/prep-staging");
+  it("labels a staging root and carries it into every URL", () => {
+    const doc = sw.manifestDocument("/prep-staging") as Record<string, unknown> & { icons: { src: string }[] };
     expect(doc.name).toBe("prep · a commonplace book (staging)");
     expect(doc.short_name).toBe("prep (staging)");
     expect(doc.scope).toBe("/prep-staging/");
+    expect(doc.start_url).toBe("/prep-staging/");
+    expect(doc.icons.map((i) => i.src)).toEqual([
+      "/prep-staging/static/pwa/icon-192.png",
+      "/prep-staging/static/pwa/icon-512.png",
+    ]);
   });
 });
 

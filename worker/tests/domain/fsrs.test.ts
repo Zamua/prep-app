@@ -186,8 +186,9 @@ describe('fuzz', () => {
     }
   });
 
-  // FSRS fuzz is a small band around the interval, not a free hand.
-  it('stays within a few percent of the unfuzzed interval', () => {
+  // FSRS fuzz is a band around the interval, not a free hand. The bound is
+  // the widest band FSRS itself draws from, not the spread this case shows.
+  it('stays within three days plus six percent of the unfuzzed interval', () => {
     const days = plain.intervalSeconds / DAY;
     for (let i = 0; i < 64; i++) {
       const got = on(() => i / 64).intervalSeconds / DAY;

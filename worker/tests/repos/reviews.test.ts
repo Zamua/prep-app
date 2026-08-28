@@ -25,11 +25,16 @@ describe('ReviewRepo.record', () => {
   it('the second review a day later persists the scheduler output and the review row', () => {
     clock.set(at(TEST_NOW, D));
     const r2 = repos.reviews.record(qid, 'wrong', 'b', 'n');
-    const row = storage.rows('cards')[0]!;
-    expect(row).toMatchObject({ question_id: qid, last_review: '2026-03-15T15:00:00+00:00', fsrs_state: 1 });
-    expect(Number(row['stability'])).toBeLessThan(2.3065);
-    expect(r2).toEqual({ step: row['step'], next_due: row['next_due'], interval_minutes: 1 });
-    expect(r2.next_due).toBe('2026-03-15T15:01:00+00:00');
+    expect(r2).toEqual({ step: 0, next_due: '2026-03-15T15:01:00+00:00', interval_minutes: 1 });
+    expect(storage.rows('cards')[0]).toEqual({
+      question_id: qid,
+      step: 0,
+      next_due: '2026-03-15T15:01:00+00:00',
+      last_review: '2026-03-15T15:00:00+00:00',
+      stability: 0.57129918,
+      difficulty: 7.39450274,
+      fsrs_state: 1,
+    });
     expect(storage.rows('reviews').map(({ id: _id, ...r }) => r)).toEqual([
       { question_id: qid, ts: '2026-03-14T15:00:00+00:00', result: 'right', user_answer: 'a', grader_notes: '' },
       { question_id: qid, ts: '2026-03-15T15:00:00+00:00', result: 'wrong', user_answer: 'b', grader_notes: 'n' },

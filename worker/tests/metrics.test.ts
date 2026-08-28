@@ -16,12 +16,16 @@ interface Step {
 }
 
 // A family with no observation, a value in a middle bucket, one past every
-// finite bound, a non-integral sum, and a label needing escaping.
+// finite bound, a label needing escaping, two observations into one series so
+// the counts and sums have to accumulate rather than overwrite, and a second
+// label value in one family so the series within it have an order to keep.
 const SEQUENCE: readonly Step[] = [
-  { family: 'http', labels: { method: 'GET', route: '/', status: '200' }, seconds: 1.012 },
+  { family: 'http', labels: { method: 'GET', route: '/', status: '200' }, seconds: 0.012 },
   { family: 'http', labels: { method: 'GET', route: '/deck/{name}', status: '500' }, seconds: 75 },
   { family: 'http', labels: { method: 'POST', route: 'a\\b"c\nd', status: '200' }, seconds: 0.012 },
   { family: 'instant', labels: { outcome: 'ok' }, seconds: 2.0 },
+  { family: 'http', labels: { method: 'GET', route: '/', status: '200' }, seconds: 1.0 },
+  { family: 'instant', labels: { outcome: 'rate_limited' }, seconds: 0.001 },
 ];
 
 const EXPOSITION = [
@@ -44,22 +48,37 @@ const EXPOSITION = [
   "prep_instant_generate_duration_seconds_bucket{le=\"+Inf\",outcome=\"ok\"} 1.0",
   "prep_instant_generate_duration_seconds_count{outcome=\"ok\"} 1.0",
   "prep_instant_generate_duration_seconds_sum{outcome=\"ok\"} 2.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"0.01\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"0.1\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"0.5\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"1.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"2.5\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"5.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"10.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"20.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"30.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"45.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"60.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"75.0\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"+Inf\",outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_count{outcome=\"rate_limited\"} 1.0",
+  "prep_instant_generate_duration_seconds_sum{outcome=\"rate_limited\"} 0.001",
   "# HELP prep_http_request_duration_seconds Request handling time per route. Labels are coarse on purpose: `route` is the route template (e.g. /deck/{name}), not the raw URL, which keeps cardinality bounded.",
   "# TYPE prep_http_request_duration_seconds histogram",
   "prep_http_request_duration_seconds_bucket{le=\"0.005\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
   "prep_http_request_duration_seconds_bucket{le=\"0.01\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
-  "prep_http_request_duration_seconds_bucket{le=\"0.025\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
-  "prep_http_request_duration_seconds_bucket{le=\"0.05\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
-  "prep_http_request_duration_seconds_bucket{le=\"0.1\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
-  "prep_http_request_duration_seconds_bucket{le=\"0.25\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
-  "prep_http_request_duration_seconds_bucket{le=\"0.5\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
-  "prep_http_request_duration_seconds_bucket{le=\"1.0\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
-  "prep_http_request_duration_seconds_bucket{le=\"2.5\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
-  "prep_http_request_duration_seconds_bucket{le=\"5.0\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
-  "prep_http_request_duration_seconds_bucket{le=\"7.5\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
-  "prep_http_request_duration_seconds_bucket{le=\"12.0\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
-  "prep_http_request_duration_seconds_bucket{le=\"+Inf\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
-  "prep_http_request_duration_seconds_count{method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.025\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.05\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.1\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.25\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.5\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"1.0\",method=\"GET\",route=\"/\",status=\"200\"} 2.0",
+  "prep_http_request_duration_seconds_bucket{le=\"2.5\",method=\"GET\",route=\"/\",status=\"200\"} 2.0",
+  "prep_http_request_duration_seconds_bucket{le=\"5.0\",method=\"GET\",route=\"/\",status=\"200\"} 2.0",
+  "prep_http_request_duration_seconds_bucket{le=\"7.5\",method=\"GET\",route=\"/\",status=\"200\"} 2.0",
+  "prep_http_request_duration_seconds_bucket{le=\"12.0\",method=\"GET\",route=\"/\",status=\"200\"} 2.0",
+  "prep_http_request_duration_seconds_bucket{le=\"+Inf\",method=\"GET\",route=\"/\",status=\"200\"} 2.0",
+  "prep_http_request_duration_seconds_count{method=\"GET\",route=\"/\",status=\"200\"} 2.0",
   "prep_http_request_duration_seconds_sum{method=\"GET\",route=\"/\",status=\"200\"} 1.012",
   "prep_http_request_duration_seconds_bucket{le=\"0.005\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
   "prep_http_request_duration_seconds_bucket{le=\"0.01\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
@@ -122,10 +141,15 @@ describe('the exposition', () => {
   });
 
   it('covers what the format can vary on', () => {
-    expect(EXPOSITION).toContain('# TYPE prep_ai_grade_duration_seconds histogram\n# HELP');
-    expect(EXPOSITION).toContain('route="a\\\\b\\"c\\nd"');
-    expect(EXPOSITION).toContain('prep_http_request_duration_seconds_sum{method="GET",route="/",status="200"} 1.012');
-    expect(EXPOSITION).toContain('prep_http_request_duration_seconds_bucket{le="+Inf",method="GET",route="/deck/{name}",status="500"} 1.0');
+    const text = replay(SEQUENCE).render();
+    expect(text).toContain('# TYPE prep_ai_grade_duration_seconds histogram\n# HELP');
+    expect(text).toContain('route="a\\\\b\\"c\\nd"');
+    expect(text).toContain('prep_http_request_duration_seconds_bucket{le="+Inf",method="GET",route="/deck/{name}",status="500"} 1.0');
+    // Two observations into one series accumulate; they do not overwrite.
+    expect(text).toContain('prep_http_request_duration_seconds_count{method="GET",route="/",status="200"} 2.0');
+    expect(text).toContain('prep_http_request_duration_seconds_sum{method="GET",route="/",status="200"} 1.012');
+    // A second label value opens a second series in the same family.
+    expect(text).toContain('prep_instant_generate_duration_seconds_sum{outcome="rate_limited"} 0.001');
   });
 
   // The Go float format Prometheus reads: how wide an exponent is written,
