@@ -69,7 +69,7 @@ the app works as a manual SRS.
 make setup       # mise install + npm install + uv sync
 make test        # vitest
 make typecheck   # tsc over the worker and its tests
-make ci          # lint + typecheck + test + the migration tool's suite
+make ci          # lint + typecheck + test
 ```
 
 To run it for real against a local celld node:
@@ -84,9 +84,8 @@ what it expects (a `celld` binary and an S3-compatible endpoint for cell
 storage) and the env vars that redirect each. `make help` lists every
 target.
 
-Python is still in the tree for two things that are not the application:
-the migration tool under `migrate/`, and the browser and pixel test
-harness under `tests/`.
+Python is in the tree for one thing that is not the application: the
+browser and pixel test harness under `tests/`.
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before sending a PR, and
 [`docs/architecture.md`](docs/architecture.md) before making a

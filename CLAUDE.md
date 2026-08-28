@@ -481,7 +481,7 @@ make setup       # mise install + npm install + uv sync + git hooks
 make build       # templates, icons, service worker, domain twins, dist/assets
 make typecheck   # tsc over the worker and its tests
 make test        # vitest
-make ci          # lint + typecheck + test + the migration tool's suite
+make ci          # lint + typecheck + test
 make dev         # build, deploy and start a local celld node on :8791
 make dev-stop
 make llm-stub    # the canned LLM a local node calls for AI flows
@@ -491,9 +491,8 @@ make llm-stub    # the canned LLM a local node calls for AI flows
 Each step in `build.mjs` is a function so `tests/build.test.ts` can run
 one against a scratch tree.
 
-**Python in this tree is not the application.** It is the migration tool
-(`migrate/`) and the browser e2e suite (`tests/`), both driven by their
-own make targets (`test-migrate`, `e2e`). New application code is
+**Python in this tree is not the application.** It is the browser e2e
+suite (`tests/`), driven by `make e2e`. New application code is
 TypeScript under `worker/`.
 
 The pre-commit hook gates staged TypeScript on typecheck plus the whole

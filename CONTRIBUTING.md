@@ -12,7 +12,7 @@ an input.
 make setup       # mise install + npm install + uv sync + git hooks
 make test        # vitest
 make typecheck   # tsc over the worker and its tests
-make ci          # lint + typecheck + test + the migration tool's suite
+make ci          # lint + typecheck + test
 ```
 
 On macOS, `brew bundle` first. On Linux, install mise
@@ -30,16 +30,15 @@ env vars that redirect each piece. AI flows against a local node call
 `worker/` gates on `npm run typecheck` plus the whole vitest suite, which
 runs in seconds. `git commit --no-verify` bypasses it; use that sparingly.
 
-**Python is still in the tree, and it is not the application.** It covers
-the migration tool under `migrate/` and the browser e2e suite under
-`tests/`. New application code is TypeScript under
+**Python in the tree is not the application.** It is the browser e2e
+suite under `tests/`. New application code is TypeScript under
 `worker/`.
 
 ## Code style
 
 - TypeScript, 2-space indent, ES modules with `.js` import specifiers.
 - HTML/CSS/client JS: 2-space indent. No bundler, no framework.
-- Python (`migrate/`, `tests/`): 4-space indent, formatted and linted
+- Python (`tests/`): 4-space indent, formatted and linted
   with `ruff`. `make format` fixes drift, `make lint` is the read-only
   check.
 - Comments explain *why*: the non-obvious invariant, the constraint the

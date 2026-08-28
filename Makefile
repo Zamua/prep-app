@@ -6,8 +6,7 @@
 # Linux: install mise (see CONTRIBUTING.md), then the same three.
 #
 # The application is the TypeScript worker under worker/. Python remains
-# for the migration tool (migrate/) and the browser test harness
-# (tests/); `make setup` provisions both.
+# for the browser test harness (tests/); `make setup` provisions both.
 #
 # Deploy targets are operator-only and live in a private repo. This
 # Makefile never deploys anything.
@@ -20,8 +19,7 @@ NPM  := $(RUN) npm --prefix worker
 PY   := $(RUN) .venv/bin/python
 
 .PHONY: help setup tools node-deps py-deps build test typecheck \
-        test-migrate lint format hooks dev dev-stop llm-stub e2e \
-        ci clean
+        lint format hooks dev dev-stop llm-stub e2e ci clean
 
 help:
 	@echo "Setup:"
@@ -36,14 +34,13 @@ help:
 	@echo "  make llm-stub    the canned LLM a local node calls for AI flows"
 	@echo ""
 	@echo "Python tools:"
-	@echo "  make test-migrate  the migration tool's suite (migrate/)"
-	@echo "  make e2e           browser suites against a running target"
+	@echo "  make e2e         browser suites against a running target"
 	@echo ""
 	@echo "Both:"
 	@echo "  make lint        ruff format-check + check, read-only"
 	@echo "  make format      ruff format + fix (writes)"
 	@echo "  make hooks       install the pre-commit hook (part of setup)"
-	@echo "  make ci          lint + typecheck + test + test-migrate"
+	@echo "  make ci          lint + typecheck + test"
 	@echo "  make clean       drop generated build output"
 
 setup: tools node-deps py-deps hooks
@@ -85,12 +82,6 @@ llm-stub: py-deps
 
 # ----- python tools -----
 
-# The migration tool exports a pre-cutover snapshot, imports it and
-# verifies the two agree. Tier 3 bundles worker/domain/fsrs, so the
-# worker's node_modules has to be installed.
-test-migrate: py-deps node-deps
-	$(PY) -m pytest tests/migrate
-
 # Browser suites against a running target. PARITY_BASE_URL names it; the
 # suites skip with the reason when it is unset.
 e2e: py-deps
@@ -112,7 +103,7 @@ hooks:
 	@git config core.hooksPath .githooks
 	@echo "git hooks installed (.githooks/pre-commit)"
 
-ci: lint typecheck test test-migrate
+ci: lint typecheck test
 
 clean:
 	rm -rf worker/build worker/dist artifacts
