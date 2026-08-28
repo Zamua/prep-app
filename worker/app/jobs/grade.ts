@@ -1,11 +1,10 @@
 // AI grading of one free-text answer: the model returns a verdict, then the
-// FSRS path records it. Prompt and parser are the Go worker's, transcribed
-// byte for byte, because the free-tier stub keys its canned replies on the
-// message it is sent.
+// FSRS path records it. The prompt is a fixture key as well as a prompt: the
+// canned LLM keys its replies on the exact message, so editing the wording
+// means re-recording.
 //
-// The Go activity loaded the question from the database; a JobCell holds the
-// agent and no repositories, so the card travels in the job input instead,
-// which also pins what was graded across a retry.
+// A JobCell holds the agent and no repositories, so the card travels in the
+// job input, which also pins what was graded across a retry.
 import { coerceVerdict, gradeResult, truncate, MODEL_ANSWER_SUMMARY_CHARS, type GradeAnswerResult, type SrsState, type Verdict } from '../../domain/jobs/progress.js';
 import { llmStep, type StepOutput, type WriteStepContext } from './registry.js';
 import { parseJsonObject } from './plan.js';

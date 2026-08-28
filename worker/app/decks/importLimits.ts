@@ -27,7 +27,7 @@ export const MAX_IMPORT_ROWS = 5000;
 
 /**
  * `reviews.csv` rows per `.prepdeck` import. A card carries many reviews, so
- * this cannot be `MAX_IMPORT_ROWS`: the narrowest row a golden holds is 53
+ * this cannot be `MAX_IMPORT_ROWS`: the narrowest row measured is 53
  * bytes, so a 2 MiB body (prep's own writer stores, it does not deflate)
  * tops out near 39,000 rows and an honest archive never reaches this. A
  * hand-deflated one stops here instead of at the entry ceiling, which admits

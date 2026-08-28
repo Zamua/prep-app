@@ -1,10 +1,11 @@
 // Trivia batch generation: one call for N pairs, then one insert per pair.
 // Linear, no gate: a trivia user types a topic and gets a deck back.
 //
-// The prompt is the Go worker's, transcribed byte for byte, because the
-// free-tier stub keys its canned replies on the message it is sent. The
-// existing-prompts block it needs is a read of the owner's deck, so the route
-// puts it in the job input: the JobCell holds the agent and no repositories.
+// The prompt is a fixture key as well as a prompt: the canned LLM keys its
+// replies on the exact message, so editing the wording means re-recording.
+// The existing-prompts block it needs is a read of the owner's deck, so the
+// route puts it in the job input: the JobCell holds the agent and no
+// repositories.
 import { coerceTriviaPairs, triviaGenerated, triviaProgress, type TriviaCounts, type TriviaPair } from '../../domain/jobs/progress.js';
 import { llmStep, type StepOutput, type WriteStepContext } from './registry.js';
 import { resolveDeck } from './plan.js';

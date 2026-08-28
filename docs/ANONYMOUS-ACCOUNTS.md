@@ -69,13 +69,11 @@ refresh threshold must be far enough below 180 days that a visitor
 who returns at any interval shorter than the gap is never rejected.
 
 Resolve has no response object, which is the same problem stale-cookie
-clearing has, and it gets the same answer. `resolve()` sets
-`request.state.anon_cookie_refresh` to the new value; the
-response wrapper at the composition root emits the
-`Set-Cookie`. Both that emit and the stale-cookie `delete_cookie`
-must sit OUTSIDE the middleware's existing
-`if ct.startswith("text/html")` block, or a JSON response never
-refreshes and never clears.
+clearing has, and it gets the same answer. Resolution returns a cookie
+verdict alongside the identity and the response wrapper at the
+composition root emits the `Set-Cookie`. Both that emit and the
+stale-cookie clear must run for every response, not only HTML, or a
+JSON request never refreshes and never clears.
 
 **Signed, not opaque-random.** An opaque 128-bit id in a DB column
 would be equally unguessable. Signing buys three things the opaque
@@ -165,22 +163,20 @@ rule across every caller and any future resolver, and makes the
 ### One narrow addition to the port
 
 `ResolvedUser` (`worker/app/ports.ts`) gains
-`is_anonymous: bool = False`. `resolveIdentity`
+an `is_anonymous` flag, defaulting to false. `resolveIdentity`
 (`worker/app/auth/resolve.ts`) branches on exactly that:
 
 ```
-resolved = get_provider().resolve(request)
-if resolved is None: return None
-if resolved.is_anonymous:
-    user = UserRepo().get_by_external_id(resolved.external_id)
-    if user is None:
-        request.state.anon_cookie_stale = True   # cleared on the way out
-        return None
-    UserRepo().touch(resolved.external_id)
-else:
-    user = UserRepo().upsert(...)                # unchanged; CREATES the row
-    _try_merge_anon_cookie(request, user)        # section 5; AFTER the upsert
-request.state.user = user
+resolved = provider.resolve(request)
+if (!resolved) return null
+if (resolved.isAnonymous) {
+  user = prefs.getByExternalId(resolved.externalId)
+  if (!user) return { identity: null, cookie: 'clear' }  // stale cookie
+  prefs.touch(resolved.externalId)
+} else {
+  user = prefs.upsert(...)          // unchanged; CREATES the row
+  tryMergeAnonCookie(request, user) // section 5; AFTER the upsert
+}
 ```
 
 The anonymous path must NOT go through `upsert`. `upsert` inserts on
@@ -200,16 +196,12 @@ intermittent by construction and invisible to any test that seeds the
 target user first, so a test signs up an id with no pre-existing row
 and no webhook.
 
-Clearing a stale cookie needs a response, which `resolve()` does not
-have. The existing response wrapper at the composition root
-grows a two-branch block, placed BEFORE its `text/html` check so JSON
-responses get it too: `request.state.anon_cookie_stale` triggers
-`response.delete_cookie` with the same name/path,
-`request.state.anon_cookie_refresh` triggers `response.set_cookie`
-with the re-minted value and the full attribute set from the table
-above. Starlette backs `request.state` with `scope["state"]` and
-`BaseHTTPMiddleware` passes the same scope object down, so both flags
-survive the middleware boundary.
+Clearing a stale cookie needs a response, which resolution does not
+have. It returns a cookie verdict instead, and the response wrapper at
+the composition root acts on it for every response, not only HTML: a
+stale verdict deletes the cookie with the same name and path, a refresh
+verdict sets the re-minted value with the full attribute set from the
+table above.
 
 `worker/app/auth/` (bearer tokens) is untouched. Anonymous users
 cannot mint API tokens (section 4), so that surface never sees one.
@@ -561,12 +553,11 @@ and only one of them is hot:
   lookup, and it runs once per agent call or workflow start, next to
   the `byok_credentials` lookup `_user_has_byok_rows`
   (`worker/app/agent/funding.ts`) already does on that same path.
-- `_agent_context` (`worker/app/pageContext.ts`) does NOT go through
-  either. It runs on EVERY template render, and it already holds the
-  whole user dict on `request.state.user`, which carries
-  `is_anonymous` because `get_by_external_id` selects `*`. It reads
-  the flag off the dict and short-circuits `agent_available` to False
-  without calling the selector at all.
+- The page context (`worker/app/pageContext.ts`) does NOT go through
+  either. It runs on EVERY render, and it already holds the account
+  row, which carries `is_anonymous`. It reads the flag off that row
+  and short-circuits `agent_available` to false without calling the
+  selector at all.
 
 So the per-render path gains no query, the per-call path gains one
 indexed row read, and nothing anywhere parses an id for a prefix.
@@ -967,9 +958,9 @@ assert its way past the guard.
 ### What the user sees
 
 One toast on the next dashboard render: "Your deck {name} was added
-to this account." It renders from `request.state.anon_merged`, which
-`_try_merge_anon_cookie` sets only on `merged=True`, on the same
-response that clears the cookie, so it renders exactly once. No
+to this account." It renders from the merge result, which is set only
+when a merge actually moved rows, on the same response that clears the
+cookie, so it renders exactly once. No
 dialog, no choice, no undo button. The audit table is the recovery
 path, not the UI.
 
@@ -1176,7 +1167,7 @@ topic box.
   account onto another device or into the iOS PWA jar. Fixes both
   the different-device merge gap and the install gate.
 - **Anonymous free tier beyond one endpoint.** Needs a spend
-  reservation the Go worker can participate in.
+  reservation every caller of the shared tier can participate in.
 - **Upload caps on deck import.** `raw = await upload.read()` reads
   the whole body with no size cap for signed-in users too
   (`worker/app/decks/, 1940, 2001`). This spec removes the

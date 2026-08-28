@@ -773,8 +773,9 @@ lifetime of exactly one offline period.
 The offline surface is pinned in four places, and the interesting ones
 are the completeness checks rather than the happy paths.
 
-**The precache manifest** (`worker/tests/sw.test.ts`, plus the golden
-`worker/tests/fixtures/precache-*.json`). Two checks that matter:
+**The precache manifest** (`worker/tests/sw.test.ts`, against the
+committed `worker/tests/fixtures/precache-*.json`). Two checks that
+matter:
 
 - Every URL in the precache list actually resolves. This is what
   catches a renamed CSS file breaking offline silently.

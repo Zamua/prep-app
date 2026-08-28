@@ -35,8 +35,8 @@ attachCopyButtons();
 // The deploy's root path is derived from this module's own URL:
 // base.html loads app.js at <root>/static/js/..., so stripping the
 // /static/js/ tail leaves the root prefix ("" on a bare-host deploy).
-// Same prefix the manifest route uses for scope/start_url
-// (prep/web/pwa.py), just resolved client-side.
+// Same prefix the manifest route uses for scope/start_url, just
+// resolved client-side.
 const ROOT_PATH = new URL(import.meta.url).pathname.replace(/\/static\/js\/.*$/, "");
 
 if ("serviceWorker" in navigator) {

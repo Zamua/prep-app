@@ -20,7 +20,7 @@
      A different URL path is the only thing Safari's disk cache
      reliably treats as a new resource. Server route at
      /static/css/v<build>/* strips the version and serves the file
-     with immutable cache headers (see prep/app.py). #}
+     with immutable cache headers. #}
   {# index.css opts into cross-document view transitions. A skipped one
      (reduced motion, hidden tab, headless) rejects its internal promise
      before any script can hold it, so the absorber must be a classic
@@ -57,8 +57,8 @@
      module + import silently broke. Fixed in htmx-1.)
 
      Importmap aliases `@/` → /static/js/v<build>/ — the version segment
-     gives every deploy a fresh URL space (handled server-side; see
-     prep/app.py:_versioned_js). This is the canonical way to cache-
+     gives every deploy a fresh URL space, resolved server-side. This
+     is the canonical way to cache-
      bust modules referenced through an importmap: there is no spec-
      compliant way to put a ?v= query on resolved imports, so the
      version goes in the URL prefix and immutable-caches forever.

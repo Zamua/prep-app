@@ -1,5 +1,5 @@
-// The graphs as data: well formed, matching the Go worker's retry policies,
-// and naming only status literals the partials actually render.
+// The graphs as data: well formed, retrying only what is safe to retry, and
+// naming only status literals the partials actually render.
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,7 +39,7 @@ describe('every declared graph', () => {
 describe('the retry policies', () => {
   const policyOf = (kind: JobKind, name: string) => JOB_GRAPHS[kind].nodes.find((n) => n.name === name)!.retry;
 
-  it('are the Go worker values, transcribed', () => {
+  it('never retry an LLM call, and do retry a write', () => {
     // No retry on an LLM call, whatever the workflow.
     for (const [kind, name] of [
       ['PlanGenerate', 'plan'],

@@ -1,5 +1,5 @@
 // Transform end to end: the scope that auto-applies, the two that gate, and
-// the apply itself, which is the only step in phase 4 that rewrites rows the
+// the apply itself, which is the only step that rewrites rows the
 // user already had.
 import { describe, expect, it } from 'vitest';
 import { applyStep, BadTransformInput, buildTransformPrompt, goJson, mergeModification, transformJobInput, type TransformCard } from '../../../app/jobs/transform.js';

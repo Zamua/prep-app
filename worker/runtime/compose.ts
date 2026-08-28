@@ -129,7 +129,7 @@ export interface Composition {
   jobsEnabled: boolean;
   /** The job kinds this deploy can run, by kind name. */
   jobGraphs: Readonly<Record<string, StepGraph>>;
-  /** Where a step name resolves to its handler; lane B registers into it. */
+  /** Where a step name resolves to its handler. */
   stepRegistry: StepRegistry;
   /** Ceiling on one LLM step, under the deploy's outbound fetch timeout. */
   jobLlmTimeoutMs: number;
@@ -312,9 +312,9 @@ function stepRegistryFor(testMode: boolean): StepRegistry {
   return registry;
 }
 
-/** The Go worker allowed 30m per activity; a celld fetch is bounded by
- * `CELLD_FETCH_TIMEOUT_S`, so a step gets the smaller of the two minus the
- * adapter's headroom. A timeout is a step failure, not an extension. */
+/** A celld fetch is bounded by `CELLD_FETCH_TIMEOUT_S`, so a step gets the
+ * smaller of that and the configured budget, minus the adapter's headroom. A
+ * timeout is a step failure, not an extension. */
 export function jobLlmTimeoutMs(env: PublicServiceVars & { PREP_JOB_LLM_TIMEOUT_S?: string }): number {
   const fetchCeiling = envInt(env.CELLD_FETCH_TIMEOUT_S, DEFAULT_FETCH_TIMEOUT_S);
   const wanted = envInt(env.PREP_JOB_LLM_TIMEOUT_S, DEFAULT_JOB_LLM_TIMEOUT_S);

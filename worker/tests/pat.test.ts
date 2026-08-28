@@ -24,7 +24,7 @@ describe('the token format', () => {
   });
 
   it('parses nothing out of a legacy or malformed value', () => {
-    const legacy = `${TOKEN_PREFIX}Pa5rTyToKeN0000000000000000000000000000000`;
+    const legacy = `${TOKEN_PREFIX}NoDotInThisOne00000000000000000000000000000`;
     expect(parseToken(legacy)).toBeNull();
     for (const bad of ['', '   ', 'prep_pat_', 'prep_pat_.abc', 'prep_pat_abc.', 'prep_pat_a.b.c', 'prep_pat_!!.abc', 'sk-ant-api03-x', null, undefined]) {
       expect(parseToken(bad), String(bad)).toBeNull();

@@ -1,4 +1,4 @@
-// The four real workflows over the real runner: lane A's cells and ledger,
+// The four real workflows over the real runner: the real cells and ledger,
 // with only the model faked. A reply is a pure function of the prompt and the
 // call number, so a run is reproducible and a prompt assertion is a byte
 // assertion.

@@ -1,7 +1,6 @@
-// `Set-Cookie` bytes as Starlette emits them, because the contract corpus
-// records the header verbatim. `http.cookies.Morsel` prints its attributes
-// sorted by their lowercase key, quotes a value that is not entirely legal
-// characters (an empty value always is quoted), and renders an integer
+// `Set-Cookie` bytes, spelled the one way the contract suite records them:
+// attributes sorted by their lowercase key, a value quoted when it is not
+// entirely legal characters (an empty value always is), and an integer
 // `expires` as an HTTP date computed from the current time.
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -55,7 +54,7 @@ export function setCookie(name: string, value: string, attrs: CookieAttributes):
   return [`${name}=${quoteCookieValue(value)}`, ...parts.map((p) => p[1])].join('; ');
 }
 
-/** The cookies of a request header, last value winning as Starlette reads them. */
+/** The cookies of a request header, last value winning. */
 export function parseCookieHeader(header: string | null): Record<string, string> {
   const out: Record<string, string> = {};
   for (const piece of (header ?? '').split(';')) {

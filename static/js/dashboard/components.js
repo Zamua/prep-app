@@ -6,10 +6,9 @@
 //
 // Every class here is styled by the existing stylesheet
 // (static/css/components/deck-list.css, mastery-bar.css,
-// empty-state.css), so both surfaces are the same screen. That the
-// classes and the rules stay in step is pinned by
-// tests/e2e/test_dashboard_components_e2e.py, which reads the CSS
-// files.
+// empty-state.css), so both surfaces are the same screen. A class
+// renamed here without the stylesheet is an unstyled deck list, and
+// nothing but a real browser catches it.
 //
 // Copy that only one surface can truthfully say ("or generate a fresh
 // batch", the offline status line) is a per-call option with a

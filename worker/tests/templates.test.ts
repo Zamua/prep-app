@@ -36,11 +36,12 @@ function walk(dir: string, suffix: string): string[] {
   return out.sort();
 }
 
-// Python-only syntax and the Python request object; a template that still
-// reads either renders `undefined` silently under nunjucks.
+// Constructs nunjucks does not implement, and a request object no template
+// is given. Each renders `undefined` silently rather than failing, so the
+// only way to catch one is to refuse it here.
 const SMELLS = ["request.", "request.scope", " in (", ".items()", ".update(", ".get(", "namespace(", "selectattr", "rejectattr", "[:"];
 
-describe("the ported templates", () => {
+describe("the templates", () => {
   it("all 49 precompile for nunjucks-slim", () => {
     const sources = walk(TEMPLATES, ".html");
     expect(sources).toHaveLength(49);
@@ -48,13 +49,13 @@ describe("the ported templates", () => {
     expect(Object.keys(templates).sort()).toEqual(sources);
   });
 
-  it("carry no Python-only syntax", () => {
+  it("carry no syntax nunjucks silently ignores", () => {
     for (const rel of walk(TEMPLATES, ".html")) {
       const src = readFileSync(join(TEMPLATES, rel), "utf8").replace(/\{#[\s\S]*?#\}/g, "");
       for (const smell of SMELLS) {
         expect(src.includes(smell), `${rel} still contains ${smell}`).toBe(false);
       }
-      expect(/\b(True|False|None)\b/.test(src), `${rel} still contains a Python literal`).toBe(false);
+      expect(/\b(True|False|None)\b/.test(src), `${rel} still contains a capitalised literal`).toBe(false);
     }
   });
 });
@@ -62,7 +63,7 @@ describe("the ported templates", () => {
 describe("the renderer", () => {
   const renderer = makeRenderer();
 
-  it("renders every golden context without throwing", () => {
+  it("renders every committed context without throwing", () => {
     if (!existsSync(CONTEXTS)) return;
     const files = walk(CONTEXTS, ".json");
     expect(files.length).toBeGreaterThan(100);
@@ -118,8 +119,7 @@ describe("the renderer", () => {
     expect(html).toMatch(/class="icon icon-inline" aria-hidden="true"/);
   });
 
-  // The one block the reference template does not have, so no golden
-  // compares it: the export hub's 413.
+  // The one block no committed context reaches: the export hub's 413.
   it("shows the export refusal on the hub, with the other formats still offered", () => {
     const context = { ...baseContext({}), deck_name: "capitals", deck_type: "srs", error: EXPORT_TOO_LARGE };
     const html = renderer.render("deck_export.html", context);

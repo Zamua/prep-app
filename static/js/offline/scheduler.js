@@ -1,6 +1,6 @@
 // scheduler.js: the local offline ladder (docs/OFFLINE.md section
-// 5). Pure functions with the table as a constant, mirroring the
-// shape discipline of prep/domain/srs.py; no I/O, no store access.
+// 5). Pure functions with the table as a constant; no I/O, no store
+// access.
 //
 // Offline devices cannot run FSRS (the scheduler needs the full
 // per-card float state and the upstream library), so offline

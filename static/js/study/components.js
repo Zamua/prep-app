@@ -69,7 +69,7 @@ export function studyNav(card, onPause) {
 }
 
 // The prompt block, markdown-rendered: same DOM shape as the online
-// templates' `study-prompt prose` div fed by the mistune filter.
+// templates' `study-prompt prose` div.
 // A renderer throw (e.g. stack overflow on pathological nesting)
 // falls back to plain text so the card stays studyable.
 function promptNode(card) {
@@ -251,8 +251,7 @@ export function studyCardView(card, {onAnswer, onIdk, onPause, onDraft, draft}) 
     form.appendChild(fieldset);
     collect = () => {
       const picked = Array.from(form.querySelectorAll("input:checked"), (i) => i.value);
-      // Mirror the online wire form (prep/study/routes.py
-      // _read_user_answer): mcq stores the choice string, multi a
+      // The online wire form: mcq stores the choice string, multi a
       // sorted JSON array string.
       return multi ? JSON.stringify(picked.sort()) : picked[0] || "";
     };

@@ -15,8 +15,8 @@ export function apiE2eToken(user: string): string {
 
 /** An owner whose only fixture is a usable PAT: the API suites create their
  * own decks through the public API and need nothing else. Kept apart from
- * `reader`, whose legacy-format token pins a masked prefix in a pixel
- * golden and cannot authenticate. */
+ * `reader`, whose legacy-format token pins a masked prefix in a rendered
+ * page and cannot authenticate. */
 export async function profileApiE2e(ctx: SeedContext): Promise<Record<string, unknown>> {
   const { repos, user, hasher, at } = ctx;
   const plaintext = apiE2eToken(user);

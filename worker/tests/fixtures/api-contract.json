@@ -6778,7 +6778,7 @@
                 "type": "object"
               },
               "_RecordReviewRequest": {
-                "description": "Wire format for worker → prep SRS state writes.\n\nThe Go worker handled SRS bookkeeping locally via a hardcoded\nladder before this endpoint existed; consolidating here means\nFSRS (the live Python scheduler) drives every code/short grade,\nnot just the sync self-grade path. See worker-go/activities/grading.go's\nRecordReview activity for the caller.",
+                "description": "Wire format for worker → prep SRS state writes.\n\nEvery code and short grade is scheduled here rather than by the\ncaller, so a card reviewed through this endpoint and one reviewed\nin the app land on the same interval.",
                 "properties": {
                   "grader_notes": {
                     "default": "",
@@ -6817,7 +6817,7 @@
                 "type": "object"
               },
               "_RunRequest": {
-                "description": "Wire format matching worker-go/agent.RunInput so the worker can\npoint at prep with no client-side change. session_id / resume_id\nare accepted-but-ignored — the SDK port doesn't currently expose\nmulti-turn sessions for our one-shot callers.\n\n`user_id` is plumbed end-to-end so the selector can route to the\nuser's BYOK key when present. Optional for backwards compat (an\nolder worker without the field falls through to the deploy-wide\nprecedence: subscription token where allowed, else the free\ntier), but any new caller should send it.",
+                "description": "Run one agent turn. session_id / resume_id are accepted and\nignored: every caller here is one-shot.\n\n`user_id` is plumbed end-to-end so the selector can route to that\nuser's BYOK key. Optional for backwards compatibility (a caller\nwithout it falls through to the deploy's shared tier), but any new\ncaller should send it.",
                 "properties": {
                   "model": {
                     "anyOf": [
@@ -6951,7 +6951,7 @@
             },
             "/api/agent/run": {
               "post": {
-                "description": "Execute a single prompt via the user's configured adapter\n(selector precedence: BYOK, then the deploy-wide providers), log\nusage, return {stdout}\n(matching the legacy agent-server response shape so the Go\nworker doesn't notice it's hitting a different host).",
+                "description": "Execute a single prompt via the user's configured adapter\n(selector precedence: BYOK, then the deploy-wide providers), log\nusage, return {stdout}.",
                 "operationId": "api_agent_run_api_agent_run_post",
                 "parameters": [
                   {
@@ -7839,7 +7839,7 @@
             },
             "/deck/{name}/retention": {
               "post": {
-                "description": "Per-deck FSRS retention override (SRS decks only).\n\n`retention` is either a float in [MIN, MAX] (override the user\ndefault for this deck) or the literal string \"default\" (clear\nthe override → fall back to the user's setting at /settings/srs).\n\nResolution at review time happens in prep/study/repo.py:record —\ndeck override wins; user-level fallback; FSRS algorithm default.",
+                "description": "Per-deck FSRS retention override (SRS decks only).\n\n`retention` is either a float in [MIN, MAX] (override the user\ndefault for this deck) or the literal string \"default\" (clear\nthe override → fall back to the user's setting at /settings/srs).\n\nResolution at review time: the deck override wins, then the\nuser-level setting, then the FSRS default.",
                 "operationId": "deck_set_retention_deck__name__retention_post",
                 "parameters": [
                   {
@@ -8241,7 +8241,7 @@
                 "summary": "Deck New Trivia Form"
               },
               "post": {
-                "description": "Create a trivia deck + kick off the initial-batch generation as\na background Temporal workflow. The deck row lands sync; the\nresponse is an immediate redirect to /trivia/gen/<wid> which polls\na status endpoint until the workflow's `done` (then jumps to the\ndeck page). Same pattern as /plan/<wid> for SRS plan-generate.",
+                "description": "Create a trivia deck + kick off the initial-batch generation as\na background job. The deck row lands sync; the\nresponse is an immediate redirect to /trivia/gen/<wid> which polls\na status endpoint until the workflow's `done` (then jumps to the\ndeck page). Same pattern as /plan/<wid> for SRS plan-generate.",
                 "operationId": "deck_new_trivia_create_decks_new_trivia_post",
                 "responses": {
                   "200": {
@@ -8429,7 +8429,7 @@
             },
             "/notify/prefs": {
               "post": {
-                "description": "Merge submitted values over the existing prefs so scheduler-only\nfields (last_digest_date, last_when_ready_at) survive an update.\npydantic does the bounds-check + mode validation.",
+                "description": "Merge submitted values over the existing prefs so scheduler-only\nfields (last_digest_date, last_when_ready_at) survive an update.\nThe bounds-check and the mode validation run on the merged result.",
                 "operationId": "notify_prefs_save_notify_prefs_post",
                 "responses": {
                   "200": {

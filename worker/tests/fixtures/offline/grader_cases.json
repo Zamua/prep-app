@@ -533,7 +533,7 @@
       "note": "exactly MAX_REGEX_LEN still grades"
     },
     {
-      "id": "short-regex-python-named-group-right",
+      "id": "short-regex-dialect-named-group-right",
       "module": "grader",
       "fn": "grade",
       "args": [
@@ -550,7 +550,7 @@
       "note": "(?P<name> normalizes to the JS (?<name> spelling"
     },
     {
-      "id": "short-regex-python-named-backref-right",
+      "id": "short-regex-dialect-named-backref-right",
       "module": "grader",
       "fn": "grade",
       "args": [
@@ -567,7 +567,7 @@
       "note": "(?P=name) normalizes to \\k<name>"
     },
     {
-      "id": "short-regex-python-anchors-diverge",
+      "id": "short-regex-dialect-anchors-diverge",
       "module": "grader",
       "fn": "grade",
       "args": [
@@ -579,7 +579,7 @@
         "paris"
       ],
       "expected": null,
-      "note": "deliberate divergence: \\A/\\Z are Python anchors; under the JS u flag they throw, so the offline grader falls to self-verdict instead of silently matching the literal letters A/Z"
+      "note": "\\A and \\Z are not JavaScript anchors: under the u flag they throw, so the offline grader falls to self-verdict instead of silently matching the literal letters A and Z"
     },
     {
       "id": "short-regex-inline-flag-diverges",
@@ -674,7 +674,7 @@
         "café"
       ],
       "expected": null,
-      "note": "JS \\w is ASCII-only even under u; Python's is Unicode. Shorthand + non-ASCII falls to self-verdict in JS instead of a false wrong."
+      "note": "\\w is ASCII-only in JavaScript even under the u flag, while the stored pattern dialect means it as Unicode. Shorthand plus non-ASCII falls to self-verdict instead of a false wrong."
     },
     {
       "id": "regex-shorthand-ascii-still-grades",

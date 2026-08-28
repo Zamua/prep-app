@@ -41,7 +41,7 @@ function render(src: string, context: Record<string, unknown> = {}, root = ""): 
   return env.render("t.html", context);
 }
 
-describe("round: Python round(), ties to even on the exact value", () => {
+describe("round: ties to even on the exact value", () => {
   it.each([
     [0.5, 0],
     [1.5, 2],
@@ -92,7 +92,7 @@ describe("floattext: a float as text", () => {
   });
 });
 
-describe("int: Python int() truncation with Jinja's fallbacks", () => {
+describe("int: truncation, with a fallback for anything unparseable", () => {
   it.each([
     [3.7, 3],
     [-3.7, -3],
@@ -110,8 +110,8 @@ describe("int: Python int() truncation with Jinja's fallbacks", () => {
   });
 });
 
-describe("string: Python str() of template values", () => {
-  it("prints None, True and False as Python does and Undefined as nothing", () => {
+describe("string: any template value as text", () => {
+  it("prints null and the booleans capitalised, and a missing value as nothing", () => {
     expect(asText(null)).toBe("None");
     expect(asText(true)).toBe("True");
     expect(asText(false)).toBe("False");
@@ -124,7 +124,7 @@ describe("string: Python str() of template values", () => {
   });
 });
 
-describe("format: Python % formatting", () => {
+describe("format: printf-style substitution", () => {
   it.each([
     ["%.0f", 2.5, "2"],
     ["%.0f", 0.5, "0"],
@@ -141,7 +141,7 @@ describe("format: Python % formatting", () => {
   it("takes a tuple with width, alignment and sign flags", () => {
     expect(printf("%5.1f|%-4d|%+d|%s", [3.14159, 7, 3, null])).toBe("  3.1|7   |+3|None");
   });
-  it("refuses an argument count mismatch like Python", () => {
+  it("refuses an argument count mismatch", () => {
     expect(() => printf("%d %d", 1)).toThrow(/not enough arguments/);
     expect(() => printf("%d", [1, 2])).toThrow(/not all arguments/);
   });
@@ -150,7 +150,7 @@ describe("format: Python % formatting", () => {
   });
 });
 
-describe("slice: Python slice semantics", () => {
+describe("slice: bounds, negatives and code points", () => {
   it.each([
     ["hello", 0, 2, "he"],
     ["hello", -3, undefined, "llo"],
@@ -172,7 +172,7 @@ describe("slice: Python slice semantics", () => {
 });
 
 describe("tojson: markupsafe htmlsafe_json_dumps", () => {
-  it("sorts keys, uses Python separators and escapes to ASCII", () => {
+  it("sorts keys, spaces the separators and escapes to ASCII", () => {
     expect(stableJson({ b: 1, a: [1, 2.5, "x"], c: { z: null, y: true } })).toBe('{"a": [1, 2.5, "x"], "b": 1, "c": {"y": true, "z": null}}');
     expect(stableJson('é — 𝄞 "q" \\ \n \x01 \x7f')).toBe('"\\u00e9 \\u2014 \\ud834\\udd1e \\"q\\" \\\\ \\n \\u0001 \\u007f"');
   });
@@ -230,7 +230,7 @@ describe("root global", () => {
 });
 
 describe("none test", () => {
-  it("matches null alone, as Python's None", () => {
+  it("matches null alone", () => {
     expect(render("{% if v is none %}N{% else %}-{% endif %}", { v: null })).toBe("N");
     expect(render("{% if v is not none %}S{% else %}-{% endif %}", { v: 0 })).toBe("S");
     expect(render("{% if v is none %}N{% else %}-{% endif %}", {})).toBe("-");
@@ -356,7 +356,7 @@ describe("relative_time: every branch of prep.app._relative_time at the pinned i
   });
 });
 
-describe("Jinja constructs the ported templates rely on", () => {
+describe("the nunjucks constructs the templates rely on", () => {
   it("tuple membership rewritten to arrays evaluates, and `not in` too", () => {
     expect(render("{% if s in ['done', 'failed'] %}T{% endif %}{% if s not in ['done'] %}N{% endif %}", { s: "failed" })).toBe("TN");
   });

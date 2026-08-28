@@ -86,7 +86,7 @@ function loadTables(storage: FakeCellStorage, user: string): void {
  * The rows the corpus seeds but does not snapshot: they carry no owner
  * column, so the merge never names them and ownership follows the
  * foreign key. Across cells nothing follows anything, so they are exactly
- * what the import has to bring along, and the merge oracle cannot pin them.
+ * what the import has to bring along, and the recorded pair cannot pin them.
  */
 function loadDerived(storage: FakeCellStorage, opts: { questionId: number; sessionId: string }): void {
   insertRows(storage, 'cards', [
@@ -152,7 +152,7 @@ function fixture(): Fixture {
 
 const targetTables = async (f: Fixture) => (await f.cells.cell(TARGET).dump()).tables;
 
-// ---- the oracle ------------------------------------------------------------
+// ---- the recorded pair ------------------------------------------------------
 
 describe('the merge saga over the seeded scenario', () => {
   let f: Fixture;

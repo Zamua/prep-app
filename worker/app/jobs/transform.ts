@@ -1,11 +1,11 @@
 // Transform: the model proposes a plan over one card, one deck, or the whole
 // library, and (past the gate, for the two wide scopes) the plan is written.
-// Prompts and parser are the Go worker's, transcribed byte for byte, because
-// the free-tier stub keys its canned replies on the message it is sent.
+// The prompts are fixture keys as well as prompts: the canned LLM keys its
+// replies on the exact message, so editing the wording means re-recording.
 //
-// The Go compute activity read the cards out of the database; a JobCell holds
-// the agent and no repositories, so the snapshot travels in the job input,
-// which also pins what the user reviewed to what the model was shown.
+// A JobCell holds the agent and no repositories, so the snapshot travels in
+// the job input, which also pins what the user reviewed to what the model
+// was shown.
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 import type { TransformJobInput, UserRepos } from '../ports.js';
 import {

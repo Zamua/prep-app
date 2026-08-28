@@ -22,8 +22,8 @@ function seeded(profile: string) {
 describe('the seed profiles', () => {
   it.each(['reader', 'empty', 'anonymous'])('%s reproduces tests/fixtures/pages/<profile>/seed.json exactly', async (profile) => {
     const { seed } = seeded(profile);
-    const golden = readFileSync(join(PAGES, profile, 'seed.json'), 'utf8');
-    expect(JSON.parse(JSON.stringify(await seed))).toEqual(JSON.parse(golden));
+    const expected = readFileSync(join(PAGES, profile, 'seed.json'), 'utf8');
+    expect(JSON.parse(JSON.stringify(await seed))).toEqual(JSON.parse(expected));
   });
 
   it('reader: the rows the profile pins', async () => {

@@ -12,7 +12,7 @@
 // the SW controls every page under the app.
 //
 // The BUILD and PRECACHE constants below hold placeholders that the
-// /sw.js route (prep/web/pwa.py) substitutes before serving: the
+// /sw.js route substitutes before serving: the
 // deterministic build token (lowercase hex) and a JSON array of
 // scope-relative URLs to precache. The placeholder spellings must
 // appear ONLY at the two definition sites: substitution is a global

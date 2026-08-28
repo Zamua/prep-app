@@ -71,7 +71,7 @@ export function comparable(
   return response;
 }
 
-/** Whitespace between tags is not content; nunjucks and jinja space it differently. */
+/** Whitespace between tags is not content, and no assertion here turns on it. */
 export function collapse(html: string): string {
   return html.replace(/\s+/g, ' ').replace(/> </g, '><').trim();
 }

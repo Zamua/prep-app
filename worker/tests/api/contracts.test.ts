@@ -1,6 +1,6 @@
-// The contracts corpus, replayed in order against the TypeScript app. One
-// env for the whole file: every pair sees what the pairs before it wrote,
-// which is how the recording was made.
+// The API contract: every request/response pair the surface owes its
+// clients, replayed in order. One env for the whole file, so every pair sees
+// what the pairs before it wrote.
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { comparable, type VolatileRule } from './compare.js';
 import { loadCorpus, SEED_USER, replay, replayEnv, seed, type Pair } from './harness.js';
@@ -16,24 +16,9 @@ const INSTANT_DECK = JSON.stringify([
 ]);
 
 
-/** `.apkg` codecs land in phase 5. */
-const PHASE_5 = new Set(['mcp-call-prep_export_deck_apkg', 'mcp-call-prep_import_apkg']);
-
-/** The deck the deferred `prep_import_apkg` would have created. The list pair
- * that follows it still replays: the recorded list minus that one deck is the
- * whole of what this phase owns, and it is the only assertion that a CSV
- * import lands in the deck list. */
-const APKG_DECK = 'mcp-restored';
-
-function withoutApkgDeck(name: string, json: unknown): unknown {
-  if (name !== 'v1-decks-list-after') return json;
-  const body = json as { decks: { name: string }[] };
-  return { ...body, decks: body.decks.filter((d) => d.name !== APKG_DECK) };
-}
-
-/** The instant each pair was recorded at, which the corpus states in its
- * notes rather than a header: the refresh window is reached by moving the
- * clock, not by waiting. A name here changes the clock from that pair on. */
+/** The instant each pair runs at: the refresh window is reached by moving
+ * the clock, not by waiting. A name here changes the clock from that pair
+ * on. */
 const TEST_NOW = '2026-03-14T15:00:00Z';
 const CLOCK_FROM: Record<string, string> = {
   'cookie-refreshed-after-window': '2026-04-13T15:00:01Z',
@@ -41,10 +26,9 @@ const CLOCK_FROM: Record<string, string> = {
 };
 
 const corpus = loadCorpus('api');
-// The corpus header names every value another implementation cannot
-// reproduce, including the row ids drawn after the first anonymous mint:
-// The recording numbers all users' decks and questions from one sequence, so those
-// carry the anonymous accounts' rows and per-cell id blocks do not.
+// The header names every value that cannot be reproduced run to run: the
+// wall-clock stamps, the minted ids, and the row ids drawn after the first
+// anonymous mint.
 const volatile: VolatileRule[] = corpus.header.volatile ?? [];
 
 interface Outcome {
@@ -94,7 +78,6 @@ beforeAll(async () => {
   await seed(env, 'reader', SEED_USER);
   for (const pair of corpus.pairs) {
     clockNow = CLOCK_FROM[pair.name] ?? clockNow;
-    if (PHASE_5.has(pair.name)) continue;
     const actual = await replay(env as Env, pair, headersFor(pair), bodyFor(pair));
     if (pair.name === 'mcp-call-prep_add_card') {
       const text = (actual.json as { result: { content: { text: string }[] } }).result.content[0]!.text;
@@ -113,7 +96,7 @@ beforeAll(async () => {
       pair,
       expected: comparable(pair.name, {
         status: pair.response.status,
-        json: withoutApkgDeck(pair.name, pair.response.json),
+        json: pair.response.json,
         text: pair.response.text,
         location: pair.response.location,
         setCookie: pair.response.set_cookie,
@@ -124,7 +107,7 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('the contracts corpus replays against the TypeScript app', () => {
-  const replayed = corpus.pairs.filter((p) => !PHASE_5.has(p.name));
+  const replayed = corpus.pairs;
 
   it.each(replayed.map((p) => p.name))('%s', (name) => {
     const outcome = results.get(name);
@@ -132,8 +115,8 @@ describe('the contracts corpus replays against the TypeScript app', () => {
     expect(outcome!.actual).toEqual(outcome!.expected);
   });
 
-  it('covers every pair the phase owns', () => {
-    expect(replayed.length).toBe(corpus.pairs.length - PHASE_5.size);
-    expect(replayed.length).toBe(128);
+  it('replays every recorded pair, none skipped', () => {
+    expect(replayed.length).toBe(corpus.pairs.length);
+    expect(replayed.length).toBe(130);
   });
 });

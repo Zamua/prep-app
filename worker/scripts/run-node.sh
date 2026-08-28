@@ -43,7 +43,7 @@ mkdir -p "$STATE_DIR" "$STATE_DIR/watch"
 # 503 without a master key, and /notify/vapid-public-key needs the keypair.
 b64u() { base64 | tr -d '\n' | tr '+/' '-_' | tr -d '='; }
 
-# The local test value from tests/e2e/conftest.py, not a credential.
+# A fixed local value, not a credential.
 export CELLD_VAR_PREP_KEY_ENCRYPTION_SECRET="${PREP_DEV_KEY_ENCRYPTION_SECRET:-abababababababababababababababababababababababababababababababab}"
 
 # A throwaway P-256 pair, generated once per state dir. SEC1 DER for this

@@ -96,8 +96,8 @@ function dueTime(card) {
 // next_due is stamped from its own clock read, so a batch's
 // timestamps land microseconds apart and a millisecond comparison is
 // a total order in creation order: the tiebreak would never fire.
-// DUE_BUCKET_MS mirrors the server's _DUE_BUCKET (prep/study/repo.py)
-// so the offline queue and the online queue agree on what counts as
+// DUE_BUCKET_MS mirrors the server's due bucket so the offline queue
+// and the online queue agree on what counts as
 // equally due: the wall-clock hour, wide enough that a generation
 // batch spanning seconds cannot split across buckets and replay in
 // creation order.
@@ -334,7 +334,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// CardSource over the JSON study API (prep/study/api.py). Holds no DOM
+// CardSource over the JSON study API. Holds no DOM
 // and no view state: just the deck/session it is pointed at, the
 // session's optimistic-concurrency version, and fetch.
 //

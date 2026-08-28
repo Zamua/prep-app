@@ -1,4 +1,4 @@
-// Archives a user exported from an earlier build still import.
+// An archive a user exported from an earlier build still imports.
 //
 // `tests/fixtures/legacy/` holds real export bytes, unreadable by any writer
 // in this tree: `.prepdeck` whose meta.json escapes non-ASCII and whose float

@@ -1,4 +1,4 @@
-// The seam between lane C's routes and lane B's handlers: what a route puts
+// The seam between the routes and the step handlers: what a route puts
 // in a job input is all an LLM step ever sees, because that step runs in the
 // JobCell, which holds the agent and no repositories. Every other suite fakes
 // one side of this, so a route that omits the snapshot shows the model an

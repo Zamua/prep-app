@@ -66,8 +66,8 @@
     </p>
 
     {% if progress.plan %}
-      {# Go's json marshaller emits null for unset slices, so default to []
-         in jinja before any |length / iteration. #}
+      {# The job payload carries null for an unset list, so default to []
+         before any |length or iteration. #}
       {% set plan = progress.plan %}
       {% set mods = plan.modifications or [] %}
       {% set adds = plan.additions or [] %}

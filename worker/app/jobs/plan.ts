@@ -1,7 +1,7 @@
 // Plan-first generation: an outline the user reviews, then one call per
-// accepted item, then one insert per card. Prompts and parsers are the Go
-// worker's, transcribed byte for byte, because the free-tier stub keys its
-// canned replies on the message it is sent.
+// accepted item, then one insert per card. The prompts are fixture keys as
+// well as prompts: the canned LLM keys its replies on the exact message, so
+// editing the wording means re-recording.
 //
 // The two LLM steps run in the JobCell, which holds no repositories, so
 // everything they read about the deck arrives in the job input.
@@ -145,8 +145,8 @@ Output ONLY the JSON object.`;
 /**
  * The JSON payload out of whatever the model returned: a fenced block
  * anywhere in the string, else the first opener to the last matching closer,
- * else the string itself. Transcribed from the Go worker's `extractJSON`,
- * which grew each branch from a failure seen in production.
+ * else the string itself. Each branch answers a shape a model has actually
+ * returned; none of them is hypothetical.
  */
 export function extractJson(raw: string): string {
   const s = raw.trim();
@@ -272,9 +272,9 @@ export const expandStep = llmStep(async (ctx) => {
   return { value: card, progress: expandProgress(done + 1, total) };
 });
 
-/** The column form of a generated card. A code card with no language gets the
- * Go worker's `go` default; the type is stored as the model spelled it, since
- * the column is free text and the renderers branch on the four they know. */
+/** The column form of a generated card. A code card with no language falls
+ * back to `go`; the type is stored as the model spelled it, since the column
+ * is free text and the renderers branch on the four they know. */
 export function toNewQuestion(card: GeneratedCard): NewQuestion {
   return {
     type: card.type as QuestionType,

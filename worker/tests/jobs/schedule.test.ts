@@ -207,7 +207,7 @@ describe('backoff', () => {
 });
 
 describe('step keys', () => {
-  it('keeps the Go worker spelling where one exists', () => {
+  it('spells a per-item key as job, node and index', () => {
     const plan = JOB_GRAPHS.PlanGenerate;
     const expand = plan.nodes.find((n) => n.name === 'expand')!;
     const insert = plan.nodes.find((n) => n.name === 'insert')!;

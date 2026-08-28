@@ -66,10 +66,10 @@ the app works as a manual SRS.
 ## Hack on it
 
 ```bash
-make setup       # mise install + npm install + uv sync
+make setup       # mise install + npm install + git hooks
 make test        # vitest
 make typecheck   # tsc over the worker and its tests
-make ci          # lint + typecheck + test
+make ci          # typecheck + test
 ```
 
 To run it for real against a local celld node:
@@ -83,9 +83,6 @@ make dev-stop
 what it expects (a `celld` binary and an S3-compatible endpoint for cell
 storage) and the env vars that redirect each. `make help` lists every
 target.
-
-Python is in the tree for one thing that is not the application: the
-browser and pixel test harness under `tests/`.
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before sending a PR, and
 [`docs/architecture.md`](docs/architecture.md) before making a

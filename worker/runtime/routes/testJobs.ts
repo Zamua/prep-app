@@ -76,9 +76,9 @@ export async function serveTestJobs(request: Request, url: URL, env: Env, c: Com
     return Response.json(await cell(body.id).signal({ name: body.name, payload: body.payload, at }));
   }
 
-  // The pixel gate's `gone` screen. Python deletes the Temporal execution
-  // out from under a running job; here the job's cell is emptied and the
-  // owner is left with the closed badge row and no progress to answer from.
+  // The `gone` screen: the job's cell is emptied and the owner is left
+  // with the closed badge row and no progress to answer from. The only way
+  // a test reaches that branch.
   if (request.method === 'POST' && rest === '/abandon') {
     const body = (await request.json()) as AbandonBody;
     if (typeof body.id !== 'string' || typeof body.owner !== 'string') return Response.json({ detail: 'id and owner are required' }, { status: 422 });

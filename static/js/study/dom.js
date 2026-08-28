@@ -5,9 +5,9 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 // Phosphor Light path data (copied from static/icons/*.svg). Inlined
-// because the online app's icon() helper is a server-side Jinja
-// global and the raw icon files are not in the SW precache. Trusted
-// static markup, built via createElementNS, never innerHTML.
+// because the online app's icon() helper renders server-side and the
+// raw icon files are not in the SW precache. Trusted static markup,
+// built via createElementNS, never innerHTML.
 const ICON_PATHS = {
   check:
     "M228.24,76.24l-128,128a6,6,0,0,1-8.48,0l-56-56a6,6,0,0,1,8.48-8.48L96,191.51,219.76,67.76a6,6,0,0,1,8.48,8.48Z",

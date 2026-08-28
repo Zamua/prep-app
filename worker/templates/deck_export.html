@@ -16,10 +16,10 @@
   </p>
 </section>
 
-{# Rewrite-only: the reference caps no export, so it has no error state here
-   and no golden context carries one. The hub is re-rendered rather than
-   replaced by the error page because CSV has no ceiling, so the format that
-   still works stays one tap away. Gated in worker/tests/templates.test.ts. #}
+{# No committed context carries an export refusal, so this branch is pinned
+   in worker/tests/templates.test.ts rather than by a context fixture. The hub
+   is re-rendered rather than replaced by the error page because CSV has no
+   ceiling, so the format that still works stays one tap away. #}
 {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
 
 {# Three format cards. Each card has the format name, a one-line

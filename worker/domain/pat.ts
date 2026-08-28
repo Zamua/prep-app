@@ -3,9 +3,9 @@
 //
 // `prep_pat_<b64u(subject)>.<b64u(secret)>`. The subject travels in the
 // token so the entry worker can route to its owner's cell without a global
-// index; it is not a secret (every deep link carries it). A token in the
-// pre-rewrite format has no dot and parses as nothing, which is the same
-// answer as an unknown token.
+// index; it is not a secret (every deep link carries it). An older token has
+// no dot and parses as nothing, which is the same answer as an unknown
+// token.
 import { b64uDecodeText, b64uEncode, b64uEncodeText } from './base64.js';
 
 export const TOKEN_PREFIX = 'prep_pat_';

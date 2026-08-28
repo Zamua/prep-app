@@ -16,7 +16,7 @@ const SWAGGER_CSS = '<link type="text/css" rel="stylesheet" href="https://cdn.js
 const SWAGGER_JS = '<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>';
 const REDOC_FONTS = '<link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">';
 const REDOC_JS = '<script src="https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js"> </script>';
-const FAVICON = '<link rel="shortcut icon" href="https://fastapi.tiangolo.com/img/favicon.png">';
+const FAVICON = '<link rel="shortcut icon" href="/static/pwa/icon-192.png">';
 
 const INDENT = '    ';
 const line = (body: string) => INDENT + body;

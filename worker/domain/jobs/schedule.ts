@@ -42,8 +42,8 @@ export function backoffMs(policy: { initialMs: number; coefficient: number; capM
   return Math.min(policy.capMs, Math.round(policy.initialMs * policy.coefficient ** Math.max(0, attempt - 1)));
 }
 
-/** The idempotency key of one step row. The three keys the Go worker already
- * writes keep its spelling, so a step row and a data row cannot disagree. */
+/** The idempotency key of one step row. Stable across a retry, which is what
+ * makes a write step safe to run again. */
 export function stepKey(jobId: string, node: StepNode, item: number): string {
   return node.keyIsJobId ? jobId : `${jobId}-${node.name}-${item}`;
 }

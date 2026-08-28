@@ -1,6 +1,7 @@
 // The four job kinds as data. The runner reads these and nothing else, so a
 // workflow's shape is reviewable as a table rather than as control flow.
-// Retry values are the Go worker's RetryPolicy values, transcribed.
+// No LLM step retries: re-running a long prompt hides the real failure for
+// another long prompt. Write steps do, and are idempotent.
 import { triviaStarting } from '../../domain/jobs/progress.js';
 import type { RetryPolicy, StepGraph } from '../../domain/jobs/graph.js';
 import { triviaBatchSize } from './trivia.js';

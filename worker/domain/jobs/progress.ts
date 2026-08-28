@@ -5,9 +5,9 @@
 //
 // The key names (`plan`, `round`, `total`, `generated_count`, `inserted`,
 // `skipped_dups`, `skipped_invalid`, `result`, `notes`) are read by the
-// partials, and key PRESENCE is part of the contract with the Go worker: a
-// field it always marshals is always here, and one it omits when empty is
-// omitted here.
+// partials, and key PRESENCE is itself part of the shape: a partial reads
+// `key in progress` to tell "not yet" from "zero", so a field that is always
+// written stays written and one that is dropped when empty stays dropped.
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -18,7 +18,7 @@ const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
 const ints = (v: unknown): number[] => (Array.isArray(v) ? v.map(int).filter((n) => n !== 0) : []);
 const dicts = (v: unknown): JsonRecord[] => (Array.isArray(v) ? v.filter(isDict) : []);
 
-/** The Go worker's `truncate`: an ellipsis, not three dots. */
+/** Truncation with a real ellipsis, not three dots. */
 export function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n)}…`;
 }

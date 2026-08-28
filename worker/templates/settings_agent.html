@@ -53,8 +53,8 @@
 
   {# Free-tier callout. Rendered whenever the deploy configures the
      free inference tier; the copy splits on whether the user has a
-     BYOK key (their key always outranks the shared model - see
-     prep/agent/selector.py precedence). The disclosure paragraph is
+     BYOK key (their key always outranks the shared model). The
+     disclosure paragraph is
      mandatory: prompts leave the deploy for a third-party endpoint,
      and BYOK is the opt-out. #}
   {% if free_tier_configured %}

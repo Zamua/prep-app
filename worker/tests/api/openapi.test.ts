@@ -1,5 +1,5 @@
 // The unauthenticated JSON surface: the recorded OpenAPI document and the
-// two FastAPI doc shells, whose vendor tags are stripped in test mode so
+// the two doc shells, whose vendor tags are stripped in test mode so
 // the pixel harness never reaches a CDN.
 import { describe, expect, it } from 'vitest';
 import { OPENAPI_DOCUMENT, redocShell, servePublic, swaggerShell } from '../../runtime/routes/openapi.js';

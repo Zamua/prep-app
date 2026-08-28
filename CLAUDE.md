@@ -75,7 +75,7 @@ whole request path.
 worker/
 ├── domain/                PURE. No I/O, no framework, no clock of its own
 │   ├── fsrs/              the ts-fsrs seam: two verdicts, ladder bucket
-│   ├── grading/           deterministic mcq/multi/idk grader, py-repr helpers
+│   ├── grading/           deterministic mcq/multi/idk grader, answer literals
 │   ├── jobs/              graph algebra, ledger, schedule, refusal, ids
 │   ├── markdown/          the renderer (block, inline, links, tables, url)
 │   ├── instant/           card hygiene, limiter arithmetic, ip parsing
@@ -98,11 +98,11 @@ worker/
 │   ├── cells/             UserCell, DirectoryCell, InstantLimiterCell, JobCell
 │   │   ├── router.ts      the cell-side route table + identity gates
 │   │   ├── routes/        pages.ts, api.ts, jobs.ts, adapt.ts
-│   │   └── seed/          seed profiles for local and e2e targets
+│   │   └── seed/          seed profiles for local and test targets
 │   ├── adapters/
 │   │   ├── sql/           one repo per aggregate + schema.ts + migrate.ts
 │   │   ├── agents/        anthropic, openaiCompat, byok, freeTier, select
-│   │   ├── nunjucks/      the renderer, its shims, the icon global
+│   │   ├── nunjucks/      the renderer, its filter set, the icon global
 │   │   └── clerk, anonCookie, pat, svix, byokCrypto, hkdf, webpush,
 │   │       alarmLedgerRunner, clock, random, apkg, zip, …
 │   ├── routes/            instant, metrics, openapi, legal, migrate
@@ -110,7 +110,7 @@ worker/
 │   └── assets.ts sw.ts storage.ts buildToken.ts webhooks.ts
 ├── templates/             nunjucks templates, precompiled at build time
 ├── tests/                 vitest, mirroring the three layers
-├── scripts/               build.mjs, build-domain.mjs, build-pages.mjs,
+├── scripts/               build.mjs, build-domain.mjs, llm-stub.mjs,
 │                          run-node.sh
 └── wrangler.{dev,staging,prod}.jsonc    deploy contracts, public values only
 
@@ -267,9 +267,8 @@ Document a new `data-*` hook here when you add one.
 
 ### Templates
 
-nunjucks (the JavaScript port of Jinja2), precompiled by
-`scripts/build.mjs` into `build/templates.js`. Nothing is parsed at
-request time.
+nunjucks, precompiled by `scripts/build.mjs` into `build/templates.js`.
+Nothing is parsed at request time.
 
 ```
 worker/templates/
@@ -287,10 +286,12 @@ worker/templates/
 - **Page extension**: every page extends `base.html` and overrides
   `{% block title %}`, `{% block page_class %}`, `{% block main %}`.
   Do not add a top-level block unless several pages need it.
-- The nunjucks shims (Python `%` formatting, slices, `tojson`,
-  banker's rounding, `items()`) live in `runtime/adapters/nunjucks/`.
-  A construct that silently evaluates to false or undefined in nunjucks
-  but worked in Jinja is the failure mode to watch for.
+- The filter set the templates use beyond what nunjucks ships
+  (`printf`, `slice`, `tojson`, banker's rounding, `items()`,
+  `floattext`) lives in `runtime/adapters/nunjucks/filters.ts`. A
+  construct nunjucks evaluates to undefined rather than rejecting is the
+  failure mode to watch for: it renders as a blank branch, not an
+  error.
 
 ### PWA + service worker
 
@@ -417,8 +418,8 @@ Precedence, stated once in `app/auth/resolve.ts`:
 **signed-in > dormant session > anonymous cookie > visitor.**
 
 - **Clerk** when its five vars are set; otherwise `NoIdentityProvider`
-  and the deploy is anonymous-only with no sign-in page. Under parity
-  mode a `FakeIdentityProvider` reads a trusted header instead.
+  and the deploy is anonymous-only with no sign-in page. In test mode a
+  `FakeIdentityProvider` reads a trusted header instead.
 - **The dormant step is load-bearing.** A returning user on a PWA cold
   launch has an expired session token and durable evidence of one.
   Falling through to a `prep_anon` cookie left on that browser would
@@ -477,11 +478,11 @@ this repo.
 `make help` lists every target. The ones that matter:
 
 ```bash
-make setup       # mise install + npm install + uv sync + git hooks
+make setup       # mise install + npm install + git hooks
 make build       # templates, icons, service worker, domain twins, dist/assets
 make typecheck   # tsc over the worker and its tests
 make test        # vitest
-make ci          # lint + typecheck + test
+make ci          # typecheck + test
 make dev         # build, deploy and start a local celld node on :8791
 make dev-stop
 make llm-stub    # the canned LLM a local node calls for AI flows
@@ -490,10 +491,6 @@ make llm-stub    # the canned LLM a local node calls for AI flows
 `worker/build/` and `worker/dist/` are generated and never committed.
 Each step in `build.mjs` is a function so `tests/build.test.ts` can run
 one against a scratch tree.
-
-**Python in this tree is not the application.** It is the browser e2e
-suite (`tests/`), driven by `make e2e`. New application code is
-TypeScript under `worker/`.
 
 The pre-commit hook gates staged TypeScript on typecheck plus the whole
 vitest suite. It runs in seconds; do not reach for `--no-verify` to get
@@ -510,10 +507,11 @@ minus headroom so an LLM step gets its full budget.
 
 ## Gotchas worth knowing
 
-**Parity mode is a local and staging-only switch.** `PREP_TEST_MODE=1`
-enables a fake identity provider that trusts a header, a pinned clock, a
-seed endpoint and the probe job graphs. The composition root refuses it
-on prod. Never set it on a deploy that serves real users.
+**Test mode is a local and staging-only switch.** `PREP_TEST_MODE=1`
+enables a fake identity provider that trusts a header, a pinned clock,
+seeded randomness, the `/_test/*` routes and the probe job graphs. The
+composition root refuses it on prod. Never set it on a deploy that
+serves real users.
 
 **Importmap MUST appear in `<head>`, before any module script.** The
 spec requires the importmap to be parsed before the first
@@ -538,11 +536,10 @@ trigger, a terminal fragment omits it and htmx stops. Do not reach for
 `100dvh`, plus `body:has(dialog[open]) { overflow: hidden }` and
 `overscroll-behavior: contain` to stop scroll chaining.
 
-**A tuple or a Python literal in a template evaluates silently wrong.**
-`x in ('a','b')` is false in nunjucks and `True` / `False` / `None`
-resolve to undefined. Use `['a','b']` and `true` / `false` / `null`. The
-shims cover the rest; a missing shim shows up as a blank branch, not an
-error.
+**A template expression nunjucks does not understand renders empty.**
+`x in ('a','b')` is false and a bare `True` / `False` / `None` resolves
+to undefined. Use `['a','b']` and `true` / `false` / `null`. The failure
+is a blank branch, never an error.
 
 **`app/` may not contain `fetch(`, `new Response`, `.sql.exec`,
 `DurableObject` or `nunjucks`.** The layering test greps for those
