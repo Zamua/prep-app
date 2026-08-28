@@ -145,8 +145,8 @@ function matchRegex(pattern, given) {
   return re ? re.test(answer) : null;
 }
 
-// domain/grading/pyjson.ts
-var PyDict = class {
+// domain/grading/answerJson.ts
+var JsonObject = class {
   constructor(keys) {
     this.keys = keys;
   }
@@ -154,7 +154,7 @@ var PyDict = class {
 };
 var JsonDecodeError = class extends Error {
 };
-var PyTypeError = class extends Error {
+var ValueTypeError = class extends Error {
 };
 var NUMBER = /-?(?:0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/y;
 var WS = /[ \t\n\r]*/y;
@@ -263,7 +263,7 @@ var Parser = class {
     this.ws();
     if (this.s[this.i] === "}") {
       this.i++;
-      return new PyDict(keys);
+      return new JsonObject(keys);
     }
     for (; ; ) {
       this.ws();
@@ -279,12 +279,12 @@ var Parser = class {
       }
       this.ws();
       const c = this.s[this.i++];
-      if (c === "}") return new PyDict(keys);
+      if (c === "}") return new JsonObject(keys);
       if (c !== ",") this.fail("expecting ',' delimiter");
     }
   }
 };
-function loads(text) {
+function parseJson(text) {
   const p = new Parser(text);
   p.ws();
   const v = p.value();
@@ -303,15 +303,15 @@ function toSet(value) {
   let items;
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (Array.isArray(item) || item instanceof PyDict) throw new PyTypeError("unhashable type");
+      if (Array.isArray(item) || item instanceof JsonObject) throw new ValueTypeError("unhashable type");
     }
     items = value;
   } else if (typeof value === "string") {
     items = Array.from(value);
-  } else if (value instanceof PyDict) {
+  } else if (value instanceof JsonObject) {
     items = value.keys;
   } else {
-    throw new PyTypeError("object is not iterable");
+    throw new ValueTypeError("object is not iterable");
   }
   const seen = /* @__PURE__ */ new Set();
   const out = [];
@@ -330,7 +330,7 @@ function sameSet(a, b) {
   return b.every((v) => keys.has(scalarKey(v)));
 }
 
-// domain/grading/pyrepr.ts
+// domain/grading/literal.ts
 var GradingError = class extends Error {
 };
 function kindOf(v) {
@@ -361,7 +361,7 @@ function cmpNum(a, b) {
   if (i > floor) return 1;
   return f > Math.floor(f) ? -1 : 0;
 }
-function pySorted(items) {
+function sortedValues(items) {
   const out = items.slice();
   if (out.length < 2) return out;
   const kind = kindOf(out[0]);
@@ -371,7 +371,7 @@ function pySorted(items) {
   return out;
 }
 var UNPRINTABLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Zs}]/u;
-function reprStr(s) {
+function stringLiteral(s) {
   const q = s.includes("'") && !s.includes('"') ? '"' : "'";
   let out = q;
   for (const ch of s) {
@@ -388,7 +388,7 @@ function reprStr(s) {
   }
   return out + q;
 }
-function reprFloat(x) {
+function floatLiteral(x) {
   if (Number.isNaN(x)) return "nan";
   if (x === Infinity) return "inf";
   if (x === -Infinity) return "-inf";
@@ -407,15 +407,15 @@ function reprFloat(x) {
   }
   return (x < 0 ? "-" : "") + body;
 }
-function pyRepr(v) {
-  if (typeof v === "string") return reprStr(v);
+function literal(v) {
+  if (typeof v === "string") return stringLiteral(v);
   if (v === null) return "None";
   if (typeof v === "boolean") return v ? "True" : "False";
   if (typeof v === "bigint") return v.toString();
-  return reprFloat(v);
+  return floatLiteral(v);
 }
-function pyReprList(items) {
-  return `[${items.map(pyRepr).join(", ")}]`;
+function literalList(items) {
+  return `[${items.map(literal).join(", ")}]`;
 }
 
 // domain/grading/index.ts
@@ -450,8 +450,8 @@ function gradeMcq(question, userAnswer) {
   };
 }
 function loadSet(x) {
-  if (typeof x !== "string") throw new PyTypeError("the JSON object must be str");
-  return toSet(loads(x));
+  if (typeof x !== "string") throw new ValueTypeError("the JSON object must be str");
+  return toSet(parseJson(x));
 }
 function gradeMulti(question, userAnswer) {
   let picked;
@@ -460,15 +460,15 @@ function gradeMulti(question, userAnswer) {
     picked = userAnswer ? loadSet(userAnswer) : [];
     expected = loadSet(question.answer);
   } catch (e) {
-    if (!(e instanceof JsonDecodeError || e instanceof PyTypeError)) throw e;
+    if (!(e instanceof JsonDecodeError || e instanceof ValueTypeError)) throw e;
     picked = [];
     expected = [];
   }
   const correct = sameSet(picked, expected);
-  const summary = pyReprList(pySorted(expected));
+  const summary = literalList(sortedValues(expected));
   return {
     result: correct ? "right" : "wrong",
-    feedback: correct ? "Correct." : `Expected: ${summary}; you picked: ${pyReprList(pySorted(picked))}.`,
+    feedback: correct ? "Correct." : `Expected: ${summary}; you picked: ${literalList(sortedValues(picked))}.`,
     model_answer_summary: summary
   };
 }

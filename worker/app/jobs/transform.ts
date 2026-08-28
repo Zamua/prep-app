@@ -66,8 +66,7 @@ export function transformSnapshot(repos: UserRepos, scope: TransformScope, targe
   return { cards: card ? [card] : [], decks: [] };
 }
 
-/** The owning deck's standing description, '' when it has none: Python's
- * `_resolve_deck_context_prompt`. */
+/** The owning deck's standing description, '' when it has none. */
 export function deckContextFor(repos: UserRepos, deckId: number): string {
   const name = repos.decks.findName(deckId);
   return name === null ? '' : (repos.decks.getContextPrompt(name) ?? '');
@@ -185,7 +184,7 @@ You can:
 
 Do ONLY what the user's request implies. If the request is "fix typos across all decks", return modifications, no new_decks/moves. If the request is "split deck X into Y and Z", return new_decks for Y/Z and card_moves placing each existing card in its new home; NO modifications unless the user also asked for content edits.
 
-For trivia cards: when you change prompt or answer, also update explanation + answer_regex so they stay in sync. answer_regex is a case-insensitive Python regex (re.fullmatch) that should match the new answer + obvious legitimate alternative forms.
+For trivia cards: when you change prompt or answer, also update explanation + answer_regex so they stay in sync. answer_regex is a case-insensitive full-match pattern that should match the new answer + obvious legitimate alternative forms.
 
 If URLs or recent material are referenced, you may use your web-fetch / web-search tools to ground the change.
 

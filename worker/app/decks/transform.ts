@@ -10,7 +10,7 @@ import { page, redirect, type PageRequest, type PageResult } from '../pageResult
 import type { Question } from '../entities.js';
 import type { UserRepos, WorkflowRunner } from '../ports.js';
 import { flatten, gone } from '../jobs/view.js';
-import { NO_FUNDING, pyInt } from './pages.js';
+import { NO_FUNDING, parseIntLiteral } from './pages.js';
 import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
 
 
@@ -33,7 +33,7 @@ export function parseTransformWid(wid: string): { scope: string; targetId: numbe
   if (parts.length < 3) return null;
   const scope = parts[0]!;
   if (!SCOPES.includes(scope)) return null;
-  const targetId = pyInt(parts[1]!);
+  const targetId = parseIntLiteral(parts[1]!);
   if (targetId === null) return null;
   return { scope, targetId };
 }
@@ -84,9 +84,9 @@ function oldFields(q: Question): Fields {
 }
 
 /** The model's value when it sent one, else the live value, so the template
- * can walk one key set and align the two columns. Python's `or` for the
- * first four and `is not None` for the rest, transcribed: an empty string
- * clears a field the model may legitimately want emptied. */
+ * can walk one key set and align the two columns. An empty string clears a
+ * field the model may legitimately want emptied; only null and undefined
+ * fall back. */
 function newFields(m: Record<string, unknown>, old: Question): Fields {
   const kept = (key: string, fallback: string): string => (m[key] === null || m[key] === undefined ? fallback : s(m[key]));
   return {
@@ -174,8 +174,8 @@ export async function transformView(repos: UserRepos, req: PageRequest, deps: Tr
   const parsed = requireOwnsTransform(repos, wid);
   const progress = (await progressOf(deps, wid)) ?? gone();
   const ctx = buildTransformViewCtx(repos, { ...parsed, progress });
-  // `desc` was Temporal's workflow description; the ledger's own row is the
-  // only status now, and the template reads it off `progress`.
+  // `desc` is vestigial: the ledger's row is the only status, and the
+  // template reads it off `progress`.
   return page('transform.html', { wid, scope: parsed.scope, target_id: parsed.targetId, progress, desc: {}, status: progress['status'], ...ctx });
 }
 
@@ -221,8 +221,8 @@ export async function deckTransform(repos: UserRepos, req: PageRequest, deps: Tr
   const name = req.params['name'] ?? '';
   const prompt = (req.form.get('prompt') ?? '').trim();
   if (!prompt) throw badRequest('empty prompt');
-  // The deck is materialised first, as Python does: a transform names a
-  // deck that may not have rows yet.
+  // The deck is materialised first: a transform names a deck that may not
+  // have rows yet.
   const deckId = repos.decks.getOrCreate(name);
   if (!agentAvailable(repos, deps.freeTierConfigured)) throw new AppError(403, NO_FUNDING);
   try {

@@ -15,8 +15,9 @@ export const MANIFEST_ICONS = ['icon-192.png', 'icon-512.png'];
 
 /** Every URL the offline shell needs to cold-launch with no network: the
  * shell pinned to this token, the whole css tree and the four js subtrees
- * at their versioned URLs, then the icons. The order is the manifest's
- * contract with the Python route. */
+ * at their versioned URLs, then the icons. The order is part of the
+ * manifest's contract: the shell has to be first or a cold launch has
+ * nothing to render while the rest arrives. */
 export function precacheUrls(tree: AssetTree, token: string, root = ''): string[] {
   return [
     `${root}/offline?build=${token}`,

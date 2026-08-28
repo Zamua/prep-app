@@ -1,13 +1,12 @@
-// The de-facto standard chat-completions wire format, transcribed from
-// prep/agent/openai_compat.py. One POST, one text answer, and the error
-// mapping the taxonomy rests on.
+// The de-facto standard chat-completions wire format: one POST, one text
+// answer, and the error mapping the refusal taxonomy rests on.
 //
 // `shared` is the whole mode split: with a deploy-wide credential a 429 or a
 // quota-coded body is contention (`AgentBusy`) and a transport timeout is
 // `AgentTimeout`; with the caller's own key the same signals are their budget
 // (`AgentBudgetExhausted`).
 import { AgentBudgetExhausted, AgentBusy, AgentTimeout, AgentUnavailable, type AgentPort, type AgentRequest } from '../../../app/ports.js';
-import { pyRepr } from '../../../domain/grading/pyrepr.js';
+import { literal } from '../../../domain/grading/literal.js';
 
 export interface CompatConfig {
   apiKey: string;
@@ -61,8 +60,8 @@ export class OpenAICompatAgent implements AgentPort {
 
   async complete(request: AgentRequest): Promise<string> {
     const c = this.config;
-    // Merge order is Python's: adapter defaults, then the deploy's knobs,
-    // then the two keys no knob may claim.
+    // Adapter defaults, then the deploy's knobs, then the two keys no knob
+    // may claim.
     const body: Record<string, unknown> = { model: c.model, max_tokens: request.maxTokens ?? c.maxTokens, ...this.extraBody };
     body['messages'] = messagesFor(request);
 
@@ -80,9 +79,9 @@ export class OpenAICompatAgent implements AgentPort {
       if (c.shared) {
         // The request went out, so a shared-credential timeout counts as
         // spend. The message is user-visible: it carries the remedy.
-        throw new AgentTimeout(`${c.label} timed out after ${pyRepr(timeoutS)}s; try again later, or add your own key in Settings for dedicated capacity`);
+        throw new AgentTimeout(`${c.label} timed out after ${literal(timeoutS)}s; try again later, or add your own key in Settings for dedicated capacity`);
       }
-      throw new AgentUnavailable(`${c.label} API timeout after ${pyRepr(timeoutS)}s`);
+      throw new AgentUnavailable(`${c.label} API timeout after ${literal(timeoutS)}s`);
     }
 
     if (res.status !== 200) this.raiseForPayload(res.status, await payloadOf(res));
@@ -129,8 +128,8 @@ export class OpenAICompatAgent implements AgentPort {
   }
 }
 
-/** Python's port takes one prompt string, so a parity call carries exactly one
- * user message: an injected system turn would change the fixture key. */
+/** A system turn is sent only when there is one: the canned-LLM fixtures
+ * key on the message list, so an empty turn would miss every fixture. */
 export function messagesFor(request: AgentRequest): { role: string; content: string }[] {
   const out: { role: string; content: string }[] = [];
   if (request.system) out.push({ role: 'system', content: request.system });

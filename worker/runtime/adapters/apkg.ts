@@ -162,8 +162,8 @@ export class SqlJsApkg implements ApkgReader, ApkgWriter {
       db.close();
     }
 
-    // The 1980 stamp again: Python's writer takes the wall clock here, so two
-    // exports of one deck differ. Anki reads the entries by name.
+    // The 1980 stamp again, so two exports of one deck are identical bytes.
+    // Anki reads the entries by name, never by stamp.
     const mtime = new Date(1980, 0, 1, 0, 0, 0).getTime();
     return zipSync(
       {

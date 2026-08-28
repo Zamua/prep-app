@@ -1,5 +1,4 @@
-// mistune._inline.emphasis: the CommonMark delimiter-run algorithm over
-// the flat inline token list.
+// The CommonMark delimiter-run algorithm over the flat inline token list.
 import { cpAt, cpBefore, isAlnum, isSpace } from "./chars";
 import type { Token } from "./tokens";
 import { CHARREF_PREFIX } from "./url";

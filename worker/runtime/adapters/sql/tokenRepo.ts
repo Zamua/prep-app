@@ -1,5 +1,5 @@
-// `api_tokens`, transcribed from prep/api/repo.py. Hashing and masking are
-// the PAT adapter's; the repo stores what it is given.
+// `api_tokens`. Hashing and masking are the PAT adapter's; the repo stores
+// what it is given and never sees a plaintext token.
 import type { Clock, TokenRepo } from '../../../app/ports.js';
 import type { ApiTokenMetadata } from '../../../app/entities.js';
 import { Db, type CellStorage, type Row } from './storage.js';

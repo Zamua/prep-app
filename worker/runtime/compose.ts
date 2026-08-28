@@ -91,7 +91,7 @@ export const NOW_HEADER = 'x-prep-now';
 export const PARITY_NOW_HEADER = 'x-parity-now';
 const SESSION_COUNTER_KEY = 'parity_session_counter';
 
-/** Three generators, seeded apart under parity as the Python harness patches them. */
+/** Three generators, seeded apart so one draw cannot shift another's. */
 export interface Randoms {
   instant: Random;
   merge: Random;
@@ -202,7 +202,8 @@ function refusePinsOutsideParityHosts(env: Env): void {
   }
 }
 
-/** Python's `_env_int`: unset or unparsable means the default. */
+/** An integer knob: unset or unparsable means the default, never a throw
+ * at composition time. */
 function envInt(raw: string | undefined, fallback: number): number {
   const s = (raw ?? '').trim();
   if (!s || !/^[+-]?\d+$/.test(s)) return fallback;
@@ -356,7 +357,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     agentFor: (load, opts = {}) => new SelectedAgent(load, { ...selectDeps, timeoutMs: opts.timeoutMs ?? selectDeps.timeoutMs }),
     jobsEnabled: env.JOB !== undefined,
     // A deploy with no JOB binding has jobs off: every start refuses, and
-    // the use cases take the branch Python takes when nothing funds one.
+    // the use cases take the same branch as an unfunded workflow.
     runner: (ctx) =>
       env.JOB === undefined
         ? new StubWorkflowRunner()
@@ -431,8 +432,9 @@ export function clockFor(c: Composition, request: Request): Clock {
   return new FixedClock(parseFakeNow(raw));
 }
 
-/** `Cache-Control: no-cache` on every HTML response, as the Python
- * middleware does; other content types pass untouched. */
+/** `Cache-Control: no-cache` on every HTML response, so a page never
+ * outlives the session it was rendered for; other content types pass
+ * untouched. */
 export function noCacheHtml(res: Response): Response {
   if (!(res.headers.get('content-type') ?? '').startsWith('text/html')) return res;
   const out = new Response(res.body, res);
@@ -449,7 +451,7 @@ export const ANON_COOKIE_HEADER = 'x-prep-anon-cookie';
  * response. Runs for every response, not just HTML, or a JSON request never
  * clears a dead cookie and never refreshes a live one.
  *
- * Precedence is Python's. A `mint` supersedes both pending updates: the new
+ * A `mint` supersedes both pending updates: the new
  * value is the account the response just handed out, and a stale-cookie
  * delete emitted afterwards would erase it. A `clear` from forget-device,
  * sign-out or a tombstoned cell wins over a refresh for the same reason.

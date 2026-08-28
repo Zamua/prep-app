@@ -187,7 +187,7 @@ export function identityFromClaims(payload: JwtPayload): Identity {
   };
 }
 
-/** Python's `quote_plus`: unreserved characters pass, a space becomes `+`. */
+/** Query-string encoding: unreserved characters pass, a space becomes `+`. */
 export function quotePlus(value: string): string {
   let out = '';
   for (const byte of new TextEncoder().encode(value)) {

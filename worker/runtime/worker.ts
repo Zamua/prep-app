@@ -389,8 +389,8 @@ function isPatBearer(request: Request): boolean {
 }
 
 /**
- * Python's `bearer_user`, split across the hop: the refusals that need no
- * storage answer here, and the hash is checked by the owner's own cell.
+ * Bearer resolution split across the hop: the refusals that need no storage
+ * answer here, and the hash is checked by the owner's own cell.
  */
 async function routeByToken(request: Request, headers: Headers, env: Env, c: Composition): Promise<Response> {
   const value = bearerValue(request.headers.get('authorization'));

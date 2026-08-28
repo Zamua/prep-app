@@ -8,8 +8,8 @@ import { AgentBusy, AgentUnavailable, type AgentPort } from '../ports.js';
 /** Shared-tier contention, not a broken grader: its fallback line says so. */
 export { AgentBusy };
 
-/** Python's `_GRADE_TIMEOUT_S`: a grader that has not answered by now loses
- * to the string match, which is instant. */
+/** A grader that has not answered by now loses to the string match, which
+ * is instant. */
 export const GRADE_TIMEOUT_MS = 12_000;
 
 export interface Verdict {
@@ -55,7 +55,7 @@ the regex. Examples:
   expected "Crash recovery"    given "crsh recovry"      → NO update (typo)
 
 When proposing a regex_update:
-- It must compile under Python's \`re\` with re.IGNORECASE.
+- It must be a case-insensitive full-match pattern.
 - It must match BOTH the expected answer AND the user's answer
   (case-insensitive fullmatch).
 - Keep it under 200 chars.

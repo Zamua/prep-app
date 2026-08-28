@@ -26,7 +26,7 @@ export function isIdle(lastSeenAt: string, cutoff: string): boolean {
  * How long an open migration run holds the sweep off.
  *
  * A migration registers an account before its cell holds anything, and a
- * migrated `created_at` is Python's, years old, so a sweep landing in that
+ * migrated `created_at` is the source's, years old, so a sweep landing in that
  * gap destroys a live account permanently: the cell tombstones, every later
  * chunk for it is refused, and nothing un-tombstones a cell. The hold has to
  * cover the whole cutover, which is why it is days rather than minutes; the

@@ -98,9 +98,9 @@ export function assembleCookie(payload: string, mac: Uint8Array): string {
 }
 
 const ASCII = /^[\x00-\x7f]*$/;
-// Python int(): optional ASCII whitespace and sign, digits with single
-// underscores between them.
-const PY_INT = /^[ \t\n\r\v\f]*[+-]?[0-9](?:_?[0-9])*[ \t\n\r\v\f]*$/;
+// A decimal integer as the cookie may spell it: optional ASCII whitespace
+// and sign, digits with single underscores between them.
+const DECIMAL_INT = /^[ \t\n\r\v\f]*[+-]?[0-9](?:_?[0-9])*[ \t\n\r\v\f]*$/;
 
 /** Shape check only; a value failing any check is treated as absent. */
 export function parseCookie(raw: string | null | undefined): ParsedCookie | null {
@@ -111,7 +111,7 @@ export function parseCookie(raw: string | null | undefined): ParsedCookie | null
   if (version !== COOKIE_VERSION) return null;
   const id = b64uDecode(idPart, ID_BYTES);
   if (id === null) return null;
-  if (!PY_INT.test(iatPart)) return null;
+  if (!DECIMAL_INT.test(iatPart)) return null;
   const issuedAt = Number(iatPart.replace(/[ \t\n\r\v\f_]/g, '')) + 0;
   return { payload: `${version}.${idPart}.${iatPart}`, idBytes: id, issuedAt, sig };
 }

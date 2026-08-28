@@ -7,7 +7,8 @@ import type { AgentPort } from '../../../app/ports.js';
 import { AnthropicAgent } from './anthropic.js';
 import { OpenAICompatAgent } from './openaiCompat.js';
 
-/** Python's adapter-side default: a response-length cap, not a budget. */
+/** A response-length cap, not a spend budget: the owner's key, the owner's
+ * bill. */
 export const BYOK_MAX_OUTPUT_TOKENS = 4096;
 
 export class UnsupportedProvider extends Error {}

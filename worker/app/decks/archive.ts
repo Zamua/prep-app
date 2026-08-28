@@ -3,7 +3,7 @@
 // FSRS state, the review log and the queue, so an import restores a deck
 // rather than appending to one. `prompt` is the join key across the three
 // CSVs because a restore assigns fresh question ids.
-import { pyRepr, pyReprList } from '../../domain/grading/pyrepr.js';
+import { literal, literalList } from '../../domain/grading/literal.js';
 import { parseDict, writeRow } from '../api/csv.js';
 import { CSV_COLUMNS, questionToRow, questionsForExport, type DeckIoRepos } from '../api/deckIo.js';
 import type { NewQuestion, QuestionType, ReviewResult } from '../entities.js';
@@ -166,11 +166,11 @@ export function prepdeckToDeck(
 ): PrepdeckImportOutcome {
   const errors: string[] = [];
 
-  if (!VALID_NAME.test(deckName)) return fail(deckName, `invalid deck name ${pyRepr(deckName)}; must match ${VALID_NAME_SOURCE}`);
+  if (!VALID_NAME.test(deckName)) return fail(deckName, `invalid deck name ${literal(deckName)}; must match ${VALID_NAME_SOURCE}`);
   if (repos.decks.findId(deckName) !== null) {
     return fail(
       deckName,
-      `deck ${pyRepr(deckName)} already exists. Pick a fresh name — .prepdeck imports restore full state, which would merge awkwardly with existing cards.`,
+      `deck ${literal(deckName)} already exists. Pick a fresh name — .prepdeck imports restore full state, which would merge awkwardly with existing cards.`,
     );
   }
 
@@ -183,7 +183,7 @@ export function prepdeckToDeck(
   }
   const byName = new Map(entries.map((e) => [e.name, e.bytes]));
   const missing = REQUIRED_ENTRIES.filter((n) => !byName.has(n));
-  if (missing.length) return fail(deckName, `archive is missing required entries: ${pyReprList([...missing])}`);
+  if (missing.length) return fail(deckName, `archive is missing required entries: ${literalList([...missing])}`);
 
   let meta: Record<string, unknown>;
   try {
@@ -297,7 +297,7 @@ function importCards(
     // and strips to a type no `QuestionType` names.
     const typeRaw = ((row['type'] ?? '') || 'short').trim().toLowerCase();
     if (!QUESTION_TYPES.includes(typeRaw)) {
-      errors.push(`cards.csv row ${i}: unknown type ${pyRepr(row['type'] ?? null)}`);
+      errors.push(`cards.csv row ${i}: unknown type ${literal(row['type'] ?? null)}`);
       continue;
     }
     const answer = cell(row, 'answer');
@@ -343,7 +343,7 @@ function restoreCardState(repos: UserRepos, qid: number, row: Record<string, str
     if (!v) return null;
     const parsed = integral ? (/^[+-]?\d+$/.test(v) ? Number(v) : NaN) : Number(v);
     if (!Number.isFinite(parsed)) {
-      errors.push(`cards.csv row ${rowNum}: bad ${name}=${pyRepr(v)}`);
+      errors.push(`cards.csv row ${rowNum}: bad ${name}=${literal(v)}`);
       return null;
     }
     return parsed;
@@ -377,12 +377,12 @@ function importReviews(repos: UserRepos, csvText: string, qidByPrompt: Map<strin
     }
     const qid = qidByPrompt.get(prompt);
     if (qid === undefined) {
-      errors.push(`reviews.csv row ${i}: prompt ${pyRepr(prompt.slice(0, 40))} not found in deck`);
+      errors.push(`reviews.csv row ${i}: prompt ${literal(prompt.slice(0, 40))} not found in deck`);
       continue;
     }
     const result = cell(row, 'result').toLowerCase();
     if (result !== 'right' && result !== 'wrong') {
-      errors.push(`reviews.csv row ${i}: bad result ${pyRepr(result)}`);
+      errors.push(`reviews.csv row ${i}: bad result ${literal(result)}`);
       continue;
     }
     try {
@@ -418,7 +418,7 @@ function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<s
     const prompt = cell(row, 'prompt');
     const qid = qidByPrompt.get(prompt);
     if (qid === undefined) {
-      errors.push(`trivia_queue.csv row ${i}: prompt ${pyRepr(prompt.slice(0, 40))} not in deck`);
+      errors.push(`trivia_queue.csv row ${i}: prompt ${literal(prompt.slice(0, 40))} not in deck`);
       continue;
     }
     const rawPos = (row['queue_position'] ?? '').trim() || '0';
@@ -430,7 +430,7 @@ function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<s
     let lastAnsweredCorrectly: number | null = null;
     if (lacRaw !== '') {
       if (!/^[+-]?\d+$/.test(lacRaw)) {
-        errors.push(`trivia_queue.csv row ${i}: bad last_answered_correctly=${pyRepr(lacRaw)}`);
+        errors.push(`trivia_queue.csv row ${i}: bad last_answered_correctly=${literal(lacRaw)}`);
         continue;
       }
       lastAnsweredCorrectly = Number(lacRaw);

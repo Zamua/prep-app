@@ -41,7 +41,8 @@ export interface CookieAttributes {
   httpOnly?: boolean;
 }
 
-/** The header value, attributes in Python's sorted order. */
+/** The header value. Attributes are emitted in a fixed order so the same
+ * cookie always serialises to the same bytes. */
 export function setCookie(name: string, value: string, attrs: CookieAttributes): string {
   const parts: [key: string, rendered: string][] = [];
   if (attrs.expires !== undefined) parts.push(['expires', `expires=${httpDate(attrs.expires)}`]);

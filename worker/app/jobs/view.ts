@@ -1,6 +1,5 @@
-// What a route hands a progress partial. The ledger keeps the status literal
-// beside its progress keys; every partial reads one flat dict, as the
-// Temporal query handler used to return.
+// What a route hands a progress partial. The ledger keeps the status
+// literal beside its progress keys; every partial reads one flat object.
 import type { JobStatus } from '../ports.js';
 
 export const flatten = (s: JobStatus): Record<string, unknown> => ({ ...s.progress, status: s.status });
@@ -9,6 +8,7 @@ export const flatten = (s: JobStatus): Record<string, unknown> => ({ ...s.progre
  * A fresh object each call, because a route may add keys to it. */
 export const gone = (): Record<string, unknown> => ({ status: 'gone' });
 
-/** The statuses the grading poll stops on, as `prep/study/api.py` spells
- * them; the four upper-case ones were Temporal's own close states. */
+/** The statuses the grading poll stops on. The upper-case four are only
+ * reachable on rows written before the current runner and are kept so an
+ * old row still terminates the poll. */
 export const TERMINAL_GRADING: readonly string[] = ['done', 'failed', 'COMPLETED', 'FAILED', 'CANCELED', 'TERMINATED'];

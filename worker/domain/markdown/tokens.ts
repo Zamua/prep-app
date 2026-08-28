@@ -1,4 +1,4 @@
-// The token shapes mistune's parsers hand its renderer.
+// The token shapes the parsers hand the renderer.
 
 export interface Token {
   type: string;

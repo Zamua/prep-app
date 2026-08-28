@@ -1,5 +1,5 @@
-// The `profile` row, transcribed from prep/auth/repo.py: UserRepo. Read as
-// the `user` dict with Python's key names.
+// The `profile` row: one per cell, read as the `user` object the templates
+// and the API both spell out.
 import type { Clock, PrefsRepo } from '../../../app/ports.js';
 import {
   DEFAULT_EDITOR_INPUT_MODE,
@@ -14,7 +14,8 @@ import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow } from './time.js';
 import type { AccountRows } from '../../../domain/limits.js';
 
-/** Python's column order, `tailscale_login` for the id. */
+/** The column order the `user` object is read in; `tailscale_login` is the
+ * id column. */
 export function rowToProfile(r: Row): Profile {
   return {
     tailscale_login: String(r['id']),

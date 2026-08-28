@@ -1,5 +1,4 @@
-// `notifications_log` and `push_subscriptions`, transcribed from
-// prep/notify/repo.py.
+// `notifications_log` and `push_subscriptions`.
 import type { Clock, NotifyRepo, PushSubRepo } from '../../../app/ports.js';
 import type { NotificationLogEntry, PushSubscription } from '../../../app/entities.js';
 import { Db, type CellStorage } from './storage.js';

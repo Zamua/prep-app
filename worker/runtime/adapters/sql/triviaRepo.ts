@@ -1,5 +1,5 @@
-// `trivia_queue` and `trivia_sessions`, transcribed from prep/trivia/repo.py.
-// Selection ranks by answer state; the shown order is shuffled once and the
+// `trivia_queue` and `trivia_sessions`. Selection ranks by answer state;
+// the shown order is shuffled once and the
 // session persists it.
 import type { Clock, Random, SessionIds, TriviaRepo } from '../../../app/ports.js';
 import type { ActiveTriviaSession, DoneItem, NextCard, TriviaDeckStats, TriviaQueueEntry, TriviaSession } from '../../../app/entities.js';

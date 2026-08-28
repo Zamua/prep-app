@@ -1,5 +1,4 @@
-// `active_workflows`, the job status read model, transcribed from
-// prep/workflows/repo.py: ActiveWorkflowsRepo.
+// `active_workflows`: the job status read model the badge polls.
 import type { Clock, JobStatusRepo } from '../../../app/ports.js';
 import type { ActiveWorkflow } from '../../../app/entities.js';
 import { Db, type CellStorage, type Row } from './storage.js';

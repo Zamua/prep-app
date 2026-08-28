@@ -18,7 +18,7 @@ describe('preference validation', () => {
     expect(validatePrefs({ ...DEFAULT_NOTIFICATION_PREFS })).toEqual(DEFAULT_NOTIFICATION_PREFS);
   });
 
-  it('reports an unknown mode as pydantic does, with the url', () => {
+  it('names the allowed modes when one is unknown', () => {
     try {
       validatePrefs({ ...DEFAULT_NOTIFICATION_PREFS, mode: 'hourly' });
       expect.unreachable();
@@ -31,7 +31,6 @@ describe('preference validation', () => {
           msg: "Input should be 'off', 'digest' or 'when-ready'",
           input: 'hourly',
           ctx: { expected: "'off', 'digest' or 'when-ready'" },
-          url: 'https://errors.pydantic.dev/2.13/v/enum',
         },
       ]);
     }

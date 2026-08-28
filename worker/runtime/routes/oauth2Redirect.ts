@@ -1,6 +1,5 @@
-// FastAPI's OAuth2 redirect shell, byte for byte: Swagger's authorize flow
-// opens this page and posts the code back to the opener. Static markup with
-// no vendor tag, so it needs no parity stripping.
+// The OAuth2 redirect shell: Swagger's authorize flow opens this page and
+// posts the code back to the opener. Static markup, no vendor script.
 export const OAUTH2_REDIRECT_HTML = `
     <!doctype html>
     <html lang="en-US">

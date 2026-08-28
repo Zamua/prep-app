@@ -1,6 +1,7 @@
-// Python's `csv` dialect: comma delimiter, `"` quoting doubled on
-// escape, CRLF terminator, minimal quoting. The wire format is shared
-// with the CSV exporter, so the dialect is part of the contract.
+// The CSV dialect: comma delimiter, `"` quoting doubled on escape, CRLF
+// terminator, minimal quoting. Shared with the CSV exporter and with every
+// file a user has already exported, so the dialect is part of the
+// contract.
 
 const QUOTE = '"';
 const DELIMITER = ',';

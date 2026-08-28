@@ -10,7 +10,7 @@ import { errorContext } from '../../errors.js';
 import { HTML, type CellPorts, type CellRequest, type Gate, type Handled, type Route } from '../router.js';
 
 /** A urlencoded body, parsed once. Any other content type posts no fields,
- * which is what FastAPI's `Form(...)` also sees for a body it cannot read. */
+ * so a handler reading a form never has to check the content type. */
 export async function formOf(request: Request): Promise<URLSearchParams> {
   if (request.method === 'GET' || request.method === 'HEAD') return new URLSearchParams();
   const type = request.headers.get('content-type') ?? '';
@@ -150,9 +150,8 @@ function handled(result: PageResult, req: CellRequest): Handled {
   return { empty: true, status: result.status, headers: result.headers };
 }
 
-/** Python raises `HTTPException` and the shared handler renders the error
- * page; here the page carries the caller's own context, so the masthead
- * still shows who is signed in. */
+/** The error page carries the caller's own context, so the masthead still
+ * shows who is signed in. */
 function errorPageOf(e: AppError, req: CellRequest): Handled {
   return { page: 'error.html', context: errorContext(e.status, req.url.pathname, e.detail), status: e.status };
 }

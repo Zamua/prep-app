@@ -1,6 +1,5 @@
-// Ceilings the Python app did not need. FastAPI spooled an upload to disk and
-// sqlite3 opened a temp file; a cell has 128 MB of heap, no disk, and holds
-// the upload, the inflated collection and the sql.js linear memory at once.
+// Import ceilings. A cell has 128 MB of heap, no disk, and holds the
+// upload, the inflated collection and the sql.js linear memory at once.
 // Half the isolate is the ceiling, so the renderer keeps the other half.
 //
 // Every number below is the largest workload measured to answer on a celld

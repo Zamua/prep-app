@@ -1,6 +1,6 @@
 // Randomness behind the `Random` and `SessionIds` ports. Production draws
-// from WebCrypto; parity draws from a port of CPython's `random.Random(int)`
-// so seeded slugs, ids and tokens reproduce the corpus.
+// from WebCrypto; test mode draws from a seeded MT19937 so slugs, ids and
+// tokens reproduce run to run.
 import type { Random, SessionIds } from '../../app/ports.js';
 
 export class WebCryptoRandom implements Random {
@@ -10,7 +10,8 @@ export class WebCryptoRandom implements Random {
     return out;
   }
 
-  /** Rejection sampling over the smallest power of two, as `secrets.choice`. */
+  /** Rejection sampling over the smallest power of two, so every element is
+   * equally likely. */
   choice<T>(seq: readonly T[]): T {
     if (seq.length === 0) throw new RangeError('choice on an empty sequence');
     const n = seq.length;
@@ -30,9 +31,10 @@ const UPPER = 0x80000000;
 const LOWER = 0x7fffffff;
 
 /**
- * MT19937 as CPython seeds it from an int: `init_by_array` over the
- * absolute value split into 32-bit words, `getrandbits(k)` for k <= 32,
- * and `_randbelow` (rejection over the bit length) for `choice`.
+ * MT19937 seeded from an int: `init_by_array` over the absolute value split
+ * into 32-bit words, bit draws for k <= 32, and rejection over the bit
+ * length for `choice`. The exact seeding matters only in that it must not
+ * change: the seed profiles' ids are pinned to this stream.
  */
 export class SeededRandom implements Random {
   private readonly mt = new Uint32Array(N);

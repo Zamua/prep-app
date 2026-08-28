@@ -1,4 +1,4 @@
-// The Python snapshot into the cells, one chunk at a time.
+// A snapshot of an account's rows into its cell, one chunk at a time.
 //
 // Nothing here is keyed by a run id. Every step keys on something the data
 // already carries, so a replay converges instead of duplicating: `register`

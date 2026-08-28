@@ -1,17 +1,20 @@
-// Answer patterns are authored in the `re` dialect, so they run through a
-// u-flag RegExp only after a pass that rewrites what the two dialects spell
-// differently and refuses (null) what they would grade differently.
+// Stored answer patterns are authored in a dialect of their own, so they
+// run through a u-flag RegExp only after a pass that rewrites what the two
+// spell differently and refuses (null) what they would grade differently.
+// The dialect is fixed by the patterns already on people's cards; it is
+// the reader that adapts, never the stored value.
 
 export const MAX_REGEX_LEN = 500;
 
-// Escapes the u flag accepts outside a class; re reads any other escaped
-// punctuation as the character itself.
+// Escapes the u flag accepts outside a class; the stored dialect reads any
+// other escaped punctuation as the character itself.
 const JS_SYNTAX = new Set([...'^$\\.*+?()[]{}|/']);
 const QUANTIFIER = new Set(['?', '*', '+', '{']);
 
 const isAsciiAlnum = (c: string) => /^[A-Za-z0-9]$/.test(c);
 const isDigit = (c: string | undefined) => c !== undefined && c >= '0' && c <= '9';
-// `\uD83D\uDE00`: two lone code points in re, one astral code point under u.
+// `\uD83D\uDE00`: two lone code points in the stored dialect, one astral
+// code point under the u flag.
 const isSurrogateHex = (hex: string[]) => {
   const v = parseInt(hex.join(''), 16);
   return hex.length === 4 && hex.every((h) => /^[0-9A-Fa-f]$/.test(h)) && v >= 0xd800 && v <= 0xdfff;
@@ -19,15 +22,18 @@ const isSurrogateHex = (hex: string[]) => {
 
 interface Scanned {
   source: string;
-  /** \w \W \b \B \d \D present: ASCII-only in JS, Unicode in re. */
+  /** \w \W \b \B \d \D present: ASCII-only in JS, Unicode in the stored
+   * dialect. */
   shorthand: boolean;
-  /** \B present: re never matches it in an empty subject, JS does. */
+  /** \B present: the stored dialect never matches it in an empty subject,
+   * JS does. */
   emptyDiverges: boolean;
 }
 
 // A backreference is translated only to a group that is always set once
 // the reference runs: closed, top level, unquantified, not cut off by a
-// top-level `|`. re fails a reference to an unset group, JS matches empty.
+// top-level `|`. The stored dialect fails a reference to an unset group,
+// JS matches empty.
 interface Group {
   closed: boolean;
   reliable: boolean;
@@ -36,9 +42,11 @@ interface Group {
 /**
  * One pass over the pattern. Translated: `(?P<n>` to `(?<n>`, `(?P=n)` to
  * `\k<n>`, escaped punctuation to bare, one leading `(?i)`/`(?s)` group
- * dropped (both flags are always on). Refused: JS-only syntax re rejects
+ * dropped (both flags are always on). Refused: JS-only syntax the stored
+ * dialect rejects
  * (`(?<n>`, `\k`, `\p`, `\P`, `\c`, `\u{`, `[]`, `[^]`), scoped flag
- * groups, lookbehind (re wants it fixed-width), a reused group name, a
+ * groups, lookbehind (fixed-width only in the stored dialect), a reused
+ * group name, a
  * reference to a group that may be unset, a multi-digit `\NN`, an escaped
  * surrogate, and every other `(?` extension, which one engine or the other
  * lacks.
@@ -49,7 +57,7 @@ function scan(pattern: string): Scanned | null {
   let shorthand = false;
   let emptyDiverges = false;
   let inClass = false;
-  let classOpen = false; // just after "[" or "[^", where re takes "]" literally
+  let classOpen = false; // just after "[" or "[^", where "]" is literal
   const groups: Group[] = [];
   const named = new Map<string, Group>();
   const open: (Group | null)[] = [];
@@ -152,7 +160,8 @@ function scan(pattern: string): Scanned | null {
   return { source: out, shorthand, emptyDiverges };
 }
 
-/** The JS source for a re pattern, or null when it cannot be trusted to agree. */
+/** The JS source for a stored pattern, or null when it cannot be trusted
+ * to grade the same. */
 export function translatePattern(pattern: string): string | null {
   return scan(pattern)?.source ?? null;
 }

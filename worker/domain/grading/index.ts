@@ -1,11 +1,11 @@
 // The synchronous grader: mcq, multi and "I don't know", plus the regex
 // half of short-answer grading. Free text is graded elsewhere.
-import { JsonDecodeError, PyTypeError, loads, sameSet, toSet, type PyScalar } from './pyjson';
-import { GradingError, pyReprList, pySorted } from './pyrepr';
+import { JsonDecodeError, ValueTypeError, parseJson, sameSet, toSet, type Scalar } from './answerJson';
+import { GradingError, literalList, sortedValues } from './literal';
 import { matchRegex } from './regex';
 
 export { MAX_REGEX_LEN, matchRegex, translatePattern, validateRegexUpdate } from './regex';
-export { GradingError } from './pyrepr';
+export { GradingError } from './literal';
 
 export type Verdict = 'right' | 'wrong';
 export type Question = Record<string, unknown>;
@@ -51,30 +51,30 @@ function gradeMcq(question: Question, userAnswer: string): GradeResult {
   };
 }
 
-/** `set(json.loads(x))`; a non-string is json.loads's TypeError. */
-function loadSet(x: unknown): PyScalar[] {
-  if (typeof x !== 'string') throw new PyTypeError('the JSON object must be str');
-  return toSet(loads(x));
+/** The answer parsed and reduced to a set; a non-string cannot be one. */
+function loadSet(x: unknown): Scalar[] {
+  if (typeof x !== 'string') throw new ValueTypeError('the JSON object must be str');
+  return toSet(parseJson(x));
 }
 
 // A parse or type failure on either side empties both sets, so a broken
-// pair grades right; the reference does the same.
+// pair grades right rather than blaming the learner for stored damage.
 function gradeMulti(question: Question, userAnswer: string): GradeResult {
-  let picked: PyScalar[];
-  let expected: PyScalar[];
+  let picked: Scalar[];
+  let expected: Scalar[];
   try {
     picked = userAnswer ? loadSet(userAnswer) : [];
     expected = loadSet(question.answer);
   } catch (e) {
-    if (!(e instanceof JsonDecodeError || e instanceof PyTypeError)) throw e;
+    if (!(e instanceof JsonDecodeError || e instanceof ValueTypeError)) throw e;
     picked = [];
     expected = [];
   }
   const correct = sameSet(picked, expected);
-  const summary = pyReprList(pySorted(expected));
+  const summary = literalList(sortedValues(expected));
   return {
     result: correct ? 'right' : 'wrong',
-    feedback: correct ? 'Correct.' : `Expected: ${summary}; you picked: ${pyReprList(pySorted(picked))}.`,
+    feedback: correct ? 'Correct.' : `Expected: ${summary}; you picked: ${literalList(sortedValues(picked))}.`,
     model_answer_summary: summary,
   };
 }

@@ -1,5 +1,5 @@
-// The error pages, ported from prep/web/errors.py: the copy verbatim, the
-// detail folded into the blurb when it adds something.
+// The error pages: one headline and blurb per status, with the detail
+// folded into the blurb when it adds something.
 import { NO_AUTH_URLS, type AuthUrls } from '../app/pageContext.js';
 import type { Renderer } from '../app/ports.js';
 import { appBase } from './appBase.js';
@@ -26,7 +26,7 @@ const FALLBACK_COPY: readonly [string, string] = [
 ];
 
 /** The nine context-processor names for a page rendered outside a cell,
- * plus the request origin every Python context carried as `request`. */
+ * plus the request origin. */
 export function anonymousContext(buildToken: string, appBase: string, urls: AuthUrls = NO_AUTH_URLS): Record<string, unknown> {
   return {
     app_base: appBase,

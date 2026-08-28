@@ -18,8 +18,8 @@
       aria-valuemin="0"
       aria-valuemax="100">
   <span class="mastery-bar__fill mastery-bar__fill--right"
-        style="width: {{ _mp | round(2) | pyfloat }}%"></span>
+        style="width: {{ _mp | round(2) | floattext }}%"></span>
   <span class="mastery-bar__fill mastery-bar__fill--wrong"
-        style="left: {{ _mp | round(2) | pyfloat }}%; width: {{ _wp | round(2) | pyfloat }}%"></span>
+        style="left: {{ _mp | round(2) | floattext }}%; width: {{ _wp | round(2) | floattext }}%"></span>
 </span>
 {% endmacro %}

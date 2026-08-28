@@ -1,11 +1,11 @@
 // The unauthenticated surface the entry worker answers before any identity
-// is resolved: the recorded OpenAPI document, FastAPI's doc shells and its
+// is resolved: the OpenAPI document, the Swagger and ReDoc shells and the
 // OAuth2 redirect, /llms.txt, and the VAPID public key a browser needs to
 // subscribe.
 //
-// The shells are FastAPI's own markup, line for line, with the vendor tags
-// stripped under parity so the pixel harness never reaches a CDN. The
-// indentation of a stripped line survives, as it does in Python.
+// The shells load their viewer from a CDN, which test mode strips so a
+// screenshot never reaches the network. Stripping keeps the line's
+// indentation, so the rest of the markup is unchanged.
 import doc from '../openapi.json';
 import { llmsTxt } from './legal.js';
 import { OAUTH2_REDIRECT_HTML } from './oauth2Redirect.js';

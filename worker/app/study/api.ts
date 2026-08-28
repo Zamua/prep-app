@@ -1,12 +1,12 @@
-// The JSON study API, transcribed from prep/study/api.py. Shapes mirror
-// the CardSource contract the browser components drive:
+// The JSON study API. Shapes are the CardSource contract the browser
+// components drive:
 //   next   -> {card, draft} | {caughtUp}
 //   submit -> {verdict, ...} | {selfGrade} | {pending}
 //   author -> {card}
 // A 200 body carries exactly one outcome key; a non-2xx body is
 // {error: {code, message}}.
 import { grade, GradingError, UnsupportedQuestionType } from '../../domain/grading/index.js';
-import { JsonDecodeError } from '../../domain/grading/pyjson.js';
+import { JsonDecodeError } from '../../domain/grading/answerJson.js';
 import { deviceLabelFromUa } from '../../domain/study/device.js';
 import { gradeCard } from '../../domain/jobs/snapshot.js';
 import { DurationError, parseUntil } from '../durations.js';
@@ -271,8 +271,8 @@ async function submit(
   try {
     verdict = grade(q as unknown as Record<string, unknown>, userAnswer, idk) as unknown as Record<string, unknown>;
   } catch (e) {
-    // Python's `except ValueError`: an ungradable type, an unreadable
-    // stored answer, or malformed JSON in a `multi` submission.
+    // An ungradable type, an unreadable stored answer, or malformed JSON
+    // in a `multi` submission: the learner's fault or the row's, not a bug.
     if (e instanceof UnsupportedQuestionType || e instanceof GradingError || e instanceof JsonDecodeError) return error(422, 'not_gradable', e.message);
     throw e;
   }

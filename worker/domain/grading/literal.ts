@@ -1,12 +1,12 @@
-// sorted() and repr() of a list of hashable JSON values, as Python 3.11
-// prints them in the multi-select feedback.
-import type { PyScalar } from './pyjson';
+// How a list of answer values is ordered and spelled in the multi-select
+// feedback the learner reads.
+import type { Scalar } from './answerJson';
 
 export class GradingError extends Error {}
 
 type Kind = 'str' | 'num' | 'none';
 
-function kindOf(v: PyScalar): Kind {
+function kindOf(v: Scalar): Kind {
   if (typeof v === 'string') return 'str';
   if (v === null) return 'none';
   return 'num';
@@ -23,7 +23,8 @@ function cmpStr(a: string, b: string): number {
   return xs.length - ys.length;
 }
 
-/** Exact int-versus-float comparison, as Python does it; bool is 0 or 1. */
+/** Exact int-versus-float comparison, so a large int never loses to
+ * rounding; bool is 0 or 1. */
 function cmpNum(a: boolean | bigint | number, b: boolean | bigint | number): number {
   const x = typeof a === 'boolean' ? BigInt(a ? 1 : 0) : a;
   const y = typeof b === 'boolean' ? BigInt(b ? 1 : 0) : b;
@@ -40,10 +41,11 @@ function cmpNum(a: boolean | bigint | number, b: boolean | bigint | number): num
 }
 
 /**
- * Python `sorted()`. Strings, numbers (int, float, bool) and None are the
- * comparable classes; two elements of different classes cannot be ordered.
+ * Ascending order. Strings, numbers (int, float, bool) and null are the
+ * comparable classes; two elements of different classes cannot be ordered,
+ * which is a grading error rather than an arbitrary result.
  */
-export function pySorted(items: PyScalar[]): PyScalar[] {
+export function sortedValues(items: Scalar[]): Scalar[] {
   const out = items.slice();
   if (out.length < 2) return out;
   const kind = kindOf(out[0]!);
@@ -53,10 +55,11 @@ export function pySorted(items: PyScalar[]): PyScalar[] {
   return out;
 }
 
-// str.isprintable() is false for these categories and for no other character.
+// Unprintable: these categories and no other character. Escaped rather
+// than emitted, so an answer of invisible characters is still readable.
 const UNPRINTABLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Zs}]/u;
 
-function reprStr(s: string): string {
+function stringLiteral(s: string): string {
   const q = s.includes("'") && !s.includes('"') ? '"' : "'";
   let out = q;
   for (const ch of s) {
@@ -75,11 +78,12 @@ function reprStr(s: string): string {
 }
 
 /**
- * repr(float): the shortest round-trip digits (toExponential and CPython
- * agree on them), fixed notation for exponents in [-4, 16), else scientific
- * with a two-digit exponent, and an integral value keeps its `.0`.
+ * A float as a source literal: the shortest round-trip digits, fixed
+ * notation for exponents in [-4, 16), else scientific with a two-digit
+ * exponent, and an integral value keeps its `.0` so it does not read as an
+ * int.
  */
-export function reprFloat(x: number): string {
+export function floatLiteral(x: number): string {
   if (Number.isNaN(x)) return 'nan';
   if (x === Infinity) return 'inf';
   if (x === -Infinity) return '-inf';
@@ -99,16 +103,16 @@ export function reprFloat(x: number): string {
   return (x < 0 ? '-' : '') + body;
 }
 
-/** Python `repr()` of one hashable JSON value. */
-export function pyRepr(v: PyScalar): string {
-  if (typeof v === 'string') return reprStr(v);
+/** One answer value, spelled the way the feedback shows it. */
+export function literal(v: Scalar): string {
+  if (typeof v === 'string') return stringLiteral(v);
   if (v === null) return 'None';
   if (typeof v === 'boolean') return v ? 'True' : 'False';
   if (typeof v === 'bigint') return v.toString();
-  return reprFloat(v);
+  return floatLiteral(v);
 }
 
-/** Python `repr()` of a list. */
-export function pyReprList(items: PyScalar[]): string {
-  return `[${items.map(pyRepr).join(', ')}]`;
+/** A list of answer values, spelled the way the feedback shows it. */
+export function literalList(items: Scalar[]): string {
+  return `[${items.map(literal).join(', ')}]`;
 }

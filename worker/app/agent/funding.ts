@@ -1,16 +1,14 @@
-// Which credential funds one owner's call, and whether any does. Transcribed
-// from prep/agent/selector.py: `agent_for_user`, `funding_tier_for_user` and
-// `require_funded_workflow`, minus the retired subscription branch.
+// Which credential funds one owner's call, and whether any does.
 //
 // Policy over rows, so it is app-layer: no adapter is named here, and the
 // answer is a value the composition root turns into an adapter.
 import { AgentUnavailable, type AgentConfig, type FundingTier, type UserRepos } from '../ports.js';
 
-/** Python's `_NO_FUNDING`, raised by a start no tier would fund. */
+/** Raised by a start no tier would fund. */
 export const NO_FUNDING = 'AI is not configured. Add a personal API key on /settings/agent, or ask the deploy admin to configure a shared tier.';
 
-/** Python's `_ANON_NO_AGENT`. A guest's one AI path is the instant endpoint,
- * which resolves the free tier directly and never comes through here. */
+/** A guest's one AI path is the instant endpoint, which resolves the free
+ * tier directly and never comes through here. */
 export const ANON_NO_AGENT = 'AI is not configured for a guest account. Create an account and add a personal API key on /settings/agent to generate cards.';
 
 /** Rows exist but none of them yielded a key. Falling through to the shared

@@ -3,11 +3,11 @@
 // progress keys it owns; the runner merges those in ledger order and never
 // learns what a key means.
 //
-// Key names are Python's (`plan`, `round`, `total`, `generated_count`,
-// `inserted`, `skipped_dups`, `skipped_invalid`, `result`, `notes`), because
-// the partials read them by name. Key PRESENCE follows the Go worker's
-// `omitempty` tags for the same reason: a field it always marshalled is
-// always here, and one it dropped when empty is dropped here.
+// The key names (`plan`, `round`, `total`, `generated_count`, `inserted`,
+// `skipped_dups`, `skipped_invalid`, `result`, `notes`) are read by the
+// partials, and key PRESENCE is part of the contract with the Go worker: a
+// field it always marshals is always here, and one it omits when empty is
+// omitted here.
 
 export type JsonRecord = Record<string, unknown>;
 

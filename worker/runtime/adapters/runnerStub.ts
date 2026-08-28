@@ -1,6 +1,6 @@
-// A deploy with jobs off: every start refuses and the use cases take the
-// branch Python takes when no tier funds a workflow. Reads answer as if the
-// workflow were gone, which is what the partials already render.
+// A deploy with jobs off: every start refuses, taking the same branch as an
+// unfunded workflow. Reads answer as if the workflow were gone, which is
+// what the partials already render.
 import { RunnerUnavailable, type JobInputs, type JobKind, type JobStatus, type WorkflowRunner } from '../../app/ports.js';
 
 export class StubWorkflowRunner implements WorkflowRunner {

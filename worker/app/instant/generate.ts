@@ -1,7 +1,6 @@
-// Anonymous free-tier deck generation, transcribed from
-// prep/instant/routes.py: one topic in, one deck out. Every response
-// carries a `kind` the client branches on; the endpoint never 500s, so
-// an unexpected failure maps to `generation_failed` and counts as spend.
+// Anonymous free-tier deck generation: one topic in, one deck out. Every
+// response carries a `kind` the client branches on; the endpoint never 500s,
+// so an unexpected failure maps to `generation_failed` and counts as spend.
 //
 // This is the only path that mints an anonymous account, and it mints
 // one only after a generation succeeds.

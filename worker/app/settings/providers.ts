@@ -2,9 +2,8 @@
 // Static metadata the settings page renders; no adapter is imported to
 // draw a section.
 //
-// `claude-subscription` is retired (docs/CELLD-REWRITE.md 7.4): it is not
-// offered, but a row migrated from the Python app still renders so its
-// owner can delete it and paste an API key instead.
+// `claude-subscription` is retired: it is not offered, but an existing row
+// still renders so its owner can delete it and paste an API key instead.
 
 export type ProviderId = 'anthropic-api' | 'openai-api' | 'openrouter-api' | 'claude-subscription';
 

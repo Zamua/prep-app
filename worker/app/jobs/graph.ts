@@ -107,7 +107,8 @@ export const JOB_GRAPHS: Readonly<Record<JobKind, StepGraph>> = {
   GradeAnswer: GRADE_GRAPH,
 };
 
-/** The badge's `workflow_type` for a kind, as Python spells it. */
+/** The badge's `workflow_type` for a kind. Persisted on the badge row, so
+ * these strings are a stored contract. */
 export const WORKFLOW_TYPE: Readonly<Record<JobKind, string>> = {
   PlanGenerate: 'plan',
   Transform: 'transform',
@@ -115,8 +116,7 @@ export const WORKFLOW_TYPE: Readonly<Record<JobKind, string>> = {
   GradeAnswer: 'grading',
 };
 
-/** The badge row a start registers: the deep link and the deck it names.
- * Same values Python's start routes pass to `workflows.register`. */
+/** The badge row a start registers: the deep link and the deck it names. */
 export function jobRoute(kind: JobKind, id: string, input: Readonly<Record<string, unknown>>): { urlPath: string; deckId: number | null; deckName: string | null } {
   const deckName = typeof input['deckName'] === 'string' ? (input['deckName'] as string) : null;
   const deckId = typeof input['deckId'] === 'number' ? (input['deckId'] as number) : null;

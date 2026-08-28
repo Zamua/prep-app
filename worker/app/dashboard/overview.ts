@@ -1,6 +1,6 @@
-// The dashboard's JSON and menu surfaces, transcribed from
-// prep/web/dashboard.py. Both read the deck summaries the HTML route
-// already reads, so a menu can never describe a deck the list omits.
+// The dashboard's JSON and menu surfaces. Both read the deck summaries the
+// HTML route already reads, so a menu can never describe a deck the list
+// omits.
 import type { DeckSummary, Profile } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
 import type { UserRepos } from '../ports.js';

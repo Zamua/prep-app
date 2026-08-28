@@ -1,9 +1,8 @@
-// Anthropic's Messages API with an owner-supplied key, transcribed from
-// prep/agent/anthropic_api.py. A different endpoint and a different auth
-// header from the OpenAI-compatible ones, so it is its own adapter rather
-// than a config of that one.
+// Anthropic's Messages API with an owner-supplied key. A different endpoint
+// and a different auth header from the OpenAI-compatible ones, so it is its
+// own adapter rather than a config of that one.
 import { AgentBudgetExhausted, AgentUnavailable, type AgentPort, type AgentRequest } from '../../../app/ports.js';
-import { pyRepr } from '../../../domain/grading/pyrepr.js';
+import { literal } from '../../../domain/grading/literal.js';
 import { aborted, deadline, describe, InvalidKeyShape, payloadOf } from './openaiCompat.js';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
@@ -47,7 +46,7 @@ export class AnthropicAgent implements AgentPort {
         signal: deadline(request.signal, c.timeoutMs),
       });
     } catch (e) {
-      if (aborted(e)) throw new AgentUnavailable(`anthropic API timeout after ${pyRepr(timeoutS)}s`);
+      if (aborted(e)) throw new AgentUnavailable(`anthropic API timeout after ${literal(timeoutS)}s`);
       throw new AgentUnavailable(`anthropic API transport error: ${describe(e)}`);
     }
 

@@ -1,7 +1,7 @@
 // The zip container, over `fflate`. Reads bound every entry from the central
-// directory before anything inflates; writes reproduce CPython's
-// `zipfile.ZipFile(..., ZIP_STORED)` with a fixed `ZipInfo` byte for byte, so
-// `.prepdeck` is a byte-parity format rather than a merely equivalent one.
+// directory before anything inflates. Writes fix every field a zip would
+// otherwise take from the clock or the host, so exporting one deck twice
+// gives identical bytes.
 import { unzipSync, zipSync, type Unzipped, type UnzipFileInfo } from 'fflate';
 import { NotAZip, ZipEntryTooLarge, type ZipCodec, type ZipEntry, type ZipReadOptions } from '../../app/ports.js';
 
@@ -16,10 +16,10 @@ const totalOverflow = (max: number): string => `the archive expands to more than
  */
 const DOS_EPOCH = new Date(1980, 0, 1, 0, 0, 0).getTime();
 
-/** CPython's `_open_to_write` fills an unset `external_attr` with `0o600 << 16`. */
+/** Fixed permissions, so the archive does not carry the host's umask. */
 const EXTERNAL_ATTR = 0o600 << 16;
 
-/** `create_system = 3` (unix), which CPython picks off `sys.platform`. */
+/** `create_system = 3` (unix), fixed rather than read off the host. */
 const CREATE_SYSTEM = 3;
 
 export class FflateZip implements ZipCodec {

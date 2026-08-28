@@ -1,7 +1,6 @@
-// The context-processor values every page inside a cell renders with,
-// from the cell's own rows. Python spreads these from nine processors on
-// `templates`; here one call yields them and the route's own context is
-// merged over the top.
+// The values every page inside a cell renders with, read from the cell's
+// own rows. One call yields them all and the route's own context is merged
+// over the top.
 import type { UserRepos } from './ports.js';
 
 export interface AuthUrls {

@@ -1,14 +1,13 @@
-// Sync orchestration for the offline context, transcribed from
-// prep/offline/service.py. Cards first, then reviews in reviewed_at
-// order across the whole batch, each replayed through the real
-// scheduler. A bad item lands in `rejected` and the batch proceeds;
-// only the batch caps are a parse-level rule.
+// Sync orchestration for the offline context. Cards first, then reviews in
+// reviewed_at order across the whole batch, each replayed through the real
+// scheduler. A bad item lands in `rejected` and the batch proceeds; only the
+// batch caps are a parse-level rule.
 import { RowCapReached } from '../../domain/limits.js';
 import { validateRegexUpdate } from '../../domain/grading/index.js';
 import { IsoFormatError, parseIso } from '../../domain/time.js';
 import type { ReviewResult } from '../entities.js';
 import { SyncItemRejected, type Clock, type UserRepos } from '../ports.js';
-import { listTooLong, listType, modelAttributesType, RequestValidationError, type PydanticError } from '../validation.js';
+import { listTooLong, listType, modelAttributesType, RequestValidationError, type ValidationDetail } from '../validation.js';
 
 export const MAX_SYNC_CARDS = 100;
 export const MAX_SYNC_REVIEWS = 500;
@@ -46,10 +45,10 @@ export interface SyncResponse {
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** The two batch caps and the item-shape check, as pydantic enforces them. */
+/** The two batch caps and the item-shape check. */
 export function parseBatch(body: unknown): { new_cards: Record<string, unknown>[]; reviews: Record<string, unknown>[] } {
   const o = isObject(body) ? body : {};
-  const errors: PydanticError[] = [];
+  const errors: ValidationDetail[] = [];
   const list = (name: string, max: number): Record<string, unknown>[] => {
     const raw = o[name];
     if (raw === undefined || raw === null) return [];

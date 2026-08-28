@@ -1,6 +1,6 @@
-// The MCP-over-HTTP server, transcribed from prep/api/mcp.py: one
-// JSON-RPC 2.0 message per request, the tool catalog of tools.ts, and
-// the same user-scoped repositories the REST surface uses.
+// The MCP-over-HTTP server: one JSON-RPC 2.0 message per request, the tool
+// catalog of tools.ts, and the same user-scoped repositories the REST
+// surface uses.
 import { parseIso } from '../../domain/time.js';
 import { ankiNotesToDeck } from '../decks/anki.js';
 import { buildApkg } from '../decks/ankiExport.js';
@@ -351,18 +351,18 @@ export async function dispatch(repos: V1Repos, body: unknown, deps: McpDeps): Pr
     const args = (params['arguments'] ?? {}) as Record<string, unknown>;
     const handler = typeof name === 'string' ? HANDLERS[name] : undefined;
     const asyncHandler = typeof name === 'string' ? ASYNC_HANDLERS[name] : undefined;
-    if (!handler && !asyncHandler) return json(rpcError(id, -32602, `unknown tool: ${pyRepr(name)}`));
+    if (!handler && !asyncHandler) return json(rpcError(id, -32602, `unknown tool: ${literal(name)}`));
     try {
       return json(rpcResult(id, handler ? handler(repos, args) : await asyncHandler!(repos, args, deps)));
     } catch (e) {
       return json(rpcResult(id, toolError(`tool error: ${e instanceof Error ? e.message : String(e)}`)));
     }
   }
-  return json(rpcError(id, -32601, `unknown method: ${pyRepr(method)}`));
+  return json(rpcError(id, -32601, `unknown method: ${literal(method)}`));
 }
 
 /** `repr()` of the value a client sent, for the error message. */
-function pyRepr(value: unknown): string {
+function literal(value: unknown): string {
   if (typeof value === 'string') return `'${value.split('\\').join('\\\\').split("'").join("\\'")}'`;
   if (value === null || value === undefined) return 'None';
   if (typeof value === 'boolean') return value ? 'True' : 'False';

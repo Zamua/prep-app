@@ -1,13 +1,13 @@
-// mistune.list_parser: list items, continuation indents, tight and loose
-// lists, and the break rules that end an item.
-import { cpBefore, isSpace, pyStrip, pyre } from "./chars";
+// List items, continuation indents, tight and loose lists, and the break
+// rules that end an item.
+import { cpBefore, isSpace, strip, unicodeRe } from "./chars";
 import type { BlockParser, BlockState, Scanner, ScanMatch } from "./block";
 import type { Token } from "./tokens";
 
 export const LIST_PATTERN = "^(?P<list_1> {0,3})(?P<list_2>[\\*\\+-]|\\d{1,9}[.)])(?P<list_3>[ \\t]*|[ \\t].+)$";
 
-const LINE_HAS_TEXT = pyre("(\\s*)\\S", "y");
-const BLANK_LINE = pyre("(^[ \\t\\v\\f]*\\n)+", "y", true);
+const LINE_HAS_TEXT = unicodeRe("(\\s*)\\S", "y");
+const BLANK_LINE = unicodeRe("(^[ \\t\\v\\f]*\\n)+", "y", true);
 
 interface ListMarker {
   spaces: string;
@@ -34,7 +34,7 @@ function createListMarker(groups: Record<string, string | undefined>, prefix: st
 export function parseList(block: BlockParser, m: ScanMatch, state: BlockState): number | null {
   const item = createListMarker(m.groups, "list");
   const text = item.text;
-  if (!pyStrip(text)) {
+  if (!strip(text)) {
     // An empty item cannot interrupt a paragraph.
     const endPos = state.appendParagraph();
     if (endPos) return endPos;
@@ -130,7 +130,7 @@ function collectListItemLines(
     const hasContinuation = hasContinuationIndent(rawLine, continueWidth);
     if (hasContinuation) {
       // An item can begin with at most one blank line.
-      if (prevBlankLine && !text && !pyStrip(src)) break;
+      if (prevBlankLine && !text && !strip(src)) break;
       src += rawLine;
       prevBlankLine = false;
       state.cursor = nextPos;
@@ -212,7 +212,7 @@ function compileListItemPattern(bullet: string, width: number): RegExp {
   const key = bullet + width;
   let re = ITEM_PATTERNS.get(key);
   if (!re) {
-    re = pyre("^(?P<listitem_1> {0," + width + "})(?P<listitem_2>" + bullet + ")(?P<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
+    re = unicodeRe("^(?P<listitem_1> {0," + width + "})(?P<listitem_2>" + bullet + ")(?P<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
     ITEM_PATTERNS.set(key, re);
   }
   return re;

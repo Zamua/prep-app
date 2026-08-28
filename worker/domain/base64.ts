@@ -1,7 +1,6 @@
-// Base64, both alphabets, with Python's strictness. `base64.b64decode(s,
-// validate=True)` refuses a character outside the alphabet and refuses bad
-// padding; `urlsafe_b64decode` after re-padding is how the unpadded values
-// on the wire are read.
+// Base64, both alphabets, decoded strictly: a character outside the
+// alphabet or bad padding is a refusal, never a silent skip, because these
+// values carry signatures. Unpadded wire values are re-padded first.
 
 const STD = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';

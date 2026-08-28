@@ -1,5 +1,5 @@
-// The offline snapshot reads and the per-item sync writes, transcribed from
-// prep/offline/repo.py. Each write is one item's effect in one transaction:
+// The offline snapshot reads and the per-item sync writes. Each write is
+// one item's effect in one transaction:
 // the domain write and its ledger row commit together or not at all.
 import type { CardRepo, Clock, DeckRepo, OfflineRepo } from '../../../app/ports.js';
 import { DeckNameTaken, SyncItemRejected } from '../../../app/ports.js';

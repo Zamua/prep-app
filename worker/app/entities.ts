@@ -1,5 +1,6 @@
-// The entities the ports exchange: typed views over the rows, the field
-// names Python's pydantic models carry, minus every user column.
+// The entities the ports exchange: typed views over the rows. Field names
+// are the column names; a cell holds one user, so no row carries a user
+// column.
 
 export type QuestionType = 'code' | 'mcq' | 'multi' | 'short';
 export type DeckType = 'srs' | 'trivia';
@@ -8,7 +9,8 @@ export type ReviewResult = 'right' | 'wrong';
 export const SLUG_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
 export const SLUG_LENGTH = 8;
 
-/** The `users` row as Python reads it (`tailscale_login` is the cell id). */
+/** The account row. `tailscale_login` is the cell id, whatever provider
+ * minted it. */
 export interface Profile {
   tailscale_login: string;
   display_name: string | null;

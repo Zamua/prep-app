@@ -1,6 +1,6 @@
-// The Jinja-to-nunjucks shim: every filter, global and test the ported
-// templates need beyond what nunjucks ships, each reproducing the
-// Python semantics the goldens were rendered with.
+// Every filter, global and test the templates use beyond what nunjucks
+// ships. Each is a small formatting decision the pages depend on, so the
+// definitions live here rather than being inlined per template.
 import nunjucks from "nunjucks/browser/nunjucks-slim.js";
 import type { Clock } from "../../../app/ports";
 import { markdownHTML } from "../../../domain/markdown";
@@ -13,11 +13,12 @@ function isKwargs(v: unknown): v is Kwargs {
   return typeof v === "object" && v !== null && Object.prototype.hasOwnProperty.call(v, "__keywords");
 }
 
-// ---- Python scalars -------------------------------------------------------
+// ---- scalars --------------------------------------------------------------
 
-// `str(float)`: the shortest round-trip digits, `.0` on integral values,
-// exponent form below 1e-4 and from 1e16, two-digit exponents.
-export function pyFloat(value: unknown): string {
+// A float as text: the shortest round-trip digits, `.0` on integral values
+// so a percentage does not read as a count, exponent form below 1e-4 and
+// from 1e16, two-digit exponents.
+export function floatText(value: unknown): string {
   const n = Number(value);
   if (Number.isNaN(n)) return "nan";
   if (n === Infinity) return "inf";
@@ -34,9 +35,10 @@ export function pyFloat(value: unknown): string {
   return String(n);
 }
 
-// `str(x)` for the values a template can hold. A missing attribute is
-// Jinja's Undefined, which prints as the empty string.
-export function pyStr(value: unknown): string {
+// Any value a template can hold, as text. A missing attribute prints as
+// the empty string; null and the booleans print capitalised, which is what
+// the pages that show a raw stored value expect.
+export function asText(value: unknown): string {
   if (value === undefined) return "";
   if (value === null) return "None";
   if (value === true) return "True";
@@ -44,8 +46,9 @@ export function pyStr(value: unknown): string {
   return String(value);
 }
 
-// `int(x)`, with Jinja's fallbacks: a float string truncates, junk is 0.
-export function pyInt(value: unknown, fallback = 0): number {
+// A whole number, truncating a float or a float-shaped string. Anything
+// unparseable is the fallback, so a template never renders NaN.
+export function toInt(value: unknown, fallback = 0): number {
   if (typeof value === "number") return Number.isFinite(value) ? Math.trunc(value) : fallback;
   if (typeof value === "boolean") return value ? 1 : 0;
   if (value instanceof SafeString || typeof value === "string") {
@@ -57,10 +60,11 @@ export function pyInt(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-// `round(x, p)`: ties on the exact binary value go to even, so 0.5 is 0
-// and 2.5 is 2. A tie at precision p is an odd multiple of 2^-(p+1),
-// which the power-of-two scaling detects exactly.
-export function pyRound(value: unknown, precision = 0): number {
+// Rounding with ties on the exact binary value going to even, so 0.5 is 0
+// and 2.5 is 2: a bar width rounded up on every tie drifts visibly wide. A
+// tie at precision p is an odd multiple of 2^-(p+1), which the power-of-two
+// scaling detects exactly.
+export function roundHalfEven(value: unknown, precision = 0): number {
   const x = Number(value);
   if (!Number.isFinite(x)) return x;
   const p = Math.max(0, Math.trunc(precision));
@@ -76,31 +80,30 @@ export function pyRound(value: unknown, precision = 0): number {
   return Number(x.toFixed(p));
 }
 
-// ---- Python `%` formatting ----------------------------------------------
+// ---- `%` formatting -------------------------------------------------------
 
 const FORMAT_RE = /%([-+ 0#]*)(\d+)?(?:\.(\d+))?([sdifr%])/g;
 
-function pad(text: string, flags: string, width: number | undefined, numeric: boolean): string {
-  if (width === undefined || text.length >= width) return text;
-  if (flags.includes("-")) return text.padEnd(width, " ");
+function pad(s: string, flags: string, width: number | undefined, numeric: boolean): string {
+  if (width === undefined || s.length >= width) return s;
+  if (flags.includes("-")) return s.padEnd(width, " ");
   if (numeric && flags.includes("0")) {
-    const sign = /^[+-]/.test(text) ? text[0]! : "";
-    return sign + text.slice(sign.length).padStart(width - sign.length, "0");
+    const sign = /^[+-]/.test(s) ? s[0]! : "";
+    return sign + s.slice(sign.length).padStart(width - sign.length, "0");
   }
-  return text.padStart(width, " ");
+  return s.padStart(width, " ");
 }
 
-function signed(text: string, flags: string): string {
-  if (text.startsWith("-")) return text;
-  if (flags.includes("+")) return `+${text}`;
-  if (flags.includes(" ")) return ` ${text}`;
-  return text;
+function signed(s: string, flags: string): string {
+  if (s.startsWith("-")) return s;
+  if (flags.includes("+")) return `+${s}`;
+  if (flags.includes(" ")) return ` ${s}`;
+  return s;
 }
 
-// `fmt % args` for `%s`, `%d`/`%i`, `%f` with flags, width and precision,
-// and `%%`. `args` is one value or a list, as Python takes a scalar or a
-// tuple.
-export function pyFormat(fmt: string, args: unknown): string {
+// `%s`, `%d`/`%i`, `%f` with flags, width and precision, and `%%`. `args`
+// is one value or a list.
+export function printf(fmt: string, args: unknown): string {
   const list = Array.isArray(args) ? args : [args];
   let i = 0;
   const next = (): unknown => {
@@ -111,7 +114,7 @@ export function pyFormat(fmt: string, args: unknown): string {
     const width = w === undefined ? undefined : parseInt(w, 10);
     if (conv === "%") return "%";
     if (conv === "s" || conv === "r") {
-      let s = pyStr(next());
+      let s = asText(next());
       if (prec !== undefined) s = s.slice(0, parseInt(prec, 10));
       return pad(s, flags, width, false);
     }
@@ -120,7 +123,7 @@ export function pyFormat(fmt: string, args: unknown): string {
       return pad(signed(String(Math.trunc(n)), flags), flags, width, true);
     }
     const p = prec === undefined ? 6 : parseInt(prec, 10);
-    return pad(signed(pyRound(n, p).toFixed(p), flags), flags, width, true);
+    return pad(signed(roundHalfEven(n, p).toFixed(p), flags), flags, width, true);
   });
   if (i < list.length) throw new Error("not all arguments converted during string formatting");
   return out;
@@ -138,8 +141,9 @@ function sliceBounds(length: number, start: unknown, end: unknown): [number, num
   return [norm(start, 0), norm(end, length)];
 }
 
-// `x[start:end]` on strings (by code point) and arrays, negatives included.
-export function pySlice<T>(value: string | T[] | null | undefined, start?: unknown, end?: unknown): string | T[] | null | undefined {
+// A subrange of a string (by code point, so an emoji is not cut in half) or
+// an array. A negative bound counts from the end.
+export function sliceOf<T>(value: string | T[] | null | undefined, start?: unknown, end?: unknown): string | T[] | null | undefined {
   if (value === null || value === undefined) return value;
   if (Array.isArray(value)) {
     const [a, b] = sliceBounds(value.length, start, end);
@@ -151,7 +155,8 @@ export function pySlice<T>(value: string | T[] | null | undefined, start?: unkno
   return (copySafeness(value, out) as string);
 }
 
-// `obj.get(key, default)`: the default only when the key is absent.
+// A lookup with a default, taken only when the key is absent: a stored null
+// is a value, not a miss.
 export function getDefault(obj: unknown, key: unknown, dflt: unknown = null): unknown {
   if (obj === null || obj === undefined) return dflt;
   if (obj instanceof Map) return obj.has(key) ? obj.get(key) : dflt;
@@ -159,8 +164,9 @@ export function getDefault(obj: unknown, key: unknown, dflt: unknown = null): un
   return Object.prototype.hasOwnProperty.call(obj, k) ? (obj as Record<string, unknown>)[k] : dflt;
 }
 
-// `dict.items()` in insertion order. JS reorders integer-like keys,
-// so a map keyed by ids arrives as a Map or an entries array instead.
+// Key/value pairs in insertion order. JS reorders integer-like keys on a
+// plain object, so a table keyed by ids arrives as a Map or an entries
+// array instead.
 export function items(obj: unknown): [string, unknown][] {
   if (obj === null || obj === undefined) return [];
   if (obj instanceof Map) return [...obj.entries()].map(([k, v]) => [String(k), v]);
@@ -170,13 +176,13 @@ export function items(obj: unknown): [string, unknown][] {
 export function replaceAll(value: unknown, old: unknown, replacement: unknown): unknown {
   if (value === null || value === undefined) return value;
   const s = String(value);
-  const out = old === "" ? s : s.split(String(old)).join(pyStr(replacement));
+  const out = old === "" ? s : s.split(String(old)).join(asText(replacement));
   return copySafeness(value, out);
 }
 
 export function join(value: unknown, sep: unknown = ""): string {
-  if (!Array.isArray(value)) return pyStr(value);
-  return value.map(pyStr).join(pyStr(sep));
+  if (!Array.isArray(value)) return asText(value);
+  return value.map(asText).join(asText(sep));
 }
 
 // ---- JSON ------------------------------------------------------------------
@@ -199,10 +205,11 @@ function jsonString(s: string): string {
   return `${out}"`;
 }
 
-// `json.dumps(obj, sort_keys=True)`: ASCII-only, `, ` and `: ` separators,
-// keys sorted by code point. Integral floats cannot be told from ints
-// once a context has crossed JSON, so they print as ints.
-export function pyJsonDumps(value: unknown): string {
+// Stable JSON: ASCII-only, `, ` and `: ` separators, keys sorted by code
+// point, so the same context always embeds the same bytes. Integral floats
+// cannot be told from ints once a context has crossed JSON, so they print
+// as ints.
+export function stableJson(value: unknown): string {
   if (value === null || value === undefined) return "null";
   if (value === true) return "true";
   if (value === false) return "false";
@@ -212,20 +219,20 @@ export function pyJsonDumps(value: unknown): string {
     return String(value);
   }
   if (typeof value === "string" || value instanceof SafeString) return jsonString(String(value));
-  if (Array.isArray(value)) return `[${value.map(pyJsonDumps).join(", ")}]`;
-  if (value instanceof Map) return pyJsonDumps(Object.fromEntries(value));
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(", ")}]`;
+  if (value instanceof Map) return stableJson(Object.fromEntries(value));
   if (typeof value === "object") {
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${keys.map((k) => `${jsonString(k)}: ${pyJsonDumps(obj[k])}`).join(", ")}}`;
+    return `{${keys.map((k) => `${jsonString(k)}: ${stableJson(obj[k])}`).join(", ")}}`;
   }
   return jsonString(String(value));
 }
 
-// markupsafe's `htmlsafe_json_dumps`: safe inside `<script>` because
-// `<`, `>`, `&` and `'` never appear literally.
+// Safe to embed inside `<script>`: `<`, `>`, `&` and `'` never appear
+// literally, so no payload can close the tag.
 export function htmlsafeJson(value: unknown): string {
-  return pyJsonDumps(value)
+  return stableJson(value)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026")
@@ -237,8 +244,8 @@ export function htmlsafeJson(value: unknown): string {
 const ISO_RE =
   /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:[.,](\d{1,6}))?)?)?(Z|[+-]\d{2}(?::?\d{2})?)?$/;
 
-// `datetime.fromisoformat` for the shapes the app writes; a naive value
-// is UTC. Returns epoch milliseconds, or null when unparseable.
+// The ISO 8601 shapes the app writes; a value with no offset is UTC.
+// Returns epoch milliseconds, or null when unparseable.
 export function parseIso(value: unknown): number | null {
   if (typeof value !== "string") return null;
   const m = ISO_RE.exec(value);
@@ -301,20 +308,20 @@ export function wakesIn(value: unknown, now: Date): string {
   return years === 1 ? "next year" : `in ${years} years`;
 }
 
-// ---- registration -----------------------------------------------------------
+// ---- registration ---------------------------------------------------------
 
-export interface ShimOptions {
+export interface FilterOptions {
   clock: Clock;
   root: string;
 }
 
-interface ShimEnv {
+interface FilterEnv {
   addFilter(name: string, fn: (...args: any[]) => unknown): unknown;
   addGlobal(name: string, value: unknown): unknown;
   addTest(name: string, fn: (...args: any[]) => boolean): unknown;
 }
 
-export function registerShims(env: ShimEnv, { clock, root }: ShimOptions): void {
+export function registerFilters(env: FilterEnv, { clock, root }: FilterOptions): void {
   env.addGlobal("root", root);
   env.addGlobal("get", (obj: unknown, key: unknown, dflt?: unknown) =>
     getDefault(obj, key, isKwargs(dflt) ? null : dflt),
@@ -323,25 +330,25 @@ export function registerShims(env: ShimEnv, { clock, root }: ShimOptions): void 
 
   env.addFilter("format", (fmt: unknown, ...args: unknown[]) => {
     const plain = args.filter((a) => !isKwargs(a));
-    return pyFormat(String(fmt), plain.length === 1 ? plain[0] : plain);
+    return printf(String(fmt), plain.length === 1 ? plain[0] : plain);
   });
   env.addFilter("slice", (value: unknown, start?: unknown, end?: unknown) =>
-    pySlice(value as string | unknown[] | null | undefined, start, isKwargs(end) ? undefined : end),
+    sliceOf(value as string | unknown[] | null | undefined, start, isKwargs(end) ? undefined : end),
   );
   env.addFilter("tojson", (value: unknown) => markSafe(htmlsafeJson(value)));
   env.addFilter("round", (value: unknown, precision?: unknown) =>
-    pyRound(value, isKwargs(precision) || precision === undefined ? 0 : Number(precision)),
+    roundHalfEven(value, isKwargs(precision) || precision === undefined ? 0 : Number(precision)),
   );
-  env.addFilter("pyfloat", pyFloat);
+  env.addFilter("floattext", floatText);
   env.addFilter("int", (value: unknown, fallback?: unknown) =>
-    pyInt(value, isKwargs(fallback) || fallback === undefined ? 0 : Number(fallback)),
+    toInt(value, isKwargs(fallback) || fallback === undefined ? 0 : Number(fallback)),
   );
-  env.addFilter("string", (value: unknown) => copySafeness(value, pyStr(value)));
+  env.addFilter("string", (value: unknown) => copySafeness(value, asText(value)));
   env.addFilter("replace", (value: unknown, old: unknown, replacement: unknown) =>
     replaceAll(value, old, replacement),
   );
   env.addFilter("join", (value: unknown, sep?: unknown) => join(value, isKwargs(sep) ? "" : sep ?? ""));
-  env.addFilter("markdown", (text: unknown) => markSafe(text ? markdownHTML(String(text)) : ""));
+  env.addFilter("markdown", (value: unknown) => markSafe(value ? markdownHTML(String(value)) : ""));
   env.addFilter("wakes_in", (value: unknown) => wakesIn(value, clock.now()));
   env.addFilter("relative_time", (value: unknown) => relativeTime(value, clock.now()));
 

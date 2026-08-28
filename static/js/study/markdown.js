@@ -52,17 +52,17 @@ function stripEnd(s, chars) {
   }
   return i;
 }
-function pyStrip(s, chars = null) {
+function strip(s, chars = null) {
   const start = stripStart(s, chars);
   return s.slice(start, Math.max(start, stripEnd(s, chars)));
 }
-function pyLstrip(s, chars = null) {
+function lstrip(s, chars = null) {
   return s.slice(stripStart(s, chars));
 }
-function pyRstrip(s, chars = null) {
+function rstrip(s, chars = null) {
   return s.slice(0, stripEnd(s, chars));
 }
-function pySplit(s) {
+function splitWhitespace(s) {
   const out = [];
   let cur = "";
   for (const c of s) {
@@ -74,7 +74,7 @@ function pySplit(s) {
   if (cur) out.push(cur);
   return out;
 }
-function pyre(pattern, flags = "", multiline = false) {
+function unicodeRe(pattern, flags = "", multiline = false) {
   let out = "";
   let inClass = false;
   for (let i = 0; i < pattern.length; i++) {
@@ -196,7 +196,7 @@ function unquoteUrl(url) {
   return url;
 }
 function safeUrl(url) {
-  const probe = pyLstrip(unquoteUrl(url).toLowerCase());
+  const probe = lstrip(unquoteUrl(url).toLowerCase());
   const head = probe.split("/", 1)[0];
   const safe = SAFE_PROTOCOLS.some((p) => probe.startsWith(p)) || GOOD_DATA_PROTOCOLS.some((p) => probe.startsWith(p)) || probe.startsWith("/") || probe.startsWith("#") || probe.startsWith("?") || !head.includes(":");
   return safe ? escapeHtml(url) : "#harmful-link";
@@ -211,8 +211,8 @@ function striptags(s) {
 // domain/markdown/links.ts
 var LINK_LABEL = "(?:[^\\\\\\[\\]]|\\\\.){0,500}";
 var LINK_WHITESPACE = " 	\n\r\f";
-var INLINE_LINK_LABEL_RE = pyre(LINK_LABEL + "\\]", "y");
-var ESCAPE_CHAR_RE = pyre("\\\\(" + PUNCTUATION_CLASS + ")", "g");
+var INLINE_LINK_LABEL_RE = unicodeRe(LINK_LABEL + "\\]", "y");
+var ESCAPE_CHAR_RE = unicodeRe("\\\\(" + PUNCTUATION_CLASS + ")", "g");
 function unescapeChar(text) {
   return text.replace(ESCAPE_CHAR_RE, "$1");
 }
@@ -326,7 +326,7 @@ function parseAngleLinkHref(src, pos) {
   return [null, null];
 }
 function unikey(s) {
-  return pySplit(s).join(" ").toLowerCase().toUpperCase();
+  return splitWhitespace(s).join(" ").toLowerCase().toUpperCase();
 }
 function parseInlineLink(inline2, m, state) {
   let pos = m.end;
@@ -531,8 +531,8 @@ function buildClosingBracketMap(src) {
 
 // domain/markdown/list.ts
 var LIST_PATTERN = "^(?P<list_1> {0,3})(?P<list_2>[\\*\\+-]|\\d{1,9}[.)])(?P<list_3>[ \\t]*|[ \\t].+)$";
-var LINE_HAS_TEXT = pyre("(\\s*)\\S", "y");
-var BLANK_LINE = pyre("(^[ \\t\\v\\f]*\\n)+", "y", true);
+var LINE_HAS_TEXT = unicodeRe("(\\s*)\\S", "y");
+var BLANK_LINE = unicodeRe("(^[ \\t\\v\\f]*\\n)+", "y", true);
 function leadingWidth(item) {
   return item.spaces.length + item.marker.length;
 }
@@ -542,7 +542,7 @@ function createListMarker(groups, prefix) {
 function parseList(block2, m, state) {
   const item = createListMarker(m.groups, "list");
   const text = item.text;
-  if (!pyStrip(text)) {
+  if (!strip(text)) {
     const endPos = state.appendParagraph();
     if (endPos) return endPos;
   }
@@ -614,7 +614,7 @@ function collectListItemLines(block2, listItemRe, breakSc, state, text, continue
     }
     const hasContinuation = hasContinuationIndent(rawLine, continueWidth);
     if (hasContinuation) {
-      if (prevBlankLine && !text && !pyStrip(src)) break;
+      if (prevBlankLine && !text && !strip(src)) break;
       src += rawLine;
       prevBlankLine = false;
       state.cursor = nextPos;
@@ -684,7 +684,7 @@ function compileListItemPattern(bullet, width) {
   const key = bullet + width;
   let re = ITEM_PATTERNS.get(key);
   if (!re) {
-    re = pyre("^(?P<listitem_1> {0," + width + "})(?P<listitem_2>" + bullet + ")(?P<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
+    re = unicodeRe("^(?P<listitem_1> {0," + width + "})(?P<listitem_2>" + bullet + ")(?P<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
     ITEM_PATTERNS.set(key, re);
   }
   return re;
@@ -757,10 +757,10 @@ function isLooseList(tokens) {
 // domain/markdown/table.ts
 var TABLE_PATTERN = "^ {0,3}\\|[^\\n]*\\|[ \\t]*(?:\\n|$)";
 var NP_TABLE_PATTERN = "^ {0,3}\\S[^\\n]*\\|[^\\n]*(?:\\n|$)";
-var ALIGN_CENTER = pyre("^ *:-+: *$");
-var ALIGN_LEFT = pyre("^ *:-+ *$");
-var ALIGN_RIGHT = pyre("^ *-+: *$");
-var ALIGN_NONE = pyre("^ *-+ *$");
+var ALIGN_CENTER = unicodeRe("^ *:-+: *$");
+var ALIGN_LEFT = unicodeRe("^ *:-+ *$");
+var ALIGN_RIGHT = unicodeRe("^ *-+: *$");
+var ALIGN_NONE = unicodeRe("^ *-+ *$");
 function parseTable(m, state) {
   let pos = m.end;
   const header = stripPipeTableRow(m.text);
@@ -816,12 +816,12 @@ function processThead(header, align) {
     if (ALIGN_CENTER.test(v)) aligns.push("center");
     else if (ALIGN_LEFT.test(v)) aligns.push("left");
     else if (ALIGN_RIGHT.test(v)) aligns.push("right");
-    else if (ALIGN_NONE.test(v) || !pyStrip(v)) aligns.push(null);
+    else if (ALIGN_NONE.test(v) || !strip(v)) aligns.push(null);
     else return [null, null];
   }
   const children2 = headers.map((text, i) => ({
     type: "table_cell",
-    text: pyStrip(text),
+    text: strip(text),
     attrs: { align: aligns[i], head: true }
   }));
   return [{ type: "table_head", children: children2 }, aligns];
@@ -831,13 +831,13 @@ function processRow(text, aligns) {
   if (cells.length !== aligns.length) return null;
   const children2 = cells.map((cell, i) => ({
     type: "table_cell",
-    text: pyStrip(cell),
+    text: strip(cell),
     attrs: { align: aligns[i], head: false }
   }));
   return { type: "table_row", children: children2 };
 }
 function stripPipeTableRow(line) {
-  let text = pyRstrip(pyRstrip(line, "\n"), " 	");
+  let text = rstrip(rstrip(line, "\n"), " 	");
   if (!text.startsWith("|") && (text.startsWith(" ") || text.startsWith("	"))) text = text.replace(/^ +/u, "");
   if (!text.startsWith("|") || !text.endsWith("|")) return null;
   return text.slice(1, -1);
@@ -852,7 +852,7 @@ function parseInvalidPipeTable(state, pos) {
   return pos;
 }
 function stripTableLine(line) {
-  const text = pyRstrip(pyRstrip(line, "\n"), " 	");
+  const text = rstrip(rstrip(line, "\n"), " 	");
   if (!text || !text.includes("|")) return null;
   return text;
 }
@@ -861,11 +861,11 @@ function splitTableCells(text) {
   let start = 0;
   for (let pos = 0; pos < text.length; pos++) {
     if (text[pos] === "|" && !isEscapedPipe(text, pos)) {
-      cells.push(pyStrip(text.slice(start, pos)));
+      cells.push(strip(text.slice(start, pos)));
       start = pos + 1;
     }
   }
-  cells.push(pyStrip(text.slice(start)));
+  cells.push(strip(text.slice(start)));
   return cells;
 }
 function isEscapedPipe(text, pos) {
@@ -944,15 +944,15 @@ var Scanner = class {
     return best;
   }
 };
-var INDENT_CODE_TRIM = pyre("^ {1,4}", "g", true);
-var ATX_HEADING_TRIM = pyre("(\\s+|^)#+\\s*$", "g");
-var BLOCK_QUOTE_TRIM = pyre("^ ?", "g", true);
-var BLANK_TO_LINE = pyre("[ \\t]*\\n", "y");
-var BLOCK_QUOTE_LINE = pyre("^ {0,3}>([^\\n]*(?:\\n|$))", "y", true);
-var BLANK_LINE2 = pyre("(^[ \\t\\v\\f]*\\n)+", "g", true);
-var EXPAND_TAB = pyre("^( {0,3})\\t", "g", true);
-var OPEN_TAG_END = pyre(HTML_ATTRIBUTES + "[ \\t]*>[ \\t]*(?:\\n|$)", "y");
-var CLOSE_TAG_END = pyre("[ \\t]*>[ \\t]*(?:\\n|$)", "y");
+var INDENT_CODE_TRIM = unicodeRe("^ {1,4}", "g", true);
+var ATX_HEADING_TRIM = unicodeRe("(\\s+|^)#+\\s*$", "g");
+var BLOCK_QUOTE_TRIM = unicodeRe("^ ?", "g", true);
+var BLANK_TO_LINE = unicodeRe("[ \\t]*\\n", "y");
+var BLOCK_QUOTE_LINE = unicodeRe("^ {0,3}>([^\\n]*(?:\\n|$))", "y", true);
+var BLANK_LINE2 = unicodeRe("(^[ \\t\\v\\f]*\\n)+", "g", true);
+var EXPAND_TAB = unicodeRe("^( {0,3})\\t", "g", true);
+var OPEN_TAG_END = unicodeRe(HTML_ATTRIBUTES + "[ \\t]*>[ \\t]*(?:\\n|$)", "y");
+var CLOSE_TAG_END = unicodeRe("[ \\t]*>[ \\t]*(?:\\n|$)", "y");
 function expandLeadingTab(text, width = 4) {
   return text.replace(EXPAND_TAB, (_m, s) => s + " ".repeat(width - s.length));
 }
@@ -1040,7 +1040,7 @@ var BlockParser = class {
     const key = name + "\0" + pattern;
     let r = this.compiled.get(key);
     if (!r) {
-      r = { name, sticky: pyre(pattern, "y", true), global: pyre(pattern, "g", true) };
+      r = { name, sticky: unicodeRe(pattern, "y", true), global: unicodeRe(pattern, "g", true) };
       this.compiled.set(key, r);
     }
     return r;
@@ -1133,7 +1133,7 @@ var BlockParser = class {
     while (pos < state.cursorMax) {
       if (pos > state.cursor && sc.matchAt(state.src, pos)) break;
       const line = state.getLine(pos);
-      if (!pyStrip(line)) break;
+      if (!strip(line)) break;
       pos += line.length;
     }
     if (pos <= state.cursor) return false;
@@ -1149,7 +1149,7 @@ var BlockParser = class {
     if (endPos !== m.end) code = state.getText(endPos);
     code = expandLeadingTab(code);
     code = code.replace(INDENT_CODE_TRIM, "");
-    code = pyStrip(code, "\n");
+    code = strip(code, "\n");
     state.appendToken({ type: "block_code", raw: code, style: "indent" });
     return endPos;
   }
@@ -1159,7 +1159,7 @@ var BlockParser = class {
     let info = m.groups.fenced_3;
     const c = marker[0];
     if (info && c === "`" && info.includes(c)) return null;
-    const end = pyre("^ {0,3}" + c + "{" + marker.length + ",}[ \\t]*(?:\\n|$)", "g", true);
+    const end = unicodeRe("^ {0,3}" + c + "{" + marker.length + ",}[ \\t]*(?:\\n|$)", "g", true);
     const cursorStart = m.end + 1;
     let code;
     let endPos;
@@ -1172,18 +1172,18 @@ var BlockParser = class {
       code = state.src.slice(cursorStart);
       endPos = state.cursorMax;
     }
-    if (spaces && code) code = code.replace(pyre("^ {0," + spaces.length + "}", "g", true), "");
+    if (spaces && code) code = code.replace(unicodeRe("^ {0," + spaces.length + "}", "g", true), "");
     const token = { type: "block_code", raw: code, style: "fenced", marker };
     if (info) {
       info = unescapeChar(info);
-      token.attrs = { info: pyStrip(info) };
+      token.attrs = { info: strip(info) };
     }
     state.appendToken(token);
     return endPos;
   }
   parseAtxHeading(m, state) {
     const level = m.groups.atx_1.length;
-    let text = pyStrip(m.groups.atx_2, ASCII_WHITESPACE);
+    let text = strip(m.groups.atx_2, ASCII_WHITESPACE);
     if (text) text = text.replace(ATX_HEADING_TRIM, "");
     state.appendToken({ type: "heading", text, attrs: { level }, style: "atx" });
     return m.end + 1;
@@ -1260,7 +1260,7 @@ var BlockParser = class {
         if (quote !== null) {
           text += quote;
           state.cursor += state.getLine(state.cursor).length;
-          prevBlankLine = !pyStrip(quote);
+          prevBlankLine = !strip(quote);
           continue;
         }
         if (prevBlankLine) break;
@@ -1291,7 +1291,7 @@ var BlockParser = class {
     return state.cursor;
   }
   parseRawHtml(m, state) {
-    const marker = pyStrip(m.text);
+    const marker = strip(m.text);
     if (marker === "<!--") return parseHtmlToEnd(state, "-->", m.end);
     if (marker === "<?") return parseHtmlToEnd(state, "?>", m.end);
     if (marker === "<![CDATA[") return parseHtmlToEnd(state, "]]>", m.end);
@@ -1369,7 +1369,7 @@ function trimPartialNextLineIndent(text, endPos) {
   const lineStart = text.lastIndexOf("\n") + 1;
   if (lineStart === 0) return endPos;
   const suffix = text.slice(lineStart);
-  if (suffix && pyStrip(suffix, " 	") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
+  if (suffix && strip(suffix, " 	") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
   return endPos;
 }
 function expandTabsWidth(s) {
@@ -1694,7 +1694,7 @@ var RULES = [
 var COMPILED = /* @__PURE__ */ new Map();
 for (const name of Object.keys(SPECIFICATION2)) {
   const p = SPECIFICATION2[name];
-  COMPILED.set(name, { name, sticky: pyre(p, "y"), global: pyre(p, "g") });
+  COMPILED.set(name, { name, sticky: unicodeRe(p, "y"), global: unicodeRe(p, "g") });
 }
 function matchAt(rules, src, pos) {
   for (const name of rules) {
@@ -1858,7 +1858,7 @@ var InlineParser = class {
     const m2 = pattern.exec(state.src);
     if (m2) {
       let code = m2[1].replace(/\n/g, " ");
-      if (pyStrip(code).length && code.startsWith(" ") && code.endsWith(" ")) code = code.slice(1, -1);
+      if (strip(code).length && code.startsWith(" ") && code.endsWith(" ")) code = code.slice(1, -1);
       state.appendToken({ type: "codespan", raw: code });
       return m.end + m2[0].length;
     }
@@ -1925,7 +1925,7 @@ function findEndMarker(src, pos, marker) {
   return null;
 }
 function isSpaceChar(c) {
-  return pyStrip(c) === "";
+  return strip(c) === "";
 }
 function hasOddBackslashes(src, pos) {
   let count = 0;
@@ -1946,7 +1946,7 @@ function renderTokens(tokens, inline2, env) {
 }
 function children(tok, inline2, env) {
   if (tok.children) return renderTokens(tok.children, inline2, env);
-  if (tok.text !== void 0) return renderTokens(inline2.call(pyStrip(tok.text, INLINE_STRIP), env), inline2, env);
+  if (tok.text !== void 0) return renderTokens(inline2.call(strip(tok.text, INLINE_STRIP), env), inline2, env);
   return "";
 }
 function attr(tok, name) {
@@ -1991,7 +1991,7 @@ function renderToken(tok, inline2, env) {
     case "block_quote":
       return "<blockquote>\n" + children(tok, inline2, env) + "</blockquote>\n";
     case "block_html":
-      return "<p>" + escapeHtml(pyStrip(tok.raw)) + "</p>\n";
+      return "<p>" + escapeHtml(strip(tok.raw)) + "</p>\n";
     case "list": {
       const body = children(tok, inline2, env);
       if (attr(tok, "ordered")) {
@@ -2032,8 +2032,8 @@ function image(text, url, title) {
 function blockCode(code, info) {
   let html = "<pre><code";
   if (info !== void 0) {
-    info = safeEntity(pyStrip(info));
-    if (info) html += ' class="language-' + pySplit(info)[0] + '"';
+    info = safeEntity(strip(info));
+    if (info) html += ' class="language-' + splitWhitespace(info)[0] + '"';
   }
   return html + ">" + escapeHtml(code) + "</code></pre>\n";
 }

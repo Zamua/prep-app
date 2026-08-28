@@ -1,5 +1,4 @@
-// `reviews` and the grade path, transcribed from prep/study/repo.py:
-// ReviewRepo.record. The scheduler is the domain's; the retention
+// `reviews` and the grade path. The scheduler is the domain's; the retention
 // resolution (deck, then profile, then the default) is the card repo's.
 import type { CardRepo, Clock, ReviewRepo } from '../../../app/ports.js';
 import { QuestionNotFound } from '../../../app/ports.js';

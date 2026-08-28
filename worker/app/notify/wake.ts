@@ -1,7 +1,6 @@
-// The per-user alarm: what the cell reads, and what it does with the plan the
-// domain returns. Transcribed from prep/notify/scheduler.py `_tick` and
-// prep/trivia/scheduler.py `tick`, each stripped of the walk over every user:
-// a cell wakes for its own.
+// The per-user alarm: what the cell reads, and what it does with the plan
+// the domain returns. There is no walk over every user: a cell wakes for its
+// own.
 //
 // The reading and the doing are separate on purpose. `nextWakeAt` re-derives
 // the wake from the rows after any write, and `runWake` reads the same rows
@@ -93,8 +92,7 @@ export function nextWakeAt(repos: UserRepos, clock: Clock, canGenerate: boolean)
 /**
  * One activation. Each task carries its own guard, so a duplicate fire costs
  * a read; a task that throws leaves its stamp unwritten and is retried rather
- * than taking the rest of the plan down with it, which is Python's per-user
- * and per-deck try block.
+ * than taking the rest of the plan down with it.
  */
 export async function runWake(deps: WakeDeps): Promise<WakeReport> {
   const now = deps.clock.now();
@@ -161,9 +159,8 @@ async function whenReady(deps: WakeDeps, now: Date): Promise<void> {
 
 /**
  * The refill is a dispatch and nothing more: the job calls the LLM in its own
- * cell, on its own alarm. A deploy that cannot start one is the same
- * condition Python swallowed, and the deck still gets notified with whatever
- * it already holds.
+ * cell, on its own alarm. A deploy that cannot start one is swallowed, and
+ * the deck still gets notified with whatever it already holds.
  */
 async function refill(deps: WakeDeps, deckId: number): Promise<void> {
   const deckName = deps.repos.decks.findName(deckId);

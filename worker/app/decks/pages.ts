@@ -2,7 +2,7 @@
 // inputs, calls the repositories or the service, and names a template or a
 // redirect; the cell's route table turns that into a response.
 import { MAX_DESIRED_RETENTION, MIN_DESIRED_RETENTION } from '../../domain/fsrs/index.js';
-import { pyRepr } from '../../domain/grading/pyrepr.js';
+import { literal } from '../../domain/grading/literal.js';
 import { parseIso } from '../../domain/time.js';
 import { csvToDeck, deckToCsv, questionsForExport } from '../api/deckIo.js';
 import { ankiNotesToDeck } from './anki.js';
@@ -25,7 +25,7 @@ import { agentAvailable } from '../pageContext.js';
 import { empty, page, redirect, redirectBack, type PageRequest, type PageResult } from '../pageResult.js';
 import { NotAnApkg, RunnerUnavailable, ZipEntryTooLarge, type ApkgReader, type ApkgWriter, type Random, type UserRepos, type WorkflowRunner, type ZipCodec } from '../ports.js';
 import { parseQuestionForm, questionFormFromEntity } from './questionForm.js';
-import { RETENTION_PRESETS, pyFloat } from '../settings/srs.js';
+import { RETENTION_PRESETS, parseFloatLiteral } from '../settings/srs.js';
 import { addQuestion, setNotificationsEnabled, splitDeck, SplitRejected } from './service.js';
 import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
 import { MAX_CONTEXT_PROMPT_CHARS, MAX_TOPIC_PROMPT_CHARS, uniqueSlug, validateDeckName, validateDisplayName } from './validation.js';
@@ -108,7 +108,7 @@ export async function deckNewTriviaCreate(repos: UserRepos, req: PageRequest, de
   const topic = (req.form.get('topic') ?? '').trim();
   const rawInterval = (req.form.get('notification_interval_minutes') ?? '').trim() || '30';
   const rerender = (error: string, status = 400): PageResult => {
-    const parsed = pyInt(rawInterval);
+    const parsed = parseIntLiteral(rawInterval);
     return page('deck_new_trivia.html', { name_value: name, topic_value: topic, interval_value: parsed ?? 30, error }, status);
   };
 
@@ -125,7 +125,7 @@ export async function deckNewTriviaCreate(repos: UserRepos, req: PageRequest, de
   if (!topic) {
     return rerender('Topic is required — it describes what the deck is about, and the AI uses it later if you configure one.');
   }
-  const interval = pyInt(rawInterval);
+  const interval = parseIntLiteral(rawInterval);
   if (interval === null) return rerender('Notification interval must be an integer.');
   if (interval < 1 || interval > 720) return rerender('Notification interval must be 1–720 minutes.');
 
@@ -262,7 +262,7 @@ export async function deckExportApkg(repos: UserRepos, req: PageRequest, deps: {
 const importPage = (template: string, outcome: unknown, error: string | null, status?: number): PageResult => page(template, { outcome, error }, status);
 
 /** The deck name a form posted, or the page re-rendered with why it is not
- * usable. Python raises `HTTPException` here and renders its detail. */
+ * usable: an importer never leaves the user on an error page. */
 function importDeckName(template: string, raw: string): { name: string } | { refusal: PageResult } {
   try {
     return { name: validateDeckName(raw) };
@@ -371,7 +371,7 @@ export async function deckSplitSubmit(repos: UserRepos, req: PageRequest): Promi
   const newTopic = (req.form.get('new_topic') ?? '').trim();
   const selected = req.form
     .getAll('question_ids')
-    .map((v) => pyInt(v))
+    .map((v) => parseIntLiteral(v))
     .filter((n): n is number => n !== null);
   try {
     await splitDeck(repos, { sourceDeckId: id, newDeckName: newName, questionIds: selected, newTopicPrompt: newTopic || null });
@@ -400,8 +400,8 @@ export function deckRetention(repos: UserRepos, req: PageRequest): PageResult {
   const raw = (req.form.get('retention') ?? '').trim().toLowerCase();
   let value: number | null = null;
   if (raw !== 'default' && raw !== 'none' && raw !== '') {
-    value = pyFloat(raw);
-    if (value === null) throw badRequest(`retention must be a number or 'default', got ${pyRepr(raw)}`);
+    value = parseFloatLiteral(raw);
+    if (value === null) throw badRequest(`retention must be a number or 'default', got ${literal(raw)}`);
     if (!(MIN_DESIRED_RETENTION <= value && value <= MAX_DESIRED_RETENTION)) {
       throw badRequest(`retention must be between ${pct(MIN_DESIRED_RETENTION)} and ${pct(MAX_DESIRED_RETENTION)}`);
     }
@@ -502,8 +502,8 @@ export async function questionImprove(repos: UserRepos, req: PageRequest, deps: 
 
 // ---- shared ----------------------------------------------------------------
 
-/** Python's `int()`: null when the literal would raise ValueError. */
-export function pyInt(raw: string): number | null {
+/** A whole-number literal; null when the text is not one. */
+export function parseIntLiteral(raw: string): number | null {
   const s = raw.trim();
   return /^[+-]?\d+$/.test(s) ? Number(s) : null;
 }

@@ -1,15 +1,15 @@
-// mistune.plugins.table: pipe tables and the pipe-less `nptable` form.
-import { pyRstrip, pyStrip, pyre } from "./chars";
+// Pipe tables and the pipe-less `nptable` form.
+import { rstrip, strip, unicodeRe } from "./chars";
 import type { BlockState, ScanMatch } from "./block";
 import type { Token } from "./tokens";
 
 export const TABLE_PATTERN = "^ {0,3}\\|[^\\n]*\\|[ \\t]*(?:\\n|$)";
 export const NP_TABLE_PATTERN = "^ {0,3}\\S[^\\n]*\\|[^\\n]*(?:\\n|$)";
 
-const ALIGN_CENTER = pyre("^ *:-+: *$");
-const ALIGN_LEFT = pyre("^ *:-+ *$");
-const ALIGN_RIGHT = pyre("^ *-+: *$");
-const ALIGN_NONE = pyre("^ *-+ *$");
+const ALIGN_CENTER = unicodeRe("^ *:-+: *$");
+const ALIGN_LEFT = unicodeRe("^ *:-+ *$");
+const ALIGN_RIGHT = unicodeRe("^ *-+: *$");
+const ALIGN_NONE = unicodeRe("^ *-+ *$");
 
 type Align = "center" | "left" | "right" | null;
 
@@ -70,12 +70,12 @@ function processThead(header: string, align: string): [Token, Align[]] | [null, 
     if (ALIGN_CENTER.test(v)) aligns.push("center");
     else if (ALIGN_LEFT.test(v)) aligns.push("left");
     else if (ALIGN_RIGHT.test(v)) aligns.push("right");
-    else if (ALIGN_NONE.test(v) || !pyStrip(v)) aligns.push(null);
+    else if (ALIGN_NONE.test(v) || !strip(v)) aligns.push(null);
     else return [null, null];
   }
   const children: Token[] = headers.map((text, i) => ({
     type: "table_cell",
-    text: pyStrip(text),
+    text: strip(text),
     attrs: { align: aligns[i], head: true },
   }));
   return [{ type: "table_head", children }, aligns];
@@ -86,14 +86,14 @@ function processRow(text: string, aligns: Align[]): Token | null {
   if (cells.length !== aligns.length) return null;
   const children: Token[] = cells.map((cell, i) => ({
     type: "table_cell",
-    text: pyStrip(cell),
+    text: strip(cell),
     attrs: { align: aligns[i], head: false },
   }));
   return { type: "table_row", children };
 }
 
 function stripPipeTableRow(line: string): string | null {
-  let text = pyRstrip(pyRstrip(line, "\n"), " \t");
+  let text = rstrip(rstrip(line, "\n"), " \t");
   if (!text.startsWith("|") && (text.startsWith(" ") || text.startsWith("\t"))) text = text.replace(/^ +/u, "");
   if (!text.startsWith("|") || !text.endsWith("|")) return null;
   return text.slice(1, -1);
@@ -110,7 +110,7 @@ function parseInvalidPipeTable(state: BlockState, pos: number): number {
 }
 
 function stripTableLine(line: string): string | null {
-  const text = pyRstrip(pyRstrip(line, "\n"), " \t");
+  const text = rstrip(rstrip(line, "\n"), " \t");
   if (!text || !text.includes("|")) return null;
   return text;
 }
@@ -120,11 +120,11 @@ function splitTableCells(text: string): string[] {
   let start = 0;
   for (let pos = 0; pos < text.length; pos++) {
     if (text[pos] === "|" && !isEscapedPipe(text, pos)) {
-      cells.push(pyStrip(text.slice(start, pos)));
+      cells.push(strip(text.slice(start, pos)));
       start = pos + 1;
     }
   }
-  cells.push(pyStrip(text.slice(start)));
+  cells.push(strip(text.slice(start)));
   return cells;
 }
 

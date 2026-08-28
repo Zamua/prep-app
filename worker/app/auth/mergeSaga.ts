@@ -1,7 +1,7 @@
-// Merging an anonymous account into a provider account across cells. Python
-// did this in one transaction; two cells cannot, so the directory's marker
-// and audit row bracket a saga: dump, the domain's policy, an import
-// idempotent by row id, then the anonymous cell's three-step deletion. Every
+// Merging an anonymous account into a provider account across cells. Two
+// cells cannot share a transaction, so the directory's marker and audit row
+// bracket a saga: dump, the domain's policy, an import idempotent by row
+// id, then the anonymous cell's three-step deletion. Every
 // step is retry-safe and the marker is what a later request resumes from, so
 // a crash anywhere leaves the anonymous account still owning its rows or the
 // target already holding them, never half of each.
@@ -70,11 +70,10 @@ export function hexFrom(random: Random): RandomHex {
 }
 
 /**
- * No refusal is audited. Python writes a `failed` row for `anon_missing`,
- * but that is the steady state of every cookie outliving its account: one
- * shared directory cell would take a row per request from any client that
- * ignores the delete. `failMerge` is for a merge that was admitted and then
- * gave up, which is the state an operator has to see.
+ * No refusal is audited. A cookie outliving its account is the steady
+ * state, and auditing it would take a row on the one shared directory cell
+ * per request from any client that ignores the delete. `failMerge` is for a
+ * merge that was admitted and then gave up, which an operator has to see.
  */
 const refusal = (reason: string, resolved: boolean): MergeResult => ({ resolved, merged: false, counts: {}, reason });
 

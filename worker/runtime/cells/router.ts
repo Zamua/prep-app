@@ -99,7 +99,7 @@ export interface Route {
   handler(req: CellRequest): Promise<Handled> | Handled;
 }
 
-/** An anonymous identity on a signed-in route; renders as Python's handler. */
+/** An anonymous identity on a signed-in route. */
 export class SignInRequired extends Error {}
 /** A non-token identity on a bearer-only route. */
 export class TokenRequired extends Error {}
@@ -156,8 +156,8 @@ export const HTML = 'text/html; charset=utf-8';
  * not one of them. */
 const JSON_ENDPOINT_SUFFIXES = ['/notify/subscribe', '/notify/unsubscribe', '/notify/test', '/notify/prefs', '/notify/vapid-public-key'];
 
-/** Python's `_wants_json`: an Accept naming JSON and not HTML, or one of the
- * JSON endpoints whatever the browser asked for. */
+/** An Accept naming JSON and not HTML, or one of the JSON endpoints
+ * whatever the browser asked for. */
 export function wantsJson(request: Request): boolean {
   const accept = request.headers.get('accept') ?? '';
   if (accept.includes('application/json') && !accept.includes('text/html')) return true;
@@ -194,7 +194,8 @@ export function toResponse(handled: Handled, render: (template: string, context:
   return new Response(null, { status: handled.status ?? 204, headers });
 }
 
-/** The 429 body Python's cap handler answers with. */
+/** The 429 a row cap answers with: the error page for a browser, the error
+ * envelope for anything else. */
 export function capRefusal(e: RowCapReached, request: Request, errorPage: (status: number, detail: string) => Response): Response {
   if (wantsHtml(request)) return errorPage(429, e.message);
   return Response.json({ error: { code: 'deck_limit', message: e.message } }, { status: 429 });

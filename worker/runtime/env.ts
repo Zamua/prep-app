@@ -54,7 +54,7 @@ export interface Env extends InstantLimitEnv, ClerkVars, SecretVars, PublicServi
   PREP_PARITY_SIGN_OUT_URL?: string;
 }
 
-/** The instant limiter's windows, as Python names them; unset means the default. */
+/** The instant limiter's windows; unset means the default. */
 export interface InstantLimitEnv {
   PREP_INSTANT_BURST_LIMIT?: string;
   PREP_INSTANT_BURST_WINDOW_S?: string;

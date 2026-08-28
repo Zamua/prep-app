@@ -21,7 +21,8 @@ function parseV4(s: string): number[] | null {
   return octets;
 }
 
-/** Python's `ipaddress` IPv6 grammar; scoped (`%`) forms are refused. */
+/** The IPv6 grammar; scoped (`%`) forms are refused, since a zone index
+ * does not identify a client. */
 function parseV6(s: string): bigint | null {
   if (s.includes('%')) return null;
   const parts = s.split(':');

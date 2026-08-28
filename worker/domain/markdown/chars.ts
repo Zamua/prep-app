@@ -1,14 +1,15 @@
-// CPython str predicates over code points, so the port classifies
-// characters the way mistune's regexes and str methods do.
+// Character predicates over code points. CommonMark classifies by Unicode
+// category, which JavaScript's `\s`, `\w` and `\d` do not follow, so the
+// sets are spelled out here and every pattern goes through `unicodeRe`.
 
-// str.isspace(): bidi WS, B, S and category Zs.
+// Whitespace: bidi WS, B and S, plus category Zs.
 const SPACE_CHARS =
   " \t\n\r\x0b\x0c\x1c\x1d\x1e\x1f\x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000";
 // The same set as a character-class body.
 const SPACE_CLASS = " \\t\\n\\r\\x0b\\x0c\\x1c-\\x1f\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
-// string.whitespace.
+// ASCII whitespace only.
 export const ASCII_WHITESPACE = " \t\n\r\x0b\x0c";
-// string.punctuation.
+// ASCII punctuation only.
 export const ASCII_PUNCTUATION = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 export const PUNCTUATION_CLASS = "[!-/:-@\\[-`{-~]";
 
@@ -69,22 +70,22 @@ function stripEnd(s: string, chars: string | null): number {
   return i;
 }
 
-/** str.strip(chars); null strips whitespace. */
-export function pyStrip(s: string, chars: string | null = null): string {
+/** Trims `chars` from both ends; null trims whitespace. */
+export function strip(s: string, chars: string | null = null): string {
   const start = stripStart(s, chars);
   return s.slice(start, Math.max(start, stripEnd(s, chars)));
 }
 
-export function pyLstrip(s: string, chars: string | null = null): string {
+export function lstrip(s: string, chars: string | null = null): string {
   return s.slice(stripStart(s, chars));
 }
 
-export function pyRstrip(s: string, chars: string | null = null): string {
+export function rstrip(s: string, chars: string | null = null): string {
   return s.slice(0, stripEnd(s, chars));
 }
 
-/** str.split() with no separator: runs of whitespace, empties dropped. */
-export function pySplit(s: string): string[] {
+/** Splits on runs of whitespace, dropping empties. */
+export function splitWhitespace(s: string): string[] {
   const out: string[] = [];
   let cur = "";
   for (const c of s) {
@@ -98,11 +99,11 @@ export function pySplit(s: string): string[] {
 }
 
 /**
- * A Python `re` pattern as a JavaScript RegExp: `\s`/`\S` become the
- * isspace() set, `.` excludes only `\n`, `\d` is ASCII, `^`/`$` follow
- * re.M when `multiline`, `(?P<` becomes `(?<`. Always unicode mode.
+ * A pattern as a JavaScript RegExp with the classifications above: `\s`/`\S`
+ * become the whitespace set, `.` excludes only `\n`, `\d` is ASCII, `^`/`$`
+ * are per-line when `multiline`. Always unicode mode.
  */
-export function pyre(pattern: string, flags = "", multiline = false): RegExp {
+export function unicodeRe(pattern: string, flags = "", multiline = false): RegExp {
   let out = "";
   let inClass = false;
   for (let i = 0; i < pattern.length; i++) {

@@ -38,5 +38,5 @@ export type ApiResult = JsonResult | TextResult | BytesResult | PageResult | Emp
 
 export const json = (body: unknown, status = 200, headers?: Record<string, string>): JsonResult => ({ json: body, status, headers });
 
-/** FastAPI's `HTTPException` body. */
+/** The refusal body every JSON route answers with: `{ detail }`. */
 export const detail = (status: number, message: unknown): JsonResult => ({ json: { detail: message }, status });

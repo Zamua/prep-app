@@ -1,6 +1,6 @@
-// The read-only client snapshot, transcribed from prep/offline/routes.py.
-// The identity in the payload is display-only on the client; the sync
-// endpoint never trusts a client-side ownership claim.
+// The read-only client snapshot. The identity in the payload is
+// display-only on the client; the sync endpoint never trusts a client-side
+// ownership claim.
 import { isoUtc } from '../../domain/time.js';
 import { json, type ApiResult } from '../http.js';
 import type { Clock, UserRepos } from '../ports.js';

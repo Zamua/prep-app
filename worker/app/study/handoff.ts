@@ -97,7 +97,8 @@ export function buildMessage(opts: {
   return parts.join('\n');
 }
 
-/** `urllib.parse.quote(s, safe="")`: only unreserved characters survive. */
+/** Percent-encoding with no safe set: only unreserved characters survive,
+ * so the message can sit in any part of a URL. */
 export function quoteAll(s: string): string {
   return encodeURIComponent(s).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
 }

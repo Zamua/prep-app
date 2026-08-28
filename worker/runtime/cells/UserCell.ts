@@ -1,6 +1,5 @@
 // One user's cell: their SQLite behind the repositories, the route table,
-// the parity seed and the three-step deletion. Until lanes C and D land
-// their routes, an unmatched request replays the recorded Python page.
+// the seed profiles and the three-step deletion.
 import { DurableObject } from 'cloudflare:workers';
 import type { CellSnapshot, InstantCard, InstantDeckResult, MigrationStatus, MigrationWrite, Profile, ProfileClaims, TombstoneReason } from '../../app/entities.js';
 import type { AgentConfig, CarriedPreferences, Clock, JobStatusWrite, JobStepRequest, Precheck, UserCellRpc, UserRepos } from '../../app/ports.js';
@@ -56,7 +55,7 @@ export class UnknownProfile extends Error {}
 export class AccountDestroyed extends Error {}
 
 export const TOMBSTONED_HEADER = 'x-prep-tombstoned';
-/** FastAPI's detail for an unauthenticated request. */
+/** The `detail` an unauthenticated request answers with. */
 export const NOT_AUTHENTICATED = 'not authenticated';
 
 const MS: Record<keyof Delta, number> = { days: 86_400_000, hours: 3_600_000, minutes: 60_000 };
@@ -67,8 +66,9 @@ const ALARM_FLOOR_MS = 1;
  * How soon a plan that is still due after a whole pass may come back. A task
  * that throws leaves its stamp unwritten, and one whose effect is a job the
  * deck is still waiting on cannot stamp anything yet; either way the retry
- * belongs on the period Python's scheduler ran at (`_TICK_SECONDS`), not on
- * the next millisecond. A wake that is already in the future is untouched.
+ * belongs a few minutes out, not on the next millisecond, or a deck that
+ * cannot progress spins the alarm. A wake already in the future is
+ * untouched.
  */
 const TICK_MS = 300_000;
 
@@ -254,10 +254,9 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   }
 
   /**
-   * What `temporal workflow terminate && workflow delete` left the Python app
-   * looking at, and the only way a parity run reaches the partial's `gone`:
-   * the badge row closed on the status a deleted execution reads as, and the
-   * progress row a poll answers from dropped out from under it.
+   * A job whose record is gone: the badge row closed on the terminal status
+   * and the progress row a poll answers from dropped out from under it. The
+   * only way a test reaches the partial's `gone` branch.
    */
   async forgetJob(jobId: string, at: string): Promise<void> {
     const repos = this.repos(fixedClock(at));
@@ -371,7 +370,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   /**
    * One migration chunk under one transaction, so a run killed mid-user
    * leaves whole chunks and never half a row. The id block is raised before
-   * the insert: a migrated row keeps its Python id, far below the block, and
+   * the insert: a migrated row keeps its source id, far below the block, and
    * seeding first is what stops a row minted later from taking the same one.
    *
    * A row already here is overwritten when it differs, which is what makes

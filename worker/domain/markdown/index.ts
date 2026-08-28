@@ -1,7 +1,7 @@
-// The card-prompt markdown renderer: a port of mistune 3.3.4 as the app
-// configures it (escape=True, hard_wrap=False, strikethrough and table
-// plugins, HTMLRenderer). One implementation serves the worker's
-// template filter and, bundled, the browser.
+// The card-prompt markdown renderer: CommonMark with strikethrough and
+// tables, raw HTML escaped rather than passed through, and no hard wrap.
+// One implementation serves the worker's template filter and, bundled, the
+// browser, so a card cannot render differently online and offline.
 import { BlockParser, BlockState } from "./block";
 import { InlineParser } from "./inline";
 import { renderTokens } from "./render";

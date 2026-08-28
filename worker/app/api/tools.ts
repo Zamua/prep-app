@@ -1,6 +1,6 @@
-// The MCP tool catalog, byte-equal to prep/api/mcp.py's `_TOOLS`: an
-// external client negotiates against these objects, so their text is
-// part of the contract.
+// The MCP tool catalog. An external client negotiates against these
+// objects, so their text is part of the contract: reword a description and
+// a model that was calling the tool correctly may stop.
 
 export interface McpTool {
   name: string;

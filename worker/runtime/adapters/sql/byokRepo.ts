@@ -1,5 +1,5 @@
-// `byok_credentials`, transcribed from prep/byok/repo.py minus the crypto:
-// the `Cipher` port wraps this repo.
+// `byok_credentials`. The crypto is not here: the `Cipher` port wraps this
+// repo, so a plaintext key never reaches SQL.
 import type { ByokRepo, Clock } from '../../../app/ports.js';
 import type { CredentialMetadata } from '../../../app/entities.js';
 import { Db, type CellStorage } from './storage.js';

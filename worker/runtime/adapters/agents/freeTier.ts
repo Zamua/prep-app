@@ -4,7 +4,7 @@
 // broken one.
 //
 // `shared: true` is what makes a 429 here contention rather than a user's
-// budget, and the label is the one Python's messages carry.
+// own budget, which is a different message to the user.
 import type { CompatConfig } from './openaiCompat.js';
 import { OpenAICompatAgent } from './openaiCompat.js';
 

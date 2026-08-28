@@ -1,5 +1,4 @@
-// The notify surface, transcribed from prep/notify/routes.py and the
-// fanout half of prep/notify/push.py. Delivery itself is the `WebPush`
+// The notify surface and the push fanout. Delivery itself is the `WebPush`
 // port; this layer decides what is sent and what is recorded.
 import { DEFAULT_NOTIFICATION_PREFS } from '../entities.js';
 import { detail, json, type ApiResult } from '../http.js';

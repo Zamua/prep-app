@@ -1,5 +1,6 @@
-// The UserCell schema: the Python tables minus every user column, names
-// and remaining columns unchanged so a migration copies rows verbatim.
+// The UserCell schema. A cell holds one user, so no table carries a user
+// column; every other column name is what a migrated row already uses, so
+// an import copies rows verbatim.
 
 export const PROFILE_TABLE = 'profile';
 

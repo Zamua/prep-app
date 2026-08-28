@@ -1,4 +1,4 @@
-// The InstantLimiterCell's ledger: `instant_generations` as Python keeps it.
+// The InstantLimiterCell's ledger: `instant_generations`.
 // The windows are the domain's; the cell reads the last day and reserves.
 import type { ReserveResult } from '../../../app/ports.js';
 import {

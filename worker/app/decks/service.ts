@@ -1,5 +1,5 @@
-// Deck-level operations that span more than one repository: the pieces
-// prep/decks/service.py owns, minus the workflow orchestration (phase 4).
+// Deck-level operations that span more than one repository. Workflow
+// orchestration lives in app/jobs.
 import type { NewQuestion } from '../entities.js';
 import type { UserRepos } from '../ports.js';
 

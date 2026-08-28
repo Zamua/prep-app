@@ -1,5 +1,4 @@
-// The SRS state on `cards` and the due-queue reads, transcribed from
-// prep/study/repo.py: ReviewRepo's card side.
+// The SRS state on `cards`, and the due-queue reads.
 import type { CardRepo, Clock } from '../../../app/ports.js';
 import type { CardRow, Question } from '../../../app/entities.js';
 import type { ScheduledReview } from '../../../domain/fsrs/index.js';
@@ -9,7 +8,7 @@ import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow, isoUtc } from './time.js';
 
 // The hour bucket of an ISO timestamp: cards due within the same hour tie
-// and RANDOM() shuffles them (prep/study/repo.py `_DUE_BUCKET`).
+// and RANDOM() shuffles them.
 export const DUE_BUCKET = 'substr(cards.next_due, 1, 13)';
 
 export function rowToCard(r: Row): CardRow {

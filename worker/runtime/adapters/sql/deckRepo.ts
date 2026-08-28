@@ -1,4 +1,4 @@
-// `decks`, transcribed from prep/decks/repo.py: DeckRepo.
+// `decks`.
 import type { Clock, DeckRepo } from '../../../app/ports.js';
 import { DeckNameTaken } from '../../../app/ports.js';
 import type { Deck, DeckMeta, DeckSummary, DeckType, TriviaSourceMeta } from '../../../app/entities.js';

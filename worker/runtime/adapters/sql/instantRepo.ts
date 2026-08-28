@@ -1,6 +1,5 @@
-// The instant deck write, transcribed from prep/instant/repo.py
-// `create_instant_deck`: the account when minting, the deck and every card
-// in one transaction.
+// The instant deck write: the account when minting, the deck and every card
+// in one transaction, so a half-made deck cannot outlive the request.
 import type { Clock, InstantRepo, Random } from '../../../app/ports.js';
 import { SLUG_ALPHABET, SLUG_LENGTH, type InstantCard, type InstantDeckResult } from '../../../app/entities.js';
 import { refuseOverRowCap } from './caps.js';

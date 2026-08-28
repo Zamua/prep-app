@@ -1,19 +1,18 @@
-// json.loads() and set() over its result, written out instead of JSON.parse
-// because repr() needs Python's int/float split and dict key order, and
-// JSON.parse keeps neither: 1 and 1.0 both parse to 1, and integer-like keys
-// are reordered.
+// Parsing a multi-select answer and reducing it to a set. Written out
+// instead of JSON.parse because the feedback has to tell 1 from 1.0 and
+// has to keep an object's key order; JSON.parse keeps neither.
 
-/** A hashable JSON value: bigint is a Python int, number a float. */
-export type PyScalar = string | null | boolean | bigint | number;
-export type PyValue = PyScalar | PyValue[] | PyDict;
+/** A value that can be a set element: bigint is an int, number a float. */
+export type Scalar = string | null | boolean | bigint | number;
+export type JsonValue = Scalar | JsonValue[] | JsonObject;
 
 /** A parsed object: only its keys survive, in first-insertion order. */
-export class PyDict {
+export class JsonObject {
   constructor(readonly keys: string[]) {}
 }
 
 export class JsonDecodeError extends Error {}
-export class PyTypeError extends Error {}
+export class ValueTypeError extends Error {}
 
 const NUMBER = /-?(?:0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/y;
 const WS = /[ \t\n\r]*/y;
@@ -33,13 +32,13 @@ class Parser {
     this.i = WS.lastIndex;
   }
 
-  literal(word: string, value: PyScalar): PyScalar {
+  literal(word: string, value: Scalar): Scalar {
     if (!this.s.startsWith(word, this.i)) this.fail('expecting value');
     this.i += word.length;
     return value;
   }
 
-  value(): PyValue {
+  value(): JsonValue {
     const c = this.s[this.i];
     switch (c) {
       case '{': return this.object();
@@ -54,7 +53,7 @@ class Parser {
     }
   }
 
-  number(): PyScalar {
+  number(): Scalar {
     if (this.s.startsWith('-Infinity', this.i)) return this.literal('-Infinity', -Infinity);
     NUMBER.lastIndex = this.i;
     const m = NUMBER.exec(this.s);
@@ -87,8 +86,8 @@ class Parser {
     }
   }
 
-  array(): PyValue[] {
-    const out: PyValue[] = [];
+  array(): JsonValue[] {
+    const out: JsonValue[] = [];
     this.i++;
     this.ws();
     if (this.s[this.i] === ']') { this.i++; return out; }
@@ -102,12 +101,12 @@ class Parser {
     }
   }
 
-  object(): PyDict {
+  object(): JsonObject {
     const keys: string[] = [];
     const seen = new Set<string>();
     this.i++;
     this.ws();
-    if (this.s[this.i] === '}') { this.i++; return new PyDict(keys); }
+    if (this.s[this.i] === '}') { this.i++; return new JsonObject(keys); }
     for (;;) {
       this.ws();
       if (this.s[this.i] !== '"') this.fail('expecting property name enclosed in double quotes');
@@ -119,14 +118,15 @@ class Parser {
       if (!seen.has(key)) { seen.add(key); keys.push(key); }
       this.ws();
       const c = this.s[this.i++];
-      if (c === '}') return new PyDict(keys);
+      if (c === '}') return new JsonObject(keys);
       if (c !== ',') this.fail("expecting ',' delimiter");
     }
   }
 }
 
-/** Python `json.loads(text)`: strict JSON plus NaN, Infinity and -Infinity. */
-export function loads(text: string): PyValue {
+/** Strict JSON plus NaN, Infinity and -Infinity, which stored answers
+ * predating the current writer can carry. */
+export function parseJson(text: string): JsonValue {
   const p = new Parser(text);
   p.ws();
   const v = p.value();
@@ -136,10 +136,11 @@ export function loads(text: string): PyValue {
 }
 
 /**
- * Hash-equality key: 1, 1.0 and True share one. Python keeps every NaN as
- * its own element; here they collapse, an untested corner.
+ * Hash-equality key: 1, 1.0 and true share one, so an answer stored as a
+ * float still matches a choice stored as an int. Every NaN collapses to
+ * one element.
  */
-export function scalarKey(v: PyScalar): string {
+export function scalarKey(v: Scalar): string {
   if (typeof v === 'string') return 's' + v;
   if (v === null) return 'n';
   if (typeof v === 'boolean') return 'i' + (v ? '1' : '0');
@@ -148,26 +149,26 @@ export function scalarKey(v: PyScalar): string {
 }
 
 /**
- * Python `set(value)`: the elements of a list, the code points of a string,
- * the keys of an object; a scalar is not iterable and a nested list or
- * object is unhashable. Duplicates keep their first occurrence.
+ * The set of a value: the elements of a list, the code points of a string,
+ * the keys of an object. A scalar is not iterable and a nested list or
+ * object cannot be an element. Duplicates keep their first occurrence.
  */
-export function toSet(value: PyValue): PyScalar[] {
-  let items: PyScalar[];
+export function toSet(value: JsonValue): Scalar[] {
+  let items: Scalar[];
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (Array.isArray(item) || item instanceof PyDict) throw new PyTypeError('unhashable type');
+      if (Array.isArray(item) || item instanceof JsonObject) throw new ValueTypeError('unhashable type');
     }
-    items = value as PyScalar[];
+    items = value as Scalar[];
   } else if (typeof value === 'string') {
     items = Array.from(value);
-  } else if (value instanceof PyDict) {
+  } else if (value instanceof JsonObject) {
     items = value.keys;
   } else {
-    throw new PyTypeError('object is not iterable');
+    throw new ValueTypeError('object is not iterable');
   }
   const seen = new Set<string>();
-  const out: PyScalar[] = [];
+  const out: Scalar[] = [];
   for (const item of items) {
     const k = scalarKey(item);
     if (!seen.has(k)) {
@@ -178,8 +179,8 @@ export function toSet(value: PyValue): PyScalar[] {
   return out;
 }
 
-/** Python `set == set`. */
-export function sameSet(a: PyScalar[], b: PyScalar[]): boolean {
+/** Set equality. */
+export function sameSet(a: Scalar[], b: Scalar[]): boolean {
   if (a.length !== b.length) return false;
   const keys = new Set(a.map(scalarKey));
   return b.every((v) => keys.has(scalarKey(v)));

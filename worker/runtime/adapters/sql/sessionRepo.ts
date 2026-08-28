@@ -1,5 +1,4 @@
-// `study_sessions` and `study_session_answers`, transcribed from
-// prep/study/repo.py: SessionRepo. Version-checked mutations raise
+// `study_sessions` and `study_session_answers`. Version-checked mutations raise
 // `StaleVersionError`; the next card is the most overdue, ties within the
 // hour broken by RANDOM().
 import type { Clock, SessionIds, SessionRepo } from '../../../app/ports.js';

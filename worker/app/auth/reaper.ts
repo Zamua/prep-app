@@ -57,8 +57,8 @@ export async function reapIdleAnonymous(deps: ReapDeps, opts: ReapOptions = {}):
       // moved nothing, with the cookie that could have retried deleted.
       if (await deps.directory.marker(user.id)) continue;
       // The cell's own date, or nothing. The directory row's `created_at` is
-      // not a stand-in for it: a migrated account carries Python's, years
-      // old, while its cell is still being written, and reaping is one-way.
+      // not a stand-in for it: a migrated account's is years old while its
+      // cell is still being written, and reaping is one-way.
       const lastSeen = await deps.cells.cell(user.id).lastSeenAt();
       if (lastSeen === null) {
         // No profile is two different accounts. A tombstoned cell is a

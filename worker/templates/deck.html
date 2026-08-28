@@ -185,7 +185,7 @@
         {% for value, label, blurb in retention_presets %}
           {% set picked = deck_retention is not none and (deck_retention - value)|abs < 0.001 %}
           <label class="retention-preset {% if picked %}is-active{% endif %}">
-            <input type="radio" name="retention" value="{{ value|pyfloat }}"
+            <input type="radio" name="retention" value="{{ value|floattext }}"
                    {% if picked %}checked{% endif %}>
             <span class="retention-preset-label">{{ label }}</span>
             <span class="retention-preset-blurb">{{ blurb }}</span>

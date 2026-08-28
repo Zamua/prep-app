@@ -80,8 +80,8 @@ Output ONLY a valid JSON array, with no surrounding prose or markdown fences aro
 
 export class TriviaParseError extends Error {}
 
-/** Fence-stripped, then the first `[` to the last `]`: the Go parser, which
- * itself matches Python's `_parse_qa_pairs`. */
+/** Fence-stripped, then the first `[` to the last `]`: models wrap JSON in
+ * prose often enough that the strict parse is not worth the failures. */
 export function parseTriviaJson(raw: string): TriviaPair[] {
   let text = raw.trim();
   text = text.replace(/^```(?:json)?\s*/i, '');

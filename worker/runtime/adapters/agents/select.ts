@@ -1,7 +1,6 @@
 // Turning one owner's `AgentConfig` into the adapter that serves it, and the
-// lazy port the cells hold. Mirrors prep/agent/selector.py's precedence; the
-// decision itself is app-layer policy (app/agent/funding.ts), because only
-// the construction is infrastructure.
+// lazy port the cells hold. The decision itself is app-layer policy
+// (app/agent/funding.ts); only the construction is infrastructure.
 //
 // The key is decrypted here, in the isolate that will use it, and is never
 // held past the call: a revoked credential stops the next step because the
@@ -11,8 +10,8 @@ import { AgentUnavailable, type AgentConfig, type AgentPort, type AgentRequest, 
 import { byokAgent } from './byok.js';
 import { FreeTierAgent, freeTierConfig, type FreeTierEnv } from './freeTier.js';
 
-/** Python's `AgentPort.run` default deadline. The job path narrows it to the
- * step budget the fetch ceiling allows. */
+/** The default deadline. The job path narrows it to the step budget the
+ * fetch ceiling allows. */
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
 export interface SelectDeps {

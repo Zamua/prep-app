@@ -1,6 +1,6 @@
-// mistune's HTMLRenderer(escape=True) with the strikethrough and table
-// renderers, over the block and inline token trees.
-import { pySplit, pyStrip } from "./chars";
+// The HTML renderer over the block and inline token trees. Raw HTML in a
+// card is escaped, never passed through.
+import { splitWhitespace, strip } from "./chars";
 import type { InlineParser } from "./inline";
 import type { Env, Token } from "./tokens";
 import { escapeHtml, safeEntity, safeUrl, striptags } from "./url";
@@ -15,7 +15,7 @@ export function renderTokens(tokens: Token[], inline: InlineParser, env: Env): s
 
 function children(tok: Token, inline: InlineParser, env: Env): string {
   if (tok.children) return renderTokens(tok.children, inline, env);
-  if (tok.text !== undefined) return renderTokens(inline.call(pyStrip(tok.text, INLINE_STRIP), env), inline, env);
+  if (tok.text !== undefined) return renderTokens(inline.call(strip(tok.text, INLINE_STRIP), env), inline, env);
   return "";
 }
 
@@ -62,7 +62,7 @@ function renderToken(tok: Token, inline: InlineParser, env: Env): string {
     case "block_quote":
       return "<blockquote>\n" + children(tok, inline, env) + "</blockquote>\n";
     case "block_html":
-      return "<p>" + escapeHtml(pyStrip(tok.raw!)) + "</p>\n";
+      return "<p>" + escapeHtml(strip(tok.raw!)) + "</p>\n";
     case "list": {
       const body = children(tok, inline, env);
       if (attr(tok, "ordered")) {
@@ -106,8 +106,8 @@ function image(text: string, url: string, title?: string): string {
 function blockCode(code: string, info?: string): string {
   let html = "<pre><code";
   if (info !== undefined) {
-    info = safeEntity(pyStrip(info));
-    if (info) html += ' class="language-' + pySplit(info)[0]! + '"';
+    info = safeEntity(strip(info));
+    if (info) html += ' class="language-' + splitWhitespace(info)[0]! + '"';
   }
   return html + ">" + escapeHtml(code) + "</code></pre>\n";
 }

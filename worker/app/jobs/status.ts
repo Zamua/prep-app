@@ -3,10 +3,9 @@
 // delivery happens after it commits, because a fetch cannot run inside
 // `transactionSync`.
 //
-// Transcribed from prep/workflows/service.py: register + update_status. One
-// difference, deliberate: the notified stamp is written inside the
-// transaction rather than after the send, so a transition redelivered
-// mid-send is at most one push, not two.
+// The notified stamp is written inside the transaction rather than after
+// the send, so a transition redelivered mid-send is at most one push, not
+// two.
 import { isActionRequired, isTerminal } from '../badge/status.js';
 import type { ActiveWorkflow } from '../entities.js';
 import { sendToUser, type NotifyDeps } from '../notify/routes.js';
@@ -32,10 +31,9 @@ export function applyJobStatus(repos: UserRepos, write: JobStatusWrite): StatusW
   if (stored !== null && write.transition <= stored) return { applied: false, push: null };
 
   // The prior status is what the rules diff against, and a row this write
-  // creates has none: Python's route registers first, so its `prev` is the
-  // pre-transition row. Registering here and then comparing to what we just
-  // wrote would silence the rules for a job whose first delivered transition
-  // is already terminal.
+  // creates has none, so the read happens before the register. Registering
+  // first and then comparing to what we just wrote would silence the rules
+  // for a job whose first delivered transition is already terminal.
   const before = repos.jobs.get(write.jobId);
   repos.jobs.register({
     workflowId: write.jobId,

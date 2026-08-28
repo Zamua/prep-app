@@ -1,6 +1,6 @@
-// CSV import/export for decks, transcribed from prep/decks/io.py. One
-// CSV per deck; trivia decks carry a `# key: value` preamble above the
-// header so the importer can rebuild the deck shape.
+// CSV import/export for decks. One CSV per deck; trivia decks carry a
+// `# key: value` preamble above the header so the importer can rebuild the
+// deck shape.
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 import type { DeckRepo, QuestionRepo, TriviaRepo } from '../ports.js';
 import { rowCapMessage } from '../decks/importLimits.js';
@@ -97,8 +97,8 @@ export function splitPreamble(csvText: string): { preamble: Record<string, strin
   return { preamble, rest: lines.slice(i).join('\n') };
 }
 
-/** Python's `int(s)` over a preamble value: whole string, sign allowed. */
-function pyInt(raw: string | undefined, fallback: number): number {
+/** A preamble value as a whole number: the whole string, sign allowed. */
+function preambleInt(raw: string | undefined, fallback: number): number {
   const s = (raw ?? '').trim();
   if (!/^[+-]?\d+$/.test(s)) return fallback;
   return Number(s);
@@ -134,11 +134,11 @@ export function csvToDeck(
     }
     deckId = existingId;
   } else if (declaredType === 'trivia') {
-    const interval = pyInt(preamble['notification_interval_minutes'] ?? '30', 30);
+    const interval = preambleInt(preamble['notification_interval_minutes'] ?? '30', 30);
     const topic = preamble['topic_prompt'] || contextPrompt || '';
     deckId = repos.decks.createTrivia(deckName, { topic, intervalMinutes: interval });
     if ('trivia_session_size' in preamble) {
-      const size = pyInt(preamble['trivia_session_size'], NaN);
+      const size = preambleInt(preamble['trivia_session_size'], NaN);
       if (Number.isFinite(size)) {
         try {
           repos.decks.setTriviaSessionSize(deckId, size);
@@ -214,8 +214,8 @@ export function csvToDeck(
       inserted++;
       if (declaredType === 'trivia') repos.trivia.appendCard(qid, deckId);
     } catch (e) {
-      // Python reports a failed write per row rather than sinking the import;
-      // the separator is the one the wire format already carries.
+      // A failed row is reported and the import continues; one bad row
+      // must not cost the user the other several hundred.
       errors.push(`row ${i}: write failed \u2014 ${e instanceof Error ? e.message : String(e)}`);
     }
   }

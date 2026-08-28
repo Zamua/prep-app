@@ -1,7 +1,6 @@
 // The ports the app layer speaks through. Adapters live in runtime/adapters
-// and meet these interfaces at the composition root only. Repositories
-// mirror the Python repos method for method, the user parameter dropped:
-// a cell holds one user.
+// and meet these interfaces at the composition root only. No repository
+// method takes a user: a cell holds one.
 import type { ScheduledReview } from '../domain/fsrs/index.js';
 import type { LedgerCommit, LedgerRows, StepOutput } from '../domain/jobs/ledger.js';
 import type { GradeCard, TransformCard, TransformDeck, TransformScope } from '../domain/jobs/snapshot.js';
@@ -187,7 +186,7 @@ export interface QuestionRepo {
   delete(qid: number): boolean;
 }
 
-/** The card-state reads and writes of Python's ReviewRepo. */
+/** The scheduler state of a card, and the reviews behind it. */
 export interface CardRepo {
   srsState(qid: number): CardRow | null;
   /** The retention the scheduler runs at: deck override, else the profile's. */
@@ -308,7 +307,7 @@ export interface IdempotencyRepo {
 }
 
 export interface PrefsRepo {
-  /** The profile as Python's user dict, or null before the first upsert. */
+  /** The account row, or null before the first upsert. */
   get(): Profile | null;
   /** Creates or refreshes the row and bumps `last_seen_at`; COALESCE keeps set claims. */
   upsert(id: string, claims?: ProfileClaims): Profile;
@@ -705,7 +704,7 @@ export interface JobStatusWrite {
   status: string;
   progress: Record<string, unknown>;
   urlPath: string;
-  /** The badge's `workflow_type`, as Python spells it. */
+  /** The badge's `workflow_type`. */
   kind: string;
   deckId: number | null;
   deckName: string | null;
@@ -850,8 +849,8 @@ export interface UserCellRpc {
   /** Which credential funds this owner's next LLM step. Read once per step,
    * never cached: a revoked key must stop the step after it. */
   agentConfig(): Promise<AgentConfig>;
-  /** One transaction: `active_workflows`, `job_progress`, and Python's
-   * `update_status` notification rules. Idempotent by `(jobId, transition)`. */
+  /** One transaction: `active_workflows`, `job_progress` and the
+   * notification rules. Idempotent by `(jobId, transition)`. */
   jobStatus(write: JobStatusWrite): Promise<void>;
   /** Runs a write step here, where the repositories and the idempotency
    * ledgers are, so a step row and a data row cannot disagree. */

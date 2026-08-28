@@ -1,6 +1,5 @@
-// mistune.block_parser: the block scanner, containers and the rule
-// methods, plus the table plugin's top-level rules.
-import { isAsciiPunct, isDigit, isSpace, cpAt, pyStrip, pyre, ASCII_WHITESPACE } from "./chars";
+// The block scanner: containers, the block rules and the table rules.
+import { isAsciiPunct, isDigit, isSpace, cpAt, strip, unicodeRe, ASCII_WHITESPACE } from "./chars";
 import { LINK_LABEL, parseLinkHref, parseLinkTitle, unescapeChar, unikey } from "./links";
 import { LIST_PATTERN, parseList } from "./list";
 import { NP_TABLE_PATTERN, TABLE_PATTERN, parseNpTable, parseTable } from "./table";
@@ -93,15 +92,15 @@ export class Scanner {
   }
 }
 
-const INDENT_CODE_TRIM = pyre("^ {1,4}", "g", true);
-const ATX_HEADING_TRIM = pyre("(\\s+|^)#+\\s*$", "g");
-const BLOCK_QUOTE_TRIM = pyre("^ ?", "g", true);
-const BLANK_TO_LINE = pyre("[ \\t]*\\n", "y");
-const BLOCK_QUOTE_LINE = pyre("^ {0,3}>([^\\n]*(?:\\n|$))", "y", true);
-const BLANK_LINE = pyre("(^[ \\t\\v\\f]*\\n)+", "g", true);
-const EXPAND_TAB = pyre("^( {0,3})\\t", "g", true);
-const OPEN_TAG_END = pyre(HTML_ATTRIBUTES + "[ \\t]*>[ \\t]*(?:\\n|$)", "y");
-const CLOSE_TAG_END = pyre("[ \\t]*>[ \\t]*(?:\\n|$)", "y");
+const INDENT_CODE_TRIM = unicodeRe("^ {1,4}", "g", true);
+const ATX_HEADING_TRIM = unicodeRe("(\\s+|^)#+\\s*$", "g");
+const BLOCK_QUOTE_TRIM = unicodeRe("^ ?", "g", true);
+const BLANK_TO_LINE = unicodeRe("[ \\t]*\\n", "y");
+const BLOCK_QUOTE_LINE = unicodeRe("^ {0,3}>([^\\n]*(?:\\n|$))", "y", true);
+const BLANK_LINE = unicodeRe("(^[ \\t\\v\\f]*\\n)+", "g", true);
+const EXPAND_TAB = unicodeRe("^( {0,3})\\t", "g", true);
+const OPEN_TAG_END = unicodeRe(HTML_ATTRIBUTES + "[ \\t]*>[ \\t]*(?:\\n|$)", "y");
+const CLOSE_TAG_END = unicodeRe("[ \\t]*>[ \\t]*(?:\\n|$)", "y");
 
 export function expandLeadingTab(text: string, width = 4): string {
   return text.replace(EXPAND_TAB, (_m, s: string) => s + " ".repeat(width - s.length));
@@ -207,7 +206,7 @@ export class BlockParser {
     const key = name + "\0" + pattern;
     let r = this.compiled.get(key);
     if (!r) {
-      r = { name, sticky: pyre(pattern, "y", true), global: pyre(pattern, "g", true) };
+      r = { name, sticky: unicodeRe(pattern, "y", true), global: unicodeRe(pattern, "g", true) };
       this.compiled.set(key, r);
     }
     return r;
@@ -305,7 +304,7 @@ export class BlockParser {
     while (pos < state.cursorMax) {
       if (pos > state.cursor && sc.matchAt(state.src, pos)) break;
       const line = state.getLine(pos);
-      if (!pyStrip(line)) break;
+      if (!strip(line)) break;
       pos += line.length;
     }
     if (pos <= state.cursor) return false;
@@ -322,7 +321,7 @@ export class BlockParser {
     if (endPos !== m.end) code = state.getText(endPos);
     code = expandLeadingTab(code);
     code = code.replace(INDENT_CODE_TRIM, "");
-    code = pyStrip(code, "\n");
+    code = strip(code, "\n");
     state.appendToken({ type: "block_code", raw: code, style: "indent" });
     return endPos;
   }
@@ -334,7 +333,7 @@ export class BlockParser {
     const c = marker[0]!;
     // An info string on a backtick fence cannot contain a backtick.
     if (info && c === "`" && info.includes(c)) return null;
-    const end = pyre("^ {0,3}" + c + "{" + marker.length + ",}[ \\t]*(?:\\n|$)", "g", true);
+    const end = unicodeRe("^ {0,3}" + c + "{" + marker.length + ",}[ \\t]*(?:\\n|$)", "g", true);
     const cursorStart = m.end + 1;
     let code: string;
     let endPos: number;
@@ -347,11 +346,11 @@ export class BlockParser {
       code = state.src.slice(cursorStart);
       endPos = state.cursorMax;
     }
-    if (spaces && code) code = code.replace(pyre("^ {0," + spaces.length + "}", "g", true), "");
+    if (spaces && code) code = code.replace(unicodeRe("^ {0," + spaces.length + "}", "g", true), "");
     const token: Token = { type: "block_code", raw: code, style: "fenced", marker };
     if (info) {
       info = unescapeChar(info);
-      token.attrs = { info: pyStrip(info) };
+      token.attrs = { info: strip(info) };
     }
     state.appendToken(token);
     return endPos;
@@ -359,7 +358,7 @@ export class BlockParser {
 
   private parseAtxHeading(m: ScanMatch, state: BlockState): number {
     const level = m.groups.atx_1!.length;
-    let text = pyStrip(m.groups.atx_2!, ASCII_WHITESPACE);
+    let text = strip(m.groups.atx_2!, ASCII_WHITESPACE);
     if (text) text = text.replace(ATX_HEADING_TRIM, "");
     state.appendToken({ type: "heading", text, attrs: { level }, style: "atx" });
     return m.end + 1;
@@ -439,7 +438,7 @@ export class BlockParser {
         if (quote !== null) {
           text += quote;
           state.cursor += state.getLine(state.cursor).length;
-          prevBlankLine = !pyStrip(quote);
+          prevBlankLine = !strip(quote);
           continue;
         }
         // A blank line is required between a quote and a following paragraph.
@@ -476,7 +475,7 @@ export class BlockParser {
   }
 
   private parseRawHtml(m: ScanMatch, state: BlockState): number | null {
-    const marker = pyStrip(m.text);
+    const marker = strip(m.text);
     if (marker === "<!--") return parseHtmlToEnd(state, "-->", m.end);
     if (marker === "<?") return parseHtmlToEnd(state, "?>", m.end);
     if (marker === "<![CDATA[") return parseHtmlToEnd(state, "]]>", m.end);
@@ -560,7 +559,7 @@ function trimPartialNextLineIndent(text: string, endPos: number): number {
   const lineStart = text.lastIndexOf("\n") + 1;
   if (lineStart === 0) return endPos;
   const suffix = text.slice(lineStart);
-  if (suffix && pyStrip(suffix, " \t") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
+  if (suffix && strip(suffix, " \t") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
   return endPos;
 }
 

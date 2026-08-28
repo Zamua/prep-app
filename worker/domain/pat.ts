@@ -44,7 +44,7 @@ export function maskToken(token: string): string {
   return `${TOKEN_PREFIX}${middle}…${token.slice(-4)}`;
 }
 
-/** Python's `bearer_user` messages, in the order it checks them. */
+/** The bearer refusals, in the order they are checked. */
 export const MISSING_HEADER = 'missing Authorization header';
 export const BAD_SCHEME = "Authorization must be 'Bearer <token>'";
 export const BAD_TOKEN = 'invalid or revoked token';
@@ -52,7 +52,7 @@ export const NO_USER = 'user no longer exists';
 
 export type BearerRefusal = typeof MISSING_HEADER | typeof BAD_SCHEME;
 
-/** The bearer value, or the refusal Python answers with. */
+/** The bearer value, or why the header cannot yield one. */
 export function bearerValue(authorization: string | null): { token: string } | { refusal: BearerRefusal } {
   if (!authorization) return { refusal: MISSING_HEADER };
   const space = authorization.indexOf(' ');

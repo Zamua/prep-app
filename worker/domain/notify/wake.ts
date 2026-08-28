@@ -2,10 +2,9 @@
 // a cold cell, an evicted cell and a duplicate alarm all reach the same
 // answer: the alarm is re-derived from the rows, never held.
 //
-// The policy is prep/notify/scheduler.py and prep/trivia/scheduler.py minus
-// the cross-user walk each opened with. A five-minute tick could decline to
-// act and simply come back; an alarm cannot, so every path that declines
-// names the instant it wants instead.
+// An alarm cannot decline to act and simply come back the way a periodic
+// tick could, so every path that declines names the instant it wants
+// instead.
 import { isoUtc, parseIso } from '../time.js';
 
 const MINUTE_MS = 60_000;
@@ -63,7 +62,7 @@ export interface WakeInputs {
    * neither, a refill is not a task that could ever complete, so planning one
    * would leave the deck asking on every wake for the life of the deploy. */
   canGenerate: boolean;
-  /** Python walks only the users who have a device to push to. */
+  /** No device means nothing to push to, so nothing is planned. */
   hasPushDevice: boolean;
   dueTotal: number;
   /** When the next SRS card comes due; null when none is scheduled. */
@@ -128,8 +127,8 @@ function planDigest(i: WakeInputs, now: Date, tasks: WakeTask[], wakes: number[]
 
 function planWhenReady(i: WakeInputs, now: Date, quietEnd: Date | null, tasks: WakeTask[], wakes: number[]): void {
   const at = now.getTime();
-  // An unparsable stamp is no debounce, which is what Python's swallowed
-  // ValueError leaves behind.
+  // An unparsable stamp is no debounce: a damaged row must not silence
+  // notifications forever.
   const last = tryParse(i.prefs.last_when_ready_at);
   const debounceEnd = last === null ? at : last + WHEN_READY_DEBOUNCE_MS;
   const readyAt = i.dueTotal >= i.prefs.threshold ? at : tryParse(i.nextDueAt);
@@ -144,7 +143,8 @@ function planWhenReady(i: WakeInputs, now: Date, quietEnd: Date | null, tasks: W
 function planDeck(d: TriviaDeckState, canGenerate: boolean, now: Date, quietEnd: Date | null, tasks: WakeTask[], wakes: number[]): void {
   if (!d.notificationsEnabled) return;
   const at = now.getTime();
-  // Python compares the stored stamp to `isoformat()` as strings.
+  // The stamps are fixed-width UTC, so a string compare is a time
+  // compare.
   if (d.mutedUntil !== null && d.mutedUntil > isoUtc(now)) {
     const until = tryParse(d.mutedUntil);
     if (until !== null && until > at) wakes.push(until);
@@ -158,7 +158,7 @@ function planDeck(d: TriviaDeckState, canGenerate: boolean, now: Date, quietEnd:
 
   // The refill is a dispatch, never a generation: the alarm does not call the
   // LLM. It runs during quiet hours so morning has fresh content, and no more
-  // often than the deck's own interval, which is where Python's tick put it.
+  // often than the deck's own interval.
   // Its guard is the job row the dispatch writes; without one, a deck that
   // cannot be refilled would ask again on every wake, forever.
   if (canGenerate && d.unanswered < d.sessionSize && d.topic !== '') {
@@ -254,7 +254,7 @@ function formatterFor(tz: string): Intl.DateTimeFormat | null {
   const memo = formatters.get(key);
   if (memo !== undefined) return memo;
   // An unknown or malformed zone falls back to the default rather than
-  // throwing, which is what the Python helper does with the same prefs.
+  // throwing: a bad tz pref must not take the whole wake down.
   const made = buildFormatter(key) ?? buildFormatter(DEFAULT_TZ);
   formatters.set(key, made);
   return made;

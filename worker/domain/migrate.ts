@@ -22,11 +22,11 @@ export const MIGRATION_SEALED = 'migration sealed';
 export const DROPPED_BYOK_PROVIDERS: readonly string[] = ['claude-subscription'];
 
 /**
- * Tables no chunk may carry. Every `active_workflows` row names a Temporal
- * execution that stops existing with the Go worker, and a non-terminal one
- * would leave the badge polling a job cell with no ledger; `job_progress`
- * is that badge's read model. Refused rather than ignored, so an exporter
- * that started emitting them fails loudly.
+ * Tables no chunk may carry. Every `active_workflows` row names an
+ * execution the exporting side no longer runs, and a non-terminal one would
+ * leave the badge polling a job cell with no ledger; `job_progress` is that
+ * badge's read model. Refused rather than ignored, so an exporter that
+ * started emitting them fails loudly.
  */
 export const RESET_TABLES: readonly string[] = ['active_workflows', 'job_progress'];
 
@@ -41,8 +41,8 @@ export const GLOBAL_TABLES: Readonly<Record<string, readonly string[]>> = {
   limiter: ['instant_generations'],
 };
 
-/** Python's primary key for the row the cell keys by `id`. */
-const PY_PROFILE_KEY = 'tailscale_login';
+/** The exported row's primary key; the cell keys the same row by `id`. */
+const SOURCE_PROFILE_KEY = 'tailscale_login';
 
 /** One user, one table, the rows of it that fit under the caps. */
 export interface UserChunk {
@@ -140,7 +140,7 @@ export function parseChunk(body: unknown, knownTables: readonly string[]): Migra
     profile = rawProfile as Record<string, unknown>;
     const bad = badValue(profile);
     if (bad) return refuse(422, `profile.${bad} is not a column value`);
-    const id = profile['id'] ?? profile[PY_PROFILE_KEY];
+    const id = profile['id'] ?? profile[SOURCE_PROFILE_KEY];
     if (id !== b['user']) return refuse(422, 'profile names a different user');
   }
 
@@ -194,14 +194,14 @@ export function applyDispositions(table: string, rows: readonly Record<string, u
 }
 
 /**
- * Python's `users` row as the cell's `profile` row. The key is renamed, and
+ * An exported account row as the cell's `profile` row. The key is renamed, and
  * a provider the import drops cannot be left named as the active one or the
  * settings page offers a credential that is no longer there.
  */
 export function profileForImport(row: Readonly<Record<string, unknown>>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...row };
-  if (out['id'] === undefined) out['id'] = out[PY_PROFILE_KEY];
-  delete out[PY_PROFILE_KEY];
+  if (out['id'] === undefined) out['id'] = out[SOURCE_PROFILE_KEY];
+  delete out[SOURCE_PROFILE_KEY];
   if (DROPPED_BYOK_PROVIDERS.includes(String(out['active_byok_provider']))) out['active_byok_provider'] = null;
   return out;
 }

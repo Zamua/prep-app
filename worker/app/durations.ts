@@ -1,6 +1,6 @@
-// Duration parsing for the snooze and mute posts, transcribed from
-// prep/web/durations.py. Either a `preset` chip or a `custom` + `unit`
-// pair resolves to an ISO-8601 UTC instant the repos store directly.
+// Duration parsing for the snooze and mute posts. Either a `preset` chip or
+// a `custom` + `unit` pair resolves to an ISO-8601 UTC instant the repos
+// store directly.
 import { isoUtc } from '../domain/time.js';
 
 /** Far enough out that "muted indefinitely" needs no special case. */

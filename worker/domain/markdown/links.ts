@@ -1,6 +1,6 @@
-// mistune.helpers link grammar and mistune._inline.links: destinations,
-// titles, labels, and the inline `[text](url)` / `![alt](url)` rule.
-import { ASCII_PUNCTUATION, PUNCTUATION_CLASS, pySplit, pyre } from "./chars";
+// The link grammar: destinations, titles, labels, and the inline
+// `[text](url)` / `![alt](url)` rule.
+import { ASCII_PUNCTUATION, PUNCTUATION_CLASS, splitWhitespace, unicodeRe } from "./chars";
 import type { InlineParser, InlineState, RuleMatch } from "./inline";
 import type { RefLink, Token } from "./tokens";
 import { escapeUrl } from "./url";
@@ -9,8 +9,8 @@ export const LINK_LABEL = "(?:[^\\\\\\[\\]]|\\\\.){0,500}";
 // helpers.ASCII_WHITESPACE: no vertical tab.
 const LINK_WHITESPACE = " \t\n\r\f";
 
-const INLINE_LINK_LABEL_RE = pyre(LINK_LABEL + "\\]", "y");
-const ESCAPE_CHAR_RE = pyre("\\\\(" + PUNCTUATION_CLASS + ")", "g");
+const INLINE_LINK_LABEL_RE = unicodeRe(LINK_LABEL + "\\]", "y");
+const ESCAPE_CHAR_RE = unicodeRe("\\\\(" + PUNCTUATION_CLASS + ")", "g");
 
 export function unescapeChar(text: string): string {
   return text.replace(ESCAPE_CHAR_RE, "$1");
@@ -141,7 +141,7 @@ function parseAngleLinkHref(src: string, pos: number): [string, number] | [null,
 
 // util.unikey: the reference label's lookup key.
 export function unikey(s: string): string {
-  return pySplit(s).join(" ").toLowerCase().toUpperCase();
+  return splitWhitespace(s).join(" ").toLowerCase().toUpperCase();
 }
 
 export function parseInlineLink(inline: InlineParser, m: RuleMatch, state: InlineState): number | null {

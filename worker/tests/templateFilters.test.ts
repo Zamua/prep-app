@@ -7,18 +7,18 @@ import {
   items,
   join,
   parseIso,
-  pyFloat,
-  pyFormat,
-  pyInt,
-  pyJsonDumps,
-  pyRound,
-  pySlice,
-  pyStr,
-  registerShims,
+  floatText,
+  printf,
+  toInt,
+  stableJson,
+  roundHalfEven,
+  sliceOf,
+  asText,
+  registerFilters,
   relativeTime,
   replaceAll,
   wakesIn,
-} from "../runtime/adapters/nunjucks/shims";
+} from "../runtime/adapters/nunjucks/filters";
 import { makeIconGlobal, renderIcon } from "../runtime/adapters/nunjucks/icons";
 
 // The parity instant (docs/PARITY-GATE.md section 0).
@@ -36,7 +36,7 @@ function render(src: string, context: Record<string, unknown> = {}, root = ""): 
   });
   const compiled = { "t.html": new Function(`return ${js}`)() as unknown };
   const env = new slim.Environment(new slim.PrecompiledLoader(compiled), { autoescape: true });
-  registerShims(env, { clock, root });
+  registerFilters(env, { clock, root });
   env.addGlobal("icon", makeIconGlobal({ check: '<svg viewBox="0 0 8 8" fill="currentColor"><path d="M0 0"/></svg>' }));
   return env.render("t.html", context);
 }
@@ -52,7 +52,7 @@ describe("round: Python round(), ties to even on the exact value", () => {
     [-0.4, 0],
     [28, 28],
   ])("round(%s) = %s", (x, want) => {
-    expect(pyRound(x)).toBe(want);
+    expect(roundHalfEven(x)).toBe(want);
   });
   it.each([
     [2.675, 2, 2.67],
@@ -62,14 +62,14 @@ describe("round: Python round(), ties to even on the exact value", () => {
     [1.005, 2, 1],
     [50, 2, 50],
   ])("round(%s, %s) = %s", (x, p, want) => {
-    expect(pyRound(x, p)).toBe(want);
+    expect(roundHalfEven(x, p)).toBe(want);
   });
   it("is the |round filter, chaining into |int like the deck page", () => {
     expect(render("{{ (100 * 1 / 3)|round|int }}|{{ 2.5|round }}|{{ 0.5|round|int }}")).toBe("33|2|0");
   });
 });
 
-describe("pyfloat: Python str(float)", () => {
+describe("floattext: a float as text", () => {
   it.each([
     [50, "50.0"],
     [0.8, "0.8"],
@@ -85,10 +85,10 @@ describe("pyfloat: Python str(float)", () => {
     [NaN, "nan"],
     [Infinity, "inf"],
   ])("str(%s) = %s", (x, want) => {
-    expect(pyFloat(x)).toBe(want);
+    expect(floatText(x)).toBe(want);
   });
   it("keeps 50.0 as 50.0 through the mastery bar's round(2)", () => {
-    expect(render("{{ (100 * 1 / 2)|round(2)|pyfloat }}|{{ (100 * 1 / 3)|round(2)|pyfloat }}")).toBe("50.0|33.33");
+    expect(render("{{ (100 * 1 / 2)|round(2)|floattext }}|{{ (100 * 1 / 3)|round(2)|floattext }}")).toBe("50.0|33.33");
   });
 });
 
@@ -103,7 +103,7 @@ describe("int: Python int() truncation with Jinja's fallbacks", () => {
     ["junk", 0],
     [undefined, 0],
   ])("int(%s) = %s", (x, want) => {
-    expect(pyInt(x)).toBe(want);
+    expect(toInt(x)).toBe(want);
   });
   it("is the |int filter", () => {
     expect(render("{{ (m / 60)|int }}h", { m: 90 })).toBe("1h");
@@ -112,11 +112,11 @@ describe("int: Python int() truncation with Jinja's fallbacks", () => {
 
 describe("string: Python str() of template values", () => {
   it("prints None, True and False as Python does and Undefined as nothing", () => {
-    expect(pyStr(null)).toBe("None");
-    expect(pyStr(true)).toBe("True");
-    expect(pyStr(false)).toBe("False");
-    expect(pyStr(undefined)).toBe("");
-    expect(pyStr(3)).toBe("3");
+    expect(asText(null)).toBe("None");
+    expect(asText(true)).toBe("True");
+    expect(asText(false)).toBe("False");
+    expect(asText(undefined)).toBe("");
+    expect(asText(3)).toBe("3");
   });
   it("compares equal strings the way the diff card needs", () => {
     expect(render("{% if a|string != b|string %}changed{% else %}same{% endif %}", { a: "", b: "" })).toBe("same");
@@ -136,14 +136,14 @@ describe("format: Python % formatting", () => {
     ["%.2f", 2.675, "2.67"],
     ["%s", null, "None"],
   ])("%s %% %s = %s", (fmt, arg, want) => {
-    expect(pyFormat(fmt, arg)).toBe(want);
+    expect(printf(fmt, arg)).toBe(want);
   });
   it("takes a tuple with width, alignment and sign flags", () => {
-    expect(pyFormat("%5.1f|%-4d|%+d|%s", [3.14159, 7, 3, null])).toBe("  3.1|7   |+3|None");
+    expect(printf("%5.1f|%-4d|%+d|%s", [3.14159, 7, 3, null])).toBe("  3.1|7   |+3|None");
   });
   it("refuses an argument count mismatch like Python", () => {
-    expect(() => pyFormat("%d %d", 1)).toThrow(/not enough arguments/);
-    expect(() => pyFormat("%d", [1, 2])).toThrow(/not all arguments/);
+    expect(() => printf("%d %d", 1)).toThrow(/not enough arguments/);
+    expect(() => printf("%d", [1, 2])).toThrow(/not all arguments/);
   });
   it("is the |format filter at the retention and time sites", () => {
     expect(render("{{ '%.0f%%'|format(r * 100) }} {{ '%02d:00'|format(h) }}", { r: 0.95, h: 8 })).toBe("95% 08:00");
@@ -158,12 +158,12 @@ describe("slice: Python slice semantics", () => {
     ["hello", 10, undefined, ""],
     ["héllo𝄞x", 5, 6, "𝄞"],
   ])("%s[%s:%s] = %s", (s, a, b, want) => {
-    expect(pySlice(s, a, b)).toBe(want);
+    expect(sliceOf(s, a, b)).toBe(want);
   });
   it("slices arrays and passes null through", () => {
-    expect(pySlice([1, 2, 3, 4], 0, 2)).toEqual([1, 2]);
-    expect(pySlice([1, 2, 3, 4], -2)).toEqual([3, 4]);
-    expect(pySlice(null, 0, 3)).toBeNull();
+    expect(sliceOf([1, 2, 3, 4], 0, 2)).toEqual([1, 2]);
+    expect(sliceOf([1, 2, 3, 4], -2)).toEqual([3, 4]);
+    expect(sliceOf(null, 0, 3)).toBeNull();
   });
   it("replaces the [:n] sites, including inside a for", () => {
     expect(render("{{ t|slice(0, 3) }}{% for x in xs|slice(0, 2) %}{{ x }}{% endfor %}", { t: "abcdef", xs: [1, 2, 3] })).toBe("abc12");
@@ -173,8 +173,8 @@ describe("slice: Python slice semantics", () => {
 
 describe("tojson: markupsafe htmlsafe_json_dumps", () => {
   it("sorts keys, uses Python separators and escapes to ASCII", () => {
-    expect(pyJsonDumps({ b: 1, a: [1, 2.5, "x"], c: { z: null, y: true } })).toBe('{"a": [1, 2.5, "x"], "b": 1, "c": {"y": true, "z": null}}');
-    expect(pyJsonDumps('é — 𝄞 "q" \\ \n \x01 \x7f')).toBe('"\\u00e9 \\u2014 \\ud834\\udd1e \\"q\\" \\\\ \\n \\u0001 \\u007f"');
+    expect(stableJson({ b: 1, a: [1, 2.5, "x"], c: { z: null, y: true } })).toBe('{"a": [1, 2.5, "x"], "b": 1, "c": {"y": true, "z": null}}');
+    expect(stableJson('é — 𝄞 "q" \\ \n \x01 \x7f')).toBe('"\\u00e9 \\u2014 \\ud834\\udd1e \\"q\\" \\\\ \\n \\u0001 \\u007f"');
   });
   it("escapes <, >, & and ' as \\u003c, \\u003e, \\u0026, \\u0027", () => {
     expect(htmlsafeJson("</script><script>alert(1)</script> & 'x'")).toBe(
@@ -262,7 +262,7 @@ describe("markdown filter", () => {
     expect(render("[{{ t|markdown }}]", { t: "" })).toBe("[]");
     expect(render("[{{ t|markdown }}]", { t: null })).toBe("[]");
   });
-  it("escapes raw HTML inside the text", () => {
+  it("escapes raw HTML inside the asText", () => {
     expect(render("{{ t|markdown }}", { t: "<b>x</b>" })).toBe("<p>&lt;b&gt;x&lt;/b&gt;</p>\n");
   });
 });

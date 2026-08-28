@@ -15,7 +15,7 @@ function deck(): { deps: ReturnType<typeof cell>; qid: number } {
 }
 
 describe('the batch caps', () => {
-  it('reports the cap as pydantic does, with the length it saw', () => {
+  it('reports the cap with the length it saw', () => {
     const items = Array.from({ length: MAX_SYNC_CARDS + 1 }, (_, i) => ({ client_id: `c${i}`, prompt: 'p', answer: 'a' }));
     try {
       parseBatch({ new_cards: items, reviews: [] });

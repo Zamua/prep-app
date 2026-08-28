@@ -1,6 +1,6 @@
-// Workflow ids keep Python's shapes verbatim: the routes parse them for
-// ownership, so a change here is a change to what a deep link means.
-// `prep/temporal_client.py` builds all four from `uuid4().hex[:10]`.
+// Workflow id shapes. The routes parse them for ownership, so a change here
+// is a change to what a deep link means, and links already in the wild stop
+// resolving.
 
 export const SUFFIX_HEX_CHARS = 10;
 

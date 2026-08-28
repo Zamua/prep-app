@@ -1,5 +1,4 @@
-// `questions` and the cards row an SRS question carries, transcribed from
-// prep/decks/repo.py: QuestionRepo.
+// `questions`, and the `cards` row an SRS question carries.
 import type { Clock, QuestionRepo } from '../../../app/ports.js';
 import { QuestionNotFound } from '../../../app/ports.js';
 import type { DeckCard, NewQuestion, Question, QuestionType } from '../../../app/entities.js';

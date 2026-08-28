@@ -24,10 +24,10 @@ const STATIC_EXCLUDED_FILES = new Set(["sw.js"]);
 // static/js subtrees the offline shell needs, in manifest order.
 const PRECACHE_JS_DIRS = ["offline", "study", "dashboard", "modules"];
 
-// Every file under `dir`, as posix paths relative to it, in Python's
-// pathlib order: paths compare component by component, which differs
-// from a plain string sort whenever a directory name is a prefix of a
-// sibling file name.
+// Every file under `dir`, as posix paths relative to it, compared component
+// by component. That differs from a plain string sort whenever a directory
+// name is a prefix of a sibling file name, and the precache manifest's order
+// is a contract with the service worker.
 export function walk(dir) {
   const out = [];
   (function visit(d) {

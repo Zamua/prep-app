@@ -1,6 +1,5 @@
-// Anki `.apkg` export, transcribed from prep/decks/anki_export.py. Every prep
-// question flattens to one Basic note with a Front and a Back field, and one
-// never-studied card. The sqlite and the zip are the `ApkgWriter` port's job;
+// Anki `.apkg` export. Every prep question flattens to one Basic note with a
+// Front and a Back field, and one never-studied card. The sqlite and the zip are the `ApkgWriter` port's job;
 // this half only shapes the rows.
 import { sha1Hex } from '../../domain/sha1.js';
 import type { Question } from '../entities.js';
@@ -11,8 +10,8 @@ const MODEL_ID = 1_700_000_000_000;
 const DECK_ID = 1_700_000_000_001;
 
 /** Anki's `field_checksum`: the first 8 hex digits of SHA-1 over the sort
- * field, as an integer. Python hashes with `hash()` instead, which is salted
- * per process and so is not reproducible even against itself. */
+ * field, as an integer. Anki reads this to find duplicate notes, so the
+ * hash has to be the one it specifies, not a convenient one. */
 export function fieldChecksum(sortField: string): number {
   return parseInt(sha1Hex(sortField).slice(0, 8), 16);
 }

@@ -1,6 +1,5 @@
 // /llms.txt: the agent manifest naming the MCP and REST surfaces, served
-// unauthenticated so a client can read it before holding a token. The base
-// URL is the product's own, as in prep/web/legal.py.
+// unauthenticated so a client can read it before holding a token.
 const BODY = `# prep
 
 > Self-hosted spaced-repetition flashcards. Describe a topic, an AI

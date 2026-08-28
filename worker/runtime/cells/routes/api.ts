@@ -12,23 +12,23 @@ import { syncBatch } from '../../../app/offline/sync.js';
 import { agentAvailable } from '../../../app/pageContext.js';
 import * as study from '../../../app/study/api.js';
 import { gradingPoll } from '../../../app/study/grading.js';
-import { jsonInvalid, pythonJsonError, RequestValidationError } from '../../../app/validation.js';
+import { jsonInvalid, jsonDecodeFailure, RequestValidationError } from '../../../app/validation.js';
 import { isoUtc } from '../../../domain/time.js';
 import type { CellRequest, Handled, Route } from '../router.js';
 
-/** A body pydantic would have parsed: a decode failure is the model's 422. */
+/** The request body as JSON; a decode failure is a 422, not a 500. */
 async function jsonBody(req: CellRequest): Promise<unknown> {
   const text = await req.request.text();
   if (!text) return null;
   try {
     return JSON.parse(text);
   } catch {
-    const { message, position } = pythonJsonError(text);
+    const { message, position } = jsonDecodeFailure(text);
     throw new RequestValidationError([jsonInvalid(message, position)]);
   }
 }
 
-/** The 422 FastAPI answers when a request model fails to validate. */
+/** Turns a validation refusal into its 422 body. */
 function handle(fn: (req: CellRequest) => Promise<ApiResult> | ApiResult): (req: CellRequest) => Promise<Handled> {
   return async (req) => {
     try {

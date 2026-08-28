@@ -1,7 +1,6 @@
-// The `icon(name, class_=, title=)` global over the baked SVG map, with
-// the attribute injection `prep/icons.py` does: the class and
-// `aria-hidden` go right after the opening `<svg`, or `role="img"` and
-// an `aria-label` when titled. An unknown name renders nothing.
+// The `icon(name, class_=, title=)` global over the baked SVG map. The
+// class and `aria-hidden` go right after the opening `<svg`, or `role="img"`
+// and an `aria-label` when titled. An unknown name renders nothing.
 import nunjucks from "nunjucks/browser/nunjucks-slim.js";
 
 const { SafeString } = nunjucks.runtime;

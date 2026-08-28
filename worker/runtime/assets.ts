@@ -19,8 +19,8 @@ const REVALIDATE = 'no-cache';
 const VERSIONED = /^\/static\/(js|css)\/v([^/]*)\/(.+)$/;
 
 /** `null` for anything outside `/static/`, for a non-GET, and for a missing
- * asset, so the router's own 404 page answers as the Python
- * HTTPException(404) did. The token is not consulted: the alias rule
+ * asset, so the router's own 404 page answers rather than a bare status.
+ * The token is not consulted: the alias rule
  * accepts any token so pages cached from a prior build keep resolving. */
 export async function serveStatic(
   request: Request,

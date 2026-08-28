@@ -1,6 +1,7 @@
-// The three status buckets the badge sorts and labels by, transcribed
-// from prep/workflows/entities.py. Status strings are workflow-type
-// specific; these sets are the single source of truth for the UI.
+// The three status buckets the badge sorts and labels by. Status strings are
+// workflow-type specific; these sets are the single source of truth for the
+// UI. The upper-case four are only on rows written before the current
+// runner, and are kept so an old badge still reads as finished.
 
 export const ACTION_REQUIRED_STATUSES: readonly string[] = ['awaiting_apply', 'awaiting_feedback'];
 

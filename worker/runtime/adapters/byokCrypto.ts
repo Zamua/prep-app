@@ -1,6 +1,6 @@
-// AES-256-GCM envelope encryption for BYOK secrets, byte-compatible with
-// `prep/byok/crypto.py`: 12-byte nonce, no AAD, `base64(nonce || ct || tag)`,
-// master key 32 hex bytes. A row written by the Python app decrypts here.
+// AES-256-GCM envelope encryption for BYOK secrets: 12-byte nonce, no AAD,
+// `base64(nonce || ct || tag)`, master key 32 hex bytes. The layout is fixed
+// by the rows already stored; every saved key is unreadable if it moves.
 import type { Cipher, Random } from '../../app/ports.js';
 import { DecryptionError } from '../../app/ports.js';
 import { b64Decode, b64Encode, hexToBytes } from '../../domain/base64.js';

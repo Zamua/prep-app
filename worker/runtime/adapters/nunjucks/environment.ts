@@ -4,7 +4,7 @@
 import nunjucks, { type Environment } from "nunjucks/browser/nunjucks-slim.js";
 import type { Clock, Renderer } from "../../../app/ports";
 import { makeIconGlobal } from "./icons";
-import { registerShims } from "./shims";
+import { registerFilters } from "./filters";
 
 export interface EnvironmentOptions {
   clock: Clock;
@@ -15,7 +15,7 @@ export interface EnvironmentOptions {
 
 export function buildEnvironment({ clock, root, templates, icons }: EnvironmentOptions): Environment {
   const env = new nunjucks.Environment(new nunjucks.PrecompiledLoader(templates), { autoescape: true });
-  registerShims(env, { clock, root });
+  registerFilters(env, { clock, root });
   env.addGlobal("icon", makeIconGlobal(icons));
   return env;
 }

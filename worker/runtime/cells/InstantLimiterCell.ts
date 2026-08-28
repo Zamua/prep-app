@@ -28,8 +28,8 @@ export class InstantLimiterCell extends DurableObject<Env> implements Limiter {
     return pageByRowid(this.storage.sql, table, { after, limit, columns: columns ?? undefined });
   }
 
-  /** The migration's copy of the ledger, keyed by the Python id it preserves.
-   * The window is the exporter's; a replay inserts nothing. */
+  /** The migration's copy of the ledger, keyed by the id it preserves, so a
+   * replay inserts nothing. */
   async importMigrationRows(table: string, rows: readonly Record<string, unknown>[]): Promise<number> {
     return this.storage.transactionSync(() => this.c.importGlobalRows(this.storage, table, rows));
   }

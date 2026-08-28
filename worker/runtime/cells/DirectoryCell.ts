@@ -207,7 +207,7 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
       return;
     }
     // A run in flight registers accounts whose cells are not written yet,
-    // against Python `created_at` values years old. Sweeping now would read
+    // against migrated `created_at` values years old. Sweeping now would read
     // them as idle and destroy them, and a reaped cell refuses every later
     // chunk forever, so the walk waits for the seal.
     if (migrationHolds((await this.migrationRun())?.openedAt ?? null, now)) {

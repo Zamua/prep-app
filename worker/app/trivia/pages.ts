@@ -8,7 +8,7 @@ import { badRequest, notFound } from '../errors.js';
 import { CHAT_PROVIDERS, DEFAULT_PROVIDER, buildMessage, providerUrls, quoteAll } from '../study/handoff.js';
 import { page, redirect, redirectBack, type PageRequest, type PageResult } from '../pageResult.js';
 import type { AgentPort, UserRepos, WorkflowRunner } from '../ports.js';
-import { pyInt } from '../decks/pages.js';
+import { parseIntLiteral } from '../decks/pages.js';
 import { triviaStartInput } from '../jobs/startInput.js';
 import { aiRegrade, gradeWithFallback, type Verdict } from './grading.js';
 
@@ -336,7 +336,7 @@ export function triviaDeckNotifications(req: PageRequest, deps: TriviaDeps, setE
 }
 
 export function triviaDeckInterval(req: PageRequest, deps: TriviaDeps): PageResult {
-  const minutes = pyInt(req.form.get('minutes') ?? '');
+  const minutes = parseIntLiteral(req.form.get('minutes') ?? '');
   if (minutes === null) throw badRequest('interval must be an integer (minutes)');
   if (minutes < 1 || minutes > 720) throw badRequest('interval must be between 1 and 720 minutes');
   const id = Number(req.params['deck_id']);
@@ -345,7 +345,7 @@ export function triviaDeckInterval(req: PageRequest, deps: TriviaDeps): PageResu
 }
 
 export function triviaDeckSessionSize(req: PageRequest, deps: TriviaDeps): PageResult {
-  const size = pyInt(req.form.get('size') ?? '');
+  const size = parseIntLiteral(req.form.get('size') ?? '');
   if (size === null) throw badRequest('session size must be an integer');
   if (size < 1 || size > 20) throw badRequest('session size must be between 1 and 20 cards');
   const id = Number(req.params['deck_id']);

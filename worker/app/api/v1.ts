@@ -1,5 +1,5 @@
-// The public REST surface at /api/v1, transcribed from
-// prep/api/routes.py. Bearer-only; the router applies the gate.
+// The public REST surface at /api/v1. Bearer-only; the router applies the
+// gate.
 import type { Question } from '../entities.js';
 import { detail, json, type ApiResult } from '../http.js';
 import type { DeckRepo, QuestionRepo, TriviaRepo } from '../ports.js';

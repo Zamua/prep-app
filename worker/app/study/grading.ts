@@ -1,7 +1,7 @@
 // The AI grading poll. The verdict is written to `job_progress` by the same
 // transaction that made the job terminal, so a terminal status with no
-// result is a job that genuinely produced none: Python's bounded wait on
-// `handle.result()` has nothing left to wait for.
+// result is a job that genuinely produced none, and the poll stops rather
+// than waiting for a write that will not come.
 import { flatten, TERMINAL_GRADING } from '../jobs/view.js';
 import { json, type ApiResult } from '../http.js';
 import type { UserRepos } from '../ports.js';

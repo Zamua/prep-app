@@ -1,6 +1,5 @@
-// The masthead badge fragment, transcribed from prep/workflows/routes.py.
-// The stale-terminal cleanup rides the read path: one indexed DELETE per
-// poll is cheaper than a scheduler.
+// The masthead badge fragment. The stale-terminal cleanup rides the read
+// path: one indexed DELETE per poll is cheaper than a scheduler.
 import type { ActiveWorkflow } from '../entities.js';
 import type { ApiResult } from '../http.js';
 import type { UserRepos } from '../ports.js';

@@ -1,7 +1,7 @@
-// mistune.util and the HTMLRenderer's URL policy: HTML escaping, the
-// entity unescape, urllib's quote/unquote and the safe-protocol check.
+// The URL policy: HTML escaping, the entity unescape, percent
+// quote/unquote and the safe-protocol check.
 import { HTML5_ENTITIES, INVALID_CHARREFS, INVALID_CODEPOINTS } from "./entities";
-import { pyLstrip } from "./chars";
+import { lstrip } from "./chars";
 
 export function escapeHtml(s: string, quote = true): string {
   s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -48,7 +48,8 @@ const QUOTE_SAFE = new Set(
 const HEX = "0123456789ABCDEF";
 const encoder = new TextEncoder();
 
-/** urllib.parse.quote over the unescaped link, with mistune's safe set. */
+/** Percent-encoding over the unescaped link, leaving the characters a URL
+ * is allowed to carry. */
 export function escapeUrl(link: string): string {
   let out = "";
   for (const b of encoder.encode(unescape(link))) {
@@ -61,7 +62,8 @@ const decoder = new TextDecoder();
 const ASCII_RUN = /[\x00-\x7f]+/gu;
 const HEX_PAIR = /^[0-9a-fA-F]{2}$/;
 
-/** urllib.parse.unquote with errors="replace", decoding per ASCII run. */
+/** Percent-decoding per ASCII run; an undecodable byte becomes U+FFFD
+ * rather than failing the whole link. */
 export function unquote(s: string): string {
   if (!s.includes("%")) return s;
   return s.replace(ASCII_RUN, (run) => {
@@ -94,7 +96,7 @@ function unquoteUrl(url: string): string {
 
 /** HTMLRenderer.safe_url: the escaped href, or the harmful-link sink. */
 export function safeUrl(url: string): string {
-  const probe = pyLstrip(unquoteUrl(url).toLowerCase());
+  const probe = lstrip(unquoteUrl(url).toLowerCase());
   const head = probe.split("/", 1)[0]!;
   const safe =
     SAFE_PROTOCOLS.some((p) => probe.startsWith(p)) ||
