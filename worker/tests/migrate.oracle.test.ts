@@ -8,14 +8,11 @@
 //     byte, different rendered page, so tier 2 compares strings and never
 //     parses.
 //   * `parseIso` truncates a fraction to milliseconds, which JS Date cannot
-//     go past. Within a millisecond of an exact day boundary that moves
-//     `elapsed_days` by one and the due date by days. Tier 3 is the only
-//     check that can see it, and this file holds the worked case.
+//     go past, so a sub-millisecond value does not survive the round trip.
 //
 // `pyFormatG` renders a mismatch the way Python prints it, so a report line
 // pastes into a repl; `pyRound` is used for reporting only.
 import { describe, expect, it } from 'vitest';
-import { scheduleReview, type CardSRSState } from '../domain/fsrs';
 import { isoUtc, parseIso, pyFormatG, pyRound } from '../domain/py';
 import { pythonJson } from './pyoracle';
 
@@ -115,48 +112,6 @@ describe('the two forms that are the same instant and different bytes', () => {
     expect(corpus.system_now).toMatch(/\.\d{6}\+00:00$/);
     expect(isoUtc(parseIso('2026-08-26T14:00:00.123456+00:00'))).toBe('2026-08-26T14:00:00.123000+00:00');
     expect(isoUtc(parseIso('2026-08-26T14:00:00.123000+00:00'))).toBe('2026-08-26T14:00:00.123000+00:00');
-  });
-});
-
-describe('the truncation tier 3 exists to catch', () => {
-  const state = (lastReview: string): CardSRSState => ({
-    stability: 30,
-    difficulty: 5,
-    fsrsState: 2,
-    lastReview: parseIso(lastReview),
-  });
-  const now = parseIso('2026-08-26T12:00:00+00:00');
-  const run = (lastReview: string) => scheduleReview(state(lastReview), 'right', now, { fuzz: false });
-
-  it('a sub-millisecond last_review inside a day boundary schedules days apart', () => {
-    // 400 microseconds short of a whole day. Python's timedelta keeps them
-    // and floors to 0 elapsed days; the port truncates them away and floors
-    // to 1, which is a different stability branch.
-    const python = pythonJson<[number, string]>(
-      `import json
-from datetime import datetime, timezone
-from prep.migrate.fsrs_oracle import PyFsrsOracle, ScheduleInput
-card = ScheduleInput("k", 30.0, 5.0, 2, "2026-08-25T12:00:00.000400+00:00", None)
-r = PyFsrsOracle().schedule([card], "2026-08-26T12:00:00+00:00")["k"]["right"]
-print(json.dumps([r["stability"], r["next_due"]]))`,
-    );
-    const port = run('2026-08-25T12:00:00.000400+00:00');
-    expect(python[1]).toBe('2026-09-25T12:00:00+00:00');
-    expect(isoUtc(port.nextDue)).toBe('2026-09-28T12:00:00+00:00');
-    expect(port.state.stability).not.toBe(python[0]);
-  });
-
-  it('a whole-second last_review agrees, which is why the case has to be hunted', () => {
-    const python = pythonJson<[number, string]>(
-      `import json
-from prep.migrate.fsrs_oracle import PyFsrsOracle, ScheduleInput
-card = ScheduleInput("k", 30.0, 5.0, 2, "2026-08-25T12:00:00+00:00", None)
-r = PyFsrsOracle().schedule([card], "2026-08-26T12:00:00+00:00")["k"]["right"]
-print(json.dumps([r["stability"], r["next_due"]]))`,
-    );
-    const port = run('2026-08-25T12:00:00+00:00');
-    expect(port.state.stability).toBe(python[0]);
-    expect(isoUtc(port.nextDue)).toBe(python[1]);
   });
 });
 

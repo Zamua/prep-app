@@ -74,7 +74,7 @@ whole request path.
 ```
 worker/
 ├── domain/                PURE. No I/O, no framework, no clock of its own
-│   ├── fsrs/              FSRS-6 scheduler + fuzz
+│   ├── fsrs/              the ts-fsrs seam: two verdicts, ladder bucket
 │   ├── grading/           deterministic mcq/multi/idk grader, py-repr helpers
 │   ├── jobs/              graph algebra, ledger, schedule, refusal, ids
 │   ├── markdown/          the renderer (block, inline, links, tables, url)
@@ -111,7 +111,7 @@ worker/
 ├── templates/             nunjucks templates, precompiled at build time
 ├── tests/                 vitest, mirroring the three layers
 ├── scripts/               build.mjs, build-domain.mjs, build-pages.mjs,
-│                          run-node.sh, fsrs-oracle.mjs
+│                          run-node.sh
 └── wrangler.{dev,staging,prod}.jsonc    deploy contracts, public values only
 
 static/                    BUILD INPUT for the worker, not a served tree

@@ -440,39 +440,6 @@
    ]
   }
  },
- "469c76d16a248f4b": {
-  "snippet": "import json\nfrom datetime import datetime, timedelta, timezone\nfrom prep.domain.srs import CardSRSState, Verdict, schedule_review\nstart = datetime(2026, 3, 14, 15, tzinfo=timezone.utc)\nout = []\nfor h in [11,13,37,47]:\n    s = CardSRSState(stability=7.0, difficulty=5.0, fsrs_state=2, last_review=start)\n    r = schedule_review(s, Verdict.WRONG, now=start + timedelta(hours=h), desired_retention=0.9)\n    out.append([r.state.stability, r.state.difficulty, r.state.fsrs_state, r.next_due.isoformat(), r.interval_seconds])\nprint(json.dumps(out))",
-  "value": [
-   [
-    2.1865943918794186,
-    8.341762369296838,
-    3,
-    "2026-03-15T02:10:00+00:00",
-    600
-   ],
-   [
-    2.1865943918794186,
-    8.341762369296838,
-    3,
-    "2026-03-15T04:10:00+00:00",
-    600
-   ],
-   [
-    1.0105014741859755,
-    8.341762369296838,
-    3,
-    "2026-03-16T04:10:00+00:00",
-    600
-   ],
-   [
-    1.0105014741859755,
-    8.341762369296838,
-    3,
-    "2026-03-16T14:10:00+00:00",
-    600
-   ]
-  ]
- },
  "4a667c2a52261e77": {
   "snippet": "from datetime import datetime,timezone;print(__import__('json').dumps(datetime.fromisoformat(\"2026-03-17T15:10:00.123Z\").astimezone(timezone.utc).isoformat()))",
   "value": "2026-03-17T15:10:00.123000+00:00"
@@ -2360,13 +2327,6 @@
   "snippet": "import json;print(json.dumps(\"a\".strip()))",
   "value": "a"
  },
- "89362149c70383dd": {
-  "snippet": "import json\nfrom datetime import datetime, timezone\nfrom prep.migrate.fsrs_oracle import PyFsrsOracle, ScheduleInput\ncard = ScheduleInput(\"k\", 30.0, 5.0, 2, \"2026-08-25T12:00:00.000400+00:00\", None)\nr = PyFsrsOracle().schedule([card], \"2026-08-26T12:00:00+00:00\")[\"k\"][\"right\"]\nprint(json.dumps([r[\"stability\"], r[\"next_due\"]]))",
-  "value": [
-   30.0,
-   "2026-09-25T12:00:00+00:00"
-  ]
- },
  "8e3ab3628711499c": {
   "snippet": "\nimport json, random\ndef draws(seed):\n    r = random.Random(seed)\n    out = {\"bytes16\": [r.getrandbits(8) for _ in range(16)]}\n    out[\"choices\"] = [r.choice(\"abcdefghijkmnpqrstuvwxyz23456789\") for _ in range(24)]\n    out[\"bytes32\"] = [r.getrandbits(8) for _ in range(32)]\n    out[\"choice_small\"] = [r.choice([0, 1, 2]) for _ in range(10)]\n    out[\"bits32\"] = [r.getrandbits(32) for _ in range(4)]\n    return out\nprint(json.dumps({\"s0\": draws(20260314), \"s1\": draws(20260315), \"big\": draws(2**40 + 7), \"zero\": draws(0)}))\n",
   "value": {
@@ -3347,66 +3307,10 @@
   "snippet": "import json;print(json.dumps(\"   \".strip()))",
   "value": ""
  },
- "d33ba4b4e4da4358": {
-  "snippet": "import json\nfrom datetime import datetime, timezone\nimport prep.domain.srs as srs\nfrom prep.domain.srs import CardSRSState, Verdict, schedule_review\nclass NoFuzz(srs._FsrsScheduler):\n    def __init__(self, *a, **k):\n        k[\"enable_fuzzing\"] = False\n        super().__init__(*a, **k)\nsrs._FsrsScheduler = NoFuzz\nsrs._SCHEDULER_CACHE.clear()\ns = CardSRSState(stability=30.0, difficulty=5.0, fsrs_state=2, last_review=datetime(2026, 3, 14, 15, tzinfo=timezone.utc))\nr = schedule_review(s, Verdict.RIGHT, now=datetime(2026, 3, 21, 15, tzinfo=timezone.utc), desired_retention=float(\"nan\"))\nprint(json.dumps([r.next_due.isoformat(), r.interval_seconds]))",
-  "value": [
-   "2026-03-31T15:00:00+00:00",
-   864000
-  ]
- },
  "d54e05f8e097d848": {
   "snippet": "import json, hashlib\nprint(json.dumps({\"hash\": hashlib.sha256(\"prep_pat_dXNlcl8yYWJjREVG.bMJwUe_1bP_QA0jQxVzl7Fx1ZnKI7x_cuvi7I_lC-B0\".encode(\"utf-8\")).hexdigest()}))",
   "value": {
    "hash": "4f96d9ec9ff4269189c0a4222a90d1e87fb7867223f30da8381faa03ccd8468c"
-  }
- },
- "d86816938c6b7511": {
-  "snippet": "\nimport os, tempfile, json\nfrom datetime import datetime, timezone\nd = tempfile.mkdtemp()\nos.environ[\"PREP_DB_PATH\"] = os.path.join(d, \"x.sqlite\")\nos.environ[\"PREP_FAKE_NOW\"] = \"2026-03-14T15:00:00Z\"\nfrom prep.infrastructure import db, clock\ndb.init()\nfrom prep.auth.repo import UserRepo\nfrom prep.decks.repo import DeckRepo, QuestionRepo\nfrom prep.decks.entities import NewQuestion, QuestionType\nfrom prep.study.repo import ReviewRepo\nu = \"parity@example.com\"\nUserRepo().upsert(u, email=u, display_name=\"Parity\")\nUserRepo().set_desired_retention(u, 0.85)\ndeck = DeckRepo().create(u, \"d\", display_name=\"D\")\nqid = QuestionRepo().add(u, deck, NewQuestion(type=QuestionType.SHORT, prompt=\"p\", answer=\"a\"))\ndef row():\n    with db.cursor() as c:\n        return dict(c.execute(\"SELECT * FROM cards WHERE question_id = ?\", (qid,)).fetchone())\nout = {}\nout[\"r1\"] = ReviewRepo().record(u, qid, \"right\", \"a\").model_dump(); out[\"row1\"] = row()\nclock.set_clock(clock.FixedClock(datetime(2026, 3, 15, 15, 0, tzinfo=timezone.utc)))\nout[\"r2\"] = ReviewRepo().record(u, qid, \"wrong\", \"b\", notes=\"n\").model_dump(); out[\"row2\"] = row()\nwith db.cursor() as c:\n    out[\"reviews\"] = [dict(r) for r in c.execute(\"SELECT question_id, ts, result, user_answer, grader_notes FROM reviews ORDER BY id\")]\nprint(json.dumps(out))\n",
-  "value": {
-   "r1": {
-    "interval_minutes": 10,
-    "next_due": "2026-03-14T15:10:00+00:00",
-    "step": 1
-   },
-   "r2": {
-    "interval_minutes": 1,
-    "next_due": "2026-03-15T15:01:00+00:00",
-    "step": 0
-   },
-   "reviews": [
-    {
-     "grader_notes": "",
-     "question_id": 1,
-     "result": "right",
-     "ts": "2026-03-14T15:00:00+00:00",
-     "user_answer": "a"
-    },
-    {
-     "grader_notes": "n",
-     "question_id": 1,
-     "result": "wrong",
-     "ts": "2026-03-15T15:00:00+00:00",
-     "user_answer": "b"
-    }
-   ],
-   "row1": {
-    "difficulty": 2.118103970459016,
-    "fsrs_state": 1,
-    "last_review": "2026-03-14T15:00:00+00:00",
-    "next_due": "2026-03-14T15:10:00+00:00",
-    "question_id": 1,
-    "stability": 2.3065,
-    "step": 1
-   },
-   "row2": {
-    "difficulty": 7.394502741279718,
-    "fsrs_state": 1,
-    "last_review": "2026-03-15T15:00:00+00:00",
-    "next_due": "2026-03-15T15:01:00+00:00",
-    "question_id": 1,
-    "stability": 0.5712991793450282,
-    "step": 0
-   }
   }
  },
  "dff5175ddb6562be": {
@@ -3414,13 +3318,6 @@
   "value": {
    "key": "a60ae7dd318a3add48864ab099e2601d152011bdfbf0d3a824ff9e95c3bbaef7"
   }
- },
- "e5d1c0e83241a799": {
-  "snippet": "import json\nfrom prep.migrate.fsrs_oracle import PyFsrsOracle, ScheduleInput\ncard = ScheduleInput(\"k\", 30.0, 5.0, 2, \"2026-08-25T12:00:00+00:00\", None)\nr = PyFsrsOracle().schedule([card], \"2026-08-26T12:00:00+00:00\")[\"k\"][\"right\"]\nprint(json.dumps([r[\"stability\"], r[\"next_due\"]]))",
-  "value": [
-   32.62001488285417,
-   "2026-09-28T12:00:00+00:00"
-  ]
  },
  "e788b0b3ba11693f": {
   "snippet": "\nimport base64, ipaddress, json\nout = []\nfor value in json.loads(base64.b64decode(\"WyIyMDMuMC4xMTMuNSIsIjAuMC4wLjAiLCIyNTUuMjU1LjI1NS4yNTUiLCIwMS4yLjMuNCIsIjEuMi4zIiwiMS4yLjMuNC41IiwiMjU2LjEuMS4xIiwiMS4yLjMuNCAiLCIxLjIuMy40OjgwIiwiMjAwMTpkYjg6OjEiLCIyMDAxOjBkYjg6MDAwMDowMDAwOjAwMDA6MDAwMDowMDAwOjAwMDEiLCIyMDAxOmRiODowOjA6MTowOjA6MSIsIjIwMDE6ZGI4OjEyMzQ6NTY3ODo5YWJjOmRlZjA6MTIzNDo1Njc4IiwiMToyOjM6NDo1OjY6Nzo4IiwiMTowOjA6MTowOjA6MDoxIiwiMTowOjA6MTowOjA6MToxIiwiMDowOjA6MTo6IiwiOjowOjE6MDowOjA6MCIsIjE6OiIsIjA6MTo6IiwiOjoiLCI6OjEiLCIwMDAwOjoiLCJGRkZGOjoxIiwiOjpmZmZmOjE5Mi4wLjIuMSIsIjo6RkZGRjoxLjIuMy40IiwiOjpmZmZmOmMwMDA6MDIwMSIsIjo6ZmZmZjowOjAiLCI6OmZmZmY6ZmZmZjpmZmZmIiwiOjoxLjIuMy40IiwiNjQ6ZmY5Yjo6MTkyLjAuMi4xIiwiMToyOjM6NDo1OjY6MS4yLjMuNCIsIjE6MjozOjQ6NTo2Ojc6ODo5IiwiMToyOjM6NDo1OjY6NyIsIjE6OjI6OjMiLCI6MTo6IiwiMTo6OjIiLCIxMjM0NTo6IiwiOjpnIiwiOjpmZmZmOjEuMi4zLjA0Iiwibm90IGFuIGlwIl0=\")):\n    try:\n        addr = ipaddress.ip_address(value)\n    except ValueError:\n        out.append(\"unresolved\")\n        continue\n    if isinstance(addr, ipaddress.IPv6Address):\n        mapped = addr.ipv4_mapped\n        out.append(str(mapped) if mapped is not None else str(ipaddress.ip_network(f\"{addr}/64\", strict=False)))\n    else:\n        out.append(str(addr))\nprint(json.dumps(out))\n",

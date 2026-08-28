@@ -317,8 +317,9 @@ under `blockConcurrencyWhile`, guarded and idempotent.
 
 ## SRS
 
-`domain/fsrs/` owns the rules: pure functions over the FSRS-6 state
-model (stability, difficulty, phase). No I/O.
+`domain/fsrs/` is the seam over `ts-fsrs`: prep's two verdicts, its
+retention band and its ladder bucket over the FSRS-6 state model
+(stability, difficulty, phase). No I/O.
 
 - **stability** (days): how long until recall probability falls to
   ~90%. Grows on success, shrinks on lapse.
