@@ -65,6 +65,29 @@ describe('the states a card row can hold', () => {
     const claimed = review({ stability: null, difficulty: null });
     expect(scheduleReview(claimed, 'right', NOW, OFF)).toEqual(scheduleReview(freshState(), 'right', NOW, OFF));
   });
+
+  // A card the scheduler refuses is a card its owner can never study again,
+  // so a row outside the supported band schedules at the nearest edge of it.
+  it('a memory state outside the supported band schedules at the band edge', () => {
+    const at = (over: Partial<CardSRSState>) => scheduleReview(review(over), 'right', NOW, OFF);
+    const table: [Partial<CardSRSState>, Partial<CardSRSState>][] = [
+      [{ stability: 1e-7 }, { stability: 0.001 }],
+      [{ stability: 0 }, { stability: 0.001 }],
+      [{ stability: -4 }, { stability: 0.001 }],
+      [{ difficulty: 0 }, { difficulty: 1 }],
+      [{ difficulty: -50 }, { difficulty: 1 }],
+      [{ difficulty: 11 }, { difficulty: 10 }],
+      [{ stability: 0, difficulty: 0.5 }, { stability: 0.001, difficulty: 1 }],
+    ];
+    for (const [given, clamped] of table) expect(at(given), JSON.stringify(given)).toEqual(at(clamped));
+  });
+
+  it('a non-finite memory state starts over rather than throwing', () => {
+    const scratch = scheduleReview(freshState(), 'right', NOW, OFF);
+    for (const junk of [{ stability: NaN }, { difficulty: NaN }, { stability: Infinity }, { difficulty: -Infinity }]) {
+      expect(scheduleReview(review(junk), 'right', NOW, OFF), JSON.stringify(junk)).toEqual(scratch);
+    }
+  });
 });
 
 describe('the two verdicts move a card through the states', () => {
@@ -199,5 +222,28 @@ describe('fuzz', () => {
     for (const draw of [0, 0.5, 0.999999]) {
       expect(scheduleReview(short, 'right', at, { fuzz: { random: () => draw } })).toEqual(scheduleReview(short, 'right', at, OFF));
     }
+  });
+});
+
+describe('elapsed time', () => {
+  const late = new Date('2026-03-10T22:00:00Z');
+  const card = (): CardSRSState => ({ stability: 30, difficulty: 5, fsrsState: FsrsState.Review, lastReview: late });
+  const after = (hours: number) =>
+    scheduleReview(card(), 'right', new Date(late.getTime() + hours * 3600_000), { desiredRetention: 0.9, fuzz: false })
+      .intervalSeconds / DAY;
+
+  it('is whole 24-hour periods, so the hour of day answered never moves the interval', () => {
+    for (const [a, b] of [[1, 23], [25, 47], [49, 71]] as const) expect(after(a), `${a}h vs ${b}h`).toBe(after(b));
+  });
+
+  it('counts a period only once it has fully passed, crossing midnight or not', () => {
+    expect(after(23)).toBe(after(0));
+    expect(after(24)).toBeGreaterThan(after(23));
+    expect(after(48)).toBeGreaterThan(after(24));
+  });
+
+  it('a review before the last one reads as no time passed', () => {
+    const backwards = new Date(late.getTime() - 5 * 3600_000);
+    expect(scheduleReview(card(), 'right', backwards, OFF).intervalSeconds / DAY).toBe(after(0));
   });
 });

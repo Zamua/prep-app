@@ -33,6 +33,11 @@ const LEARNING_STEPS = ['1m', '10m'] as const;
 const RELEARNING_STEPS = ['10m'] as const;
 const DAY_MS = 86_400_000;
 
+/** The memory state ts-fsrs will accept. A restored row can hold anything. */
+const STABILITY_MIN = 0.001;
+const DIFFICULTY_MIN = 1;
+const DIFFICULTY_MAX = 10;
+
 /** Fuzz off, or on with the uniform [0, 1) draw that seeds it. */
 export type Fuzz = false | { random: () => number };
 
@@ -72,24 +77,42 @@ function stateOf(raw: number | null | undefined): State {
 }
 
 /**
- * The row as a ts-fsrs card. A row with no stability has never been
- * scheduled whatever state it claims, so it enters as New. The (re)learning
- * step is not persisted, so a card resumes at the head of its ladder.
+ * The row as a ts-fsrs card. A row with no usable memory state has never been
+ * scheduled whatever state it claims, so it enters as New; one outside the
+ * supported band is brought inside it, since a card the scheduler refuses is a
+ * card its owner can never study again. The (re)learning step is not
+ * persisted, so a card resumes at the head of its ladder.
  */
-function toCard(state: CardSRSState, now: Date): CardInput {
-  const scheduled = state.stability !== null && state.difficulty !== null;
+function toCard(state: CardSRSState, lastReview: Date | null, reviewedAt: Date): CardInput {
+  const scheduled = Number.isFinite(state.stability) && Number.isFinite(state.difficulty);
   return {
-    due: state.lastReview ?? now,
-    stability: state.stability ?? 0,
-    difficulty: state.difficulty ?? 0,
+    due: lastReview ?? reviewedAt,
+    stability: scheduled ? Math.max(STABILITY_MIN, state.stability!) : 0,
+    difficulty: scheduled ? Math.min(DIFFICULTY_MAX, Math.max(DIFFICULTY_MIN, state.difficulty!)) : 0,
     elapsed_days: 0,
     scheduled_days: 0,
     learning_steps: 0,
     reps: 0,
     lapses: 0,
     state: scheduled ? stateOf(state.fsrsState) : State.New,
-    last_review: scheduled ? state.lastReview : null,
+    last_review: scheduled ? lastReview : null,
   };
+}
+
+/** A UTC midnight, so a whole number of days from it is another UTC midnight. */
+const ANCHOR_MS = 0;
+
+/**
+ * Elapsed time is whole 24-hour periods, so the hour of day a card is answered
+ * at never shifts its next interval. ts-fsrs reads elapsed time off the UTC
+ * calendar dates of `last_review` and `now`, so it is handed a pair of UTC
+ * midnights that many days apart; the interval it returns is relative to the
+ * second of them and is re-anchored to the real clock by the caller.
+ */
+function anchor(lastReview: Date | null, now: Date): { lastReview: Date | null; reviewedAt: Date } {
+  if (lastReview === null) return { lastReview: null, reviewedAt: new Date(ANCHOR_MS) };
+  const elapsedDays = Math.max(0, Math.floor((now.getTime() - lastReview.getTime()) / DAY_MS));
+  return { lastReview: new Date(ANCHOR_MS), reviewedAt: new Date(ANCHOR_MS + elapsedDays * DAY_MS) };
 }
 
 /** State + verdict + now to the next state; retention null means the default. */
@@ -110,10 +133,16 @@ export function scheduleReview(
     const { random } = opts.fuzz;
     scheduler.useStrategy(StrategyMode.SEED, () => String(random()));
   }
-  const { card } = scheduler.next(toCard(state, now), now, verdict === 'right' ? Rating.Good : Rating.Again);
+  const at = anchor(state.lastReview, now);
+  const { card } = scheduler.next(
+    toCard(state, at.lastReview, at.reviewedAt),
+    at.reviewedAt,
+    verdict === 'right' ? Rating.Good : Rating.Again,
+  );
+  const scheduledMs = card.due.getTime() - at.reviewedAt.getTime();
   // ts-fsrs orders Good strictly after Hard, which can put Good one day past
   // the maximum once both saturate.
-  const nextDue = new Date(Math.min(card.due.getTime(), now.getTime() + MAXIMUM_INTERVAL_DAYS * DAY_MS));
+  const nextDue = new Date(now.getTime() + Math.min(scheduledMs, MAXIMUM_INTERVAL_DAYS * DAY_MS));
   return {
     state: {
       stability: card.stability,
