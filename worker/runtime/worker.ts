@@ -26,6 +26,7 @@ import { resolveIdentity, type CookieVerdict, type Resolution } from '../app/aut
 import { hexFrom, mergeAnonymous } from '../app/auth/mergeSaga.js';
 import type { CellSnapshot } from '../app/entities.js';
 import type { Identity } from '../app/ports.js';
+import { landingContext } from '../app/landing.js';
 import { COOKIE_NAME } from '../domain/anonCookie.js';
 import { parseCookieHeader } from '../domain/cookies.js';
 import { bearerValue, parseToken, TOKEN_PREFIX, BAD_TOKEN } from '../domain/pat.js';
@@ -328,8 +329,7 @@ function visitorResponse(request: Request, url: URL, c: Composition, resolution:
     // A returning user whose short-lived token expired must not be flashed
     // the marketing page: the shell recovers the session and reloads.
     if (resolution.dormant && cookies[REAUTH_FALLBACK_COOKIE] !== '1') return { response: page('reauth.html'), cookie };
-    const landing = c.pages.resolve('anonymous', 'GET', '/', []);
-    if (landing?.template) return { response: page(landing.template, withLiveAuthUrls(landing.context), landing.status), cookie };
+    return { response: page('landing.html', landingContext(c)), cookie };
   }
   // A route that exists but needs an identity is 401; anything else never
   // existed, and saying so is not a signal worth withholding.
@@ -340,18 +340,6 @@ function visitorResponse(request: Request, url: URL, c: Composition, resolution:
   const signIn = c.identity.urls().sign_in;
   if (signIn) return { response: new Response(null, { status: 303, headers: { location: signIn } }), cookie };
   return { response: errorPage(c.renderer, c.buildToken, 401, request, NOT_AUTHENTICATED), cookie };
-}
-
-/** The auth chrome a recorded page must not pin. The corpus was taken
- * against a target with no in-app flow, so its context carries empty
- * sign-in URLs; a deploy that has them would otherwise render a landing
- * page offering no way in. */
-const AUTH_KEYS = ['auth_provider', 'sign_in_url', 'sign_up_url', 'sign_out_url', 'clerk_publishable_key', 'clerk_frontend_api_host'];
-
-function withLiveAuthUrls(context: Record<string, unknown> | undefined): Record<string, unknown> {
-  const out = { ...(context ?? {}) };
-  for (const key of AUTH_KEYS) delete out[key];
-  return out;
 }
 
 /** A tombstoned cell answers 410; the browser is told what that means. */

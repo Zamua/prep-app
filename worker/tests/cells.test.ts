@@ -8,7 +8,7 @@ import { TOMBSTONED_HEADER, UnknownProfile, UserCell } from '../runtime/cells/Us
 import * as pages from '../runtime/cells/routes/pages.js';
 import type { Env } from '../runtime/env.js';
 import { fakeCellState, FakeCellStorage } from './fakes/sqlStorage.js';
-import { corpusPage, fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
+import { expectedPage, fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
 
 const USER = 'parity@example.com';
 const ANON = 'anon:' + 'ab'.repeat(16);
@@ -58,7 +58,7 @@ function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
 describe('UserCell.seed', () => {
   it.each(['reader', 'empty', 'anonymous'])('reproduces the recorded seed JSON for %s', async (profile) => {
     const seed = await reseed(cell, profile);
-    expect(seed).toEqual(JSON.parse(JSON.stringify(corpusPage(profile, 'seed'))));
+    expect(seed).toEqual(JSON.parse(JSON.stringify(expectedPage(profile, 'seed'))));
   });
 
   it('refuses an unknown profile', async () => {
@@ -70,7 +70,6 @@ describe('UserCell.seed', () => {
     await reseed(cell, 'reader');
     expect(state.fake.rows('decks').map((d) => d['id'])).toEqual([1, 2, 3, 4]);
     expect(await c.directory.lookup(USER)).toMatchObject({ idx: 0, is_anonymous: false });
-    expect(await state.storage.get('parity')).toEqual({ profile: 'reader', flags: [] });
     expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Parity', email: USER, id_base: 0 });
     await reseed(cell, 'anonymous');
     expect(state.fake.rows('profile')).toEqual([]);
@@ -90,7 +89,6 @@ describe('UserCell.fetch', () => {
     const res = await cell.fetch(identified('/api/dashboard/deck-menus'));
     expect(res.status).toBe(200);
     expect(renderer.calls[0]?.template).toBe('partials/deck_menus.html');
-    expect(await state.storage.get('parity')).toEqual({ profile: 'reader', flags: [] });
   });
 
   it('answers 404 before any identity or seed', async () => {

@@ -9,7 +9,7 @@ import { EXPORT_TOO_LARGE } from "../app/decks/importLimits";
 
 const NOW = new Date("2026-03-14T15:00:00Z");
 const clock = { now: () => NOW };
-const CONTEXTS = join(WORKER, "..", "tests", "fixtures", "parity", "html", "contexts");
+const CONTEXTS = join(WORKER, "tests", "fixtures", "template-contexts");
 
 // The same bake the build does, into a scratch corner of build/, so the
 // test exercises the precompiled map and the slim runtime the worker ships.

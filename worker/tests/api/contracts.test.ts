@@ -40,7 +40,7 @@ const CLOCK_FROM: Record<string, string> = {
   'cookie-from-the-future-cleared': PARITY_NOW,
 };
 
-const corpus = loadCorpus('contracts');
+const corpus = loadCorpus('api');
 // The corpus header names every value another implementation cannot
 // reproduce, including the row ids drawn after the first anonymous mint:
 // The recording numbers all users' decks and questions from one sequence, so those

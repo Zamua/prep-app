@@ -10,7 +10,7 @@ const get = (path: string) => new Request(`${ORIGIN}${path}`);
 
 describe('GET /openapi.json', () => {
   it('serves the recorded document', async () => {
-    const recorded = loadCorpus('contracts').pairs.find((p) => p.name === 'openapi')!.response.json;
+    const recorded = loadCorpus('api').pairs.find((p) => p.name === 'openapi')!.response.json;
     expect(OPENAPI_DOCUMENT).toEqual(recorded);
     const { env } = replayEnv();
     const res = await worker.fetch(get('/openapi.json'), env);
@@ -28,7 +28,7 @@ describe('GET /openapi.json', () => {
 
 describe('the doc shells', () => {
   it('match the recorded parity bodies exactly', () => {
-    const corpus = loadCorpus('contracts');
+    const corpus = loadCorpus('api');
     expect(swaggerShell(true)).toBe(corpus.pairs.find((p) => p.name === 'docs-shell')!.response.text);
     expect(redocShell(true)).toBe(corpus.pairs.find((p) => p.name === 'redoc-shell')!.response.text);
   });

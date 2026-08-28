@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { composeWith } from '../runtime/compose.js';
 import { UserCell } from '../runtime/cells/UserCell.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
-import { CORPUS, fakeEnv, spyRenderer } from './helpers.js';
+import { PAGES, fakeEnv, spyRenderer } from './helpers.js';
 
 const USER = 'parity@example.com';
 
@@ -19,10 +19,10 @@ function seeded(profile: string) {
   return { env, state, cell, seed };
 }
 
-describe('the parity seed profiles', () => {
-  it.each(['reader', 'empty', 'anonymous'])('%s reproduces tests/fixtures/parity/pages/<profile>/seed.json exactly', async (profile) => {
+describe('the seed profiles', () => {
+  it.each(['reader', 'empty', 'anonymous'])('%s reproduces tests/fixtures/pages/<profile>/seed.json exactly', async (profile) => {
     const { seed } = seeded(profile);
-    const golden = readFileSync(join(CORPUS, profile, 'seed.json'), 'utf8');
+    const golden = readFileSync(join(PAGES, profile, 'seed.json'), 'utf8');
     expect(JSON.parse(JSON.stringify(await seed))).toEqual(JSON.parse(golden));
   });
 

@@ -42,12 +42,6 @@ import { jobRoutes } from './routes/jobs.js';
 import { pageRoutes } from './routes/pages.js';
 import { createUser, isAnonymousProfile, PROFILES, type Delta } from './seed/index.js';
 
-export interface ParityState {
-  profile: string;
-  flags: string[];
-}
-
-const STATE_KEY = 'parity';
 const SESSION_COUNTER_KEY = 'parity_session_counter';
 /** A profile with no rows: the seed wipes and returns `{}`. */
 const ANONYMOUS_PROFILE = 'anonymous';
@@ -146,7 +140,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     if (credential) return credential;
 
     const match = matchRoute(this.routes(), request.method, url.pathname);
-    if (!match) return this.replayFixture(request, url);
+    if (!match) return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
     try {
       applyGate(match.route.gate, identity);
     } catch (e) {
@@ -220,25 +214,6 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     repos.prefs.setIdBase(idx);
   }
 
-  /** Phase 1's recorded pages, by profile and flags, until every route is ported. */
-  private async replayFixture(request: Request, url: URL): Promise<Response> {
-    const c = this.c;
-    const state = (await this.storage.get<ParityState>(STATE_KEY)) ?? null;
-    const page = state && c.pages.resolve(state.profile, request.method, url.pathname, state.flags);
-    if (!state || !page) return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
-    const headers: Record<string, string> = {};
-    if (page.headers['content-type']) headers['content-type'] = page.headers['content-type'];
-    if (page.headers.location) headers.location = page.headers.location;
-    const body = page.template
-      ? c.renderer.render(page.template, derive(page.template, { ...(page.context ?? {}), app_base: appBase(request) }))
-      : (page.body ?? '');
-    if (page.sets.length) {
-      const flags = [...new Set([...state.flags, ...page.sets])];
-      await this.storage.put<ParityState>(STATE_KEY, { profile: state.profile, flags });
-    }
-    return new Response(body, { status: page.status, headers });
-  }
-
   // ---- the parity seed --------------------------------------------------------
 
   /**
@@ -251,8 +226,8 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     await this.storage.deleteAll();
   }
 
-  /** Step two: the schema and the profile's rows on the cell `wipe` emptied;
-   * Python's seed JSON. */
+  /** Step two: the schema and the profile's rows on the cell `wipe` emptied,
+   * returned as the delta the caller asserts against. */
   async seed(profile: string, user: string, at: string | null = null): Promise<Record<string, unknown>> {
     const build = PROFILES[profile];
     if (!build && profile !== ANONYMOUS_PROFILE) throw new UnknownProfile(`unknown profile ${JSON.stringify(profile)}`);
@@ -274,7 +249,6 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     };
     const ids = await build({ repos, user, hasher: this.c.hasher, at: atDelta });
     await this.c.directory.register(user, isAnonymousProfile(profile), isoUtc(now), { idx: 0 });
-    await this.storage.put<ParityState>(STATE_KEY, { profile, flags: [] });
     await this.ensureAlarm();
     return { user, profile, now: isoUtc(now), ...ids };
   }

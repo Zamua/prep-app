@@ -47,7 +47,7 @@ beforeAll(async () => {
 
 describe('the tool catalog', () => {
   it('is the seventeen objects the corpus recorded', async () => {
-    const corpus = loadCorpus('contracts');
+    const corpus = loadCorpus('api');
     const recorded = corpus.pairs.find((p) => p.name === 'mcp-tools-list')!.response.json as { result: { tools: unknown[] } };
     expect(TOOLS).toHaveLength(17);
     const { json } = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' });

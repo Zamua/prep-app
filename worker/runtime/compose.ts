@@ -9,7 +9,6 @@ import type {
   Cipher,
   Clock,
   Directory,
-  FixturePages,
   Hasher,
   IdentityProvider,
   JobCells,
@@ -53,7 +52,6 @@ import { NoWebPush, WebCryptoWebPush } from './adapters/webpush.js';
 import { OpenRouterOAuth } from './adapters/openrouter.js';
 import { SvixVerifier } from './adapters/svix.js';
 import { PatIssuer } from './adapters/pat.js';
-import { fixturePagesFromBuild } from './adapters/fixturePages.js';
 import { WebCryptoHasher } from './adapters/hash.js';
 import { SqlJsApkg } from './adapters/apkg.js';
 import { FflateZip } from './adapters/zip.js';
@@ -147,7 +145,6 @@ export interface Composition {
   /** What a page embeds for the sign-in chrome and the ClerkJS bootstrap. */
   authUrls: AuthUrls;
   renderer: Renderer;
-  pages: FixturePages;
   buildToken: string;
   parity: boolean;
   /** False only on a parity target replaying the corpus; see `periodicWork`. */
@@ -382,7 +379,6 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
     authUrls: authUrlsOf(clerk?.provider ?? null, identity),
     renderer: createRenderer({ clock, root: '' }),
-    pages: fixturePagesFromBuild(),
     buildToken: resolveBuildToken(env.PREP_BUILD_ID),
     parity,
     periodicWork: periodicWorkEnabled(env, parity),

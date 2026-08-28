@@ -7,7 +7,7 @@ import { UserCell } from '../../runtime/cells/UserCell.js';
 import { KIND_HEADER, SUBJECT_HEADER } from '../../runtime/cells/router.js';
 import type { Env } from '../../runtime/env.js';
 import { fakeCellState } from '../fakes/sqlStorage.js';
-import { corpusPage, fakeEnv, req, spyRenderer } from '../helpers.js';
+import { expectedPage, fakeEnv, req, spyRenderer } from '../helpers.js';
 
 export const USER = 'parity@example.com';
 
@@ -69,7 +69,7 @@ export async function seeded(profile: string, overrides: Partial<Env> = {}): Pro
 /** The corpus context, minus the columns a cell does not carry: the user
  * key was dropped from every table when one cell became one user. */
 export function expectedContext(profile: string, file: string): Record<string, unknown> {
-  return stripUserColumns(corpusPage(profile, file).context ?? {}) as Record<string, unknown>;
+  return stripUserColumns(expectedPage(profile, file).context ?? {}) as Record<string, unknown>;
 }
 
 export function stripUserColumns(value: unknown): unknown {

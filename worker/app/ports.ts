@@ -95,29 +95,6 @@ export interface Renderer {
   render(template: string, context: Record<string, unknown>): string;
 }
 
-/** One recorded Python response (docs/PHASE-1.md A7). A page either names
- * the template and the context the route passed, or carries a body. `sets`
- * are the flags the request leaves behind; `state` is the flag the recording
- * depended on, or null. */
-export interface FixturePage {
-  method: string;
-  path: string;
-  status: number;
-  headers: { 'content-type': string; location?: string };
-  template?: string;
-  context?: Record<string, unknown>;
-  body?: string;
-  sets: string[];
-  state: string | null;
-}
-
-/** Phase 1 stand-in for the routes lanes C and D port: the pages a profile's
- * routes rendered, replayed by state. */
-export interface FixturePages {
-  seed(profile: string): Record<string, unknown> | null;
-  resolve(profile: string, method: string, path: string, flags: readonly string[]): FixturePage | null;
-}
-
 // ---- randomness -----------------------------------------------------------
 
 export interface Random {

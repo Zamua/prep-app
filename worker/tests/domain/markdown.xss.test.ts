@@ -5,8 +5,8 @@ import { markdownHTML } from "../../domain/markdown";
 // The rendered HTML is inert: only the tags and attributes this subset
 // emits appear, every other `<` is escaped, and no attribute carries
 // script.
-const REPO = new URL("../../..", import.meta.url).pathname;
-const corpus = JSON.parse(readFileSync(`${REPO}tests/fixtures/markdown/cases.json`, "utf8")) as {
+const CASES = new URL("../fixtures/markdown/cases.json", import.meta.url).pathname;
+const corpus = JSON.parse(readFileSync(CASES, "utf8")) as {
   cases: { id: string; input: string }[];
 };
 

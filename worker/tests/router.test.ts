@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import worker, { DISPLAY_NAME_HEADER, SUBJECT_HEADER, UserCell } from '../runtime/worker.js';
 import { composeWith } from '../runtime/compose.js';
 import type { Env } from '../runtime/env.js';
-import { corpusPage, fakeEnv, fakeState, IDENTIFIED, namespaceOf, req, spyRenderer } from './helpers.js';
+import { expectedPage, fakeEnv, fakeState, IDENTIFIED, namespaceOf, req, spyRenderer } from './helpers.js';
+import { TOPIC_PLACEHOLDER } from '../app/landing.js';
 import { EMAIL_HEADER, KIND_HEADER, PAT_HASH_HEADER, PICTURE_HEADER } from '../runtime/cells/router.js';
 import { assembleToken } from '../domain/pat.js';
 import { mintCookie } from '../runtime/adapters/anonCookie.js';
@@ -61,7 +62,7 @@ const call = (path: string, init: RequestInit = {}) => worker.fetch(req(path, in
 /** The router's context for a page, plus the request origin it reads off
  * the request itself. */
 function expectCorpus(file: string, index = 0) {
-  const want = corpusPage('anonymous', file);
+  const want = expectedPage('anonymous', file);
   expect(renderer.calls[index]).toEqual({ template: want.template, context: { ...want.context, app_base: 'https://parity.example.test' } });
 }
 
@@ -119,11 +120,24 @@ describe('unauthenticated pages', () => {
     expect(renderer.calls[2]?.context.build).toBe('ce11d0000000');
   });
 
-  it('anonymous GET / is the landing page from the fixture', async () => {
+  it('anonymous GET / is the landing page, with the deploy\'s own instant-start gate', async () => {
     const res = await call('/');
     expect(res.status).toBe(200);
-    expectCorpus('01-GET-root');
+    expect(renderer.calls[0]?.template).toBe('landing.html');
+    expect(renderer.calls[0]?.context).toMatchObject({
+      user: null,
+      instant_enabled: true,
+      topic_placeholder: TOPIC_PLACEHOLDER,
+      app_base: 'https://parity.example.test',
+    });
     expect(forwarded).toEqual([]);
+  });
+
+  it('the instant-start hero turns off on a deploy with no free tier', async () => {
+    const unfunded = fakeEnv({ PREP_FREE_INFERENCE_API_KEY: '' });
+    composeWith(unfunded, { renderer });
+    expect((await worker.fetch(req('/'), unfunded)).status).toBe(200);
+    expect(renderer.calls.at(-1)?.context['instant_enabled']).toBe(false);
   });
 
   it('anonymous elsewhere is the 404 page', async () => {
@@ -283,13 +297,13 @@ describe('router and cell together', () => {
       live,
     );
     expect(seed.status).toBe(200);
-    expect(await seed.json()).toEqual(corpusPage('empty', 'seed'));
+    expect(await seed.json()).toEqual(expectedPage('empty', 'seed'));
     const res = await worker.fetch(req('/', { headers: IDENTIFIED }), live);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-cache');
     expect(renderer.calls.at(-1)).toEqual({
       template: 'index.html',
-      context: { ...corpusPage('empty', '01-GET-root').context, app_base: 'https://parity.example.test' },
+      context: { ...expectedPage('empty', '01-GET-root').context, app_base: 'https://parity.example.test' },
     });
     const bad = await worker.fetch(
       req('/_parity/seed', {

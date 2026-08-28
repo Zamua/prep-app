@@ -3,12 +3,11 @@ import { describe, expect, it } from "vitest";
 import { markdownHTML } from "../../domain/markdown";
 
 // The shared case list this renderer and its browser twin
-// (static/js/study/markdown.js) both answer. The twin is held to the same
-// file by tests/e2e/test_markdown_parity.py, so an expectation changed on
-// one side without the other is a card that renders differently online and
+// (static/js/study/markdown.js) both answer: an expectation changed on one
+// side without the other is a card that renders differently online and
 // offline.
-const REPO = new URL("../../..", import.meta.url).pathname;
-const corpus = JSON.parse(readFileSync(`${REPO}tests/fixtures/markdown/cases.json`, "utf8")) as {
+const CASES = new URL("../fixtures/markdown/cases.json", import.meta.url).pathname;
+const corpus = JSON.parse(readFileSync(CASES, "utf8")) as {
   cases: { id: string; input: string; expected: string }[];
 };
 

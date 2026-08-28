@@ -15,7 +15,7 @@ import { FakeDirectory, FakeJobCells, FakeLimiter, FakeUserCells } from './fakes
 import type { FakeCellStorage } from './fakes/sqlStorage.js';
 import { fakeEnv, namespaceOf, ROOT } from './helpers.js';
 
-const CORPUS = join(ROOT, '..', 'tests', 'fixtures', 'merge');
+const CORPUS = join(ROOT, 'tests', 'fixtures', 'merge');
 const read = (name: string) => JSON.parse(readFileSync(join(CORPUS, `${name}.json`), 'utf8'));
 
 interface Corpus {

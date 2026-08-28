@@ -6,7 +6,7 @@ import { REFRESH_AFTER_SECONDS } from '../domain/anonCookie';
 import { ANON_COOKIE_HEADER, composeWith, cookieHooks, type Composition } from '../runtime/compose';
 import type { Env } from '../runtime/env';
 import { NoIdentityProvider } from '../runtime/adapters/fakeIdentity';
-import { CORPUS, fakeEnv, req } from './helpers';
+import { fakeEnv, req } from './helpers';
 
 // The recorded responses are the gate for these bytes: a browser that stops
 // accepting the value stops holding the account.
@@ -16,7 +16,7 @@ interface Pair {
   response: { status: number; set_cookie: string[] | null };
 }
 
-const pairs: Pair[] = JSON.parse(readFileSync(join(CORPUS, '..', 'contracts', 'pairs.json'), 'utf8')).pairs;
+const pairs: Pair[] = JSON.parse(readFileSync(join(new URL('.', import.meta.url).pathname, 'fixtures', 'api-contract.json'), 'utf8')).pairs;
 const pair = (name: string): Pair => {
   const found = pairs.find((p) => p.name === name);
   if (!found) throw new Error(`no such contract pair: ${name}`);

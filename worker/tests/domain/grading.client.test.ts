@@ -6,12 +6,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as client from '../../domain/grading/client';
 
-const REPO = new URL('../../..', import.meta.url).pathname;
-const read = (p: string) => JSON.parse(readFileSync(join(REPO, p), 'utf8'));
+const FIXTURES = new URL('../fixtures/', import.meta.url).pathname;
+const read = (p: string) => JSON.parse(readFileSync(join(FIXTURES, p), 'utf8'));
 
 interface Case { id: string; module: string; fn: 'grade' | 'matchRegex'; args: unknown[]; expected: unknown }
 
-const cases = (read('tests/fixtures/offline/grader_cases.json') as { cases: Case[] }).cases;
+const cases = (read('offline/grader_cases.json') as { cases: Case[] }).cases;
 
 describe('the client twin matches the offline fixture', () => {
   it('exports the browser surface', () => {

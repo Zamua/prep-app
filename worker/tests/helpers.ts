@@ -7,15 +7,16 @@ import type { Env } from '../runtime/env.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
 
 export const ROOT = new URL('..', import.meta.url).pathname;
-export const CORPUS = join(ROOT, '..', 'tests', 'fixtures', 'parity', 'pages');
+/** The context every seeded page is expected to render with, per profile. */
+export const PAGES = join(ROOT, 'tests', 'fixtures', 'pages');
 
-export function corpusPage(profile: string, file: string): {
+export function expectedPage(profile: string, file: string): {
   status: number;
   template?: string;
   context?: Record<string, unknown>;
   headers: Record<string, string>;
 } {
-  return JSON.parse(readFileSync(join(CORPUS, profile, `${file}.json`), 'utf8'));
+  return JSON.parse(readFileSync(join(PAGES, profile, `${file}.json`), 'utf8'));
 }
 
 export interface Rendered {

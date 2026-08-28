@@ -10,7 +10,7 @@ import {
   type Row,
 } from '../../domain/merge';
 
-const DIR = new URL('../../../tests/fixtures/merge/', import.meta.url).pathname;
+const DIR = new URL('../fixtures/merge/', import.meta.url).pathname;
 
 describe('the policy', () => {
   // A user-scoped column the policy does not name is a table the merge

@@ -15,7 +15,7 @@ import { userRepos } from '../../runtime/adapters/sql/index.js';
 import { ParitySessionIds, SeededRandom } from '../../runtime/adapters/random.js';
 import { assembleToken, maskToken } from '../../domain/pat.js';
 
-export const CORPUS_ROOT = join(new URL('../..', import.meta.url).pathname, '..', 'tests', 'fixtures', 'parity');
+export const FIXTURES = join(new URL('..', import.meta.url).pathname, 'fixtures');
 export const PARITY_USER = 'parity@example.com';
 export const INTERNAL_TOKEN = 'parity-internal-token';
 export const ORIGIN = 'https://parity.example.test';
@@ -46,8 +46,9 @@ export interface Corpus {
   pairs: Pair[];
 }
 
+/** The request/response pairs an API surface is pinned to. */
 export function loadCorpus(name: string): Corpus {
-  return JSON.parse(readFileSync(join(CORPUS_ROOT, name, 'pairs.json'), 'utf8')) as Corpus;
+  return JSON.parse(readFileSync(join(FIXTURES, `${name}-contract.json`), 'utf8')) as Corpus;
 }
 
 /** A namespace whose stubs are the real cell class over fake storage. */
