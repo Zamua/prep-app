@@ -2,7 +2,7 @@
 // as sorted unique values, so the parser has to keep int and float apart,
 // keep first-insertion order, and refuse what cannot be a set member.
 import { describe, expect, it } from 'vitest';
-import { JsonDecodeError, JsonObject, ValueTypeError, parseJson, toSet } from '../../domain/grading/answerJson';
+import { AnswerJsonError, JsonObject, AnswerShapeError, parseJson, toSet } from '../../domain/grading/answerJson';
 import { GradingError, literal, literalList, sortedValues } from '../../domain/grading/literal';
 
 describe('the pieces', () => {
@@ -14,14 +14,14 @@ describe('the pieces', () => {
   it('keeps object keys in first-insertion order', () => {
     expect(parseJson('{"2": 1, "1": 2, "2": 3}')).toEqual(new JsonObject(['2', '1']));
   });
-  it('dedups by hash equality, first occurrence wins', () => {
+  it('dedups by value, first occurrence wins', () => {
     expect(toSet([1n, 1, true])).toEqual([1n]);
     expect(toSet([true, 1n])).toEqual([true]);
   });
-  it('rejects non-iterables and unhashables with ValueTypeError', () => {
-    expect(() => toSet(5n)).toThrow(ValueTypeError);
-    expect(() => toSet([[]])).toThrow(ValueTypeError);
-    expect(() => toSet([new JsonObject([])])).toThrow(ValueTypeError);
+  it('rejects a scalar and a nested container with AnswerShapeError', () => {
+    expect(() => toSet(5n)).toThrow(AnswerShapeError);
+    expect(() => toSet([[]])).toThrow(AnswerShapeError);
+    expect(() => toSet([new JsonObject([])])).toThrow(AnswerShapeError);
   });
   it('rejects mixed classes in sorted with GradingError', () => {
     expect(() => sortedValues([1n, 'a'])).toThrow(GradingError);
@@ -31,7 +31,7 @@ describe('the pieces', () => {
   });
   it('names a malformed document rather than throwing something else', () => {
     for (const text of ['', '[1', '{"a"}', '[1,]', "['a']", '[+1]', '[1] x']) {
-      expect(() => parseJson(text), text).toThrow(JsonDecodeError);
+      expect(() => parseJson(text), text).toThrow(AnswerJsonError);
     }
   });
   it('renders a list the way a stored answer spells it', () => {

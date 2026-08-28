@@ -16,7 +16,7 @@
   "sign_in_url": "",
   "sign_out_url": "",
   "sign_up_url": "",
-  "static_css_mtime": "ce11d0000000",
+  "build_token": "ce11d0000000",
   "user": {
    "created_at": "2026-03-13T09:30:00+00:00",
    "desired_retention": null,
@@ -26,7 +26,7 @@
    "is_anonymous": 1,
    "last_seen_at": "2026-03-14T15:00:00+00:00",
    "profile_pic_url": null,
-   "tailscale_login": "anon:abababababababababababababababab"
+   "login": "anon:abababababababababababababababab"
   }
  },
  "template": "base.html"

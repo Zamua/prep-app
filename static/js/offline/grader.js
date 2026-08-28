@@ -152,9 +152,9 @@ var JsonObject = class {
   }
   keys;
 };
-var JsonDecodeError = class extends Error {
+var AnswerJsonError = class extends Error {
 };
-var ValueTypeError = class extends Error {
+var AnswerShapeError = class extends Error {
 };
 var NUMBER = /-?(?:0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/y;
 var WS = /[ \t\n\r]*/y;
@@ -166,7 +166,7 @@ var Parser = class {
   s;
   i = 0;
   fail(what) {
-    throw new JsonDecodeError(`${what} at ${this.i}`);
+    throw new AnswerJsonError(`${what} at ${this.i}`);
   }
   ws() {
     WS.lastIndex = this.i;
@@ -303,7 +303,7 @@ function toSet(value) {
   let items;
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (Array.isArray(item) || item instanceof JsonObject) throw new ValueTypeError("unhashable type");
+      if (Array.isArray(item) || item instanceof JsonObject) throw new AnswerShapeError("a list or an object cannot be a set element");
     }
     items = value;
   } else if (typeof value === "string") {
@@ -311,7 +311,7 @@ function toSet(value) {
   } else if (value instanceof JsonObject) {
     items = value.keys;
   } else {
-    throw new ValueTypeError("object is not iterable");
+    throw new AnswerShapeError("a scalar has no elements");
   }
   const seen = /* @__PURE__ */ new Set();
   const out = [];
@@ -450,7 +450,7 @@ function gradeMcq(question, userAnswer) {
   };
 }
 function loadSet(x) {
-  if (typeof x !== "string") throw new ValueTypeError("the JSON object must be str");
+  if (typeof x !== "string") throw new AnswerShapeError("the stored answer is not text");
   return toSet(parseJson(x));
 }
 function gradeMulti(question, userAnswer) {
@@ -460,7 +460,7 @@ function gradeMulti(question, userAnswer) {
     picked = userAnswer ? loadSet(userAnswer) : [];
     expected = loadSet(question.answer);
   } catch (e) {
-    if (!(e instanceof JsonDecodeError || e instanceof ValueTypeError)) throw e;
+    if (!(e instanceof AnswerJsonError || e instanceof AnswerShapeError)) throw e;
     picked = [];
     expected = [];
   }

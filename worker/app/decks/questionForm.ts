@@ -1,6 +1,6 @@
 // The new-question and edit-question forms take the same fields in the
 // same shape, so one parse serves both: the entity when it validates, the
-// raw dict the template re-renders so typed input survives an error.
+// raw fields the template re-renders so typed input survives an error.
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 
 const VALID_TYPES: readonly string[] = ['code', 'mcq', 'multi', 'short'];

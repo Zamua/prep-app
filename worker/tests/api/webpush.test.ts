@@ -1,8 +1,7 @@
-// Web push, pinned two ways: the encrypted body against an RFC 8291 vector
-// an independent implementation produced (fixtures/webpush-vector.json), and
-// the VAPID header against a verifier holding only the public key. Nothing
-// here is self-referential: a bug that encrypts and decrypts consistently
-// would still fail both.
+// Web push, pinned two ways: the encrypted body against the RFC 8291 test
+// vector (fixtures/webpush-vector.json), and the VAPID header against a
+// verifier holding only the public key. Nothing here is self-referential: a
+// bug that encrypts and decrypts consistently would still fail both.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { b64uDecode, b64uEncode } from '../../domain/base64.js';
@@ -37,7 +36,7 @@ async function ecKeyPair(publicB64u: string, privateB64u: string, usages: Usage[
 }
 
 describe('aes128gcm message encryption', () => {
-  it('reproduces another implementation\'s record byte for byte', async () => {
+  it('reproduces the RFC 8291 record byte for byte', async () => {
     const ephemeral = await ecKeyPair(VECTOR.as_public, VECTOR.as_private, ['deriveBits']);
     const body = await encryptPayload(
       { p256dh: VECTOR.ua_public, auth: VECTOR.auth_secret },

@@ -34,7 +34,7 @@ function cpBefore(s, i) {
   }
   return s[i - 1];
 }
-function stripStart(s, chars) {
+function trimmedStart(s, chars) {
   let i = 0;
   while (i < s.length) {
     const c = cpAt(s, i);
@@ -43,7 +43,7 @@ function stripStart(s, chars) {
   }
   return i;
 }
-function stripEnd(s, chars) {
+function trimmedEnd(s, chars) {
   let i = s.length;
   while (i > 0) {
     const c = cpBefore(s, i);
@@ -52,15 +52,15 @@ function stripEnd(s, chars) {
   }
   return i;
 }
-function strip(s, chars = null) {
-  const start = stripStart(s, chars);
-  return s.slice(start, Math.max(start, stripEnd(s, chars)));
+function trim(s, chars = null) {
+  const start = trimmedStart(s, chars);
+  return s.slice(start, Math.max(start, trimmedEnd(s, chars)));
 }
-function lstrip(s, chars = null) {
-  return s.slice(stripStart(s, chars));
+function trimStart(s, chars = null) {
+  return s.slice(trimmedStart(s, chars));
 }
-function rstrip(s, chars = null) {
-  return s.slice(0, stripEnd(s, chars));
+function trimEnd(s, chars = null) {
+  return s.slice(0, trimmedEnd(s, chars));
 }
 function splitWhitespace(s) {
   const out = [];
@@ -106,10 +106,7 @@ function unicodeRe(pattern, flags = "", multiline = false) {
     } else if (c === ".") out += "[^\\n]";
     else if (c === "^") out += multiline ? "(?<![^\\n])" : "^";
     else if (c === "$") out += multiline ? "(?=\\n|$)" : "(?=\\n?$)";
-    else if (c === "(" && pattern.startsWith("(?P<", i)) {
-      out += "(?<";
-      i += 3;
-    } else out += c;
+    else out += c;
   }
   return new RegExp(out, flags + "u");
 }
@@ -196,14 +193,14 @@ function unquoteUrl(url) {
   return url;
 }
 function safeUrl(url) {
-  const probe = lstrip(unquoteUrl(url).toLowerCase());
+  const probe = trimStart(unquoteUrl(url).toLowerCase());
   const head = probe.split("/", 1)[0];
   const safe = SAFE_PROTOCOLS.some((p) => probe.startsWith(p)) || GOOD_DATA_PROTOCOLS.some((p) => probe.startsWith(p)) || probe.startsWith("/") || probe.startsWith("#") || probe.startsWith("?") || !head.includes(":");
   return safe ? escapeHtml(url) : "#harmful-link";
 }
 var STRIP_IMAGE = /<img\b[^>]*\balt=("([^"]*)"|'([^']*)')[^>]*>/gu;
 var STRIP_TAGS = /(<!--[^\n]*?-->|<[^>]*>)/gu;
-function striptags(s) {
+function stripTags(s) {
   s = s.replace(STRIP_IMAGE, (_m, _q, d, sq) => d || sq || "");
   return s.replace(STRIP_TAGS, "");
 }
@@ -325,7 +322,7 @@ function parseAngleLinkHref(src, pos) {
   }
   return [null, null];
 }
-function unikey(s) {
+function refKey(s) {
   return splitWhitespace(s).join(" ").toLowerCase().toUpperCase();
 }
 function parseInlineLink(inline2, m, state) {
@@ -414,7 +411,7 @@ function parseInlineLink(inline2, m, state) {
     markNoLinkBefore(state, bodyEndPos);
     return null;
   }
-  const key = unikey(label);
+  const key = refKey(label);
   const ref = refLinks.get(key);
   if (ref) {
     if (text === null) text = state.src.slice(textStart, textEnd);
@@ -505,11 +502,11 @@ function findLinkRangeEnd(src, labelStart, closePos, state) {
       const [label, newPos] = parseLinkLabel(src, endPos + 1);
       if (!newPos) return null;
       const refLabel = label || src.slice(labelStart, closePos);
-      if (refLinks.size && refLinks.has(unikey(refLabel))) return newPos;
+      if (refLinks.size && refLinks.has(refKey(refLabel))) return newPos;
       return null;
     }
   }
-  if (refLinks.size && refLinks.has(unikey(src.slice(labelStart, closePos)))) return endPos;
+  if (refLinks.size && refLinks.has(refKey(src.slice(labelStart, closePos)))) return endPos;
   return null;
 }
 function buildClosingBracketMap(src) {
@@ -530,7 +527,7 @@ function buildClosingBracketMap(src) {
 }
 
 // domain/markdown/list.ts
-var LIST_PATTERN = "^(?P<list_1> {0,3})(?P<list_2>[\\*\\+-]|\\d{1,9}[.)])(?P<list_3>[ \\t]*|[ \\t].+)$";
+var LIST_PATTERN = "^(?<list_1> {0,3})(?<list_2>[\\*\\+-]|\\d{1,9}[.)])(?<list_3>[ \\t]*|[ \\t].+)$";
 var LINE_HAS_TEXT = unicodeRe("(\\s*)\\S", "y");
 var BLANK_LINE = unicodeRe("(^[ \\t\\v\\f]*\\n)+", "y", true);
 function leadingWidth(item) {
@@ -542,7 +539,7 @@ function createListMarker(groups, prefix) {
 function parseList(block2, m, state) {
   const item = createListMarker(m.groups, "list");
   const text = item.text;
-  if (!strip(text)) {
+  if (!trim(text)) {
     const endPos = state.appendParagraph();
     if (endPos) return endPos;
   }
@@ -614,7 +611,7 @@ function collectListItemLines(block2, listItemRe, breakSc, state, text, continue
     }
     const hasContinuation = hasContinuationIndent(rawLine, continueWidth);
     if (hasContinuation) {
-      if (prevBlankLine && !text && !strip(src)) break;
+      if (prevBlankLine && !text && !trim(src)) break;
       src += rawLine;
       prevBlankLine = false;
       state.cursor = nextPos;
@@ -649,9 +646,9 @@ function collectListItemLines(block2, listItemRe, breakSc, state, text, continue
   return result;
 }
 function buildListItemSource(text, src, continueWidth) {
-  return stripEnd2(text + cleanListItemText(src, continueWidth));
+  return stripEnd(text + cleanListItemText(src, continueWidth));
 }
-function stripEnd2(src) {
+function stripEnd(src) {
   let end = src.length;
   while (end) {
     const c = cpBefore(src, end);
@@ -684,7 +681,7 @@ function compileListItemPattern(bullet, width) {
   const key = bullet + width;
   let re = ITEM_PATTERNS.get(key);
   if (!re) {
-    re = unicodeRe("^(?P<listitem_1> {0," + width + "})(?P<listitem_2>" + bullet + ")(?P<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
+    re = unicodeRe("^(?<listitem_1> {0," + width + "})(?<listitem_2>" + bullet + ")(?<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
     ITEM_PATTERNS.set(key, re);
   }
   return re;
@@ -816,12 +813,12 @@ function processThead(header, align) {
     if (ALIGN_CENTER.test(v)) aligns.push("center");
     else if (ALIGN_LEFT.test(v)) aligns.push("left");
     else if (ALIGN_RIGHT.test(v)) aligns.push("right");
-    else if (ALIGN_NONE.test(v) || !strip(v)) aligns.push(null);
+    else if (ALIGN_NONE.test(v) || !trim(v)) aligns.push(null);
     else return [null, null];
   }
   const children2 = headers.map((text, i) => ({
     type: "table_cell",
-    text: strip(text),
+    text: trim(text),
     attrs: { align: aligns[i], head: true }
   }));
   return [{ type: "table_head", children: children2 }, aligns];
@@ -831,13 +828,13 @@ function processRow(text, aligns) {
   if (cells.length !== aligns.length) return null;
   const children2 = cells.map((cell, i) => ({
     type: "table_cell",
-    text: strip(cell),
+    text: trim(cell),
     attrs: { align: aligns[i], head: false }
   }));
   return { type: "table_row", children: children2 };
 }
 function stripPipeTableRow(line) {
-  let text = rstrip(rstrip(line, "\n"), " 	");
+  let text = trimEnd(trimEnd(line, "\n"), " 	");
   if (!text.startsWith("|") && (text.startsWith(" ") || text.startsWith("	"))) text = text.replace(/^ +/u, "");
   if (!text.startsWith("|") || !text.endsWith("|")) return null;
   return text.slice(1, -1);
@@ -852,7 +849,7 @@ function parseInvalidPipeTable(state, pos) {
   return pos;
 }
 function stripTableLine(line) {
-  const text = rstrip(rstrip(line, "\n"), " 	");
+  const text = trimEnd(trimEnd(line, "\n"), " 	");
   if (!text || !text.includes("|")) return null;
   return text;
 }
@@ -861,11 +858,11 @@ function splitTableCells(text) {
   let start = 0;
   for (let pos = 0; pos < text.length; pos++) {
     if (text[pos] === "|" && !isEscapedPipe(text, pos)) {
-      cells.push(strip(text.slice(start, pos)));
+      cells.push(trim(text.slice(start, pos)));
       start = pos + 1;
     }
   }
-  cells.push(strip(text.slice(start)));
+  cells.push(trim(text.slice(start)));
   return cells;
 }
 function isEscapedPipe(text, pos) {
@@ -894,13 +891,13 @@ var PRE_TAGS = /* @__PURE__ */ new Set(["pre", "script", "style", "textarea"]);
 var BLOCK_TAGS_PATTERN = "(" + [...BLOCK_TAGS, ...PRE_TAGS].join("|") + ")";
 var SPECIFICATION = {
   blank_line: "(^[ \\t\\v\\f]*\\n)+",
-  atx_heading: "^ {0,3}(?P<atx_1>#{1,6})(?!#+)(?P<atx_2>[ \\t]*|[ \\t]+.*?)$",
-  setex_heading: "^ {0,3}(?P<setext_1>=|-){1,}[ \\t]*$",
-  fenced_code: "^(?P<fenced_1> {0,3})(?P<fenced_2>`{3,}|~{3,})[ \\t]*(?P<fenced_3>.*?)$",
+  atx_heading: "^ {0,3}(?<atx_1>#{1,6})(?!#+)(?<atx_2>[ \\t]*|[ \\t]+.*?)$",
+  setex_heading: "^ {0,3}(?<setext_1>=|-){1,}[ \\t]*$",
+  fenced_code: "^(?<fenced_1> {0,3})(?<fenced_2>`{3,}|~{3,})[ \\t]*(?<fenced_3>.*?)$",
   indent_code: "^(?: {4}| *\\t)[^\\n]+(?:\\n+|$)((?:(?: {4}| *\\t)[^\\n]+(?:\\n+|$))|\\s)*",
   thematic_break: "^ {0,3}((?:-[ \\t]*){3,}|(?:_[ \\t]*){3,}|(?:\\*[ \\t]*){3,})$",
-  ref_link: "^ {0,3}\\[(?P<reflink_1>" + LINK_LABEL + ")\\]:",
-  block_quote: "^ {0,3}>(?P<quote_1>.*?)$",
+  ref_link: "^ {0,3}\\[(?<reflink_1>" + LINK_LABEL + ")\\]:",
+  block_quote: "^ {0,3}>(?<quote_1>.*?)$",
   list: LIST_PATTERN,
   block_html: "^ {0,3}(?:(?:</?" + BLOCK_TAGS_PATTERN + "(?:[ \\t]+|\\n|$))|<!--|<\\?|<![A-Z]|<!\\[CDATA\\[)",
   raw_html: "^ {0,3}(</?" + HTML_TAGNAME + "|<!--|<\\?|<![A-Z]|<!\\[CDATA\\[)",
@@ -1133,7 +1130,7 @@ var BlockParser = class {
     while (pos < state.cursorMax) {
       if (pos > state.cursor && sc.matchAt(state.src, pos)) break;
       const line = state.getLine(pos);
-      if (!strip(line)) break;
+      if (!trim(line)) break;
       pos += line.length;
     }
     if (pos <= state.cursor) return false;
@@ -1149,7 +1146,7 @@ var BlockParser = class {
     if (endPos !== m.end) code = state.getText(endPos);
     code = expandLeadingTab(code);
     code = code.replace(INDENT_CODE_TRIM, "");
-    code = strip(code, "\n");
+    code = trim(code, "\n");
     state.appendToken({ type: "block_code", raw: code, style: "indent" });
     return endPos;
   }
@@ -1176,14 +1173,14 @@ var BlockParser = class {
     const token = { type: "block_code", raw: code, style: "fenced", marker };
     if (info) {
       info = unescapeChar(info);
-      token.attrs = { info: strip(info) };
+      token.attrs = { info: trim(info) };
     }
     state.appendToken(token);
     return endPos;
   }
   parseAtxHeading(m, state) {
     const level = m.groups.atx_1.length;
-    let text = strip(m.groups.atx_2, ASCII_WHITESPACE);
+    let text = trim(m.groups.atx_2, ASCII_WHITESPACE);
     if (text) text = text.replace(ATX_HEADING_TRIM, "");
     state.appendToken({ type: "heading", text, attrs: { level }, style: "atx" });
     return m.end + 1;
@@ -1205,7 +1202,7 @@ var BlockParser = class {
     const para = state.appendParagraph();
     if (para) return para;
     const label = m.groups.reflink_1;
-    const key = unikey(label);
+    const key = refKey(label);
     if (!key) return null;
     let [href, hrefPos] = parseLinkHref(state.src, m.end, true);
     if (href === null) return null;
@@ -1260,7 +1257,7 @@ var BlockParser = class {
         if (quote !== null) {
           text += quote;
           state.cursor += state.getLine(state.cursor).length;
-          prevBlankLine = !strip(quote);
+          prevBlankLine = !trim(quote);
           continue;
         }
         if (prevBlankLine) break;
@@ -1291,7 +1288,7 @@ var BlockParser = class {
     return state.cursor;
   }
   parseRawHtml(m, state) {
-    const marker = strip(m.text);
+    const marker = trim(m.text);
     if (marker === "<!--") return parseHtmlToEnd(state, "-->", m.end);
     if (marker === "<?") return parseHtmlToEnd(state, "?>", m.end);
     if (marker === "<![CDATA[") return parseHtmlToEnd(state, "]]>", m.end);
@@ -1369,7 +1366,7 @@ function trimPartialNextLineIndent(text, endPos) {
   const lineStart = text.lastIndexOf("\n") + 1;
   if (lineStart === 0) return endPos;
   const suffix = text.slice(lineStart);
-  if (suffix && strip(suffix, " 	") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
+  if (suffix && trim(suffix, " 	") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
   return endPos;
 }
 function expandTabsWidth(s) {
@@ -1858,7 +1855,7 @@ var InlineParser = class {
     const m2 = pattern.exec(state.src);
     if (m2) {
       let code = m2[1].replace(/\n/g, " ");
-      if (strip(code).length && code.startsWith(" ") && code.endsWith(" ")) code = code.slice(1, -1);
+      if (trim(code).length && code.startsWith(" ") && code.endsWith(" ")) code = code.slice(1, -1);
       state.appendToken({ type: "codespan", raw: code });
       return m.end + m2[0].length;
     }
@@ -1925,7 +1922,7 @@ function findEndMarker(src, pos, marker) {
   return null;
 }
 function isSpaceChar(c) {
-  return strip(c) === "";
+  return trim(c) === "";
 }
 function hasOddBackslashes(src, pos) {
   let count = 0;
@@ -1938,7 +1935,7 @@ function hasOddBackslashes(src, pos) {
 }
 
 // domain/markdown/render.ts
-var INLINE_STRIP = " \r\n	\f";
+var INLINE_TRIM = " \r\n	\f";
 function renderTokens(tokens, inline2, env) {
   let out = "";
   for (const tok of tokens) out += renderToken(tok, inline2, env);
@@ -1946,7 +1943,7 @@ function renderTokens(tokens, inline2, env) {
 }
 function children(tok, inline2, env) {
   if (tok.children) return renderTokens(tok.children, inline2, env);
-  if (tok.text !== void 0) return renderTokens(inline2.call(strip(tok.text, INLINE_STRIP), env), inline2, env);
+  if (tok.text !== void 0) return renderTokens(inline2.call(trim(tok.text, INLINE_TRIM), env), inline2, env);
   return "";
 }
 function attr(tok, name) {
@@ -1991,7 +1988,7 @@ function renderToken(tok, inline2, env) {
     case "block_quote":
       return "<blockquote>\n" + children(tok, inline2, env) + "</blockquote>\n";
     case "block_html":
-      return "<p>" + escapeHtml(strip(tok.raw)) + "</p>\n";
+      return "<p>" + escapeHtml(trim(tok.raw)) + "</p>\n";
     case "list": {
       const body = children(tok, inline2, env);
       if (attr(tok, "ordered")) {
@@ -2025,14 +2022,14 @@ function link(text, url, title) {
   return s + ">" + text + "</a>";
 }
 function image(text, url, title) {
-  let s = '<img src="' + safeUrl(url) + '" alt="' + striptags(text) + '"';
+  let s = '<img src="' + safeUrl(url) + '" alt="' + stripTags(text) + '"';
   if (title) s += ' title="' + safeEntity(title) + '"';
   return s + " />";
 }
 function blockCode(code, info) {
   let html = "<pre><code";
   if (info !== void 0) {
-    info = safeEntity(strip(info));
+    info = safeEntity(trim(info));
     if (info) html += ' class="language-' + splitWhitespace(info)[0] + '"';
   }
   return html + ">" + escapeHtml(code) + "</code></pre>\n";

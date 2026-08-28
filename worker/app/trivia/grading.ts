@@ -81,7 +81,7 @@ export function parseGradeJson(out: string): Record<string, unknown> {
   return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export async function aiGrade(
   agent: AgentPort,
@@ -116,12 +116,12 @@ export async function aiGrade(
       regex_update: null,
     };
   }
-  const correct = str(parsed['verdict']).trim().toLowerCase() === 'right';
+  const correct = asString(parsed['verdict']).trim().toLowerCase() === 'right';
   let regexUpdate: string | null = null;
-  if (correct && str(parsed['regex_update']).trim()) {
+  if (correct && asString(parsed['regex_update']).trim()) {
     regexUpdate = validateRegexUpdate(parsed['regex_update'], input.expected, input.given);
   }
-  return { correct, feedback: str(parsed['feedback']).trim(), regex_update: regexUpdate };
+  return { correct, feedback: asString(parsed['feedback']).trim(), regex_update: regexUpdate };
 }
 
 /** The regrade path is the same call; the name keeps the dispute explicit. */

@@ -139,7 +139,7 @@ describe("format: printf-style substitution", () => {
   ])("%s %% %s = %s", (fmt, arg, want) => {
     expect(printf(fmt, arg)).toBe(want);
   });
-  it("takes a tuple with width, alignment and sign flags", () => {
+  it("takes an argument list with width, alignment and sign flags", () => {
     expect(printf("%5.1f|%-4d|%+d|%s", [3.14159, 7, 3, null])).toBe("  3.1|7   |+3|");
   });
   it("refuses an argument count mismatch", () => {
@@ -358,7 +358,7 @@ describe("relative_time: every branch at the pinned instant", () => {
 });
 
 describe("the nunjucks constructs the templates rely on", () => {
-  it("tuple membership rewritten to arrays evaluates, and `not in` too", () => {
+  it("`in` and `not in` against an array literal both evaluate", () => {
     expect(render("{% if s in ['done', 'failed'] %}T{% endif %}{% if s not in ['done'] %}N{% endif %}", { s: "failed" })).toBe("TN");
   });
   it("a set inside a for reaches the outer variable, which the diff card counts on", () => {

@@ -4,7 +4,7 @@
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 import type { DeckRepo, QuestionRepo, TriviaRepo } from '../ports.js';
 import { rowCapMessage } from '../decks/importLimits.js';
-import { parseDict, writeRow } from './csv.js';
+import { parseCsvRecords, writeRow } from './csv.js';
 
 export const CSV_COLUMNS = ['type', 'topic', 'prompt', 'answer', 'choices', 'rubric', 'skeleton', 'language', 'answer_regex', 'explanation'] as const;
 
@@ -160,7 +160,7 @@ export function csvToDeck(
   let skippedDuplicates = 0;
   const errors: string[] = [];
 
-  const { fieldnames, rows } = parseDict(rest);
+  const { fieldnames, rows } = parseCsvRecords(rest);
   if (!fieldnames) {
     return { deck_id: deckId, deck_name: deckName, inserted: 0, skipped_duplicates: 0, errors: ['CSV has no header row'] };
   }

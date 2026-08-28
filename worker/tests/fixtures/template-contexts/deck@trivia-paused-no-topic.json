@@ -31,7 +31,7 @@
   "sign_in_url": "",
   "sign_out_url": "",
   "sign_up_url": "",
-  "static_css_mtime": "ce11d0000000",
+  "build_token": "ce11d0000000",
   "trivia": {
    "context_prompt": "Distributed systems consensus: Paxos, Raft, quorum intersection, leader election, linearizability versus sequential consistency, and the failure modes of each.",
    "deck_id": 3,
@@ -56,7 +56,7 @@
    "is_anonymous": 0,
    "last_seen_at": "2026-03-14T15:00:00+00:00",
    "profile_pic_url": null,
-   "tailscale_login": "seed@example.com"
+   "login": "seed@example.com"
   },
   "user_retention": null
  },

@@ -10,7 +10,7 @@ import {
   clerkConfig,
   frontendApiHost,
   identityFromClaims,
-  quotePlus,
+  formUrlEncode,
   resetJwksCache,
   type ClerkConfig,
   type Jwk,
@@ -249,10 +249,10 @@ describe('the provider', () => {
   });
 
   it('encodes the redirect the way quote_plus does', () => {
-    expect(quotePlus('https://a.test/')).toBe('https%3A%2F%2Fa.test%2F');
-    expect(quotePlus('a b')).toBe('a+b');
-    expect(quotePlus('~_.-')).toBe('~_.-');
-    expect(quotePlus('é')).toBe('%C3%A9');
+    expect(formUrlEncode('https://a.test/')).toBe('https%3A%2F%2Fa.test%2F');
+    expect(formUrlEncode('a b')).toBe('a+b');
+    expect(formUrlEncode('~_.-')).toBe('~_.-');
+    expect(formUrlEncode('é')).toBe('%C3%A9');
   });
 
   it('decodes the frontend API host out of the publishable key', () => {

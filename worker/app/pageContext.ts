@@ -51,6 +51,6 @@ export function pageContext(repos: UserRepos, env: PageEnv): Record<string, unkn
     clerk_frontend_api_host: urls.clerkFrontendApiHost,
     notif_unseen_count: repos.notify.countUnseen(),
     deck_display: deckDisplay,
-    static_css_mtime: env.buildToken,
+    build_token: env.buildToken,
   };
 }

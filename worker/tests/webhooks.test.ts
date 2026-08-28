@@ -73,7 +73,7 @@ describe('the receiver', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('');
     const profile = (await cells.cell(USER).dump()).profile!;
-    expect(profile['tailscale_login']).toBe(USER);
+    expect(profile['login']).toBe(USER);
     expect(profile['email']).toBe('ada@example.test');
     expect(profile['display_name']).toBe('Ada Lovelace');
     expect(profile['profile_pic_url']).toBe('https://img.example.test/ada.png');

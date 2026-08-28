@@ -325,7 +325,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       site: 'owner',
       jobId: step.jobId,
       kind: step.jobKind,
-      owner: repos.prefs.get()?.tailscale_login ?? '',
+      owner: repos.prefs.get()?.login ?? '',
       stepKey: step.stepKey,
       name: step.name,
       idx: step.idx,
@@ -459,7 +459,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       await this.storage.deleteAlarm();
       return;
     }
-    const owner = repos.prefs.get()?.tailscale_login ?? '';
+    const owner = repos.prefs.get()?.login ?? '';
     const report = await runWake(this.wakeDeps(repos, owner));
     if (report.failed.length) console.warn(`wake for ${owner}: ${report.failed.join('; ')}`);
     await this.ensureAlarm(TICK_MS);

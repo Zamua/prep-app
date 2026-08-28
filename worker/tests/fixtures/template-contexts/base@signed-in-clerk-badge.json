@@ -16,7 +16,7 @@
   "sign_in_url": "https://accounts.example.test/sign-in",
   "sign_out_url": "https://accounts.example.test/sign-out",
   "sign_up_url": "https://accounts.example.test/sign-up",
-  "static_css_mtime": "ce11d0000000",
+  "build_token": "ce11d0000000",
   "user": {
    "created_at": "2026-02-12T15:00:00+00:00",
    "desired_retention": null,
@@ -26,7 +26,7 @@
    "is_anonymous": 0,
    "last_seen_at": "2026-03-14T15:00:00+00:00",
    "profile_pic_url": null,
-   "tailscale_login": "seed@example.com"
+   "login": "seed@example.com"
   }
  },
  "template": "base.html"

@@ -1,6 +1,6 @@
 // The inline scanner: a rule per trigger character, feeding the emphasis
 // finalizer.
-import { PUNCTUATION_CLASS, cpAt, strip, unicodeRe } from "./chars";
+import { PUNCTUATION_CLASS, cpAt, trim, unicodeRe } from "./chars";
 import { finalizeEmphasisTokens, isEntityBoundary } from "./emphasis";
 import { parseInlineLink, unescapeChar } from "./links";
 import type { Env, Token } from "./tokens";
@@ -246,7 +246,7 @@ export class InlineParser {
     const m2 = pattern.exec(state.src);
     if (m2) {
       let code = m2[1]!.replace(/\n/g, " ");
-      if (strip(code).length && code.startsWith(" ") && code.endsWith(" ")) code = code.slice(1, -1);
+      if (trim(code).length && code.startsWith(" ") && code.endsWith(" ")) code = code.slice(1, -1);
       state.appendToken({ type: "codespan", raw: code });
       return m.end + m2[0].length;
     }
@@ -318,7 +318,7 @@ function findEndMarker(src: string, pos: number, marker: string): number | null 
 }
 
 function isSpaceChar(c: string): boolean {
-  return strip(c) === "";
+  return trim(c) === "";
 }
 
 function hasOddBackslashes(src: string, pos: number): boolean {

@@ -14,11 +14,10 @@ import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow } from './time.js';
 import type { AccountRows } from '../../../domain/limits.js';
 
-/** The column order the `user` object is read in; `tailscale_login` is the
- * id column. */
+/** The column order the `user` object is read in; `login` is the id column. */
 export function rowToProfile(r: Row): Profile {
   return {
-    tailscale_login: String(r['id']),
+    login: String(r['id']),
     display_name: (r['display_name'] as string | null) ?? null,
     profile_pic_url: (r['profile_pic_url'] as string | null) ?? null,
     created_at: String(r['created_at']),

@@ -29,13 +29,13 @@ export interface PlanRound {
 
 export const PRIOR_BRIEF_CHARS = 200;
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export function planJobInput(input: Readonly<Record<string, unknown>>): PlanJobInput {
   return {
     deckId: Number(input['deckId'] ?? 0),
-    deckName: str(input['deckName']),
-    prompt: str(input['prompt']),
+    deckName: asString(input['deckName']),
+    prompt: asString(input['prompt']),
     maxCards: Number(input['maxCards'] ?? 0) || 0,
   };
 }
@@ -237,7 +237,7 @@ interface GateOutcome {
 export function feedbackOf(gateOutput: unknown): string {
   const payload = (gateOutput as GateOutcome | null)?.payload;
   if (typeof payload === 'string') return payload;
-  if (payload && typeof payload === 'object') return str((payload as Record<string, unknown>)['feedback']);
+  if (payload && typeof payload === 'object') return asString((payload as Record<string, unknown>)['feedback']);
   return '';
 }
 
@@ -294,7 +294,7 @@ export function toNewQuestion(card: GeneratedCard): NewQuestion {
 export function resolveDeck(repos: UserRepos, input: Readonly<Record<string, unknown>>): number {
   const id = Number(input['deckId'] ?? 0);
   if (id > 0 && repos.decks.findName(id) !== null) return id;
-  return repos.decks.getOrCreate(str(input['deckName']));
+  return repos.decks.getOrCreate(asString(input['deckName']));
 }
 
 /**

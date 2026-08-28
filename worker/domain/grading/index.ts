@@ -1,6 +1,6 @@
 // The synchronous grader: mcq, multi and "I don't know", plus the regex
 // half of short-answer grading. Free text is graded elsewhere.
-import { JsonDecodeError, ValueTypeError, parseJson, sameSet, toSet, type Scalar } from './answerJson';
+import { AnswerJsonError, AnswerShapeError, parseJson, sameSet, toSet, type Scalar } from './answerJson';
 import { GradingError, literalList, sortedValues } from './literal';
 import { matchRegex } from './regex';
 
@@ -53,7 +53,7 @@ function gradeMcq(question: Question, userAnswer: string): GradeResult {
 
 /** The answer parsed and reduced to a set; a non-string cannot be one. */
 function loadSet(x: unknown): Scalar[] {
-  if (typeof x !== 'string') throw new ValueTypeError('the JSON object must be str');
+  if (typeof x !== 'string') throw new AnswerShapeError('the stored answer is not text');
   return toSet(parseJson(x));
 }
 
@@ -66,7 +66,7 @@ function gradeMulti(question: Question, userAnswer: string): GradeResult {
     picked = userAnswer ? loadSet(userAnswer) : [];
     expected = loadSet(question.answer);
   } catch (e) {
-    if (!(e instanceof JsonDecodeError || e instanceof ValueTypeError)) throw e;
+    if (!(e instanceof AnswerJsonError || e instanceof AnswerShapeError)) throw e;
     picked = [];
     expected = [];
   }

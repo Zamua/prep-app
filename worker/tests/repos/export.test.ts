@@ -19,10 +19,10 @@ function populated() {
 }
 
 describe('ExportRepo', () => {
-  it('dumps the profile as the user dict and every data table', () => {
+  it('dumps the profile as the user object and every data table', () => {
     const { c, q } = populated();
     const snap = c.repos.export.dump();
-    expect(snap.profile).toMatchObject({ tailscale_login: 'seed@example.com', display_name: 'Seed' });
+    expect(snap.profile).toMatchObject({ login: 'seed@example.com', display_name: 'Seed' });
     expect(Object.keys(snap.tables).sort()).toEqual([...DATA_TABLES].sort());
     expect(snap.tables['questions']).toEqual([expect.objectContaining({ id: q, prompt: 'p' })]);
     expect(snap.tables['cards']).toEqual([expect.objectContaining({ question_id: q })]);
@@ -33,7 +33,7 @@ describe('ExportRepo', () => {
   it('projects only the columns the merge policy reads of a target', () => {
     const { c, d } = populated();
     const snap = c.repos.export.project(TARGET_COLUMNS);
-    expect(snap.profile).toMatchObject({ tailscale_login: 'seed@example.com' });
+    expect(snap.profile).toMatchObject({ login: 'seed@example.com' });
     expect(Object.keys(snap.tables).sort()).toEqual(['decks', 'offline_sync_idempotency']);
     expect(snap.tables['decks']).toEqual([{ id: d, name: 'd' }]);
     expect(snap.tables['offline_sync_idempotency']).toEqual([{ client_id: 'c1' }]);
@@ -54,7 +54,7 @@ describe('ExportRepo', () => {
     expect(target.repos.export.importRows(withUserColumns, { idempotentBy: 'id', conflict: 'ignore' })).toEqual({});
     expect(target.repos.decks.listSummaries().map((d) => d.name).sort()).toEqual(['d', 'other']);
     expect(target.storage.rows('questions')).toEqual(snap.tables['questions']);
-    expect(target.repos.export.dump().profile?.tailscale_login).toBe('seed@example.com');
+    expect(target.repos.export.dump().profile?.login).toBe('seed@example.com');
   });
 
   it("under 'ignore', a row whose primary key the target holds is skipped, never rewritten", () => {
@@ -107,7 +107,7 @@ describe('ExportRepo', () => {
     const { c } = populated();
     c.repos.export.wipe();
     for (const t of DATA_TABLES) expect(c.storage.rows(t), t).toEqual([]);
-    expect(c.repos.prefs.get()?.tailscale_login).toBe('seed@example.com');
+    expect(c.repos.prefs.get()?.login).toBe('seed@example.com');
     expect(c.repos.decks.create('again')).toBe(2);
   });
 });

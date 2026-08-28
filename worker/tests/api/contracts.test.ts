@@ -42,9 +42,9 @@ let mintedCookie: string | null = null;
 let bearer = '';
 let cardId: number | null = null;
 
-/** The four card tools name the row `prep_add_card` created. The recording
- * read that id off its own response and so does the replay: an id block is
- * a property of the cell, not of the call. */
+/** The four card tools name the row `prep_add_card` created. The id is
+ * read off that call's own response rather than pinned: an id block is a
+ * property of the cell, not of the call. */
 const CARD_ID_PAIRS = new Set(['mcp-call-prep_get_card', 'mcp-call-prep_update_card', 'mcp-call-prep_suspend_card', 'mcp-call-prep_delete_card']);
 
 function bodyFor(pair: Pair): unknown {
@@ -58,7 +58,7 @@ let clockNow = TEST_NOW;
 function headersFor(pair: Pair): Record<string, string> {
   const extra: Record<string, string> = { 'x-prep-test-now': clockNow };
   // Every bearer pair follows the mint, so the replay carries the token the
-  // settings page just issued, exactly as the recording did.
+  // settings page just issued.
   if (pair.name !== 'v1-decks-bad-token' && pair.request.headers['authorization']?.startsWith('Bearer prep_pat_')) {
     extra['authorization'] = `Bearer ${bearer}`;
   }

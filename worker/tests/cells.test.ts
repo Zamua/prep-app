@@ -56,7 +56,7 @@ function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
 }
 
 describe('UserCell.seed', () => {
-  it.each(['reader', 'empty', 'anonymous'])('reproduces the recorded seed JSON for %s', async (profile) => {
+  it.each(['reader', 'empty', 'anonymous'])('reproduces the pinned seed JSON for %s', async (profile) => {
     const seed = await reseed(cell, profile);
     expect(seed).toEqual(JSON.parse(JSON.stringify(expectedPage(profile, 'seed'))));
   });
@@ -83,9 +83,8 @@ describe('UserCell.seed', () => {
 });
 
 describe('UserCell.fetch', () => {
-  it('replays a recorded page while no route claims the path, and flips the flag it sets', async () => {
+  it('serves a page route from a seeded cell, rendering its template', async () => {
     await reseed(cell, 'reader');
-    // A path the ported tables do not claim still answers from the recording.
     const res = await cell.fetch(identified('/api/dashboard/deck-menus'));
     expect(res.status).toBe(200);
     expect(renderer.calls[0]?.template).toBe('partials/deck_menus.html');
@@ -182,7 +181,7 @@ describe('UserCell.fetch', () => {
 describe('UserCell RPC', () => {
   it('upsert with an idx adopts the id block once; dump and import round-trip', async () => {
     const profile = await cell.upsert(USER, { email: USER, displayName: 'P' }, '2026-03-14T15:00:00Z', 3);
-    expect(profile).toMatchObject({ tailscale_login: USER, email: USER, last_seen_at: '2026-03-14T15:00:00+00:00' });
+    expect(profile).toMatchObject({ login: USER, email: USER, last_seen_at: '2026-03-14T15:00:00+00:00' });
     const repos = c.userRepos(state.fake, c.clock);
     expect(repos.decks.create('d')).toBe(3 * 2 ** 32 + 1);
     await cell.upsert(USER, {}, '2026-03-14T16:00:00Z', 9);

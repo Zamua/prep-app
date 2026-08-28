@@ -86,7 +86,7 @@ export function stripUserColumns(value: unknown): unknown {
 }
 
 /** The context a page rendered with, comparable against the corpus: the
- * request origin is the router's, not the recording's. */
+ * request origin is the router's, not the corpus's. */
 export function renderedContext(h: Harness): Record<string, unknown> {
   const call = h.rendered();
   if (!call) throw new Error('nothing was rendered');

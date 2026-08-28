@@ -76,24 +76,11 @@ export function rowKey(table: string, row: Row): string | null {
   return JSON.stringify(columns.map((c) => row[c] ?? null));
 }
 
-// The two `users` columns an anonymous user may have set; COPY-IF-NULL
-// onto the target. `desired_retention` already shaped the merged cards'
-// `next_due`, so it travels with them.
+// The two `profile` columns an anonymous user may have set; COPY-IF-NULL
+// onto the target. Every other column dies with the anonymous row.
+// `desired_retention` already shaped the merged cards' `next_due`, so it
+// travels with them.
 export const CARRIED_USER_COLUMNS = ['desired_retention', 'editor_input_mode'] as const;
-
-// Columns that die with the anonymous row. With CARRIED_USER_COLUMNS this
-// enumerates every `users` column, which the schema-drift check asserts.
-export const DROPPED_USER_COLUMNS = [
-  'tailscale_login',
-  'display_name',
-  'email',
-  'profile_pic_url',
-  'created_at',
-  'last_seen_at',
-  'is_anonymous',
-  'notification_prefs',
-  'active_byok_provider',
-] as const;
 
 // Slug de-collision: numbered suffixes first, then random ones without
 // bound, so a user with a hundred same-named decks stays mergeable.

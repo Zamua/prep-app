@@ -20,17 +20,17 @@ export const RAW_QUOTE_CHARS = 200;
 
 export class MissingCard extends Error {}
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export function gradeJobInput(input: Readonly<Record<string, unknown>>): GradeAnswerInput {
   const raw = input['card'];
   if (typeof raw !== 'object' || raw === null) throw new MissingCard('grade job input carries no card');
   return {
     questionId: Number(input['questionId'] ?? 0),
-    deckName: str(input['deckName']),
-    userAnswer: str(input['userAnswer']),
+    deckName: asString(input['deckName']),
+    userAnswer: asString(input['userAnswer']),
     idk: input['idk'] === true,
-    sessionId: str(input['sessionId']),
+    sessionId: asString(input['sessionId']),
     card: gradeCard(raw as Record<string, unknown>),
   };
 }

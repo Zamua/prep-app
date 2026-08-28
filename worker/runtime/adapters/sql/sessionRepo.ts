@@ -17,7 +17,7 @@ function decodeJson(v: unknown): Record<string, unknown> | null {
   }
 }
 
-const str = (v: unknown): string | null => (v == null ? null : String(v));
+const asString = (v: unknown): string | null => (v == null ? null : String(v));
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
 
 function rowToSession(r: Row): StudySession {
@@ -29,13 +29,13 @@ function rowToSession(r: Row): StudySession {
     status: ((r['status'] as string | null) || 'active') as SessionStatus,
     state: ((r['state'] as string | null) || 'awaiting-answer') as SessionState,
     current_question_id: num(r['current_question_id']),
-    current_draft: str(r['current_draft']),
-    current_grading_workflow_id: str(r['current_grading_workflow_id']),
+    current_draft: asString(r['current_draft']),
+    current_grading_workflow_id: asString(r['current_grading_workflow_id']),
     last_answered_qid: num(r['last_answered_qid']),
     last_answered_verdict: decodeJson(r['last_answered_verdict']),
     last_answered_state: decodeJson(r['last_answered_state']),
     version: Number(r['version'] || 1),
-    device_label: str(r['device_label']),
+    device_label: asString(r['device_label']),
   };
 }
 
@@ -44,15 +44,15 @@ function rowToRecent(r: Row): RecentSession {
     id: String(r['id']),
     deck_id: Number(r['deck_id']),
     deck_name: String(r['deck_name']),
-    deck_display_name: str(r['deck_display_name']),
+    deck_display_name: asString(r['deck_display_name']),
     last_active: String(r['last_active']),
     status: ((r['status'] as string | null) || 'active') as SessionStatus,
     state: ((r['state'] as string | null) || 'awaiting-answer') as SessionState,
-    device_label: str(r['device_label']),
+    device_label: asString(r['device_label']),
     current_question_id: num(r['current_question_id']),
-    current_prompt: str(r['current_prompt']),
-    current_type: str(r['current_type']),
-    snoozed_until: str(r['snoozed_until']),
+    current_prompt: asString(r['current_prompt']),
+    current_type: asString(r['current_type']),
+    snoozed_until: asString(r['snoozed_until']),
   };
 }
 

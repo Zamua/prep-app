@@ -11,8 +11,8 @@ export class JsonObject {
   constructor(readonly keys: string[]) {}
 }
 
-export class JsonDecodeError extends Error {}
-export class ValueTypeError extends Error {}
+export class AnswerJsonError extends Error {}
+export class AnswerShapeError extends Error {}
 
 const NUMBER = /-?(?:0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?/y;
 const WS = /[ \t\n\r]*/y;
@@ -23,7 +23,7 @@ class Parser {
   constructor(private readonly s: string) {}
 
   fail(what: string): never {
-    throw new JsonDecodeError(`${what} at ${this.i}`);
+    throw new AnswerJsonError(`${what} at ${this.i}`);
   }
 
   ws(): void {
@@ -157,7 +157,7 @@ export function toSet(value: JsonValue): Scalar[] {
   let items: Scalar[];
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (Array.isArray(item) || item instanceof JsonObject) throw new ValueTypeError('unhashable type');
+      if (Array.isArray(item) || item instanceof JsonObject) throw new AnswerShapeError('a list or an object cannot be a set element');
     }
     items = value as Scalar[];
   } else if (typeof value === 'string') {
@@ -165,7 +165,7 @@ export function toSet(value: JsonValue): Scalar[] {
   } else if (value instanceof JsonObject) {
     items = value.keys;
   } else {
-    throw new ValueTypeError('object is not iterable');
+    throw new AnswerShapeError('a scalar has no elements');
   }
   const seen = new Set<string>();
   const out: Scalar[] = [];

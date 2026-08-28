@@ -2,7 +2,7 @@
 // tolerances on the way in, and the trivia preamble that carries the
 // deck-level state a row cannot.
 import { describe, expect, it } from 'vitest';
-import { parseDict, parseRows, writeRow } from '../../app/api/csv.js';
+import { parseCsvRecords, parseRows, writeRow } from '../../app/api/csv.js';
 import { csvToDeck, deckToCsv, questionsForExport, splitPreamble, type DeckIoRepos } from '../../app/api/deckIo.js';
 import { cell } from '../repos/setup.js';
 
@@ -26,13 +26,13 @@ describe('the csv dialect', () => {
     expect(parseRows('a,b')).toEqual([['a', 'b']]);
   });
 
-  it('reads a blank line as an empty row, which DictReader then skips', () => {
+  it('reads a blank line as an empty row, which the record reader then skips', () => {
     expect(parseRows('a\n\nb\n')).toEqual([['a'], [], ['b']]);
-    expect(parseDict('h\n\nb\n').rows).toEqual([{ h: 'b' }]);
+    expect(parseCsvRecords('h\n\nb\n').rows).toEqual([{ h: 'b' }]);
   });
 
   it('fills a short row with nulls', () => {
-    expect(parseDict('a,b,c\n1\n').rows).toEqual([{ a: '1', b: null, c: null }]);
+    expect(parseCsvRecords('a,b,c\n1\n').rows).toEqual([{ a: '1', b: null, c: null }]);
   });
 });
 

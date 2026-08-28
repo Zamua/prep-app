@@ -26,31 +26,31 @@ export { SCOPES, type TransformCard, type TransformDeck, type TransformScope };
 
 export const DEFAULT_TRIVIA_INTERVAL_MINUTES = 30;
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export class BadTransformInput extends Error {}
 
-const asDict = (raw: unknown): Record<string, unknown> => (typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {});
+const asRecord = (raw: unknown): Record<string, unknown> => (typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {});
 
-const asCard = (raw: unknown): TransformCard => transformCard(asDict(raw));
+const asCard = (raw: unknown): TransformCard => transformCard(asRecord(raw));
 
 const asDeck = (raw: unknown): TransformDeck => {
-  const dict = asDict(raw);
-  return transformDeck(dict, (Array.isArray(dict['cards']) ? dict['cards'] : []).map(asCard));
+  const fields = asRecord(raw);
+  return transformDeck(fields, (Array.isArray(fields['cards']) ? fields['cards'] : []).map(asCard));
 };
 
 /** Re-reads the persisted input on every activation, so a step decides from
  * the rows and never from a value held across a crash. */
 export function transformJobInput(input: Readonly<Record<string, unknown>>): TransformJobInput {
-  const scope = str(input['scope']) as TransformScope;
-  if (!SCOPES.includes(scope)) throw new BadTransformInput(`unknown scope: ${JSON.stringify(str(input['scope']))}`);
-  if (!str(input['prompt']).trim()) throw new BadTransformInput('prompt required');
+  const scope = asString(input['scope']) as TransformScope;
+  if (!SCOPES.includes(scope)) throw new BadTransformInput(`unknown scope: ${JSON.stringify(asString(input['scope']))}`);
+  if (!asString(input['prompt']).trim()) throw new BadTransformInput('prompt required');
   return {
     scope,
     targetId: Number(input['targetId'] ?? 0),
-    prompt: str(input['prompt']),
+    prompt: asString(input['prompt']),
     deckName: typeof input['deckName'] === 'string' ? input['deckName'] : null,
-    deckContextPrompt: str(input['deckContextPrompt']),
+    deckContextPrompt: asString(input['deckContextPrompt']),
     cards: (Array.isArray(input['cards']) ? input['cards'] : []).map(asCard),
     decks: (Array.isArray(input['decks']) ? input['decks'] : []).map(asDeck),
   };

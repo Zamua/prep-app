@@ -58,7 +58,7 @@ describe('a multi', () => {
     expect(grade(multi(7), '["Austria"]').result).toBe('right');
   });
 
-  // A mapping and a bare string are iterable, so they are read as the sets
+  // An object and a bare string both have elements, so they are read as the sets
   // they stand for rather than treated as damage.
   it('reads a mapping as its keys and a bare string as its characters', () => {
     expect(grade(multi('{"Austria": 1, "Poland": 2}'), '["Poland", "Austria"]').result).toBe('right');

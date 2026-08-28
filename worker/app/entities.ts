@@ -9,10 +9,9 @@ export type ReviewResult = 'right' | 'wrong';
 export const SLUG_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
 export const SLUG_LENGTH = 8;
 
-/** The account row. `tailscale_login` is the cell id, whatever provider
- * minted it. */
+/** The account row. `login` is the cell id, whatever provider minted it. */
 export interface Profile {
-  tailscale_login: string;
+  login: string;
   display_name: string | null;
   profile_pic_url: string | null;
   email: string | null;

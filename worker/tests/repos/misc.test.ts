@@ -111,7 +111,7 @@ describe('PrefsRepo', () => {
     expect(repos.prefs.get()).toBeNull();
     const p = repos.prefs.upsert('seed@example.com', { email: 'seed@example.com', displayName: 'Seed' });
     expect(p).toEqual({
-      tailscale_login: 'seed@example.com',
+      login: 'seed@example.com',
       display_name: 'Seed',
       profile_pic_url: null,
       created_at: '2026-03-14T15:00:00+00:00',
@@ -124,7 +124,7 @@ describe('PrefsRepo', () => {
       is_anonymous: 0,
     });
     expect(Object.keys(p)).toEqual([
-      'tailscale_login',
+      'login',
       'display_name',
       'profile_pic_url',
       'created_at',
@@ -189,7 +189,7 @@ describe('PrefsRepo', () => {
   it('createAnonymous writes the Guest row', () => {
     const { repos } = cell({ profile: false });
     const p = repos.prefs.createAnonymous('anon:' + 'ab'.repeat(16), 'Guest');
-    expect(p).toMatchObject({ tailscale_login: 'anon:' + 'ab'.repeat(16), display_name: 'Guest', email: null, is_anonymous: 1 });
+    expect(p).toMatchObject({ login: 'anon:' + 'ab'.repeat(16), display_name: 'Guest', email: null, is_anonymous: 1 });
     expect(repos.prefs.accountRows()).toEqual({ isAnonymous: true, decks: 0, questions: 0 });
     expect(cell({ profile: false }).repos.prefs.accountRows().isAnonymous).toBeNull();
   });

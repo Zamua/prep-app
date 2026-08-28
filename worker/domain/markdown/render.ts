@@ -1,11 +1,11 @@
 // The HTML renderer over the block and inline token trees. Raw HTML in a
 // card is escaped, never passed through.
-import { splitWhitespace, strip } from "./chars";
+import { splitWhitespace, trim } from "./chars";
 import type { InlineParser } from "./inline";
 import type { Env, Token } from "./tokens";
-import { escapeHtml, safeEntity, safeUrl, striptags } from "./url";
+import { escapeHtml, safeEntity, safeUrl, stripTags } from "./url";
 
-const INLINE_STRIP = " \r\n\t\f";
+const INLINE_TRIM = " \r\n\t\f";
 
 export function renderTokens(tokens: Token[], inline: InlineParser, env: Env): string {
   let out = "";
@@ -15,7 +15,7 @@ export function renderTokens(tokens: Token[], inline: InlineParser, env: Env): s
 
 function children(tok: Token, inline: InlineParser, env: Env): string {
   if (tok.children) return renderTokens(tok.children, inline, env);
-  if (tok.text !== undefined) return renderTokens(inline.call(strip(tok.text, INLINE_STRIP), env), inline, env);
+  if (tok.text !== undefined) return renderTokens(inline.call(trim(tok.text, INLINE_TRIM), env), inline, env);
   return "";
 }
 
@@ -62,7 +62,7 @@ function renderToken(tok: Token, inline: InlineParser, env: Env): string {
     case "block_quote":
       return "<blockquote>\n" + children(tok, inline, env) + "</blockquote>\n";
     case "block_html":
-      return "<p>" + escapeHtml(strip(tok.raw!)) + "</p>\n";
+      return "<p>" + escapeHtml(trim(tok.raw!)) + "</p>\n";
     case "list": {
       const body = children(tok, inline, env);
       if (attr(tok, "ordered")) {
@@ -98,7 +98,7 @@ function link(text: string, url: string, title?: string): string {
 }
 
 function image(text: string, url: string, title?: string): string {
-  let s = '<img src="' + safeUrl(url) + '" alt="' + striptags(text) + '"';
+  let s = '<img src="' + safeUrl(url) + '" alt="' + stripTags(text) + '"';
   if (title) s += ' title="' + safeEntity(title) + '"';
   return s + " />";
 }
@@ -106,7 +106,7 @@ function image(text: string, url: string, title?: string): string {
 function blockCode(code: string, info?: string): string {
   let html = "<pre><code";
   if (info !== undefined) {
-    info = safeEntity(strip(info));
+    info = safeEntity(trim(info));
     if (info) html += ' class="language-' + splitWhitespace(info)[0]! + '"';
   }
   return html + ">" + escapeHtml(code) + "</code></pre>\n";

@@ -68,8 +68,8 @@ function insertRows(storage: FakeCellStorage, table: string, rows: readonly Row[
 
 function loadProfile(storage: FakeCellStorage, user: string): void {
   const row = before.users[user]!;
-  const profile: Row = { ...row, id: row['tailscale_login'] };
-  delete profile['tailscale_login'];
+  const profile: Row = { ...row, id: row['login'] };
+  delete profile['login'];
   insertRows(storage, 'profile', [profile]);
 }
 

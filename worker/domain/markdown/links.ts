@@ -141,7 +141,7 @@ function parseAngleLinkHref(src: string, pos: number): [string, number] | [null,
 
 // A reference label's lookup key: whitespace collapsed and case folded, so
 // `[Foo  Bar]` and `[foo bar]` resolve to the same definition.
-export function unikey(s: string): string {
+export function refKey(s: string): string {
   return splitWhitespace(s).join(" ").toLowerCase().toUpperCase();
 }
 
@@ -236,7 +236,7 @@ export function parseInlineLink(inline: InlineParser, m: RuleMatch, state: Inlin
     markNoLinkBefore(state, bodyEndPos);
     return null;
   }
-  const key = unikey(label);
+  const key = refKey(label);
   const ref = refLinks.get(key);
   if (ref) {
     if (text === null) text = state.src.slice(textStart, textEnd);
@@ -335,11 +335,11 @@ function findLinkRangeEnd(src: string, labelStart: number, closePos: number, sta
       const [label, newPos] = parseLinkLabel(src, endPos + 1);
       if (!newPos) return null;
       const refLabel = label || src.slice(labelStart, closePos);
-      if (refLinks.size && refLinks.has(unikey(refLabel))) return newPos;
+      if (refLinks.size && refLinks.has(refKey(refLabel))) return newPos;
       return null;
     }
   }
-  if (refLinks.size && refLinks.has(unikey(src.slice(labelStart, closePos)))) return endPos;
+  if (refLinks.size && refLinks.has(refKey(src.slice(labelStart, closePos)))) return endPos;
   return null;
 }
 

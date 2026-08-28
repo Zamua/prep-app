@@ -47,7 +47,7 @@ const stringType = (name: string, input: unknown): ValidationDetail => ({
   input,
 });
 
-/** Validate the merged dict, reporting every failure in field order. */
+/** Validate the merged preferences, reporting every failure in field order. */
 export function validatePrefs(merged: Record<string, unknown>): NotificationPrefs {
   const errors: ValidationDetail[] = [];
   const mode = merged['mode'] ?? DEFAULT_NOTIFICATION_PREFS.mode;

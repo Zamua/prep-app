@@ -17,7 +17,7 @@
   "sign_in_url": "",
   "sign_out_url": "",
   "sign_up_url": "",
-  "static_css_mtime": "ce11d0000000",
+  "build_token": "ce11d0000000",
   "user": null
  },
  "template": "offline.html"

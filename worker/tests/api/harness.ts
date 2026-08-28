@@ -1,7 +1,7 @@
-// Replays a recorded corpus against the TypeScript app: the entry worker
-// over real cells whose storage is the SqlStorage fake. One env, one
-// isolate, so a pair sees what the pairs before it wrote, exactly as the
-// recording did.
+// Replays a pinned corpus against the app: the entry worker over real
+// cells whose storage is the SqlStorage fake. One env, one isolate, so a
+// pair sees what the pairs before it wrote, in the order the corpus lists
+// them.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DirectoryCell } from '../../runtime/cells/DirectoryCell.js';
@@ -117,7 +117,7 @@ function requestOf(pair: Pair, extraHeaders: Record<string, string> = {}, jsonOv
   for (const [k, v] of Object.entries(pair.request.headers)) headers.set(k, v);
   for (const [k, v] of Object.entries(extraHeaders)) headers.set(k, v);
   // The fake identity provider only trusts the tailscale headers when the
-  // internal token rides along, as the recording sends them.
+  // internal token rides along, as the corpus sends them.
   if (headers.has('tailscale-user-login')) headers.set('x-internal-token', INTERNAL_TOKEN);
   let body: BodyInit | undefined;
   const json = jsonOverride === undefined ? pair.request.json : jsonOverride;
@@ -150,7 +150,7 @@ export async function record(res: Response): Promise<Recorded> {
     status: res.status,
     contentType,
     json,
-    // The recording holds `response.text` for any non-JSON body, so an empty one
+    // The corpus holds `response.text` for any non-JSON body, so an empty one
     // is '' and never null; collapsing it loses a 303's empty body.
     text: isJson ? null : raw,
     location: res.headers.get('location'),
@@ -164,7 +164,7 @@ export async function replay(env: Env, pair: Pair, extraHeaders: Record<string, 
   return record(await worker.fetch(requestOf(pair, extraHeaders, jsonOverride), env));
 }
 
-/** `POST /_test/seed` through the entry worker, as the recording does. */
+/** `POST /_test/seed` through the entry worker, as the corpus does. */
 export async function seed(env: Env, profile: string, user = SEED_USER): Promise<Record<string, unknown>> {
   const res = await worker.fetch(
     new Request(`${ORIGIN}/_test/seed`, {
@@ -179,8 +179,8 @@ export async function seed(env: Env, profile: string, user = SEED_USER): Promise
 }
 
 /** A personal access token for `subject`, written straight into its cell:
- * the settings page that mints one is another lane's, and the recorded
- * bearer is volatile anyway. */
+ * the settings page that mints one is another lane's, and the corpus
+ * treats the bearer as volatile anyway. */
 export async function mintToken(storage: FakeCellStorage, subject: string, label: string): Promise<string> {
   const hasher = new WebCryptoHasher();
   const token = assembleToken(subject, new SeededRandom(20260315).bytes(32));

@@ -6,7 +6,7 @@
    fetched a level at a time. Same versioned prefix the importmap
    resolves "@/" to, so these are the URLs the imports ask for. #}
 {% block head_preload %}
-{%- set _js = root ~ '/static/js/v' ~ (static_css_mtime|default(0)) -%}
+{%- set _js = root ~ '/static/js/v' ~ (build_token|default(0)) -%}
 <link rel="modulepreload" href="{{ _js }}/dashboard/online-host.js">
 <link rel="modulepreload" href="{{ _js }}/dashboard/components.js">
 <link rel="modulepreload" href="{{ _js }}/dashboard/source.js">

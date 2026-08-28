@@ -15,7 +15,7 @@ export const DEFAULT_BATCH_SIZE = 25;
 export const EXISTING_PROMPT_LIMIT = 200;
 export const NO_CARDS = 'the AI returned 0 cards';
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export interface TriviaJobInput {
   deckId: number;
@@ -30,8 +30,8 @@ export interface TriviaJobInput {
 export function triviaJobInput(input: Readonly<Record<string, unknown>>): TriviaJobInput {
   return {
     deckId: Number(input['deckId'] ?? 0),
-    deckName: str(input['deckName']),
-    topic: str(input['topic']),
+    deckName: asString(input['deckName']),
+    topic: asString(input['topic']),
     batchSize: Number(input['batchSize'] ?? 0) || 0,
     existing: Array.isArray(input['existing']) ? (input['existing'] as unknown[]).filter((v): v is string => typeof v === 'string') : [],
   };

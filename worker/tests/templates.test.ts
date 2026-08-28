@@ -167,9 +167,9 @@ describe("the renderer", () => {
 
 function baseContext(overrides: Record<string, unknown>): Record<string, unknown> {
   return {
-    user: { tailscale_login: "seed@example.com", display_name: "Seed", is_anonymous: 0, editor_input_mode: "vim" },
+    user: { login: "seed@example.com", display_name: "Seed", is_anonymous: 0, editor_input_mode: "vim" },
     agent_available: true,
-    static_css_mtime: "ce11d0000000",
+    build_token: "ce11d0000000",
     auth_provider: "tailscale",
     sign_in_url: "",
     sign_up_url: "",

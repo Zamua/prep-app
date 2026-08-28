@@ -34,7 +34,7 @@ export function accountSettings(deps: AccountDeps): PageResult {
 
 export async function accountDelete(repos: UserRepos, req: PageRequest, deps: AccountDeps): Promise<PageResult> {
   const deleter = deleterFor(deps);
-  const expected = (repos.prefs.get()?.tailscale_login ?? '').trim();
+  const expected = (repos.prefs.get()?.login ?? '').trim();
   if ((req.form.get('confirm') ?? '').trim() !== expected) return page('settings_account.html', { error: MISMATCH }, 400);
   try {
     await deleter.deleteUpstream(expected);

@@ -17,7 +17,7 @@
 <section class="agent-panel">
   <p class="section-eyebrow"><span>Profile</span><span class="rule"></span></p>
   <p>
-    Signed in as <code>{{ user.tailscale_login }}</code>{% if user.display_name %} ({{ user.display_name }}){% endif %}.
+    Signed in as <code>{{ user.login }}</code>{% if user.display_name %} ({{ user.display_name }}){% endif %}.
   </p>
 </section>
 
@@ -41,9 +41,9 @@
         style="margin-top: 1rem;">
     <label class="form-field">
       <span class="form-label">Type your account ID to confirm</span>
-      {{ cc.block(user.tailscale_login, label='account ID') }}
+      {{ cc.block(user.login, label='account ID') }}
       <input type="text" name="confirm" required
-             placeholder="{{ user.tailscale_login }}"
+             placeholder="{{ user.login }}"
              autocapitalize="none" autocorrect="off" spellcheck="false"
              style="font-family: var(--mono, monospace);">
       <span class="form-hint">

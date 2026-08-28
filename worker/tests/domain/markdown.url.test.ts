@@ -3,7 +3,7 @@
 // shows up as an escape that silently stops escaping rather than as a wrong
 // page.
 import { describe, expect, it } from 'vitest';
-import { escapeHtml, escapeUrl, safeEntity, safeUrl, striptags, unescape, unquote } from '../../domain/markdown/url';
+import { escapeHtml, escapeUrl, safeEntity, safeUrl, stripTags, unescape, unquote } from '../../domain/markdown/url';
 
 const table = (fn: (s: string) => string, rows: readonly [string, string][]) => {
   for (const [given, want] of rows) expect(fn(given), JSON.stringify(given)).toBe(want);
@@ -141,9 +141,9 @@ describe('safeUrl', () => {
   });
 });
 
-describe('striptags', () => {
+describe('stripTags', () => {
   it('keeps an image’s alt text and drops every other tag and comment', () => {
-    table(striptags, [
+    table(stripTags, [
       ['<b>x</b>', 'x'],
       ['<img src="a" alt="pic">', 'pic'],
       ["<img src='a' alt='pic'>", 'pic'],

@@ -1,7 +1,7 @@
 // The URL policy: HTML escaping, the entity unescape, percent
 // quote/unquote and the safe-protocol check.
 import { HTML5_ENTITIES, INVALID_CHARREFS, INVALID_CODEPOINTS } from "./entities";
-import { lstrip } from "./chars";
+import { trimStart } from "./chars";
 
 export function escapeHtml(s: string, quote = true): string {
   s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -97,7 +97,7 @@ function unquoteUrl(url: string): string {
 /** The escaped href, or the harmful-link sink. Three decode passes, so a
  * scheme hidden under layers of percent-encoding is still seen. */
 export function safeUrl(url: string): string {
-  const probe = lstrip(unquoteUrl(url).toLowerCase());
+  const probe = trimStart(unquoteUrl(url).toLowerCase());
   const head = probe.split("/", 1)[0]!;
   const safe =
     SAFE_PROTOCOLS.some((p) => probe.startsWith(p)) ||
@@ -113,7 +113,7 @@ const STRIP_IMAGE = /<img\b[^>]*\balt=("([^"]*)"|'([^']*)')[^>]*>/gu;
 const STRIP_TAGS = /(<!--[^\n]*?-->|<[^>]*>)/gu;
 
 /** Image alt text out of rendered children. */
-export function striptags(s: string): string {
+export function stripTags(s: string): string {
   s = s.replace(STRIP_IMAGE, (_m, _q, d?: string, sq?: string) => d || sq || "");
   return s.replace(STRIP_TAGS, "");
 }

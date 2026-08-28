@@ -4,7 +4,7 @@
 // rather than appending to one. `prompt` is the join key across the three
 // CSVs because a restore assigns fresh question ids.
 import { literal, literalList } from '../../domain/grading/literal.js';
-import { parseDict, writeRow } from '../api/csv.js';
+import { parseCsvRecords, writeRow } from '../api/csv.js';
 import { CSV_COLUMNS, questionToRow, questionsForExport, type DeckIoRepos } from '../api/deckIo.js';
 import type { NewQuestion, QuestionType, ReviewResult } from '../entities.js';
 import { NotAZip, type CardRepo, type ReviewRepo, type UserRepos, type ZipCodec, type ZipEntry } from '../ports.js';
@@ -271,7 +271,7 @@ function importCards(
   errors: string[],
   rowCap: number | undefined,
 ): { inserted: number; skippedDuplicates: number; qidByPrompt: Map<string, number> } {
-  const { rows } = parseDict(csvText);
+  const { rows } = parseCsvRecords(csvText);
   const qidByPrompt = new Map<string, number>();
   let inserted = 0;
   let skippedDuplicates = 0;
@@ -360,7 +360,7 @@ function restoreCardState(repos: UserRepos, qid: number, row: Record<string, str
 }
 
 function importReviews(repos: UserRepos, csvText: string, qidByPrompt: Map<string, number>, errors: string[], rowCap: number | undefined): number {
-  const { rows } = parseDict(csvText);
+  const { rows } = parseCsvRecords(csvText);
   const cap = rowCap ?? Infinity;
   let inserted = 0;
   for (let index = 0; index < rows.length; index++) {
@@ -396,7 +396,7 @@ function importReviews(repos: UserRepos, csvText: string, qidByPrompt: Map<strin
 }
 
 function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<string, number>, errors: string[], rowCap: number | undefined): number {
-  const { rows } = parseDict(csvText);
+  const { rows } = parseCsvRecords(csvText);
   const pos = (row: Record<string, string | null>): number => {
     const raw = (row['queue_position'] ?? '').trim() || '0';
     return /^[+-]?\d+$/.test(raw) ? Number(raw) : 0;

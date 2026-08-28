@@ -7,21 +7,21 @@ import { isoNow, isoUtc, shifted } from './time.js';
 export const RECENT_TERMINAL_WINDOW_SECONDS = 60;
 export const RECONCILER_PRUNE_WINDOW_SECONDS = 24 * 60 * 60;
 
-const str = (v: unknown): string | null => (v == null ? null : String(v));
+const asString = (v: unknown): string | null => (v == null ? null : String(v));
 
 function rowToWorkflow(r: Row): ActiveWorkflow {
   return {
     workflow_id: String(r['workflow_id']),
     workflow_type: String(r['workflow_type']),
     deck_id: r['deck_id'] == null ? null : Number(r['deck_id']),
-    deck_name: str(r['deck_name']),
-    deck_display_name: 'deck_display_name' in r ? str(r['deck_display_name']) : null,
+    deck_name: asString(r['deck_name']),
+    deck_display_name: 'deck_display_name' in r ? asString(r['deck_display_name']) : null,
     status: (r['status'] as string | null) || '',
     started_at: String(r['started_at']),
-    terminal_at: str(r['terminal_at']),
+    terminal_at: asString(r['terminal_at']),
     url_path: String(r['url_path']),
-    notified_action_at: str(r['notified_action_at']),
-    notified_terminal_at: str(r['notified_terminal_at']),
+    notified_action_at: asString(r['notified_action_at']),
+    notified_terminal_at: asString(r['notified_terminal_at']),
   };
 }
 

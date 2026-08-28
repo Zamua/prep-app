@@ -1,6 +1,6 @@
 // The offline corpus, replayed in order. The last pair is an anonymous
 // account already at its question cap, written past the cap guard the way
-// the recording writes it.
+// the corpus writes it.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ANON_MAX_QUESTIONS } from '../../domain/limits.js';
 import { COOKIE_NAME } from '../../domain/anonCookie.js';

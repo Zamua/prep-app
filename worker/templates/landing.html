@@ -2,7 +2,7 @@
 {% block title %}prep · flashcards that remember for you{% endblock %}
 {% block page_class %}landing{% endblock %}
 {% block head_preload %}
-{%- set _js = root ~ '/static/js/v' ~ (static_css_mtime|default(0)) -%}
+{%- set _js = root ~ '/static/js/v' ~ (build_token|default(0)) -%}
 {# Which of the two regions below this visitor gets, decided BEFORE
    the first paint. A device holding cards must never see the splash,
    and IndexedDB is async: any probe of it answers after the page has

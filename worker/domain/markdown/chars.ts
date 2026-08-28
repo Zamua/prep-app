@@ -50,7 +50,7 @@ export function cpBefore(s: string, i: number): string {
   return s[i - 1]!;
 }
 
-function stripStart(s: string, chars: string | null): number {
+function trimmedStart(s: string, chars: string | null): number {
   let i = 0;
   while (i < s.length) {
     const c = cpAt(s, i);
@@ -60,7 +60,7 @@ function stripStart(s: string, chars: string | null): number {
   return i;
 }
 
-function stripEnd(s: string, chars: string | null): number {
+function trimmedEnd(s: string, chars: string | null): number {
   let i = s.length;
   while (i > 0) {
     const c = cpBefore(s, i);
@@ -71,17 +71,17 @@ function stripEnd(s: string, chars: string | null): number {
 }
 
 /** Trims `chars` from both ends; null trims whitespace. */
-export function strip(s: string, chars: string | null = null): string {
-  const start = stripStart(s, chars);
-  return s.slice(start, Math.max(start, stripEnd(s, chars)));
+export function trim(s: string, chars: string | null = null): string {
+  const start = trimmedStart(s, chars);
+  return s.slice(start, Math.max(start, trimmedEnd(s, chars)));
 }
 
-export function lstrip(s: string, chars: string | null = null): string {
-  return s.slice(stripStart(s, chars));
+export function trimStart(s: string, chars: string | null = null): string {
+  return s.slice(trimmedStart(s, chars));
 }
 
-export function rstrip(s: string, chars: string | null = null): string {
-  return s.slice(0, stripEnd(s, chars));
+export function trimEnd(s: string, chars: string | null = null): string {
+  return s.slice(0, trimmedEnd(s, chars));
 }
 
 /** Splits on runs of whitespace, dropping empties. */
@@ -135,10 +135,7 @@ export function unicodeRe(pattern: string, flags = "", multiline = false): RegEx
     } else if (c === ".") out += "[^\\n]";
     else if (c === "^") out += multiline ? "(?<![^\\n])" : "^";
     else if (c === "$") out += multiline ? "(?=\\n|$)" : "(?=\\n?$)";
-    else if (c === "(" && pattern.startsWith("(?P<", i)) {
-      out += "(?<";
-      i += 3;
-    } else out += c;
+    else out += c;
   }
   return new RegExp(out, flags + "u");
 }

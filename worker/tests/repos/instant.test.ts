@@ -14,7 +14,7 @@ describe('InstantRepo', () => {
     const anon = 'anon:' + 'ab'.repeat(16);
     const r = c.repos.instant.createInstantDeck('French Revolution', CARDS, { id: anon, displayName: 'Guest' });
     expect(r.slug).toMatch(new RegExp(`^[${SLUG_ALPHABET}]{${SLUG_LENGTH}}$`));
-    expect(c.repos.prefs.get()).toMatchObject({ tailscale_login: anon, display_name: 'Guest', is_anonymous: 1, email: null });
+    expect(c.repos.prefs.get()).toMatchObject({ login: anon, display_name: 'Guest', is_anonymous: 1, email: null });
     expect(c.storage.rows('decks')[0]).toMatchObject({ id: r.deck_id, name: r.slug, display_name: 'French Revolution', created_at: '2026-03-14T15:00:00+00:00' });
     expect(c.storage.rows('questions').map((q) => [q['type'], q['prompt'], q['answer_regex']])).toEqual([
       ['short', 'Year the Bastille fell?', '1789'],

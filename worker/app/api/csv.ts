@@ -77,8 +77,9 @@ export function parseRows(text: string): string[][] {
   return rows;
 }
 
-/** `csv.DictReader`: header row, missing columns null, blank rows skipped. */
-export function parseDict(text: string): { fieldnames: string[] | null; rows: Record<string, string | null>[] } {
+/** Header row, then one record per row: a missing column is null and a
+ * blank row is skipped. */
+export function parseCsvRecords(text: string): { fieldnames: string[] | null; rows: Record<string, string | null>[] } {
   const raw = parseRows(text);
   if (!raw.length) return { fieldnames: null, rows: [] };
   const fieldnames = raw[0]!;

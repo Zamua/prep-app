@@ -1,6 +1,6 @@
 // The block scanner: containers, the block rules and the table rules.
-import { isAsciiPunct, isDigit, isSpace, cpAt, strip, unicodeRe, ASCII_WHITESPACE } from "./chars";
-import { LINK_LABEL, parseLinkHref, parseLinkTitle, unescapeChar, unikey } from "./links";
+import { isAsciiPunct, isDigit, isSpace, cpAt, trim, unicodeRe, ASCII_WHITESPACE } from "./chars";
+import { LINK_LABEL, parseLinkHref, parseLinkTitle, unescapeChar, refKey } from "./links";
 import { LIST_PATTERN, parseList } from "./list";
 import { NP_TABLE_PATTERN, TABLE_PATTERN, parseNpTable, parseTable } from "./table";
 import { type Env, type Token, newEnv } from "./tokens";
@@ -24,13 +24,13 @@ const BLOCK_TAGS_PATTERN = "(" + [...BLOCK_TAGS, ...PRE_TAGS].join("|") + ")";
 
 const SPECIFICATION: Record<string, string> = {
   blank_line: "(^[ \\t\\v\\f]*\\n)+",
-  atx_heading: "^ {0,3}(?P<atx_1>#{1,6})(?!#+)(?P<atx_2>[ \\t]*|[ \\t]+.*?)$",
-  setex_heading: "^ {0,3}(?P<setext_1>=|-){1,}[ \\t]*$",
-  fenced_code: "^(?P<fenced_1> {0,3})(?P<fenced_2>`{3,}|~{3,})[ \\t]*(?P<fenced_3>.*?)$",
+  atx_heading: "^ {0,3}(?<atx_1>#{1,6})(?!#+)(?<atx_2>[ \\t]*|[ \\t]+.*?)$",
+  setex_heading: "^ {0,3}(?<setext_1>=|-){1,}[ \\t]*$",
+  fenced_code: "^(?<fenced_1> {0,3})(?<fenced_2>`{3,}|~{3,})[ \\t]*(?<fenced_3>.*?)$",
   indent_code: "^(?: {4}| *\\t)[^\\n]+(?:\\n+|$)((?:(?: {4}| *\\t)[^\\n]+(?:\\n+|$))|\\s)*",
   thematic_break: "^ {0,3}((?:-[ \\t]*){3,}|(?:_[ \\t]*){3,}|(?:\\*[ \\t]*){3,})$",
-  ref_link: "^ {0,3}\\[(?P<reflink_1>" + LINK_LABEL + ")\\]:",
-  block_quote: "^ {0,3}>(?P<quote_1>.*?)$",
+  ref_link: "^ {0,3}\\[(?<reflink_1>" + LINK_LABEL + ")\\]:",
+  block_quote: "^ {0,3}>(?<quote_1>.*?)$",
   list: LIST_PATTERN,
   block_html:
     "^ {0,3}(?:(?:</?" + BLOCK_TAGS_PATTERN + "(?:[ \\t]+|\\n|$))|<!--|<\\?|<![A-Z]|<!\\[CDATA\\[)",
@@ -304,7 +304,7 @@ export class BlockParser {
     while (pos < state.cursorMax) {
       if (pos > state.cursor && sc.matchAt(state.src, pos)) break;
       const line = state.getLine(pos);
-      if (!strip(line)) break;
+      if (!trim(line)) break;
       pos += line.length;
     }
     if (pos <= state.cursor) return false;
@@ -321,7 +321,7 @@ export class BlockParser {
     if (endPos !== m.end) code = state.getText(endPos);
     code = expandLeadingTab(code);
     code = code.replace(INDENT_CODE_TRIM, "");
-    code = strip(code, "\n");
+    code = trim(code, "\n");
     state.appendToken({ type: "block_code", raw: code, style: "indent" });
     return endPos;
   }
@@ -350,7 +350,7 @@ export class BlockParser {
     const token: Token = { type: "block_code", raw: code, style: "fenced", marker };
     if (info) {
       info = unescapeChar(info);
-      token.attrs = { info: strip(info) };
+      token.attrs = { info: trim(info) };
     }
     state.appendToken(token);
     return endPos;
@@ -358,7 +358,7 @@ export class BlockParser {
 
   private parseAtxHeading(m: ScanMatch, state: BlockState): number {
     const level = m.groups.atx_1!.length;
-    let text = strip(m.groups.atx_2!, ASCII_WHITESPACE);
+    let text = trim(m.groups.atx_2!, ASCII_WHITESPACE);
     if (text) text = text.replace(ATX_HEADING_TRIM, "");
     state.appendToken({ type: "heading", text, attrs: { level }, style: "atx" });
     return m.end + 1;
@@ -382,7 +382,7 @@ export class BlockParser {
     const para = state.appendParagraph();
     if (para) return para;
     const label = m.groups.reflink_1!;
-    const key = unikey(label);
+    const key = refKey(label);
     if (!key) return null;
     let [href, hrefPos] = parseLinkHref(state.src, m.end, true);
     if (href === null) return null;
@@ -438,7 +438,7 @@ export class BlockParser {
         if (quote !== null) {
           text += quote;
           state.cursor += state.getLine(state.cursor).length;
-          prevBlankLine = !strip(quote);
+          prevBlankLine = !trim(quote);
           continue;
         }
         // A blank line is required between a quote and a following paragraph.
@@ -475,7 +475,7 @@ export class BlockParser {
   }
 
   private parseRawHtml(m: ScanMatch, state: BlockState): number | null {
-    const marker = strip(m.text);
+    const marker = trim(m.text);
     if (marker === "<!--") return parseHtmlToEnd(state, "-->", m.end);
     if (marker === "<?") return parseHtmlToEnd(state, "?>", m.end);
     if (marker === "<![CDATA[") return parseHtmlToEnd(state, "]]>", m.end);
@@ -559,7 +559,7 @@ function trimPartialNextLineIndent(text: string, endPos: number): number {
   const lineStart = text.lastIndexOf("\n") + 1;
   if (lineStart === 0) return endPos;
   const suffix = text.slice(lineStart);
-  if (suffix && strip(suffix, " \t") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
+  if (suffix && trim(suffix, " \t") === "" && expandTabsWidth(suffix) < 4) return endPos - suffix.length;
   return endPos;
 }
 

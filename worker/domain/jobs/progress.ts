@@ -12,10 +12,10 @@
 export type JsonRecord = Record<string, unknown>;
 
 const isDict = (v: unknown): v is JsonRecord => typeof v === 'object' && v !== null && !Array.isArray(v);
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-const int = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : 0);
+const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
+const asInt = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : 0);
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
-const ints = (v: unknown): number[] => (Array.isArray(v) ? v.map(int).filter((n) => n !== 0) : []);
+const asInts = (v: unknown): number[] => (Array.isArray(v) ? v.map(asInt).filter((n) => n !== 0) : []);
 const dicts = (v: unknown): JsonRecord[] => (Array.isArray(v) ? v.filter(isDict) : []);
 
 /** Truncation with a real ellipsis, not three dots. */
@@ -78,10 +78,10 @@ export function coercePlanItems(value: unknown): PlanItem[] {
   if (value.length === 0) throw new BadOutput('plan is empty');
   return value.map((raw) => {
     if (!isDict(raw)) throw new BadOutput('plan entry is not an object');
-    return withOptional<PlanItem>({ title: str(raw['title']).trim(), brief: str(raw['brief']).trim() }, {
-      type: str(raw['type']).trim(),
-      topic: str(raw['topic']),
-      language: str(raw['language']),
+    return withOptional<PlanItem>({ title: asString(raw['title']).trim(), brief: asString(raw['brief']).trim() }, {
+      type: asString(raw['type']).trim(),
+      topic: asString(raw['topic']),
+      language: asString(raw['language']),
     });
   });
 }
@@ -91,14 +91,14 @@ export function coercePlanItems(value: unknown): PlanItem[] {
  * field the model left empty rather than refusing the whole op. */
 export function cardFields(raw: JsonRecord): GeneratedCard {
   return withOptional<GeneratedCard>(
-    { type: str(raw['type']), prompt: str(raw['prompt']), answer: coerceAnswer(raw['answer']), rubric: coerceRubric(raw['rubric']) },
+    { type: asString(raw['type']), prompt: asString(raw['prompt']), answer: coerceAnswer(raw['answer']), rubric: coerceRubric(raw['rubric']) },
     {
-      topic: str(raw['topic']),
+      topic: asString(raw['topic']),
       choices: strings(raw['choices']),
-      skeleton: str(raw['skeleton']),
-      language: str(raw['language']),
-      explanation: str(raw['explanation']),
-      answer_regex: str(raw['answer_regex']),
+      skeleton: asString(raw['skeleton']),
+      language: asString(raw['language']),
+      explanation: asString(raw['explanation']),
+      answer_regex: asString(raw['answer_regex']),
     },
   );
 }
@@ -114,7 +114,7 @@ export function coerceCard(value: unknown): GeneratedCard {
 }
 
 /** The plan step's keys. The counters are present from the first round because
- * Go's zero-valued ints marshal, and the partial reads them by name. */
+ * Go's zero-valued asInts marshal, and the partial reads them by name. */
 export const planProgress = (items: readonly PlanItem[], round: number): JsonRecord => ({
   plan: items.map((i) => ({ ...i })),
   round,
@@ -142,11 +142,11 @@ export interface TriviaCounts {
 
 export function coerceTriviaPairs(value: unknown): TriviaPair[] {
   if (!Array.isArray(value)) throw new BadOutput('trivia batch is not an array');
-  return value.filter(isDict).map((raw) => withOptional<TriviaPair>({ q: str(raw['q']), a: str(raw['a']) }, { e: str(raw['e']) }));
+  return value.filter(isDict).map((raw) => withOptional<TriviaPair>({ q: asString(raw['q']), a: asString(raw['a']) }, { e: asString(raw['e']) }));
 }
 
 /** Before the call returns: the batch it was asked for, beside the counters
- * Go's zero-valued ints marshalled. */
+ * Go's zero-valued asInts marshalled. */
 export const triviaStarting = (total: number): JsonRecord => ({ total, generated_count: 0, inserted: 0, skipped_dups: 0, skipped_invalid: 0 });
 
 export const triviaGenerated = (total: number): JsonRecord => ({ total, generated_count: total, inserted: 0, skipped_dups: 0, skipped_invalid: 0 });
@@ -169,10 +169,10 @@ export const MODEL_ANSWER_SUMMARY_CHARS = 400;
  * back to the model answer: the Go parser's two forgiving rules. */
 export function coerceVerdict(value: unknown, modelAnswer: string): Verdict {
   if (!isDict(value)) throw new BadOutput('verdict is not an object');
-  const summary = str(value['model_answer_summary']);
+  const summary = asString(value['model_answer_summary']);
   return {
-    result: str(value['result']) === 'right' ? 'right' : 'wrong',
-    feedback: str(value['feedback']),
+    result: asString(value['result']) === 'right' ? 'right' : 'wrong',
+    feedback: asString(value['feedback']),
     model_answer_summary: summary || truncate(modelAnswer, MODEL_ANSWER_SUMMARY_CHARS),
   };
 }
@@ -256,31 +256,31 @@ export function coerceTransformPlan(value: unknown, scope: string): TransformPla
   if (!isDict(value)) throw new BadOutput('transform plan is not an object');
   const modifications: CardModification[] = [];
   for (const raw of dicts(value['modifications'])) {
-    const qid = int(raw['question_id']);
+    const qid = asInt(raw['question_id']);
     // A hallucinated or missing id has nothing to update; the apply would
     // skip it anyway, so it never reaches the preview.
     if (qid) modifications.push({ ...cardFields(raw), question_id: qid });
   }
-  const additions: CardAddition[] = dicts(value['additions']).map((raw) => withOptional<CardAddition>(cardFields(raw), { dest_deck: str(raw['dest_deck']) }));
+  const additions: CardAddition[] = dicts(value['additions']).map((raw) => withOptional<CardAddition>(cardFields(raw), { dest_deck: asString(raw['dest_deck']) }));
   const newDecks: NewDeckOp[] = [];
   for (const raw of dicts(value['new_decks'])) {
-    const name = str(raw['name']).trim();
+    const name = asString(raw['name']).trim();
     if (name) {
       newDecks.push(
-        withOptional<NewDeckOp>({ name, deck_type: str(raw['deck_type']) || 'srs' }, { topic: str(raw['topic']), interval_minutes: int(raw['interval_minutes']) }),
+        withOptional<NewDeckOp>({ name, deck_type: asString(raw['deck_type']) || 'srs' }, { topic: asString(raw['topic']), interval_minutes: asInt(raw['interval_minutes']) }),
       );
     }
   }
   const moves: CardMoveOp[] = [];
   for (const raw of dicts(value['card_moves'])) {
-    const qid = int(raw['question_id']);
-    const dest = str(raw['dest_deck']);
+    const qid = asInt(raw['question_id']);
+    const dest = asString(raw['dest_deck']);
     if (qid && dest) moves.push({ question_id: qid, dest_deck: dest });
   }
   const renames: DeckRenameOp[] = [];
   for (const raw of dicts(value['deck_renames'])) {
-    const deckId = int(raw['deck_id']);
-    const name = str(raw['new_name']).trim();
+    const deckId = asInt(raw['deck_id']);
+    const name = asString(raw['new_name']).trim();
     if (deckId && name) renames.push({ deck_id: deckId, new_name: name });
   }
   return withOptional<TransformPlan>(
@@ -288,13 +288,13 @@ export function coerceTransformPlan(value: unknown, scope: string): TransformPla
       scope,
       modifications,
       additions,
-      deletions: ints(value['deletions']),
+      deletions: asInts(value['deletions']),
       new_decks: newDecks,
       card_moves: moves,
       deck_renames: renames,
-      deck_deletions: ints(value['deck_deletions']),
+      deck_deletions: asInts(value['deck_deletions']),
     },
-    { notes: str(value['notes']) },
+    { notes: asString(value['notes']) },
   );
 }
 

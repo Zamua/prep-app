@@ -6,7 +6,7 @@
 // A 200 body carries exactly one outcome key; a non-2xx body is
 // {error: {code, message}}.
 import { grade, GradingError, UnsupportedQuestionType } from '../../domain/grading/index.js';
-import { JsonDecodeError } from '../../domain/grading/answerJson.js';
+import { AnswerJsonError } from '../../domain/grading/answerJson.js';
 import { deviceLabelFromUa } from '../../domain/study/device.js';
 import { gradeCard } from '../../domain/jobs/snapshot.js';
 import { DurationError, parseUntil } from '../durations.js';
@@ -273,7 +273,7 @@ async function submit(
   } catch (e) {
     // An ungradable type, an unreadable stored answer, or malformed JSON
     // in a `multi` submission: the learner's fault or the row's, not a bug.
-    if (e instanceof UnsupportedQuestionType || e instanceof GradingError || e instanceof JsonDecodeError) return error(422, 'not_gradable', e.message);
+    if (e instanceof UnsupportedQuestionType || e instanceof GradingError || e instanceof AnswerJsonError) return error(422, 'not_gradable', e.message);
     throw e;
   }
   return record(deps, body, { q, verdict, userAnswer, idk, s });

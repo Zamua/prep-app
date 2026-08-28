@@ -45,8 +45,8 @@ export interface GradeCard {
 
 type Loose = Readonly<Record<string, unknown>>;
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : String(v));
-const int = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : 0);
+const asString = (v: unknown): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : String(v));
+const asInt = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : 0);
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
 /** Assigns only a non-empty value, at the position the call appears: the
@@ -58,32 +58,32 @@ function put(target: Record<string, unknown>, key: string, value: string | numbe
 
 export function transformCard(raw: Loose): TransformCard {
   const out: Record<string, unknown> = {};
-  out['question_id'] = int(raw['question_id']);
-  out['type'] = str(raw['type']);
-  put(out, 'topic', str(raw['topic']));
-  out['prompt'] = str(raw['prompt']);
+  out['question_id'] = asInt(raw['question_id']);
+  out['type'] = asString(raw['type']);
+  put(out, 'topic', asString(raw['topic']));
+  out['prompt'] = asString(raw['prompt']);
   put(out, 'choices', strings(raw['choices']));
-  out['answer'] = str(raw['answer']);
-  put(out, 'rubric', str(raw['rubric']));
-  put(out, 'skeleton', str(raw['skeleton']));
-  put(out, 'language', str(raw['language']));
-  put(out, 'explanation', str(raw['explanation']));
-  put(out, 'answer_regex', str(raw['answer_regex']));
+  out['answer'] = asString(raw['answer']);
+  put(out, 'rubric', asString(raw['rubric']));
+  put(out, 'skeleton', asString(raw['skeleton']));
+  put(out, 'language', asString(raw['language']));
+  put(out, 'explanation', asString(raw['explanation']));
+  put(out, 'answer_regex', asString(raw['answer_regex']));
   return out as unknown as TransformCard;
 }
 
 export function transformDeck(raw: Loose, cards: readonly TransformCard[]): TransformDeck {
   const out: Record<string, unknown> = {};
-  out['id'] = int(raw['id']);
-  out['name'] = str(raw['name']);
-  out['deck_type'] = str(raw['deck_type']) || 'srs';
-  put(out, 'topic', str(raw['topic']));
-  put(out, 'interval_minutes', int(raw['interval_minutes']));
+  out['id'] = asInt(raw['id']);
+  out['name'] = asString(raw['name']);
+  out['deck_type'] = asString(raw['deck_type']) || 'srs';
+  put(out, 'topic', asString(raw['topic']));
+  put(out, 'interval_minutes', asInt(raw['interval_minutes']));
   // Never nil: Go replaces a nil slice so an empty deck reads as `[]`.
   out['cards'] = [...cards];
   return out as unknown as TransformDeck;
 }
 
 export function gradeCard(raw: Loose): GradeCard {
-  return { type: str(raw['type']), prompt: str(raw['prompt']), answer: str(raw['answer']), rubric: str(raw['rubric']) };
+  return { type: asString(raw['type']), prompt: asString(raw['prompt']), answer: asString(raw['answer']), rubric: asString(raw['rubric']) };
 }

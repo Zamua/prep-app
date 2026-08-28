@@ -40,7 +40,7 @@ export function anonymousContext(buildToken: string, appBase: string, urls: Auth
     clerk_frontend_api_host: urls.clerkFrontendApiHost,
     notif_unseen_count: 0,
     deck_display: {},
-    static_css_mtime: buildToken,
+    build_token: buildToken,
   };
 }
 

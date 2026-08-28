@@ -106,7 +106,7 @@ function decodeSegment(segment: string): JwtPayload | null {
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+const asString = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
 /**
  * Verifies a Clerk session JWT. A credential that is present but fails any
@@ -130,7 +130,7 @@ export class ClerkVerifier {
     if (header['alg'] !== 'RS256') return null;
     const signature = b64Decode(rawSignature.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (rawSignature.length % 4)) % 4));
     if (!signature) return null;
-    const kid = str(header['kid']);
+    const kid = asString(header['kid']);
     if (!(await this.signatureOk(kid, `${rawHeader}.${rawPayload}`, signature))) return null;
     return this.claimsOk(payload) ? payload : null;
   }
@@ -163,14 +163,14 @@ export class ClerkVerifier {
   }
 
   private claimsOk(payload: JwtPayload): boolean {
-    if (str(payload['iss']) !== this.config.issuer) return false;
-    if (!str(payload['sub'])) return false;
+    if (asString(payload['iss']) !== this.config.issuer) return false;
+    if (!asString(payload['sub'])) return false;
     const now = this.clock.now().getTime();
     const exp = num(payload['exp']);
     if (exp === null || exp * 1000 + CLOCK_SKEW_MS <= now) return false;
     const nbf = num(payload['nbf']);
     if (nbf !== null && nbf * 1000 - CLOCK_SKEW_MS > now) return false;
-    const azp = str(payload['azp']);
+    const azp = asString(payload['azp']);
     if (azp !== null && !this.config.authorizedParties.includes(azp)) return false;
     return true;
   }
@@ -181,14 +181,14 @@ export function identityFromClaims(payload: JwtPayload): Identity {
   return {
     subject: String(payload['sub']),
     kind: 'clerk',
-    email: str(payload['email']) ?? str(payload['primary_email']),
-    displayName: str(payload['name']) ?? str(payload['full_name']) ?? str(payload['username']),
-    profilePicUrl: str(payload['picture']) ?? str(payload['image_url']),
+    email: asString(payload['email']) ?? asString(payload['primary_email']),
+    displayName: asString(payload['name']) ?? asString(payload['full_name']) ?? asString(payload['username']),
+    profilePicUrl: asString(payload['picture']) ?? asString(payload['image_url']),
   };
 }
 
 /** Query-string encoding: unreserved characters pass, a space becomes `+`. */
-export function quotePlus(value: string): string {
+export function formUrlEncode(value: string): string {
   let out = '';
   for (const byte of new TextEncoder().encode(value)) {
     const ch = String.fromCharCode(byte);
@@ -236,7 +236,7 @@ export class ClerkProvider implements IdentityProvider {
   }
 
   urls(): SignInUrls {
-    const back = quotePlus(`${this.config.authorizedParties[0]}/`);
+    const back = formUrlEncode(`${this.config.authorizedParties[0]}/`);
     return {
       sign_in: `${this.config.accountsUrl}/sign-in?redirect_url=${back}`,
       sign_up: `${this.config.accountsUrl}/sign-up?redirect_url=${back}`,

@@ -50,7 +50,7 @@
   "sign_in_url": "",
   "sign_out_url": "",
   "sign_up_url": "",
-  "static_css_mtime": "ce11d0000000",
+  "build_token": "ce11d0000000",
   "trivia": {
    "context_prompt": "",
    "deck_id": 3,
@@ -72,7 +72,7 @@
    "last_seen_at": "2026-03-14T15:00:00+00:00",
    "notification_prefs": "{\"mode\":\"off\",\"digest_hour\":9,\"tz\":\"America/New_York\",\"threshold\":3,\"quiet_hours_enabled\":false,\"quiet_start_hour\":22,\"quiet_end_hour\":8,\"last_digest_date\":null,\"last_when_ready_at\":null}",
    "profile_pic_url": null,
-   "tailscale_login": "seed@example.com"
+   "login": "seed@example.com"
   },
   "user_retention": null
  },

@@ -1,10 +1,10 @@
 // List items, continuation indents, tight and loose lists, and the break
 // rules that end an item.
-import { cpBefore, isSpace, strip, unicodeRe } from "./chars";
+import { cpBefore, isSpace, trim, unicodeRe } from "./chars";
 import type { BlockParser, BlockState, Scanner, ScanMatch } from "./block";
 import type { Token } from "./tokens";
 
-export const LIST_PATTERN = "^(?P<list_1> {0,3})(?P<list_2>[\\*\\+-]|\\d{1,9}[.)])(?P<list_3>[ \\t]*|[ \\t].+)$";
+export const LIST_PATTERN = "^(?<list_1> {0,3})(?<list_2>[\\*\\+-]|\\d{1,9}[.)])(?<list_3>[ \\t]*|[ \\t].+)$";
 
 const LINE_HAS_TEXT = unicodeRe("(\\s*)\\S", "y");
 const BLANK_LINE = unicodeRe("(^[ \\t\\v\\f]*\\n)+", "y", true);
@@ -34,7 +34,7 @@ function createListMarker(groups: Record<string, string | undefined>, prefix: st
 export function parseList(block: BlockParser, m: ScanMatch, state: BlockState): number | null {
   const item = createListMarker(m.groups, "list");
   const text = item.text;
-  if (!strip(text)) {
+  if (!trim(text)) {
     // An empty item cannot interrupt a paragraph.
     const endPos = state.appendParagraph();
     if (endPos) return endPos;
@@ -130,7 +130,7 @@ function collectListItemLines(
     const hasContinuation = hasContinuationIndent(rawLine, continueWidth);
     if (hasContinuation) {
       // An item can begin with at most one blank line.
-      if (prevBlankLine && !text && !strip(src)) break;
+      if (prevBlankLine && !text && !trim(src)) break;
       src += rawLine;
       prevBlankLine = false;
       state.cursor = nextPos;
@@ -212,7 +212,7 @@ function compileListItemPattern(bullet: string, width: number): RegExp {
   const key = bullet + width;
   let re = ITEM_PATTERNS.get(key);
   if (!re) {
-    re = unicodeRe("^(?P<listitem_1> {0," + width + "})(?P<listitem_2>" + bullet + ")(?P<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
+    re = unicodeRe("^(?<listitem_1> {0," + width + "})(?<listitem_2>" + bullet + ")(?<listitem_3>[ \\t]*|[ \\t][^\\n]+)$", "y");
     ITEM_PATTERNS.set(key, re);
   }
   return re;
