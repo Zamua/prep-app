@@ -38,7 +38,7 @@ function draws(seed: number): Draws {
     choices: Array.from({ length: 24 }, () => r.choice(alphabet)).join(''),
     bytes32: Array.from(r.bytes(32)),
     choiceSmall: Array.from({ length: 10 }, () => r.choice([0, 1, 2])),
-    bits32: Array.from({ length: 4 }, () => r.getrandbits(32)),
+    bits32: Array.from({ length: 4 }, () => r.topBits(32)),
   };
 }
 
@@ -59,7 +59,7 @@ describe('SeededRandom', () => {
   it('refuses an empty choice and out-of-range bit counts', () => {
     const r = new SeededRandom(1);
     expect(() => r.choice([])).toThrow(RangeError);
-    expect(() => r.getrandbits(33)).toThrow(RangeError);
+    expect(() => r.topBits(33)).toThrow(RangeError);
   });
 });
 
@@ -74,7 +74,7 @@ describe('WebCryptoRandom', () => {
 });
 
 describe('session ids', () => {
-  it('seeded ids are sha1("seed-session-<n>")[:16] over a counter', async () => {
+  it('seeded ids are the first sixteen hex digits of SHA-1 over a counter', async () => {
     let n = 0;
     const ids = new SeededSessionIds({ get: async () => n, set: async (v) => void (n = v) });
     expect(await ids.next()).toBe('06d904444c991b8d');
@@ -84,7 +84,7 @@ describe('session ids', () => {
     expect(await ids.next()).toBe('06d904444c991b8d');
   });
 
-  it('production ids are token_hex(8)', async () => {
+  it('production ids are sixteen hex characters of real randomness', async () => {
     const id = await new RandomSessionIds(new WebCryptoRandom()).next();
     expect(id).toMatch(/^[0-9a-f]{16}$/);
     expect(hex(new Uint8Array([0, 255, 16]))).toBe('00ff10');

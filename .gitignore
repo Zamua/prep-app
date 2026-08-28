@@ -28,3 +28,6 @@ push-subscriptions.json.archived-*
 
 # Local run output
 artifacts/
+
+# Agent scratch: worktrees and session state, never part of the app
+.claude/

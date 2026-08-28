@@ -43,13 +43,13 @@ function decode(value: string, alphabet: string): Uint8Array | null {
 export const b64Encode = (bytes: Uint8Array): string => encode(bytes, STD, true);
 export const b64uEncode = (bytes: Uint8Array): string => encode(bytes, URL, false);
 
-/** Strict: padding must be present and correct, as `validate=True` requires. */
+/** Strict: padding must be present and correct. */
 export function b64Decode(value: string): Uint8Array | null {
   if (value.length % 4 !== 0) return null;
   return decode(value, STD);
 }
 
-/** Padding optional, as the re-padding callers of `urlsafe_b64decode` do. */
+/** The URL alphabet, padding optional: web push and JWT both omit it. */
 export const b64uDecode = (value: string): Uint8Array | null => decode(value, URL);
 
 const TEXT = new TextEncoder();

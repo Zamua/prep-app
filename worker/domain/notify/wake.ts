@@ -196,8 +196,8 @@ function planPrune(i: WakeInputs, now: Date, tasks: WakeTask[], wakes: number[])
 
 // ---- the pieces the tasks share -------------------------------------------
 
-/** `in_quiet_hours`: `[start, end)` local, wrapping midnight. An equal pair
- * silences nothing, so a misconfigured range cannot mute everything. */
+/** `[start, end)` local, wrapping midnight. An equal pair silences nothing,
+ * so a misconfigured range cannot mute everything. */
 export function inQuietHours(localHour: number, start: number, end: number): boolean {
   if (start === end) return false;
   if (start < end) return start <= localHour && localHour < end;
@@ -216,7 +216,8 @@ export function effectiveIntervalMinutes(baseMinutes: number, ignoredStreak: num
   return baseMinutes * 2 ** Math.max(0, Math.min(ignoredStreak, MAX_BACKOFF_DOUBLINGS));
 }
 
-/** `_is_due` as an instant: an unset or unparsable stamp is due now. */
+/** When the deck next owes a question; an unset or unparsable stamp is
+ * due now. */
 export function triviaDueAt(deck: TriviaDeckState, now: Date): Date {
   return dueAt(deck, deck.lastNotifiedAt, now);
 }

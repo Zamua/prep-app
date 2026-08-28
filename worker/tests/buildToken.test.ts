@@ -25,7 +25,7 @@ describe("resolveBuildToken", () => {
   });
 
   it("hashes a non-hex value to 12 hex chars the routes accept", () => {
-    // hashlib.sha1(b"v0.44.0").hexdigest()[:12]
+    // The first twelve hex digits of SHA-1 over the tag's own bytes.
     expect(resolveToken("v0.44.0", BAKED)).toBe("d8392eb81ff8");
     expect(isAcceptedVersionToken(resolveToken("v0.44.0", BAKED))).toBe(true);
   });

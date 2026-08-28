@@ -92,10 +92,10 @@
      wires up before user interaction without blocking parse. #}
   <script src="{{ root }}/static/js/vendor/htmx-2.0.4.min.js?v={{ static_css_mtime|default(0) }}" defer></script>
 
-  {# ClerkJS bootstrap — only emitted when the active provider is Clerk
-     (the `clerk_publishable_key` + `clerk_frontend_api_host` globals
-     are set by the prep.web.templates context_processor on
-     PREP_AUTH_MODE=clerk deploys; None on Tailscale).
+  {# ClerkJS bootstrap, emitted only when the active provider is Clerk
+     (the page context carries `clerk_publishable_key` +
+     `clerk_frontend_api_host` on PREP_AUTH_MODE=clerk deploys, and
+     leaves them null otherwise).
 
      Loading on EVERY page (not just landing) is the fix for a
      class of bug where a page works on first arrival but a form POST

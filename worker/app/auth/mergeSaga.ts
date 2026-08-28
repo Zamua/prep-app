@@ -63,7 +63,7 @@ export interface MergeDeps extends DestroyDeps {
   randomHex: RandomHex;
 }
 
-/** `secrets.token_hex` over the `Random` port: the slug de-collision's tail. */
+/** Random hex over the `Random` port: the slug de-collision's tail. */
 export function hexFrom(random: Random): RandomHex {
   return (bytes: number) =>
     Array.from(random.bytes(bytes), (b) => b.toString(16).padStart(2, '0')).join('');

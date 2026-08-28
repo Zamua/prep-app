@@ -36,10 +36,10 @@ function walk(dir: string, suffix: string): string[] {
   return out.sort();
 }
 
-// Constructs nunjucks does not implement, and a request object no template
-// is given. Each renders `undefined` silently rather than failing, so the
-// only way to catch one is to refuse it here.
-const SMELLS = ["request.", "request.scope", " in (", ".items()", ".update(", ".get(", "namespace(", "selectattr", "rejectattr", "[:"];
+// Spellings the renderer evaluates to undefined instead of rejecting, plus
+// a `request` object no template is handed. Each one renders as a blank
+// branch and never as an error, so refusing the text is the only gate.
+const SMELLS = ["request.", " in (", ".items()", ".update(", ".get(", "namespace(", "selectattr", "rejectattr", "[:"];
 
 describe("the templates", () => {
   it("all 49 precompile for nunjucks-slim", () => {
@@ -55,6 +55,7 @@ describe("the templates", () => {
       for (const smell of SMELLS) {
         expect(src.includes(smell), `${rel} still contains ${smell}`).toBe(false);
       }
+      // The literals are `true`, `false` and `null`; a capitalised one is undefined.
       expect(/\b(True|False|None)\b/.test(src), `${rel} still contains a capitalised literal`).toBe(false);
     }
   });

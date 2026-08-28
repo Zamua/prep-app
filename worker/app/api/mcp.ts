@@ -35,7 +35,7 @@ export interface ToolResult {
 const toolError = (message: string): ToolResult => ({ content: [{ type: 'text', text: message }], isError: true });
 const toolText = (text: string): ToolResult => ({ content: [{ type: 'text', text }], isError: false });
 
-/** `json.dumps(value, ensure_ascii=False, indent=2)`. */
+/** Tool output: indented two spaces, non-ASCII left as itself. */
 const dumps = (value: unknown): string => JSON.stringify(value, null, 2);
 
 const arg = (args: Record<string, unknown>, name: string): string => {
@@ -361,10 +361,8 @@ export async function dispatch(repos: V1Repos, body: unknown, deps: McpDeps): Pr
   return json(rpcError(id, -32601, `unknown method: ${literal(method)}`));
 }
 
-/** `repr()` of the value a client sent, for the error message. */
+/** The value a client sent, quoted for the error message so an empty or
+ * padded string is visible in it. */
 function literal(value: unknown): string {
-  if (typeof value === 'string') return `'${value.split('\\').join('\\\\').split("'").join("\\'")}'`;
-  if (value === null || value === undefined) return 'None';
-  if (typeof value === 'boolean') return value ? 'True' : 'False';
-  return String(value);
+  return JSON.stringify(value) ?? String(value);
 }

@@ -31,10 +31,9 @@ const UPPER = 0x80000000;
 const LOWER = 0x7fffffff;
 
 /**
- * MT19937 seeded from an int: `init_by_array` over the absolute value split
- * into 32-bit words, bit draws for k <= 32, and rejection over the bit
- * length for `choice`. The exact seeding matters only in that it must not
- * change: the seed profiles' ids are pinned to this stream.
+ * MT19937 seeded from an integer, split into 32-bit words from its absolute
+ * value. The seed profiles' ids and every recorded page fixture are values
+ * of this stream, so the seeding is part of the contract, not an internal.
  */
 export class SeededRandom implements Random {
   private readonly mt = new Uint32Array(N);
@@ -112,38 +111,39 @@ export class SeededRandom implements Random {
     return y >>> 0;
   }
 
-  /** `getrandbits(k)` for 0 < k <= 32. */
-  getrandbits(k: number): number {
-    if (k <= 0 || k > 32) throw new RangeError('getrandbits: 1 <= k <= 32');
+  /** The top k bits of one draw, for 0 < k <= 32. */
+  topBits(k: number): number {
+    if (k <= 0 || k > 32) throw new RangeError('topBits: 1 <= k <= 32');
     return k === 32 ? this.next32() : this.next32() >>> (32 - k);
   }
 
-  /** `token_bytes(n)` as the seeded harness draws it: one `getrandbits(8)` per byte. */
+  /** n bytes, one eight-bit draw each. */
   bytes(n: number): Uint8Array {
     const out = new Uint8Array(n);
-    for (let i = 0; i < n; i++) out[i] = this.getrandbits(8);
+    for (let i = 0; i < n; i++) out[i] = this.topBits(8);
     return out;
   }
 
-  /** `_randbelow(n)`: reject draws of `n.bit_length()` bits until one is under n. */
-  randbelow(n: number): number {
-    if (n <= 0) throw new RangeError('randbelow: n must be positive');
+  /** Draws of n's bit length, rejected until one lands under n, so every
+   * value below n is equally likely. */
+  below(n: number): number {
+    if (n <= 0) throw new RangeError('below: n must be positive');
     const k = 32 - Math.clz32(n);
     for (;;) {
-      const r = this.getrandbits(k);
+      const r = this.topBits(k);
       if (r < n) return r;
     }
   }
 
   choice<T>(seq: readonly T[]): T {
     if (seq.length === 0) throw new RangeError('choice on an empty sequence');
-    return seq[this.randbelow(seq.length)]!;
+    return seq[this.below(seq.length)]!;
   }
 }
 
 export const hex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 
-/** `secrets.token_hex(8)`: sixteen hex characters. */
+/** Sixteen hex characters over eight random bytes. */
 export class RandomSessionIds implements SessionIds {
   constructor(private readonly random: Random) {}
   async next(): Promise<string> {
@@ -151,7 +151,8 @@ export class RandomSessionIds implements SessionIds {
   }
 }
 
-/** `sha1("seed-session-<n>")[:16]` over a per-cell counter, reset by the seed. */
+/** The first sixteen hex digits of SHA-1 over a per-cell counter, so a
+ * seeded run gives the same session ids every time. */
 export class SeededSessionIds implements SessionIds {
   constructor(private readonly counter: { get(): Promise<number>; set(n: number): Promise<void> }) {}
 

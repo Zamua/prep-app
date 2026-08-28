@@ -93,7 +93,7 @@ export function fakeEnv(overrides: Partial<Env> = {}): Env {
 }
 
 /** What the seeded harness sends: the fake provider only trusts the
- * tailscale headers when the internal token rides along (decision 7.0). */
+ * tailscale headers when the internal token rides along. */
 export const IDENTIFIED = {
   'tailscale-user-login': 'seed@example.com',
   'tailscale-user-name': 'Seed',

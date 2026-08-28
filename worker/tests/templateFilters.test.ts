@@ -84,7 +84,7 @@ describe("floattext: a float as text", () => {
     [12345.678, "12345.678"],
     [NaN, "nan"],
     [Infinity, "inf"],
-  ])("str(%s) = %s", (x, want) => {
+  ])("floattext(%s) = %s", (x, want) => {
     expect(floatText(x)).toBe(want);
   });
   it("keeps 50.0 as 50.0 through the mastery bar's round(2)", () => {
@@ -111,12 +111,13 @@ describe("int: truncation, with a fallback for anything unparseable", () => {
 });
 
 describe("string: any template value as text", () => {
-  it("prints null and the booleans capitalised, and a missing value as nothing", () => {
-    expect(asText(null)).toBe("None");
-    expect(asText(true)).toBe("True");
-    expect(asText(false)).toBe("False");
+  it("prints an absent value as nothing, and everything else as itself", () => {
+    expect(asText(null)).toBe("");
     expect(asText(undefined)).toBe("");
+    expect(asText(true)).toBe("true");
+    expect(asText(false)).toBe("false");
     expect(asText(3)).toBe("3");
+    expect(asText("x")).toBe("x");
   });
   it("compares equal strings the way the diff card needs", () => {
     expect(render("{% if a|string != b|string %}changed{% else %}same{% endif %}", { a: "", b: "" })).toBe("same");
@@ -134,12 +135,12 @@ describe("format: printf-style substitution", () => {
     ["%02d:00", 22, "22:00"],
     ["%d", 3.7, "3"],
     ["%.2f", 2.675, "2.67"],
-    ["%s", null, "None"],
+    ["%s", null, ""],
   ])("%s %% %s = %s", (fmt, arg, want) => {
     expect(printf(fmt, arg)).toBe(want);
   });
   it("takes a tuple with width, alignment and sign flags", () => {
-    expect(printf("%5.1f|%-4d|%+d|%s", [3.14159, 7, 3, null])).toBe("  3.1|7   |+3|None");
+    expect(printf("%5.1f|%-4d|%+d|%s", [3.14159, 7, 3, null])).toBe("  3.1|7   |+3|");
   });
   it("refuses an argument count mismatch", () => {
     expect(() => printf("%d %d", 1)).toThrow(/not enough arguments/);
@@ -165,13 +166,13 @@ describe("slice: bounds, negatives and code points", () => {
     expect(sliceOf([1, 2, 3, 4], -2)).toEqual([3, 4]);
     expect(sliceOf(null, 0, 3)).toBeNull();
   });
-  it("replaces the [:n] sites, including inside a for", () => {
+  it("is the |slice filter, on a string and on a loop's sequence", () => {
     expect(render("{{ t|slice(0, 3) }}{% for x in xs|slice(0, 2) %}{{ x }}{% endfor %}", { t: "abcdef", xs: [1, 2, 3] })).toBe("abc12");
     expect(render("{{ d|slice(5, 10) }}", { d: "2026-03-14T15:00:00" })).toBe("03-14");
   });
 });
 
-describe("tojson: markupsafe htmlsafe_json_dumps", () => {
+describe("tojson: JSON safe to embed in a <script> block", () => {
   it("sorts keys, spaces the separators and escapes to ASCII", () => {
     expect(stableJson({ b: 1, a: [1, 2.5, "x"], c: { z: null, y: true } })).toBe('{"a": [1, 2.5, "x"], "b": 1, "c": {"y": true, "z": null}}');
     expect(stableJson('é — 𝄞 "q" \\ \n \x01 \x7f')).toBe('"\\u00e9 \\u2014 \\ud834\\udd1e \\"q\\" \\\\ \\n \\u0001 \\u007f"');
@@ -277,7 +278,7 @@ describe("parseIso", () => {
     expect(parseIso("2026-03-14")).toBe(Date.UTC(2026, 2, 14));
     expect(parseIso("2026-03-14T15:00:00.250000Z")).toBe(NOW.getTime() + 250);
   });
-  it("rejects what fromisoformat rejects", () => {
+  it("answers null for anything that is not a timestamp", () => {
     expect(parseIso("garbage")).toBeNull();
     expect(parseIso("2026-13-01")).toBeNull();
     expect(parseIso(42)).toBeNull();
@@ -285,7 +286,7 @@ describe("parseIso", () => {
   });
 });
 
-describe("wakes_in: every branch of prep.app._wakes_in at the pinned instant", () => {
+describe("wakes_in: every branch at the pinned instant", () => {
   it.each([
     ["", ""],
     [null, ""],
@@ -321,7 +322,7 @@ describe("wakes_in: every branch of prep.app._wakes_in at the pinned instant", (
   });
 });
 
-describe("relative_time: every branch of prep.app._relative_time at the pinned instant", () => {
+describe("relative_time: every branch at the pinned instant", () => {
   it.each([
     ["", ""],
     [null, ""],

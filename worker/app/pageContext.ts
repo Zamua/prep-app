@@ -28,8 +28,8 @@ export interface PageEnv {
   urls?: AuthUrls;
 }
 
-/** True when `agent_for_user` would hand back a usable adapter: never for
- * an anonymous account, else a stored key or the deploy's free tier. */
+/** True when the account could be handed a usable agent adapter: never an
+ * anonymous one, else a stored key or the deploy's free tier. */
 export function agentAvailable(repos: UserRepos, freeTierConfigured: boolean): boolean {
   if (repos.prefs.get()?.is_anonymous) return false;
   return freeTierConfigured || repos.byok.listProviders().length > 0;

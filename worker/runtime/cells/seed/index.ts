@@ -51,7 +51,7 @@ const ANONYMOUS_PROFILES: ReadonlySet<string> = new Set(['merge_anon']);
 
 export const isAnonymousProfile = (profile: string): boolean => ANONYMOUS_PROFILES.has(profile);
 
-/** The user row as `create_user` writes it: upserted with the seed name and
+/** The user row a seeded run starts from: upserted with the seed name and
  * timezone, or an anonymous row for a visitor profile. */
 export function createUser(repos: UserRepos, user: string, profile = ''): void {
   if (isAnonymousProfile(profile)) repos.prefs.createAnonymous(user, 'Guest');

@@ -78,7 +78,7 @@ export function deckToCsv(repos: DeckIoRepos, deckId: number): string {
 /** Leading `# key: value` lines, keys lowercased and values stripped. */
 export function splitPreamble(csvText: string): { preamble: Record<string, string>; rest: string } {
   const preamble: Record<string, string> = {};
-  // `str.splitlines()`: a trailing newline does not yield an empty line.
+  // A trailing newline ends the last line rather than opening an empty one.
   const lines = csvText.split(/\r\n|\r|\n/);
   if (lines.length && lines[lines.length - 1] === '') lines.pop();
   let i = 0;

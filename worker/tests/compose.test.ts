@@ -43,7 +43,7 @@ describe('compose', () => {
       profilePicUrl: null,
     });
     expect(await c.identity.identify(req('/'))).toBeNull();
-    // The tailscale headers alone prove nothing (decision 7.0, option c).
+    // The tailscale headers alone prove nothing.
     const { 'x-internal-token': _token, ...unsigned } = IDENTIFIED;
     expect(await c.identity.identify(req('/', { headers: unsigned }))).toBeNull();
   });

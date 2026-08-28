@@ -4864,7 +4864,7 @@
         "json": {
           "error": {
             "code": -32601,
-            "message": "unknown method: 'resources/list'"
+            "message": "unknown method: \"resources/list\""
           },
           "id": 3,
           "jsonrpc": "2.0"
@@ -4902,7 +4902,7 @@
         "json": {
           "error": {
             "code": -32602,
-            "message": "unknown tool: 'prep_nope'"
+            "message": "unknown tool: \"prep_nope\""
           },
           "id": 7,
           "jsonrpc": "2.0"
@@ -6612,7 +6612,7 @@
                 "type": "object"
               },
               "_CsvImportOutcome": {
-                "description": "Result of a CSV upload — same shape `prep.decks.io.ImportOutcome`\nserializes to. Inserted vs duplicate-skipped vs row-level errors.",
+                "description": "Result of a CSV upload: inserted vs duplicate-skipped vs row-level\nerrors.",
                 "properties": {
                   "deck_id": {
                     "title": "Deck Id",
@@ -7231,7 +7231,7 @@
             },
             "/api/v1/decks/{name}/cards": {
               "get": {
-                "description": "List every card in the deck. Same field set the CSV exporter\nemits — JSON is the agent-friendly shape, CSV is the spreadsheet-\nfriendly shape, both backed by prep.decks.io.",
+                "description": "List every card in the deck. Same field set the CSV exporter\nemits: JSON is the agent-friendly shape, CSV is the spreadsheet-\nfriendly shape, and one exporter backs both.",
                 "operationId": "api_list_cards_api_v1_decks__name__cards_get",
                 "parameters": [
                   {
@@ -8446,7 +8446,7 @@
             },
             "/notify/subscribe": {
               "post": {
-                "description": "Browser-supplied subscription payload: {endpoint, keys: {p256dh, auth}}.\nStored via the public surface in prep.notify so future repo extraction\nof the underlying SQL is invisible to the route layer.",
+                "description": "Browser-supplied subscription payload: {endpoint, keys: {p256dh, auth}}.\nStored through the push-subscription repository, so the route layer\nnames no SQL.",
                 "operationId": "notify_subscribe_notify_subscribe_post",
                 "responses": {
                   "200": {

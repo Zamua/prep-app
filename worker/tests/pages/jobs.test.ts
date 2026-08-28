@@ -71,7 +71,7 @@ interface Harness {
   post(path: string, body?: Record<string, string>): Promise<Response>;
 }
 
-/** No shared tier configured, so `agent_for_user` hands back nothing. */
+/** No shared tier configured, so nothing but a stored key can fund a call. */
 const NO_TIER = { PREP_FREE_INFERENCE_BASE_URL: '', PREP_FREE_INFERENCE_API_KEY: '', PREP_FREE_INFERENCE_MODEL: '' };
 
 async function harness(profile = 'reader', overrides: Record<string, string> = {}): Promise<Harness> {

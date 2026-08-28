@@ -12,8 +12,9 @@ const TOKEN_RE = /^[0-9a-f]{7,40}$/;
 const LEGACY_STAMP_RE = /^[0-9]+$/;
 
 /** A token-shaped value passes verbatim; any other non-empty value (an
- * image tag like "v0.44.0") is normalized to sha1[:12] so the served token
- * always matches the accepted charset; empty falls back to `baked`. */
+ * image tag like "v0.44.0") is normalized to the first twelve hex digits of
+ * its SHA-1, so the served token always matches the accepted charset; empty
+ * falls back to `baked`. */
 export function resolveToken(raw: string | undefined | null, baked: string): string {
   const value = (raw ?? '').trim();
   if (TOKEN_RE.test(value)) return value;

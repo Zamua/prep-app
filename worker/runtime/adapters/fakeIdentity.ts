@@ -21,9 +21,8 @@ function tagsEqual(a: string, b: string): boolean {
 
 /**
  * Identity from the tailscale headers, which nothing verifies, so the same
- * request must also carry the harness's `X-Internal-Token` (decision 7.0,
- * option c). Without that gate the test host would hand any caller any
- * user's cell.
+ * request must also carry the harness's `X-Internal-Token`. Without that
+ * gate the test host would hand any caller any user's cell.
  */
 export class FakeIdentityProvider implements IdentityProvider {
   readonly name = 'tailscale';

@@ -88,7 +88,7 @@ one-card-per-screen rhythm as the online session flow.
 | --- | --- |
 | `mcq` | Choices render, user picks one, graded locally (exact match against the answer, mirroring `worker/domain/grading/`). Verdict + correct answer shown. |
 | `multi` | Checkboxes render, graded locally by set equality, same as the online deterministic grader. |
-| `short` with `answer_regex` | User types an answer; the stored regex is applied (case-insensitive, whole-string, same semantics as `match_regex`). If the pattern is absent, fails to compile in the browser's regex engine, or is over the length cap, fall through to self-verdict. |
+| `short` with `answer_regex` | User types an answer; the stored regex is applied (case-insensitive, whole-string, the same semantics `matchRegex` applies on the server). If the pattern is absent, fails to compile in the browser's regex engine, or is over the length cap, fall through to self-verdict. |
 | `short` without a usable regex | Reveal flow: user answers, taps "Show answer", the canonical answer (and rubric, if present) renders, user self-verdicts Right / Wrong. Same shape as the existing no-agent `self_grade.html` path. |
 | `code` | Always the reveal + self-verdict flow. The rubric and reference answer render on reveal. No editor niceties in v1: a plain textarea. |
 | Locally authored cards | Treated as `short` without a regex: reveal + self-verdict. |

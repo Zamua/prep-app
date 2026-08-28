@@ -111,7 +111,7 @@ export function safeUrl(url: string): string {
 const STRIP_IMAGE = /<img\b[^>]*\balt=("([^"]*)"|'([^']*)')[^>]*>/gu;
 const STRIP_TAGS = /(<!--[^\n]*?-->|<[^>]*>)/gu;
 
-/** util.striptags: image alt text out of rendered children. */
+/** Image alt text out of rendered children. */
 export function striptags(s: string): string {
   s = s.replace(STRIP_IMAGE, (_m, _q, d?: string, sq?: string) => d || sq || "");
   return s.replace(STRIP_TAGS, "");

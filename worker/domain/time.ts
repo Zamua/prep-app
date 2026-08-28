@@ -26,7 +26,7 @@ const ISO =
  */
 export function parseIso(s: string): Date {
   const m = ISO.exec(s);
-  if (!m) throw new IsoFormatError(`invalid isoformat string: ${JSON.stringify(s)}`);
+  if (!m) throw new IsoFormatError(`not an ISO 8601 timestamp: ${JSON.stringify(s)}`);
   const [, y, mo, d, h = '0', mi = '0', sec = '0', frac = '', off = ''] = m;
   const year = Number(y), month = Number(mo), day = Number(d);
   const hour = Number(h), minute = Number(mi), second = Number(sec);

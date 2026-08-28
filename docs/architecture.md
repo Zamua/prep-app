@@ -68,10 +68,10 @@ cell.** `last_seen_at` is bumped on every identified request, so it
 lives in the `UserCell`; in a global cell it would be a single-writer
 hot spot on the whole request path.
 
-The 18-table shared schema the app used to carry collapses into one
-SQLite per user with no `user_id` columns at all. `DirectoryCell` keeps
-the small amount of cross-user data that genuinely has to be
-enumerable.
+There is one SQLite per user, with no `user_id` columns in it at all:
+isolation is which cell answered, not which rows a query filtered.
+`DirectoryCell` keeps the small amount of cross-user data that genuinely
+has to be enumerable.
 
 ---
 

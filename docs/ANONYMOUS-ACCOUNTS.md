@@ -395,7 +395,7 @@ replaced it. The middle column is there because several rows say
 | Landing continue strip (`worker/templates/landing.html`) | reveals a device-local guest deck | deleted. An anonymous user with a deck never sees the landing. |
 | `/deck/{name}`, `/study/*`, `/session/*`, question edit, export, reorganize | signed-in only | unchanged. No anonymous branch: they take any resolved user and an anonymous user is a user. |
 | Deck import (`/decks/import/csv`, `/prepdeck`, `/anki`) | any resolved user | **signed-in**. Uncapped upload into a cookie identity, exception 2 below. |
-| Workflow starts (`/decks/new/srs` action=plan, `/decks/new/trivia`, `/transform/*`, plan signals) | any resolved user, agent checked inside the activity | refused when `funding_tier_for_user` is `none`, exception 2 below. |
+| Workflow starts (`/decks/new/srs` action=plan, `/decks/new/trivia`, `/transform/*`, plan signals) | any resolved user, agent checked inside the activity | refused when `fundingTier` is `none`, exception 2 below. |
 | `/offline` shell (`static/js/offline/offline-app.js`) | guest-mode overview, guest nudge, guest disclosure | normal owner device. `meta.owner` holds the anonymous user id. Every guest branch deleted. |
 | `sync.js` adoption gates | `guestAdoptionPending()` blocks flush and refresh | the guest half is deleted; the owner-ABSENT flush gate survives under a non-guest name, and the owner-MISMATCH guard is unchanged. |
 | PWA install nudge (`worker/templates/base.html`) | `{% if user %}` | `{% if user and not user.is_anonymous %}`. iOS storage jars, section 1. |
@@ -478,7 +478,7 @@ row and holds a worker slot until the Noop adapter fails the
 activity, and worker-slot starvation is a known prod failure mode.
 So every `start_*` call site in `worker/app/decks/service.ts`,
 `worker/app/study/` and `worker/app/trivia/` refuses when
-`funding_tier_for_user(uid)` is `none`, returning the same
+`fundingTier` is `none`, returning the same
 "AI is not configured" error the templates already render. Anonymous
 users are always `none` (below), so this closes the hole for them
 without a single anonymous-specific branch, and it fixes the same
@@ -522,8 +522,8 @@ Two consequences worth pinning:
   renders nothing and the panel is Scheduling, Editor and Forget this
   device. The panel must degrade to that rather than emitting a dead
   anchor.
-- `_notif_unseen_context` (`worker/app/pageContext.ts`) is left alone.
-  It runs a `COUNT` per render and returns 0 for a user with no rows,
+- The unseen-notification count (`worker/app/pageContext.ts`) is left
+  alone. It runs a `COUNT` per render and returns 0 for a user with no rows,
   which is the correct answer for an anonymous user and the same query
   every signed-in user already pays for. Adding an anonymous branch to
   a context processor to save a zero-row indexed count is a branch
@@ -531,15 +531,15 @@ Two consequences worth pinning:
 
 ### AI for anonymous users
 
-`agent_for_user` (`worker/app/agent/funding.ts`) falls through to the
-deploy free tier for any user with no BYOK row, which today would
+`agentConfig` (`worker/app/agent/funding.ts`) falls through to the
+deploy free tier for any user with no BYOK row, which would otherwise
 hand an anonymous user unlimited worker-driven generation on the
 operator's shared key.
 
 **Rule: anonymous users reach the free tier through
 `POST /api/instant/generate` and nowhere else.**
-`agent_for_user(uid)` returns `_NoopAgent` when the user is
-anonymous, and `funding_tier_for_user` reports `none`.
+`agentConfig` reports tier `none` for an anonymous account, and so
+does `fundingTier`.
 
 **How they learn it, given section 2 forbids the prefix test.** Both
 take a bare `user_id` string, so the answer has to be a `users` read
@@ -547,11 +547,10 @@ or a string test, and the string test is the one section 2 rejects.
 The read is affordable because the two call-site SHAPES are different
 and only one of them is hot:
 
-- `agent_for_user` / `funding_tier_for_user` add a single
-  `SELECT is_anonymous FROM users WHERE tailscale_login = ?` at the
-  top, returning `_NoopAgent` / `"none"` on a hit. This is a primary-key
-  lookup, and it runs once per agent call or workflow start, next to
-  the `byok_credentials` lookup `_user_has_byok_rows`
+- `agentConfig` / `fundingTier` read the account row's
+  `is_anonymous` flag first and answer `none` on a hit. That is a
+  primary-key lookup, and it runs once per agent call or workflow start,
+  next to the `byok_credentials` lookup `hasByokRows`
   (`worker/app/agent/funding.ts`) already does on that same path.
 - The page context (`worker/app/pageContext.ts`) does NOT go through
   either. It runs on EVERY render, and it already holds the account
@@ -795,7 +794,7 @@ Still required, and not by the instant deck. Instant slugs are random
 over a 32-symbol alphabet (section 3), so two accounts colliding on
 one is negligible. The reachable collisions are the slugs users
 actually control: offline-authored named decks
-(`_slug_for_deck_name`, which kebab-cases the label) and imported
+(`slugForDeckName`, which kebab-cases the label) and imported
 decks. Two people who both made a `french-revolution` deck is the
 ordinary case.
 
@@ -1015,15 +1014,13 @@ in days while no single tick can hold the lock for long. A per-account
 transaction lets request traffic interleave between accounts rather
 than waiting out the whole batch.
 
-**The cutoff must be formatted by `now()`.** `last_seen_at` is written
-by `worker/runtime/adapters/sql/schema.ts`'s `now()`, which emits an aware
-`isoformat()` with a `+00:00` suffix, and the comparison is a TEXT
-sort. A cutoff formatted with a `Z` suffix sorts ABOVE an equal-instant
-`+00:00` value, because `'Z' > '+'`, so a mismatched formatter deletes
-rows it should keep. Build the cutoff as
-`(datetime.now(timezone.utc) - timedelta(days=365)).isoformat()` and
-never with `strftime`. A test pins a row written by `now()` at exactly
-the cutoff instant and asserts it survives.
+**The cutoff must carry the same suffix `last_seen_at` does.** Stamps
+are written with a `+00:00` offset, and a TEXT comparison sorts a `Z`
+suffix ABOVE an equal-instant `+00:00` one, because `'Z' > '+'`, so a
+cutoff formatted the other way deletes rows it should keep. `cutoffFor`
+(`worker/domain/reaper.ts`) builds it through the same `isoUtc` every
+stamp goes through. A test pins a row written at exactly the cutoff
+instant and asserts it survives.
 
 **A returning visitor is never reaped**, because `UserRepo.touch`
 bumps `last_seen_at` on every resolved request, including a request

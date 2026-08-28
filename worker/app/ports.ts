@@ -609,7 +609,7 @@ export type AgentConfig =
   | { tier: 'free' }
   | { tier: 'none'; reason: string };
 
-/** What `funding_tier_for_user` answers, minus the retired subscription. */
+/** Which credential funds a call, or that none does. */
 export type FundingTier = 'byok' | 'free' | 'none';
 
 export class RunnerUnavailable extends Error {}

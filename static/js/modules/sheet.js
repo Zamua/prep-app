@@ -11,10 +11,9 @@
 //   - Plays nicely with the existing data-dialog pattern; we extend
 //     rather than parallel it.
 //
-// The sheet's <form> is reused across triggers — we just rewrite its
-// `action` attribute on open. The form posts a `preset` field (chip
-// row) OR a `custom` + `unit` pair (free-form), matching
-// prep.web.durations.parse_until.
+// The sheet's <form> is reused across triggers: the `action` attribute
+// is rewritten on open. The form posts a `preset` field (chip row) OR a
+// `custom` + `unit` pair (free-form), which is what parseUntil takes.
 
 const OPEN_ATTR = "data-sheet-open";
 const ACTION_ATTR = "data-sheet-action";

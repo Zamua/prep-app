@@ -190,7 +190,7 @@ function trusted(scanned: Scanned, pattern: string, subjects: string[]): boolean
 }
 
 /**
- * `match_regex`: fullmatch of the stripped answer, case-insensitive and
+ * The whole stripped answer against the pattern, case-insensitive and
  * dot-all. true or false is a verdict; null means the pattern is missing,
  * over MAX_REGEX_LEN, invalid, or one this engine might grade differently.
  */
@@ -205,9 +205,9 @@ export function matchRegex(pattern: unknown, given: unknown): boolean | null {
 }
 
 /**
- * `validate_regex_update`: the stripped pattern when it compiles, fits the
- * cap, fullmatches the canonical answer and (when given) the prior answer;
- * else null. The trust rule of `matchRegex` runs over both subjects.
+ * The stripped pattern when it compiles, fits the cap, and matches the whole
+ * of the canonical answer and (when given) the prior answer; else null. The
+ * trust rule of `matchRegex` runs over both subjects.
  */
 export function validateRegexUpdate(
   pattern: unknown,

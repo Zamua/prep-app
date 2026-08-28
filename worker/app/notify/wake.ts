@@ -249,5 +249,5 @@ export function canGenerate(deps: { repos: UserRepos; freeTierConfigured: boolea
   return deps.jobsEnabled && fundingTier(deps.repos, deps.freeTierConfigured) !== 'none';
 }
 
-/** `isoformat(timespec="seconds")`, which is what the deck column holds. */
+/** Whole seconds, which is the precision the deck column holds. */
 const isoSeconds = (d: Date): string => isoUtc(new Date(Math.floor(d.getTime() / 1000) * 1000));

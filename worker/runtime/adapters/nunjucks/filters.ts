@@ -35,14 +35,11 @@ export function floatText(value: unknown): string {
   return String(n);
 }
 
-// Any value a template can hold, as text. A missing attribute prints as
-// the empty string; null and the booleans print capitalised, which is what
-// the pages that show a raw stored value expect.
+// Any value a template can hold, as text. Nothing there prints as nothing:
+// a missing attribute and a null column both read as absent on the page,
+// not as a word a reader would take for content.
 export function asText(value: unknown): string {
-  if (value === undefined) return "";
-  if (value === null) return "None";
-  if (value === true) return "True";
-  if (value === false) return "False";
+  if (value === undefined || value === null) return "";
   return String(value);
 }
 

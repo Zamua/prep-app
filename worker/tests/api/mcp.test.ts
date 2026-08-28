@@ -78,12 +78,12 @@ describe('the JSON-RPC envelope', () => {
   it('answers an unknown method 200 with code -32601', async () => {
     const { status, json } = await rpc({ jsonrpc: '2.0', id: 3, method: 'resources/list' });
     expect(status).toBe(200);
-    expect(json).toEqual({ jsonrpc: '2.0', id: 3, error: { code: -32601, message: "unknown method: 'resources/list'" } });
+    expect(json).toEqual({ jsonrpc: '2.0', id: 3, error: { code: -32601, message: 'unknown method: "resources/list"' } });
   });
 
   it('answers an unknown tool 200 with code -32602', async () => {
     const { json } = await call('prep_nope');
-    expect(json).toEqual({ jsonrpc: '2.0', id: 7, error: { code: -32602, message: "unknown tool: 'prep_nope'" } });
+    expect(json).toEqual({ jsonrpc: '2.0', id: 7, error: { code: -32602, message: 'unknown tool: "prep_nope"' } });
   });
 
   it('handshakes on initialize', async () => {

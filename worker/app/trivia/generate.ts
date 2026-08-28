@@ -66,8 +66,8 @@ export async function triviaGenFragment(repos: UserRepos, req: PageRequest, deps
 }
 
 /**
- * The manual refill button and the scheduler's fallback. `find_name` scopes
- * to this cell, so a wrong deck id is the same 404 as no such deck.
+ * The manual refill button and the scheduler's fallback. The lookup is
+ * scoped to this cell, so a wrong deck id is the same 404 as no such deck.
  */
 export async function triviaGenerate(repos: UserRepos, req: PageRequest, deps: TriviaGenerateDeps): Promise<PageResult> {
   const deckId = parseIntLiteral(req.params['deck_id'] ?? '');

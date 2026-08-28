@@ -28,7 +28,7 @@ const SECRET_NAME = /SECRET|TOKEN|KEY|PASSWORD/;
  * ships in every page's markup. */
 const NOT_A_SECRET = new Set(['CLERK_PUBLISHABLE_KEY']);
 /** The test pins, committable in `dev` alone. `PREP_INTERNAL_TOKEN` is one
- * of them and is what gates the fake identity provider (decision 7.0), so
+ * of them and is what gates the fake identity provider, so
  * anywhere else it is a secret and arrives as `CELLD_VAR_`. */
 const DEV_ONLY = /^(PREP_TEST|PREP_FAKE|PREP_INTERNAL|PREP_BUILD_ID)/;
 

@@ -14,10 +14,9 @@ export const CHUNK_TOO_MANY_ROWS = `chunk over ${MAX_CHUNK_ROWS} rows`;
 export const MIGRATION_SEALED = 'migration sealed';
 
 /**
- * Decision 7.4. The subscription credential spent the operator's own token
- * and has no counterpart in the fleet, where every user brings a key. The
- * export stays a faithful copy of the snapshot; the drop is here, so the
- * policy has one home.
+ * A credential that spends the operator's own token has no place here: every
+ * user brings a key. An import stays a faithful copy of the snapshot apart
+ * from this drop, which is why the list has one home.
  */
 export const DROPPED_BYOK_PROVIDERS: readonly string[] = ['claude-subscription'];
 
@@ -80,7 +79,7 @@ export interface RunChunk {
 
 export type MigrationChunk = UserChunk | GlobalChunk | RunChunk;
 
-/** A snapshot digest, as `sha256_file` writes it. */
+/** A snapshot digest: SHA-256, lowercase hex. */
 const SHA256 = /^[0-9a-f]{64}$/;
 
 export interface ChunkRefusal {

@@ -5,7 +5,7 @@
    submit. The same <form> is reused for every trigger — its action
    attribute gets rewritten on open.
 
-   Field shape posts to prep.web.durations.parse_until:
+   Field shape posts to parseUntil:
      - preset = one of {1h, 4h, tonight, tomorrow, 1d, 1w, forever}
        (Mute also offers 'forever' since indefinite mute is meaningful)
      - OR (custom = int, unit = hours|days|weeks)
