@@ -1,12 +1,12 @@
 [project]
 # The application is TypeScript (see worker/). Python remains for two
-# tools: the migration tool under migrate/, and the browser-driven test
-# harness under tests/. Neither ships to a deploy.
+# tools: the migration tool under migrate/, and the browser-driven e2e
+# suite under tests/. Neither ships to a deploy.
 #
 # The repo's version is its git tag, not this field.
 name = "prep-tools"
 version = "0"
-description = "Migration tool and browser test harness for prep."
+description = "Migration tool and browser e2e suite for prep."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
@@ -33,13 +33,10 @@ dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "httpx==0.28.1",
-    # Browser suites: tests/e2e and the pixel flows under tests/parity.
-    # The chromium binary is a separate `playwright install chromium`.
+    # Browser suites under tests/e2e. The chromium binary is a separate
+    # `playwright install chromium`.
     "playwright==1.62.0",
     "pytest-playwright==0.9.0",
-    # Pixel comparison for the parity goldens.
-    "pillow==12.1.1",
-    "numpy==2.2.6",
     # Generates the keypair tests/migrate/test_vapid.py converts, so the
     # conversion is proved against the library that wrote the recorded
     # shape rather than against a recorded answer.

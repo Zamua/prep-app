@@ -98,7 +98,7 @@ worker/
 │   ├── cells/             UserCell, DirectoryCell, InstantLimiterCell, JobCell
 │   │   ├── router.ts      the cell-side route table + identity gates
 │   │   ├── routes/        pages.ts, api.ts, jobs.ts, adapt.ts
-│   │   └── seed/          parity seed profiles
+│   │   └── seed/          seed profiles for local and e2e targets
 │   ├── adapters/
 │   │   ├── sql/           one repo per aggregate + schema.ts + migrate.ts
 │   │   ├── agents/        anthropic, openaiCompat, byok, freeTier, select
@@ -492,9 +492,9 @@ Each step in `build.mjs` is a function so `tests/build.test.ts` can run
 one against a scratch tree.
 
 **Python in this tree is not the application.** It is the migration tool
-(`migrate/`) and the browser and pixel harness (`tests/`), both driven by
-their own make targets (`test-migrate`, `e2e`, `parity`). New
-application code is TypeScript under `worker/`.
+(`migrate/`) and the browser e2e suite (`tests/`), both driven by their
+own make targets (`test-migrate`, `e2e`). New application code is
+TypeScript under `worker/`.
 
 The pre-commit hook gates staged TypeScript on typecheck plus the whole
 vitest suite. It runs in seconds; do not reach for `--no-verify` to get

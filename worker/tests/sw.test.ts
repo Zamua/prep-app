@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { BUILD, STATIC, bakeBuildInfo, bakeServiceWorker } from "../scripts/build.mjs";
-import { pythonJson } from "./pyoracle";
 
 const TOKEN = "ce11d0000000";
 const FIXTURE = new URL("./fixtures/precache-ce11d0000000.json", import.meta.url).pathname;
@@ -55,11 +54,21 @@ describe("serviceWorkerScript", () => {
 });
 
 describe("manifestDocument", () => {
-  it("is the Python manifest with root ''", () => {
-    const expected = pythonJson<Record<string, unknown>>(
-      "import json; from prep.web.pwa import manifest; print(json.dumps(json.loads(manifest().body)))",
-    );
-    expect(sw.manifestDocument("")).toEqual(expected);
+  // The install prompt reads these; a changed id or scope makes the browser
+  // treat it as a different app and lose the installed one.
+  it("names the app, its scope and both icons at the root", () => {
+    expect(sw.manifestDocument("")).toMatchObject({
+      name: "prep \u00b7 a commonplace book",
+      short_name: "prep",
+      scope: "/",
+      start_url: "/",
+      display: "standalone",
+    });
+    const doc = sw.manifestDocument("") as { icons: { src: string; sizes: string }[] };
+    expect(doc.icons.map((i) => [i.src, i.sizes])).toEqual([
+      ["/static/pwa/icon-192.png", "192x192"],
+      ["/static/pwa/icon-512.png", "512x512"],
+    ]);
   });
 
   it("labels a staging root", () => {

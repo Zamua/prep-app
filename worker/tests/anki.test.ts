@@ -1,10 +1,9 @@
-// The Anki note mapping. `stripHtml` is checked against Python itself rather
-// than against a table someone typed twice: it is five regex passes and an
-// ordered entity table, and a transcription slip in any of them is silent.
+// The Anki note mapping. `stripHtml` is five regex passes and an ordered
+// entity table over field text an .apkg carries, so every case is pinned:
+// a slip in any pass is silent, and the file it mangles is a real export.
 import { describe, expect, it } from 'vitest';
 import { ankiNotesToDeck, stripHtml } from '../app/decks/anki.js';
 import { MAX_APKG_UPLOAD_BYTES, MAX_CSV_UPLOAD_BYTES, MAX_IMPORT_ROWS, MAX_PREPDECK_UPLOAD_BYTES, rowCapMessage, uploadTooLarge } from '../app/decks/importLimits.js';
-import { pythonJson } from './pyoracle.js';
 import { cell } from './repos/setup.js';
 
 const STRIP_CASES: readonly string[] = [
@@ -46,19 +45,49 @@ const STRIP_CASES: readonly string[] = [
   'line separator',
 ];
 
-const PY_STRIP = `
-import json, logging, os
-os.environ.setdefault('PREP_AUTH_MODE', 'fake')
-logging.disable(logging.CRITICAL)
-from prep.decks.anki import _strip_html
-cases = json.loads(${JSON.stringify(JSON.stringify(STRIP_CASES))})
-print(json.dumps([_strip_html(c) for c in cases]))
-`;
+const STRIPPED: readonly string[] = [
+  "",
+  "plain text",
+  "a\nb",
+  "a\nc",
+  "a\nd",
+  "one\n\ntwo",
+  "para\ntwo",
+  "block",
+  "one\ntwo",
+  "head\nsix",
+  "not a block end",
+  "a block end",
+  "sound  gone",
+  "anki  gone",
+  "MIXED  case",
+  "[sound:unclosed",
+  "",
+  "b\">tricky",
+  "&<>\"''",
+  "&nbsp; stays a literal entity",
+  "&amp;",
+  "leading and trailing",
+  "line\n\nblank runs collapse",
+  "a\n\nb\n\nc",
+  "",
+  "trailing newline",
+  "tabs\there",
+  "\u65e5\u672c\u8a9e\n\u30c6\u30ad\u30b9\u30c8",
+  "emoji \ud83c\udfb4\n\ud83c\udfb4",
+  "RTL: \u0645\u0631\u062d\u0628\u0627\n\u0628\u0627\u0644\u0639\u0627\u0644\u0645",
+  "bold and italic",
+  "a\n\nb",
+  "unclosed tag",
+  "<>empty tag",
+  "nbsp\u00a0inside",
+  "line\nseparator",
+];
 
 describe('stripHtml', () => {
-  it('matches Python over every pass it makes', () => {
-    const expected = pythonJson<string[]>(PY_STRIP);
-    expect(STRIP_CASES.map(stripHtml)).toEqual(expected);
+  it('reduces every field spelling to its text', () => {
+    expect(STRIP_CASES).toHaveLength(STRIPPED.length);
+    expect(STRIP_CASES.map(stripHtml)).toEqual(STRIPPED);
   });
 });
 

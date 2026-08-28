@@ -1,12 +1,12 @@
 // The contracts corpus, replayed in order against the TypeScript app. One
 // env for the whole file: every pair sees what the pairs before it wrote,
-// which is how the Python recording was made.
+// which is how the recording was made.
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { comparable, type VolatileRule } from './compare.js';
 import { loadCorpus, PARITY_USER, replay, replayEnv, seed, type Pair } from './harness.js';
 import type { Env } from '../../runtime/env.js';
 
-// The five cards the parity LLM stub answers a generation with.
+// The five cards the canned LLM answers a generation with.
 const INSTANT_DECK = JSON.stringify([
   { q: 'Year the Bastille fell?', a: '1789', r: '1789' },
   { q: 'The Estates-General had how many estates?', a: 'three', r: 'three|3' },
@@ -43,7 +43,7 @@ const CLOCK_FROM: Record<string, string> = {
 const corpus = loadCorpus('contracts');
 // The corpus header names every value another implementation cannot
 // reproduce, including the row ids drawn after the first anonymous mint:
-// Python numbers all users' decks and questions from one sequence, so those
+// The recording numbers all users' decks and questions from one sequence, so those
 // carry the anonymous accounts' rows and per-cell id blocks do not.
 const volatile: VolatileRule[] = corpus.header.volatile ?? [];
 

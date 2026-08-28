@@ -39,9 +39,8 @@ NODE_LOG="$STATE_DIR/node.log"
 mkdir -p "$STATE_DIR" "$STATE_DIR/watch"
 
 # Local-only worker vars, via `CELLD_VAR_*` so no key material enters the
-# deploy config. Both are needed by the parity corpus: it records a BYOK
-# connect (which refuses 503 without a master key) and reads the VAPID public
-# key back from /notify/vapid-public-key.
+# deploy config. Both are needed by the browser suites: a BYOK connect refuses
+# 503 without a master key, and /notify/vapid-public-key needs the keypair.
 b64u() { base64 | tr -d '\n' | tr '+/' '-_' | tr -d '='; }
 
 # The local test value from tests/e2e/conftest.py, not a credential.
@@ -65,9 +64,8 @@ fi
 export CELLD_VAR_PREP_VAPID_PRIVATE_KEY="$PREP_VAPID_PRIVATE_KEY"
 export CELLD_VAR_PREP_VAPID_PUBLIC_KEY="$PREP_VAPID_PUBLIC_KEY"
 
-# The free tier, pointed at the parity LLM stub, so a local target is funded
-# the way the recorded corpus was. Start the stub with
-# `python -m tests.parity.llm_stub --port 8089`.
+# The free tier, pointed at the canned LLM stub, so a local target is funded.
+# Start the stub with `python -m tests.support.llm_stub --port 8089`.
 export CELLD_VAR_PREP_FREE_INFERENCE_BASE_URL="${PREP_DEV_LLM_BASE_URL:-http://127.0.0.1:8089/v1}"
 export CELLD_VAR_PREP_FREE_INFERENCE_API_KEY="parity-free-tier-key"
 export CELLD_VAR_PREP_FREE_INFERENCE_MODEL="parity-model"

@@ -1,6 +1,6 @@
 // The `.prepdeck` codec's refusals and its two order-sensitive sections. The
-// happy path is the byte gate in deckio.parity.test.ts; what is here is the
-// branches no corpus profile reaches.
+// happy path is tests/legacyImport.test.ts, which reads real archives; what
+// is here is the branches no whole archive reaches.
 import { zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { deckToPrepdeck, prepdeckToDeck, FORMAT_VERSION } from '../app/decks/archive.js';
@@ -32,7 +32,7 @@ const minimal = (over: Record<string, unknown> = {}, deck: Record<string, unknow
   archive({ 'meta.json': meta(over, deck), 'cards.csv': CARDS_HEADER, 'reviews.csv': REVIEWS_HEADER });
 
 describe('prepdeckToDeck refuses', () => {
-  it('a deck name the format does not allow, quoting it as Python does', () => {
+  it('a deck name the format does not allow, quoted in the refusal', () => {
     const c = cell();
     expect(prepdeckToDeck(c.repos, 'NoCaps', minimal(), zip).errors).toEqual([
       "invalid deck name 'NoCaps'; must match ^[a-z0-9][a-z0-9-]{1,29}$",

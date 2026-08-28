@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { markdownHTML } from "../../domain/markdown";
 
-// The rendered HTML is inert: only the tags and attributes mistune emits
-// for this subset appear, every other `<` is escaped, and no attribute
-// carries script.
+// The rendered HTML is inert: only the tags and attributes this subset
+// emits appear, every other `<` is escaped, and no attribute carries
+// script.
 const REPO = new URL("../../..", import.meta.url).pathname;
-const corpus = JSON.parse(readFileSync(`${REPO}tests/fixtures/parity/markdown/corpus.json`, "utf8")) as {
+const corpus = JSON.parse(readFileSync(`${REPO}tests/fixtures/markdown/cases.json`, "utf8")) as {
   cases: { id: string; input: string }[];
 };
 

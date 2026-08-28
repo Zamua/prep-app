@@ -7,7 +7,7 @@ import { cell, H, PARITY_NOW } from './setup.js';
 const q = (prompt: string) => ({ type: 'short' as const, prompt, answer: 'a' });
 
 describe('DeckRepo', () => {
-  it('creates and reads a deck back with Python column values', () => {
+  it('creates and reads a deck back with its stored column values', () => {
     const { repos, storage } = cell();
     const id = repos.decks.create('world-capitals', { contextPrompt: 'Capitals.', displayName: 'World Capitals' });
     expect(id).toBe(1);

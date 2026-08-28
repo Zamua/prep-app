@@ -56,7 +56,7 @@ function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
 }
 
 describe('UserCell.seed', () => {
-  it.each(['reader', 'empty', 'anonymous'])('reproduces the Python seed JSON for %s', async (profile) => {
+  it.each(['reader', 'empty', 'anonymous'])('reproduces the recorded seed JSON for %s', async (profile) => {
     const seed = await reseed(cell, profile);
     expect(seed).toEqual(JSON.parse(JSON.stringify(corpusPage(profile, 'seed'))));
   });

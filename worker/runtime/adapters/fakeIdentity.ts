@@ -1,6 +1,7 @@
 import type { Identity, IdentityProvider, SignInUrls } from '../../app/ports.js';
 
-// The headers the parity harness injects (tests/parity/harness/contextspec.py).
+// The headers a Tailscale Serve front door injects, which a parity-mode
+// node trusts in place of a real identity provider.
 export const LOGIN_HEADER = 'tailscale-user-login';
 export const NAME_HEADER = 'tailscale-user-name';
 export const PIC_HEADER = 'tailscale-user-profile-pic';

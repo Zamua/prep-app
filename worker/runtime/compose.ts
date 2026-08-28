@@ -85,7 +85,7 @@ const DEFAULT_JOB_LLM_TIMEOUT_S = 300;
 /** Room for the adapter to turn a refused fetch into a step failure. */
 const FETCH_HEADROOM_S = 5;
 
-/** The seed of the parity harness (tests/parity/oracles/harness.py). */
+/** The seed a parity-mode node draws every random value from. */
 export const PARITY_SEED = 20260314;
 /** The IANA `sub` claim a push service contacts about operational issues. */
 export const DEFAULT_VAPID_SUB = 'mailto:noreply@example.com';

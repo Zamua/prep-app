@@ -6,7 +6,6 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as esbuild from "esbuild";
 import nunjucks from "nunjucks";
 import { resolveToken } from "../runtime/tokenRules.ts";
 
@@ -142,23 +141,7 @@ export function copyStatic(staticDir, distAssetsDir) {
   return walk(dest).length;
 }
 
-// 6. scripts/render-fixtures.mjs bundled for node, so the DOM gate runs
-// the same shims and view models the worker ships.
-export async function bundleRenderFixtures(entry, outDir) {
-  if (!existsSync(entry)) throw new Error(`${relative(WORKER, entry)} is missing`);
-  mkdirSync(outDir, { recursive: true });
-  await esbuild.build({
-    entryPoints: [entry],
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    target: "node20",
-    outfile: join(outDir, "render-fixtures.cjs"),
-    logLevel: "silent",
-  });
-}
-
-// 7. tsc --noEmit over worker/ and worker/tests/.
+// 6. tsc --noEmit over worker/ and worker/tests/.
 export function typecheck() {
   for (const project of ["tsconfig.json", "tests/tsconfig.json"]) {
     const r = spawnSync(join(WORKER, "node_modules", ".bin", "tsc"), ["-p", project, "--noEmit"], {
@@ -169,7 +152,7 @@ export function typecheck() {
   }
 }
 
-async function main() {
+function main() {
   const n = precompileTemplates(TEMPLATES, BUILD);
   console.log(`templates: ${n} precompiled`);
   console.log(`icons: ${bakeIcons(join(STATIC, "icons"), BUILD)}`);
@@ -177,15 +160,15 @@ async function main() {
   console.log(`sw: ${tree.css.length} css + ${tree.js.length} js precache entries`);
   console.log(`build token: ${bakeBuildInfo(process.env.PREP_BUILD_ID, BUILD)}`);
   console.log(`assets: ${copyStatic(STATIC, DIST_ASSETS)} files under dist/assets/static`);
-  await bundleRenderFixtures(join(WORKER, "scripts", "render-fixtures.mjs"), BUILD);
-  console.log("render-fixtures: bundled");
   typecheck();
   console.log("typecheck: ok");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  main().catch((e) => {
+  try {
+    main();
+  } catch (e) {
     console.error(`build failed: ${e.message ?? e}`);
     process.exit(1);
-  });
+  }
 }

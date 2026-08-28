@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { TOLERANCE_SECONDS, signSvix, svixHeaders, verifySvix } from '../runtime/adapters/svix';
 import { req } from './helpers';
-import { pythonJson } from './pyoracle';
 
 const SECRET = 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw';
 const OTHER = 'whsec_' + Buffer.from('a-different-key-32-bytes-long!!!').toString('base64');
@@ -22,25 +22,18 @@ async function signed(over: Parameters<typeof headers>[0] = {}, secret = SECRET)
 }
 
 describe('the signature', () => {
-  it('is the base64 HMAC of `<id>.<timestamp>.<body>`, as svix computes it', async () => {
-    const python = pythonJson<{ header: string }>(
-      `import json, base64, hmac, hashlib
-key = base64.b64decode("${SECRET.slice('whsec_'.length)}")
-signed = ${JSON.stringify(ID)} + "." + ${JSON.stringify(TS)} + "." + ${JSON.stringify(BODY)}
-mac = hmac.new(key, signed.encode(), hashlib.sha256).digest()
-print(json.dumps({"header": "v1," + base64.b64encode(mac).decode()}))`,
-    );
-    expect(await signSvix(SECRET, ID, TS, BODY)).toBe(python.header);
+  // The svix scheme: base64 of HMAC-SHA256 over `<id>.<timestamp>.<body>`,
+  // keyed by the base64 body of the `whsec_` secret.
+  it('is the base64 HMAC of `<id>.<timestamp>.<body>`', async () => {
+    const key = Buffer.from(SECRET.slice('whsec_'.length), 'base64');
+    const mac = createHmac('sha256', key).update(`${ID}.${TS}.${BODY}`, 'utf8').digest('base64');
+    expect(await signSvix(SECRET, ID, TS, BODY)).toBe(`v1,${mac}`);
   });
 
-  it('verifies what the svix library produced for the same message', async () => {
-    const python = pythonJson<{ header: string }>(
-      `import json
-from svix.webhooks import Webhook
-wh = Webhook(${JSON.stringify(SECRET)})
-print(json.dumps({"header": wh.sign(${JSON.stringify(ID)}, __import__("datetime").datetime.fromtimestamp(${TS}, __import__("datetime").timezone.utc), ${JSON.stringify(BODY)})}))`,
-    );
-    expect(await verifySvix(SECRET, { id: ID, timestamp: TS, signature: python.header }, BODY, NOW)).toBeNull();
+  it('verifies a header computed that way', async () => {
+    const key = Buffer.from(SECRET.slice('whsec_'.length), 'base64');
+    const mac = createHmac('sha256', key).update(`${ID}.${TS}.${BODY}`, 'utf8').digest('base64');
+    expect(await verifySvix(SECRET, { id: ID, timestamp: TS, signature: `v1,${mac}` }, BODY, NOW)).toBeNull();
   });
 
   it('accepts any listed v1 entry, so a rotated secret verifies during the overlap', async () => {

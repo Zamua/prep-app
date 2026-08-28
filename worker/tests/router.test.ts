@@ -58,8 +58,8 @@ beforeEach(() => {
 
 const call = (path: string, init: RequestInit = {}) => worker.fetch(req(path, init), env);
 
-/** The router's context for a page equals what Python passed, plus the
- * request origin Python read from `request` itself. */
+/** The router's context for a page, plus the request origin it reads off
+ * the request itself. */
 function expectCorpus(file: string, index = 0) {
   const want = corpusPage('anonymous', file);
   expect(renderer.calls[index]).toEqual({ template: want.template, context: { ...want.context, app_base: 'https://parity.example.test' } });
@@ -95,7 +95,7 @@ describe('unauthenticated pages', () => {
     expectCorpus('02-GET-privacy');
   });
 
-  it('answer GET and HEAD only, as the Python routes do', async () => {
+  it('answer GET and HEAD only', async () => {
     expect((await call('/privacy', { method: 'HEAD' })).status).toBe(200);
     for (const [path, method] of [
       ['/privacy', 'POST'],
@@ -469,7 +469,7 @@ describe('a bearer token', () => {
     expect(sent.get(PAT_HASH_HEADER)).toBe(await new WebCryptoHasher().sha256Hex(token));
   });
 
-  it('answers the refusals Python answers, before any cell is reached', async () => {
+  it('answers its refusals before any cell is reached', async () => {
     expect(await (await call('/api/v1/decks')).json()).toEqual({ detail: 'missing Authorization header' });
     expect(await (await call('/api/v1/decks', { headers: { authorization: 'Basic x' } })).json()).toEqual({
       detail: "Authorization must be 'Bearer <token>'",

@@ -1,7 +1,7 @@
 // Replays a recorded corpus against the TypeScript app: the entry worker
 // over real cells whose storage is the SqlStorage fake. One env, one
 // isolate, so a pair sees what the pairs before it wrote, exactly as the
-// Python recording did.
+// recording did.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DirectoryCell } from '../../runtime/cells/DirectoryCell.js';
@@ -74,7 +74,7 @@ export interface ReplayEnv {
   userStorage(id: string): FakeCellStorage;
 }
 
-/** The parity environment the Python harness sets, minus the paths. */
+/** The parity environment a recorded node runs with, minus the paths. */
 export function replayEnv(overrides: Partial<Env> = {}): ReplayEnv {
   const users = cells((state) => new UserCell(state, env));
   const directory = cells((state) => new DirectoryCell(state, env));
@@ -116,7 +116,7 @@ function requestOf(pair: Pair, extraHeaders: Record<string, string> = {}, jsonOv
   for (const [k, v] of Object.entries(pair.request.headers)) headers.set(k, v);
   for (const [k, v] of Object.entries(extraHeaders)) headers.set(k, v);
   // The fake identity provider only trusts the tailscale headers when the
-  // internal token rides along, as the Python harness sends them.
+  // internal token rides along, as the recording sends them.
   if (headers.has('tailscale-user-login')) headers.set('x-internal-token', INTERNAL_TOKEN);
   let body: BodyInit | undefined;
   const json = jsonOverride === undefined ? pair.request.json : jsonOverride;
@@ -149,7 +149,7 @@ export async function record(res: Response): Promise<Recorded> {
     status: res.status,
     contentType,
     json,
-    // Python records `response.text` for any non-JSON body, so an empty one
+    // The recording holds `response.text` for any non-JSON body, so an empty one
     // is '' and never null; collapsing it loses a 303's empty body.
     text: isJson ? null : raw,
     location: res.headers.get('location'),
@@ -163,7 +163,7 @@ export async function replay(env: Env, pair: Pair, extraHeaders: Record<string, 
   return record(await worker.fetch(requestOf(pair, extraHeaders, jsonOverride), env));
 }
 
-/** `POST /_parity/seed` through the entry worker, as the Python harness does. */
+/** `POST /_parity/seed` through the entry worker, as the recording does. */
 export async function seed(env: Env, profile: string, user = PARITY_USER): Promise<Record<string, unknown>> {
   const res = await worker.fetch(
     new Request(`${ORIGIN}/_parity/seed`, {

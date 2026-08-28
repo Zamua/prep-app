@@ -85,7 +85,7 @@ describe('SqlJsApkg', () => {
     await expect(new SqlJsApkg().notes(enc.encode('nope'))).rejects.toThrow(/not a valid \.apkg \(zip parse failed\)/);
   });
 
-  it('refuses a zip with no collection inside, in the words Python uses', async () => {
+  it('refuses a zip with no collection inside, naming what it looked for', async () => {
     const blob = zip.write([{ name: 'media', bytes: enc.encode('{}') }]);
     await expect(new SqlJsApkg().notes(blob)).rejects.toThrow('not a valid .apkg — no collection.anki2 / collection.anki21 inside');
   });

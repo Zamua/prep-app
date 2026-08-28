@@ -129,8 +129,6 @@ export const apiRoutes: readonly Route[] = [
   },
 
   // ---- notify --------------------------------------------------------------
-  { method: 'GET', pattern: '/notify', gate: 'signedIn', handler: handle((req) => notify.notifySettings(notifyDeps(req))) },
-  { method: 'GET', pattern: '/notify/log', gate: 'signedIn', handler: handle((req) => notify.notificationLog(notifyDeps(req))) },
   { method: 'POST', pattern: '/notify/prefs', gate: 'signedIn', handler: handle(async (req) => notify.savePrefs(notifyDeps(req), await jsonBody(req))) },
   { method: 'POST', pattern: '/notify/subscribe', gate: 'signedIn', handler: handle(async (req) => notify.subscribe(notifyDeps(req), await jsonBody(req))) },
   { method: 'POST', pattern: '/notify/unsubscribe', gate: 'signedIn', handler: handle(async (req) => notify.unsubscribe(notifyDeps(req), await jsonBody(req))) },

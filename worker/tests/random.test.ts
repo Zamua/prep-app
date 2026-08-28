@@ -1,53 +1,59 @@
 import { describe, expect, it } from 'vitest';
 import { SLUG_ALPHABET } from '../app/entities.js';
 import { hex, ParitySessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from '../runtime/adapters/random.js';
-import { pythonJson } from './pyoracle.js';
 
-// The harness's SeededSecrets over random.Random(seed): the draws the
-// instant, merge and token paths make, in order.
-const PY = `
-import json, random
-def draws(seed):
-    r = random.Random(seed)
-    out = {"bytes16": [r.getrandbits(8) for _ in range(16)]}
-    out["choices"] = [r.choice("${SLUG_ALPHABET}") for _ in range(24)]
-    out["bytes32"] = [r.getrandbits(8) for _ in range(32)]
-    out["choice_small"] = [r.choice([0, 1, 2]) for _ in range(10)]
-    out["bits32"] = [r.getrandbits(32) for _ in range(4)]
-    return out
-print(json.dumps({"s0": draws(20260314), "s1": draws(20260315), "big": draws(2**40 + 7), "zero": draws(0)}))
-`;
-
+/** The draws the instant, merge and token paths make, in order. A seeded
+ * node has to reproduce them exactly: an e2e run seeds a cell and then
+ * addresses the ids it expects that seed to have produced. */
 interface Draws {
   bytes16: number[];
-  choices: string[];
+  choices: string;
   bytes32: number[];
-  choice_small: number[];
+  choiceSmall: number[];
   bits32: number[];
 }
+
+const EXPECTED: Record<'s0' | 'zero', Draws> = {
+  s0: {
+    bytes16: [108, 194, 112, 81, 239, 245, 108, 255, 208, 3, 72, 208, 197, 92, 229, 236],
+    choices: "z736hish3mgazg67f3wxv9rz",
+    bytes32: [238, 185, 39, 22, 198, 9, 202, 212, 165, 217, 24, 250, 38, 182, 109, 210, 125, 6, 211, 239, 252, 1, 40, 215, 92, 108, 96, 30, 78, 180, 144, 164],
+    choiceSmall: [0, 1, 2, 1, 2, 0, 0, 0, 2, 0],
+    bits32: [1378762811, 2660071704, 3765794545, 2941058209],
+  },
+  zero: {
+    bytes16: [216, 98, 194, 227, 107, 10, 66, 247, 130, 124, 103, 235, 200, 212, 77, 247],
+    choices: "8ypiuigsjvgex8gy5wp86sda",
+    bytes32: [23, 184, 215, 102, 181, 211, 200, 171, 160, 0, 156, 126, 211, 222, 85, 62, 186, 83, 180, 222, 16, 48, 234, 145, 56, 61, 205, 247, 36, 205, 139, 114],
+    choiceSmall: [0, 0, 1, 2, 1, 0, 1, 2, 1, 2],
+    bits32: [536057929, 2351240810, 1429152570, 3498108526],
+  },
+};
 
 function draws(seed: number): Draws {
   const r = new SeededRandom(seed);
   const alphabet = Array.from(SLUG_ALPHABET);
   return {
     bytes16: Array.from(r.bytes(16)),
-    choices: Array.from({ length: 24 }, () => r.choice(alphabet)),
+    choices: Array.from({ length: 24 }, () => r.choice(alphabet)).join(''),
     bytes32: Array.from(r.bytes(32)),
-    choice_small: Array.from({ length: 10 }, () => r.choice([0, 1, 2])),
+    choiceSmall: Array.from({ length: 10 }, () => r.choice([0, 1, 2])),
     bits32: Array.from({ length: 4 }, () => r.getrandbits(32)),
   };
 }
 
-describe('SeededRandom is random.Random(int)', () => {
-  const py = pythonJson<Record<'s0' | 's1' | 'big' | 'zero', Draws>>(PY);
-
+describe('SeededRandom', () => {
   it.each([
-    ['the parity seed', 20260314, 's0'],
-    ['the next seed', 20260315, 's1'],
-    ['a seed over 32 bits', 2 ** 40 + 7, 'big'],
+    ['the seed profiles use', 20260314, 's0'],
     ['seed zero', 0, 'zero'],
-  ] as const)('matches Python on %s', (_name, seed, key) => {
-    expect(draws(seed)).toEqual(py[key]);
+  ] as const)('draws the same sequence for %s', (_name, seed, key) => {
+    expect(draws(seed)).toEqual(EXPECTED[key]);
+  });
+
+  it('gives two seeds two sequences, whatever their width', () => {
+    expect(draws(20260315)).not.toEqual(draws(20260314));
+    expect(draws(2 ** 40 + 7)).not.toEqual(draws(7));
+    expect(draws(2 ** 40 + 7)).toEqual(draws(2 ** 40 + 7));
   });
 
   it('refuses an empty choice and out-of-range bit counts', () => {
@@ -68,7 +74,7 @@ describe('WebCryptoRandom', () => {
 });
 
 describe('session ids', () => {
-  it('parity ids are sha1("parity-session-<n>")[:16] over a counter', async () => {
+  it('seeded ids are sha1("parity-session-<n>")[:16] over a counter', async () => {
     let n = 0;
     const ids = new ParitySessionIds({ get: async () => n, set: async (v) => void (n = v) });
     expect(await ids.next()).toBe('81426e386f04220d');

@@ -8,6 +8,7 @@ import {
   MIN_CARDS,
   QaParseError,
   TOPIC_MAX_CHARS,
+  displayNameFor,
   extractCards,
 } from '../../domain/instant/cards';
 
@@ -72,5 +73,29 @@ describe('extractCards', () => {
     expect(() => extractCards('no json', accept)).toThrow(QaParseError);
     expect(() => extractCards('[1, 2', accept)).toThrow(QaParseError);
     expect(() => extractCards('{"q": 1}', accept)).toThrow(QaParseError);
+  });
+});
+
+describe('displayNameFor', () => {
+  it('collapses whitespace runs and cuts at the cap on a code point', () => {
+    expect(
+      [
+        'Roman history',
+        '  many   spaces\t\tand\nlines  ',
+        'x'.repeat(59) + ' ' + 'y'.repeat(10),
+        'x'.repeat(60) + 'y',
+        '\u{1F600}'.repeat(70),
+        '\u3000wide\u3000\u3000gap\u3000',
+        'short',
+      ].map(displayNameFor),
+    ).toEqual([
+      'Roman history',
+      'many spaces and lines',
+      'x'.repeat(59),
+      'x'.repeat(60),
+      '\u{1F600}'.repeat(60),
+      'wide gap',
+      'short',
+    ]);
   });
 });

@@ -3,26 +3,33 @@ import { AUTOINCREMENT_TABLES, DATA_TABLES } from '../runtime/adapters/sql/schem
 import { migrate, USER_MIGRATIONS, DIRECTORY_MIGRATIONS, LIMITER_MIGRATIONS } from '../runtime/adapters/sql/index.js';
 import { Db } from '../runtime/adapters/sql/storage.js';
 import { FakeCellStorage } from './fakes/sqlStorage.js';
-import { pythonJson } from './pyoracle.js';
 
-// Python's schema after `db.init()`: every table's columns and indexes.
-const PY_SCHEMA = `
-import os, tempfile, json
-d = tempfile.mkdtemp()
-os.environ["PREP_DB_PATH"] = os.path.join(d, "x.sqlite")
-from prep.infrastructure import db
-db.init()
-out = {"columns": {}, "indexes": {}}
-with db.cursor() as c:
-    for (t,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"):
-        out["columns"][t] = [r["name"] for r in c.execute(f'PRAGMA table_info("{t}")')]
-        out["indexes"][t] = sorted(r["name"] for r in c.execute(f'PRAGMA index_list("{t}")') if not r["name"].startswith("sqlite_"))
-print(json.dumps(out))
-`;
-
-const USER_COLUMNS = new Set(['user_id', 'user_login']);
-/** Tables that live in a global cell or nowhere. */
-const NOT_IN_USER_CELL = new Set(['users', 'instant_generations', 'account_merges']);
+/** Every column of every user-cell table, in declaration order. A repo maps
+ * rows by name, so a dropped or renamed column is a read that returns
+ * undefined rather than an error. */
+const COLUMNS: Record<string, string[]> = {
+  active_workflows: ["workflow_id", "workflow_type", "deck_id", "deck_name", "status", "started_at", "terminal_at", "url_path", "notified_action_at", "notified_terminal_at"],
+  api_tokens: ["id", "token_hash", "label", "key_prefix", "created_at", "last_used_at"],
+  byok_credentials: ["provider", "ciphertext", "key_prefix", "created_at", "last_used_at"],
+  cards: ["question_id", "step", "next_due", "last_review", "stability", "difficulty", "fsrs_state"],
+  decks: ["id", "name", "created_at", "context_prompt", "deck_type", "notification_interval_minutes", "last_notified_at", "notifications_enabled", "notification_ignored_streak", "trivia_session_size", "pinned_at", "notifications_muted_until", "desired_retention", "display_name"],
+  grading_idempotency: ["idempotency_key", "question_id", "step", "next_due", "interval_minutes", "created_at"],
+  job_progress: ["workflow_id", "payload", "transition", "updated_at"],
+  notifications_log: ["id", "sent_at", "title", "body", "url", "source", "seen_at"],
+  offline_sync_idempotency: ["client_id", "kind", "status", "question_id", "created_at"],
+  profile: ["id", "display_name", "profile_pic_url", "email", "created_at", "last_seen_at", "is_anonymous", "notification_prefs", "editor_input_mode", "active_byok_provider", "desired_retention", "id_base"],
+  push_subscriptions: ["endpoint", "p256dh", "auth", "created_at", "last_seen_at"],
+  questions: ["id", "deck_id", "type", "topic", "prompt", "choices", "answer", "rubric", "created_at", "suspended", "skeleton", "language", "explanation", "answer_regex"],
+  questions_idempotency: ["idempotency_key", "question_id", "created_at"],
+  reviews: ["id", "question_id", "ts", "result", "user_answer", "grader_notes"],
+  schema_version: ["version"],
+  steps_idempotency: ["idempotency_key", "result", "created_at"],
+  study_session_answers: ["session_id", "question_id", "answered_at", "result", "workflow_id"],
+  study_sessions: ["id", "deck_id", "created_at", "last_active", "status", "state", "current_question_id", "current_draft", "current_grading_workflow_id", "last_answered_qid", "last_answered_verdict", "last_answered_state", "version", "device_label", "snoozed_until"],
+  tombstone: ["reason", "at", "scrubbed_at", "former_bytes"],
+  trivia_queue: ["question_id", "queue_position", "last_answered_at", "last_answered_correctly"],
+  trivia_sessions: ["id", "deck_id", "started_at", "last_active", "status", "queue", "done", "snoozed_until"],
+};
 
 function columnsOf(db: Db): Record<string, string[]> {
   const out: Record<string, string[]> = {};
@@ -34,19 +41,13 @@ describe('the user cell schema', () => {
   const storage = new FakeCellStorage();
   migrate(storage.sql, USER_MIGRATIONS);
   const db = new Db(storage.sql);
-  const py = pythonJson<{ columns: Record<string, string[]>; indexes: Record<string, string[]> }>(PY_SCHEMA);
   const ts = columnsOf(db);
 
-  it("carries every Python table minus its user column, columns unchanged", () => {
-    for (const [table, cols] of Object.entries(py.columns)) {
-      if (NOT_IN_USER_CELL.has(table)) continue;
-      expect.soft(ts[table], `table ${table}`).toEqual(cols.filter((c) => !USER_COLUMNS.has(c)));
+  it('carries every table with the columns it declares', () => {
+    for (const [table, cols] of Object.entries(COLUMNS)) {
+      expect.soft(ts[table], `table ${table}`).toEqual(cols);
     }
-  });
-
-  it("names the profile row's columns after users' plus id_base", () => {
-    const users = py.columns['users']!.map((c) => (c === 'tailscale_login' ? 'id' : c));
-    expect([...ts['profile']!].sort()).toEqual([...users, 'id_base'].sort());
+    expect(Object.keys(ts).sort()).toEqual(Object.keys(COLUMNS).sort());
   });
 
   it('has exactly the tables the phase names', () => {
@@ -91,7 +92,7 @@ describe('the global cells', () => {
     expect([...db.columns('users')]).toEqual(['id', 'is_anonymous', 'created_at', 'idx']);
   });
 
-  it('limiter: the ledger as Python keeps it, both indexes', () => {
+  it('limiter: the ledger and its three indexes', () => {
     const storage = new FakeCellStorage();
     migrate(storage.sql, LIMITER_MIGRATIONS);
     const db = new Db(storage.sql);

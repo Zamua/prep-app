@@ -16,7 +16,7 @@ describe('every declared graph', () => {
     for (const [kind, graph] of graphs) expect(() => validateGraph(graph), kind).not.toThrow();
   });
 
-  it('names one workflow_type per kind, as Python spells it', () => {
+  it('names one workflow_type per kind', () => {
     expect(WORKFLOW_TYPE).toEqual({ PlanGenerate: 'plan', Transform: 'transform', TriviaGenerate: 'trivia_gen', GradeAnswer: 'grading' });
   });
 
@@ -139,7 +139,7 @@ describe('the registry', () => {
 });
 
 describe('workflow ids and the routes that parse them', () => {
-  it('keep Python`s shapes verbatim', () => {
+  it('keep the persisted payload shapes verbatim', () => {
     expect(gradeId('capitals', 12, 'abcdef0123')).toBe('grade-capitals-q12-abcdef0123');
     expect(transformId('deck', 4, 'abcdef0123')).toBe('transform-deck-4-abcdef0123');
     expect(planId('capitals', 'abcdef0123')).toBe('plan-capitals-abcdef0123');

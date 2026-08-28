@@ -136,6 +136,34 @@ describe('a .prepdeck exported by an earlier build restores', () => {
     ]);
   });
 
+  it('quoting: embedded quotes, commas and newlines come back whole', () => {
+    const { c, outcome } = importPrepdeck('quoting.prepdeck');
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.inserted).toBe(4);
+
+    const cards = cardsOf(c, outcome.deck_id);
+    expect(cards.map((r) => [r['prompt'], r['answer']])).toEqual([
+      ['He said "hello", then left', 'She replied "goodbye"'],
+      ['Line one\nline two', 'Answer with, a comma'],
+      // A CRLF inside a quoted cell survives as it was written; the reader
+      // does not normalise line endings inside a value.
+      ['CRLF inside\r\nthe cell', 'LF inside\nthe cell'],
+      ['Trailing quote "', 'Leading "quote'],
+    ]);
+    expect(cards[3]!['explanation']).toBe('a, b, "c"');
+  });
+
+  it('empty: a deck with no cards restores as a deck', () => {
+    const { c, outcome } = importPrepdeck('empty.prepdeck');
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.inserted).toBe(0);
+    expect(cardsOf(c, outcome.deck_id)).toEqual([]);
+    expect(rows(c, 'SELECT name, deck_type FROM decks WHERE id = ?', outcome.deck_id)[0]).toMatchObject({
+      name: 'restored',
+      deck_type: 'srs',
+    });
+  });
+
   it('names the deck the caller asked for, not the one in the archive', () => {
     const { c, outcome } = importPrepdeck('fsrs.prepdeck');
     expect(outcome.deck_name).toBe('restored');

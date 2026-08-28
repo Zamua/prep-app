@@ -34,7 +34,7 @@ describe('trivia session state', () => {
     expect(flipDoneVerdict(items, 7, true)).toBe('42r,17w,99r');
   });
 
-  // Accepted divergences: Python's isdigit and int accept other scripts and
+  // Only ASCII digits count: other scripts and
   // unbounded magnitudes.
   it('digits are ASCII and ids stay within MAX_SAFE_INTEGER', () => {
     expect(parseCardIds('٣,9007199254740991,9007199254740992,1')).toEqual([9007199254740991, 1]);

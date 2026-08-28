@@ -15,7 +15,7 @@ import { FakeDirectory, FakeJobCells, FakeLimiter, FakeUserCells } from './fakes
 import type { FakeCellStorage } from './fakes/sqlStorage.js';
 import { fakeEnv, namespaceOf, ROOT } from './helpers.js';
 
-const CORPUS = join(ROOT, '..', 'tests', 'fixtures', 'parity', 'merge');
+const CORPUS = join(ROOT, '..', 'tests', 'fixtures', 'merge');
 const read = (name: string) => JSON.parse(readFileSync(join(CORPUS, `${name}.json`), 'utf8'));
 
 interface Corpus {
@@ -36,7 +36,7 @@ const ANON = before.header.anon;
 const TARGET = before.header.target;
 const NOW = '2026-03-14T15:00:00+00:00';
 const USER_COLUMNS = new Set(['user_id', 'user_login']);
-/** The suffix the corpus recorded for the second colliding slug. */
+/** The suffix the fixture's slug collision resolves to. */
 const SUFFIX = 'fd58dd';
 
 const key = (row: Row) => JSON.stringify(row, Object.keys(row).sort());
@@ -50,8 +50,9 @@ function columnsOf(storage: FakeCellStorage, table: string): Set<string> {
   return new Set(info.map((c) => c.name));
 }
 
-/** Inserts the corpus rows a cell would hold. Every dropped key must be an
- * owner column: anything else means the cell schema drifted from Python's. */
+/** Inserts the fixture rows a cell would hold. Every dropped key must be an
+ * owner column: anything else means the cell schema drifted from the
+ * fixture, and the scenario below is seeding something it does not model. */
 function insertRows(storage: FakeCellStorage, table: string, rows: readonly Row[]): void {
   const columns = columnsOf(storage, table);
   for (const row of rows) {
@@ -83,7 +84,7 @@ function loadTables(storage: FakeCellStorage, user: string): void {
 
 /**
  * The rows the corpus seeds but does not snapshot: they carry no owner
- * column, so Python's merge never named them and ownership followed the
+ * column, so the merge never names them and ownership follows the
  * foreign key. Across cells nothing follows anything, so they are exactly
  * what the import has to bring along, and the merge oracle cannot pin them.
  */
@@ -153,7 +154,7 @@ const targetTables = async (f: Fixture) => (await f.cells.cell(TARGET).dump()).t
 
 // ---- the oracle ------------------------------------------------------------
 
-describe('the merge saga over the oracle corpus', () => {
+describe('the merge saga over the seeded scenario', () => {
   let f: Fixture;
   let result: Awaited<ReturnType<typeof mergeAnonymous>>;
 
@@ -162,11 +163,11 @@ describe('the merge saga over the oracle corpus', () => {
     result = await mergeAnonymous(ANON, TARGET, f.deps);
   });
 
-  it('answers the MergeResult the reference did', () => {
+  it('answers the MergeResult the scenario ends at', () => {
     expect(result).toEqual(after.result);
   });
 
-  it('leaves the target holding the rows the reference left, per table', async () => {
+  it('leaves the target holding every row the scenario moves, per table', async () => {
     const tables = await targetTables(f);
     let compared = 0;
     for (const [table, columns] of Object.entries(after.tables)) {
@@ -179,7 +180,7 @@ describe('the merge saga over the oracle corpus', () => {
     expect(compared).toBe(10);
   });
 
-  it('carries the anonymous derived rows the corpus cannot pin', async () => {
+  it('carries the anonymous derived rows the fixture cannot pin', async () => {
     const tables = await targetTables(f);
     expect(tables['cards']).toEqual([expect.objectContaining({ question_id: 1, step: 2, fsrs_state: 2 })]);
     expect(tables['reviews']).toEqual([expect.objectContaining({ question_id: 1, result: 'right' })]);
@@ -455,7 +456,7 @@ describe('the deletion survives a lost durability ack', () => {
 });
 
 describe('hexFrom', () => {
-  it('draws the suffix the corpus recorded from the parity merge generator', () => {
+  it('draws the suffix the fixture resolves the collision to', () => {
     expect(hexFrom(new SeededRandom(PARITY_SEED + 1))(3)).toBe(SUFFIX);
   });
 });

@@ -1,6 +1,6 @@
 // The one direction status travels: a JobCell writes into its owner's cell,
 // once per transition. Transcribed from prep/workflows/service.py, so the
-// tests pin the notification rules by their Python names.
+// tests pin the notification rules by the names the rows carry.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { applyJobStatus, deliverJobStatus } from '../../app/jobs/status.js';
 import type { JobStatusWrite, PushOutcome, UserRepos } from '../../app/ports.js';

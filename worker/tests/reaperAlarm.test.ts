@@ -179,7 +179,7 @@ describe('the directory alarm', () => {
 
   it('holds the sweep while a migration run is open, and lets it go at the seal', async () => {
     // The account this protects: registered by the migration, its cell not
-    // written yet, carrying Python's years-old `created_at`. A sweep landing
+    // written yet, carrying an imported years-old `created_at`. A sweep landing
     // here tombstones it, and a tombstoned cell refuses every later chunk
     // for it forever - there is no un-tombstone.
     const h = harness();

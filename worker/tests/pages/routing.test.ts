@@ -27,7 +27,7 @@ describe('the page route table', () => {
   });
 
   // Which route carries which gate is checked route by route against the
-  // Python inventory in tests/routeTable.test.ts. Here: the split exists at
+  // route table in tests/routeTable.test.ts. Here: the split exists at
   // all, because a table that is entirely `signedIn` refuses every anonymous
   // account and takes the instant-start product with it.
   it('keeps the signed-in gate to the surfaces that hold a credential', () => {

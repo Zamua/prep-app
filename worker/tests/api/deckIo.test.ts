@@ -1,4 +1,4 @@
-// The CSV wire format: Python's dialect on the way out, its DictReader
+// The CSV wire format: the writer's dialect on the way out, the reader's
 // tolerances on the way in, and the trivia preamble that carries the
 // deck-level state a row cannot.
 import { describe, expect, it } from 'vitest';

@@ -24,15 +24,15 @@ through the real app; `make dev-stop` stops it. It wraps
 `worker/scripts/run-node.sh`, whose header comments list what it expects
 (a `celld` binary, an S3-compatible endpoint for cell storage) and the
 env vars that redirect each piece. AI flows against a local node call
-`make llm-stub`, the canned LLM the parity corpus was recorded against.
+`make llm-stub`, a canned LLM that replays recorded responses.
 
 `make setup` installs a pre-commit hook. Staged TypeScript under
 `worker/` gates on `npm run typecheck` plus the whole vitest suite, which
 runs in seconds. `git commit --no-verify` bypasses it; use that sparingly.
 
 **Python is still in the tree, and it is not the application.** It covers
-the migration tool under `migrate/` and the browser and pixel test
-harness under `tests/`. New application code is TypeScript under
+the migration tool under `migrate/` and the browser e2e suite under
+`tests/`. New application code is TypeScript under
 `worker/`.
 
 ## Code style
@@ -87,10 +87,9 @@ you are changing behavior that has none.
 Run the tests you affected while iterating, and `make ci` before you open
 a PR. It must be green.
 
-Domain modules have oracle tests pinned against recorded corpora under
-`tests/fixtures/parity/`. Those corpora are read-only inputs: if one is
-wrong, say so in the PR rather than editing the fixture to match your
-change.
+Some suites replay recorded corpora under `tests/fixtures/`. Those are
+read-only inputs: if one is wrong, say so in the PR rather than editing
+the fixture to match your change.
 
 ## What to file as an issue
 

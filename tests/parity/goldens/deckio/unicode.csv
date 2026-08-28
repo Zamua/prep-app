@@ -1,5 +1,0 @@
-type,topic,prompt,answer,choices,rubric,skeleton,language,answer_regex,explanation
-short,地理,日本の首都は？,東京,,,,,,
-short,,What does 🎴 mean here?,A flashcard 🎴 emoji,,,,,,Astral plane: U+1F3B4.
-short,جغرافيا,ما هي عاصمة مصر؟,القاهرة,,,,,,
-short,,Zwei Wörter mit NBSP,Ja — mit Gedankenstrich,,,,,,

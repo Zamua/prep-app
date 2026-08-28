@@ -1,11 +1,9 @@
 // The adapters behind `AgentPort`: which credential is picked, what each one
 // puts on the wire, and which error class every refusal shape becomes.
 //
-// Two oracles. The parity LLM stub keys a canned answer on the sha256 of the
-// request's `messages` alone, so a fixture HIT is proof the adapter's envelope
-// is byte for byte what the Python app sent. The taxonomy is checked against
-// prep/agent/openai_compat.py and prep/agent/anthropic_api.py, whose messages
-// reach the user through a job's error.
+// The canned LLM stub keys its answer on the sha256 of the request's
+// `messages` alone, so a fixture HIT proves the envelope this adapter builds
+// is byte for byte the one the fixture was recorded for.
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
@@ -22,7 +20,7 @@ import { InvalidKeyShape, messagesFor, OpenAICompatAgent, scrubExtraBody } from 
 import { agentFor, DEFAULT_TIMEOUT_MS, RefusingAgent, SelectedAgent } from '../runtime/adapters/agents/select.js';
 
 const REPO = new URL('../..', import.meta.url).pathname;
-const LLM_FIXTURES = join(REPO, 'tests', 'fixtures', 'parity', 'llm');
+const LLM_FIXTURES = join(REPO, 'tests', 'fixtures', 'llm');
 
 const FREE_ENV = {
   PREP_FREE_INFERENCE_BASE_URL: 'https://inference.example/v1',
@@ -413,14 +411,14 @@ interface Stub {
 }
 
 async function bootStub(fixtures: string): Promise<Stub> {
-  const proc = spawn(join(REPO, '.venv', 'bin', 'python'), ['-m', 'tests.parity.llm_stub', '--port', '0', '--fixtures', fixtures], { cwd: REPO });
+  const proc = spawn(join(REPO, '.venv', 'bin', 'python'), ['-m', 'tests.support.llm_stub', '--port', '0', '--fixtures', fixtures], { cwd: REPO });
   const line = await new Promise<string>((resolve, reject) => {
     const rl = createInterface({ input: proc.stdout });
     rl.once('line', resolve);
     proc.once('error', reject);
     setTimeout(() => reject(new Error('the stub did not announce a port')), 15_000);
   });
-  const baseUrl = /parity llm stub: (\S+)/.exec(line)?.[1];
+  const baseUrl = /llm stub: (\S+)/.exec(line)?.[1];
   if (!baseUrl) throw new Error(`unexpected stub banner: ${line}`);
   return { origin: baseUrl.replace(/\/v1$/, ''), baseUrl, proc };
 }
@@ -472,9 +470,7 @@ describe('the recorded prompts replay through the adapter', () => {
   });
 
   // The stub keys on `messages` alone, so a hit is byte-for-byte proof that
-  // the envelope this adapter sends is the one the Python app sent. Each of
-  // the four job kinds joins the corpus as lane E records it; nothing here
-  // changes when it does.
+  // the envelope this adapter sends is the one the fixture holds.
   it.each(fixtures.map((f) => [f.key.slice(0, 16), f] as const))('replays %s', async (_name, fixture) => {
     expect(fixture.messages).toHaveLength(1);
     expect(fixture.messages[0]!.role).toBe('user');

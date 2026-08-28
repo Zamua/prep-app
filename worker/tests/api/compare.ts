@@ -1,8 +1,8 @@
 // Comparing a replayed response with its recorded one. Values another
 // implementation cannot reproduce (a minted cookie, a random slug, the
 // VAPID key) are named by the corpus header and compared by regex; a
-// rendered page is compared with its whitespace collapsed, which is what
-// the Python DOM gate settles for on a fragment.
+// rendered page is compared with its whitespace collapsed, since a fragment
+// carries indentation that no reader depends on.
 
 export interface VolatileRule {
   pairs: string;

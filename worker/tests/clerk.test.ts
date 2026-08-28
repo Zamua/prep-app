@@ -121,7 +121,7 @@ describe('the verifier', () => {
     });
   });
 
-  it('reads the claim aliases Python reads, in its order', () => {
+  it('reads the claim aliases in precedence order', () => {
     expect(identityFromClaims({ sub: 's', primary_email: 'p@b.test', username: 'u', image_url: 'i' })).toEqual({
       subject: 's',
       kind: 'clerk',

@@ -26,7 +26,7 @@ const ALICE = 'alice@example.com';
 const BOB = 'bob@example.com';
 
 /**
- * A snapshot shaped like the exporter's output: Python's `users` row under
+ * A snapshot shaped like the exporter's output: the `users` row under
  * its own key, per-user tables verbatim, ids preserved and far below the
  * 2^32 id block.
  */

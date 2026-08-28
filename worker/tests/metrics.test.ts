@@ -1,39 +1,13 @@
-// The exposition against `prometheus_client`. The families a query names
-// have to keep their bucket boundaries and their label sets, and a scrape
-// has to parse the same way, so the gate is the whole text rather than a
-// structural comparison: help lines, sample ordering, float formatting and
-// escaping included.
+// The exposition the scrape serves. The families a query names have to keep
+// their bucket boundaries and their label sets, and a scrape has to parse the
+// same way, so the gate is the whole text rather than a structural
+// comparison: help lines, sample ordering, float formatting and escaping
+// included.
 import { describe, expect, it } from 'vitest';
 import { goString, METRICS_CONTENT_TYPE, Registry, renderMetrics, type Histogram } from '../app/metrics.js';
 import { ENTRY_ROUTES, observe, OTHER_METHOD, routeLabel, serveMetrics, UNMATCHED } from '../runtime/routes/metrics.js';
 import worker from '../runtime/worker.js';
 import { fakeEnv, req } from './helpers.js';
-import { pythonJson } from './pyoracle.js';
-
-const ORACLE = `
-import json
-from tests.parity.oracles.metrics import SEQUENCE, exposition
-print(json.dumps({
-    'sequence': [{'family': f, 'labels': labels, 'seconds': s} for f, labels, s in SEQUENCE],
-    'exposition': exposition(),
-}))
-`;
-
-// The bucket bounds and durations these families hold, plus the two places
-// the languages part company on their own: how wide an exponent is written,
-// and where each stops writing a number out in full.
-const GO_STRINGS = `
-import json
-from prometheus_client.utils import floatToGoString
-values = [
-    0.0, -0.0, 1.0, 0.001, 0.005, 0.012, 0.25, 1.012, 12.0, 41.5, 2.0, 30.0, 75.0,
-    123456.5, 1234567.5, 10000000.0, 12345678.0, 123456789.5,
-    1e-4, 1e-5, 1e-6, 1e-7, 1e-8,
-    1e14, 1e15, 1e16, 1e17, 1e21, 1.5e16,
-    -1.0, -1e15, -1e16, -0.001,
-]
-print(json.dumps({'values': values, 'rendered': [floatToGoString(v) for v in values]}))
-`;
 
 interface Step {
   family: string;
@@ -41,7 +15,84 @@ interface Step {
   seconds: number;
 }
 
-const oracle = pythonJson<{ sequence: Step[]; exposition: string }>(ORACLE);
+// A family with no observation, a value in a middle bucket, one past every
+// finite bound, a non-integral sum, and a label needing escaping.
+const SEQUENCE: readonly Step[] = [
+  { family: 'http', labels: { method: 'GET', route: '/', status: '200' }, seconds: 1.012 },
+  { family: 'http', labels: { method: 'GET', route: '/deck/{name}', status: '500' }, seconds: 75 },
+  { family: 'http', labels: { method: 'POST', route: 'a\\b"c\nd', status: '200' }, seconds: 0.012 },
+  { family: 'instant', labels: { outcome: 'ok' }, seconds: 2.0 },
+];
+
+const EXPOSITION = [
+  "# HELP prep_ai_grade_duration_seconds Wall-clock duration of one ai_grade call from prompt-build to response-parsed. Labeled by `verdict` (right/wrong/fallback) so we can see fallback rate separately from successful grading latency.",
+  "# TYPE prep_ai_grade_duration_seconds histogram",
+  "# HELP prep_instant_generate_duration_seconds Wall-clock duration of one anonymous instant-generate request, admission to response. Labeled by `outcome` (ok / rate_limited / busy / failed_spent / failed_free / invalid): the spend vs no-spend split is what makes abuse visible separately from upstream trouble.",
+  "# TYPE prep_instant_generate_duration_seconds histogram",
+  "prep_instant_generate_duration_seconds_bucket{le=\"0.01\",outcome=\"ok\"} 0.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"0.1\",outcome=\"ok\"} 0.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"0.5\",outcome=\"ok\"} 0.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"1.0\",outcome=\"ok\"} 0.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"2.5\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"5.0\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"10.0\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"20.0\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"30.0\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"45.0\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"60.0\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"75.0\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_bucket{le=\"+Inf\",outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_count{outcome=\"ok\"} 1.0",
+  "prep_instant_generate_duration_seconds_sum{outcome=\"ok\"} 2.0",
+  "# HELP prep_http_request_duration_seconds Request handling time per route. Labels are coarse on purpose: `route` is the route template (e.g. /deck/{name}), not the raw URL, which keeps cardinality bounded.",
+  "# TYPE prep_http_request_duration_seconds histogram",
+  "prep_http_request_duration_seconds_bucket{le=\"0.005\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.01\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.025\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.05\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.1\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.25\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.5\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"1.0\",method=\"GET\",route=\"/\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"2.5\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"5.0\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"7.5\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"12.0\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"+Inf\",method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_count{method=\"GET\",route=\"/\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_sum{method=\"GET\",route=\"/\",status=\"200\"} 1.012",
+  "prep_http_request_duration_seconds_bucket{le=\"0.005\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.01\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.025\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.05\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.1\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.25\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.5\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"1.0\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"2.5\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"5.0\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"7.5\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"12.0\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"+Inf\",method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 1.0",
+  "prep_http_request_duration_seconds_count{method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 1.0",
+  "prep_http_request_duration_seconds_sum{method=\"GET\",route=\"/deck/{name}\",status=\"500\"} 75.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.005\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.01\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 0.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.025\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.05\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.1\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.25\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"0.5\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"1.0\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"2.5\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"5.0\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"7.5\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"12.0\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_bucket{le=\"+Inf\",method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_count{method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 1.0",
+  "prep_http_request_duration_seconds_sum{method=\"POST\",route=\"a\\\\b\\\"c\\nd\",status=\"200\"} 0.012",
+  "",
+].join('\n');
 
 function replay(steps: readonly Step[]): Registry {
   const registry = new Registry();
@@ -52,7 +103,7 @@ function replay(steps: readonly Step[]): Registry {
   };
   for (const step of steps) {
     const family = families[step.family];
-    if (!family) throw new Error(`the oracle names a family this app does not have: ${step.family}`);
+    if (!family) throw new Error(`the sequence names a family this app does not have: ${step.family}`);
     family.observe(
       family.spec.labelNames.map((name) => {
         const value = step.labels[name];
@@ -65,24 +116,35 @@ function replay(steps: readonly Step[]): Registry {
   return registry;
 }
 
-describe('the exposition against prometheus_client', () => {
-  it('renders the reference byte for byte', () => {
-    expect(replay(oracle.sequence).render()).toBe(oracle.exposition);
+describe('the exposition', () => {
+  it('renders the sequence byte for byte', () => {
+    expect(replay(SEQUENCE).render()).toBe(EXPOSITION);
   });
 
-  it('replays a sequence that covers what the format can vary on', () => {
-    const text = oracle.exposition;
-    // A family with no observation, the escaping, a cumulative bucket, a
-    // value past every finite bound, and a non-integral sum.
-    expect(text).toContain('# TYPE prep_ai_grade_duration_seconds histogram\n# HELP');
-    expect(text).toContain('route="a\\\\b\\"c\\nd"');
-    expect(text).toContain('prep_http_request_duration_seconds_sum{method="GET",route="/",status="200"} 1.012');
-    expect(text).toContain('prep_http_request_duration_seconds_bucket{le="+Inf",method="GET",route="/deck/{name}",status="500"} 1.0');
+  it('covers what the format can vary on', () => {
+    expect(EXPOSITION).toContain('# TYPE prep_ai_grade_duration_seconds histogram\n# HELP');
+    expect(EXPOSITION).toContain('route="a\\\\b\\"c\\nd"');
+    expect(EXPOSITION).toContain('prep_http_request_duration_seconds_sum{method="GET",route="/",status="200"} 1.012');
+    expect(EXPOSITION).toContain('prep_http_request_duration_seconds_bucket{le="+Inf",method="GET",route="/deck/{name}",status="500"} 1.0');
   });
 
+  // The Go float format Prometheus reads: how wide an exponent is written,
+  // and where a number stops being written out in full.
   it('formats a float the way Go does', () => {
-    const { values, rendered } = pythonJson<{ values: number[]; rendered: string[] }>(GO_STRINGS);
-    expect(values.map(goString)).toEqual(rendered);
+    const values = [
+      0.0, -0.0, 1.0, 0.001, 0.005, 0.012, 0.25, 1.012, 12.0, 41.5, 2.0, 30.0, 75.0,
+      123456.5, 1234567.5, 10000000.0, 12345678.0, 123456789.5,
+      1e-4, 1e-5, 1e-6, 1e-7, 1e-8,
+      1e14, 1e15, 1e16, 1e17, 1e21, 1.5e16,
+      -1.0, -1e15, -1e16, -0.001,
+    ];
+    expect(values.map(goString)).toEqual([
+      '0.0', '-0.0', '1.0', '0.001', '0.005', '0.012', '0.25', '1.012', '12.0', '41.5', '2.0', '30.0', '75.0',
+      '123456.5', '1.2345675e+06', '1e+07', '1.2345678e+07', '1.234567895e+08',
+      '0.0001', '1e-05', '1e-06', '1e-07', '1e-08',
+      '1e+14', '1e+15', '1e+16', '1e+17', '1e+21', '1.5e+16',
+      '-1.0', '-1000000000000000.0', '-1e+16', '-0.001',
+    ]);
     // JSON has no literal for it, so the bucket bound comes on its own.
     expect(goString(Infinity)).toBe('+Inf');
   });

@@ -81,8 +81,7 @@ export function fakeEnv(overrides: Partial<Env> = {}): Env {
     PREP_BUILD_ID: 'ce11d0000000',
     PREP_PLACEHOLDER_INDEX: '0',
     PREP_INTERNAL_TOKEN: 'parity-internal-token',
-    // The parity harness's own values (tests/parity/oracles/harness.py):
-    // the corpora were recorded with a free tier configured.
+    // A free tier configured, so the agent-available branches are reachable.
     PREP_KEY_ENCRYPTION_SECRET: '11'.repeat(32),
     PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:9/v1',
     PREP_FREE_INFERENCE_API_KEY: 'parity-free-tier-key',

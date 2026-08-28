@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { DecryptionError } from '../app/ports';
 import { b64Decode, b64Encode, hexToBytes } from '../domain/base64';
 import { AesGcmCipher, KEY_LEN, loadMasterKey, MasterKeyError, NONCE_LEN } from '../runtime/adapters/byokCrypto';
-import { pythonJson } from './pyoracle';
 
 const MASTER_HEX = '11'.repeat(32);
 const MASTER = hexToBytes(MASTER_HEX)!;
@@ -57,44 +56,5 @@ describe('AES-256-GCM round trips', () => {
     await expect(cipher().decrypt(b64Encode(raw))).rejects.toThrow(/tag mismatch/);
     const other = new AesGcmCipher(hexToBytes('22'.repeat(KEY_LEN))!, counterRandom());
     await expect(other.decrypt(blob)).rejects.toThrow(DecryptionError);
-  });
-});
-
-describe('byte compatibility with the Python app', () => {
-  // The rows in `byok_credentials` were written by prep/byok/crypto.py and
-  // must decrypt here with the same master key, or phase 6 loses every key.
-  const fromPython = pythonJson<{ blob: string; roundtrip: string }>(
-    `import json
-from prep.byok.crypto import encrypt, decrypt
-key = bytes.fromhex("${MASTER_HEX}")
-blob = encrypt(${JSON.stringify(SECRET)}, key)
-print(json.dumps({"blob": blob, "roundtrip": decrypt(blob, key)}))`,
-  );
-
-  it('decrypts a ciphertext the Python app produced', async () => {
-    expect(fromPython.roundtrip).toBe(SECRET);
-    expect(await cipher().decrypt(fromPython.blob)).toBe(SECRET);
-  });
-
-  it('produces a ciphertext the Python app decrypts', async () => {
-    const blob = await cipher().encrypt(SECRET);
-    const back = pythonJson<{ plain: string }>(
-      `import json
-from prep.byok.crypto import decrypt
-print(json.dumps({"plain": decrypt(${JSON.stringify(blob)}, bytes.fromhex("${MASTER_HEX}"))}))`,
-    );
-    expect(back.plain).toBe(SECRET);
-  });
-
-  it('carries non-ASCII plaintext through unchanged', async () => {
-    const text = 'sk-or-v1-café-é中文';
-    const blob = await cipher().encrypt(text);
-    const back = pythonJson<{ plain: string }>(
-      `import json
-from prep.byok.crypto import decrypt
-print(json.dumps({"plain": decrypt(${JSON.stringify(blob)}, bytes.fromhex("${MASTER_HEX}"))}))`,
-    );
-    expect(back.plain).toBe(text);
-    expect(await cipher().decrypt(blob)).toBe(text);
   });
 });

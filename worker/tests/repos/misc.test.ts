@@ -106,7 +106,7 @@ describe('IdempotencyRepo: the three ledgers', () => {
 });
 
 describe('PrefsRepo', () => {
-  it('reads the profile as the Python user dict', () => {
+  it('reads the profile as the account record', () => {
     const { repos } = cell({ profile: false });
     expect(repos.prefs.get()).toBeNull();
     const p = repos.prefs.upsert('parity@example.com', { email: 'parity@example.com', displayName: 'Parity' });

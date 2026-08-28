@@ -1,8 +1,0 @@
-# deck_type: trivia
-# notification_interval_minutes: 30
-# trivia_session_size: 3
-# topic_prompt: Queue state
-type,topic,prompt,answer,choices,rubric,skeleton,language,answer_regex,explanation
-short,,Answered right,R,,,,,,
-short,,Answered wrong,W,,,,,,
-short,,Never answered,N,,,,,,

@@ -1,5 +1,5 @@
 {
- "description": "Shared markdown cases for the card-prompt renderer. Each case is {id, input, expected}; expected is the recorded output of the pre-cutover server-side renderer. The same cases are the tests/fixtures/parity/markdown corpus the TypeScript renderer (worker/domain/markdown) and its browser twin (static/js/study/markdown.js) are held byte-equal to.",
+ "description": "Shared markdown cases for the card-prompt renderer. Each case is {id, input, expected}. Two implementations must produce `expected` for every input: the server renderer (worker/domain/markdown) and its browser twin (static/js/study/markdown.js). The file is their contract; changing an expected value means changing both.",
  "cases": [
   {
    "id": "plain-question",

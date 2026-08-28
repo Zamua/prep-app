@@ -20,7 +20,7 @@ NPM  := $(RUN) npm --prefix worker
 PY   := $(RUN) .venv/bin/python
 
 .PHONY: help setup tools node-deps py-deps build test typecheck \
-        test-migrate lint format hooks dev dev-stop llm-stub e2e parity \
+        test-migrate lint format hooks dev dev-stop llm-stub e2e \
         ci clean
 
 help:
@@ -37,8 +37,7 @@ help:
 	@echo ""
 	@echo "Python tools:"
 	@echo "  make test-migrate  the migration tool's suite (migrate/)"
-	@echo "  make e2e           browser suites against PARITY_BASE_URL"
-	@echo "  make parity        pixel flows against PARITY_BASE_URL"
+	@echo "  make e2e           browser suites against a running target"
 	@echo ""
 	@echo "Both:"
 	@echo "  make lint        ruff format-check + check, read-only"
@@ -80,10 +79,9 @@ dev: node-deps
 dev-stop:
 	worker/scripts/run-node.sh stop
 
-# The canned LLM the parity corpus was recorded against. A local node is
-# configured to call it, so AI flows need it running.
+# The canned LLM a local node calls. AI flows need it running.
 llm-stub: py-deps
-	$(PY) -m tests.parity.llm_stub --port 8089
+	$(PY) -m tests.support.llm_stub --port 8089
 
 # ----- python tools -----
 
@@ -97,17 +95,6 @@ test-migrate: py-deps node-deps
 # suites skip with the reason when it is unset.
 e2e: py-deps
 	$(PY) -m pytest tests/e2e
-
-# The pixel goldens under tests/parity/goldens/. PARITY_PHASE selects
-# which flows run; `all` is every phase. One file per invocation on
-# purpose: each holds a browser session for its whole scope.
-PARITY_PHASE ?= all
-
-parity: py-deps
-	@for f in tests/parity/test_flows_*.py; do \
-	  echo "-> $$f"; \
-	  PARITY_PHASE=$(PARITY_PHASE) $(PY) -m pytest -q $$f || exit 1; \
-	done
 
 # ----- both -----
 

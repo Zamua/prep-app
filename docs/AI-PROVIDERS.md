@@ -221,11 +221,10 @@ Two layers, and they answer different questions.
   (`worker/tests/jobs/workflows/plan.test.ts` and its siblings): fenced
   output, prose around the JSON, wrong-typed fields, missing fields.
 
-Separately, `tests/fixtures/parity/llm/` is a recorded corpus keyed by
-the hash of the request messages, replayed by a stub so the end-to-end
-parity flows exercise real model output without a network call. A miss
-there means a prompt stopped being deterministic: fix the prompt, never
-the key.
+Separately, `tests/fixtures/llm/` is a recorded corpus keyed by the hash
+of the request messages, replayed by a stub so the end-to-end flows
+exercise real model output without a network call. A miss there means a
+prompt stopped being deterministic: fix the prompt, never the key.
 
 If a new model habit shows up, pin it first and then make the parser
 cope, so "we think it copes" becomes recorded behavior.

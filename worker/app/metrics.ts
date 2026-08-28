@@ -44,7 +44,7 @@ export const SPECS = {
   },
   httpRequest: {
     name: 'prep_http_request_duration_seconds',
-    help: 'Request handling time per route. Labels are coarse on purpose: `route` is the FastAPI route template (e.g. /deck/{name}), not the raw URL — keeps cardinality bounded.',
+    help: 'Request handling time per route. Labels are coarse on purpose: `route` is the route template (e.g. /deck/{name}), not the raw URL, which keeps cardinality bounded.',
     labelNames: ['method', 'route', 'status'],
     buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 7.5, 12.0],
   },

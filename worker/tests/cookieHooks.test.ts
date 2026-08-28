@@ -8,8 +8,8 @@ import type { Env } from '../runtime/env';
 import { NoIdentityProvider } from '../runtime/adapters/fakeIdentity';
 import { CORPUS, fakeEnv, req } from './helpers';
 
-// The recorded Python responses are the oracle for these bytes: a browser
-// that stops accepting the value stops holding the account.
+// The recorded responses are the gate for these bytes: a browser that stops
+// accepting the value stops holding the account.
 interface Pair {
   name: string;
   request: { method: string; path: string; headers: Record<string, string> | null };

@@ -165,7 +165,7 @@ describe('the reaper walk', () => {
 
   it('skips an account whose cell holds no profile rather than judging it by the directory', async () => {
     // A migration registers an account before its cell is written, and a
-    // migrated `created_at` is Python's, years old. Falling back to it reads
+    // migrated `created_at` is the imported one, years old. Falling back to it reads
     // a live account as idle and destroys it, and a reaped cell refuses
     // every later migration chunk forever.
     const f = fixture();
