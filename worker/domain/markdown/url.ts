@@ -30,7 +30,7 @@ function replaceCharref(s: string): string {
   return "&" + s;
 }
 
-/** html.unescape restricted to references with a trailing semicolon. */
+/** Character references, resolved only when they end in a semicolon. */
 export function unescape(s: string): string {
   if (!s.includes("&")) return s;
   return s.replace(CHARREF, (_m, ref: string) => replaceCharref(ref));
@@ -94,7 +94,8 @@ function unquoteUrl(url: string): string {
   return url;
 }
 
-/** HTMLRenderer.safe_url: the escaped href, or the harmful-link sink. */
+/** The escaped href, or the harmful-link sink. Three decode passes, so a
+ * scheme hidden under layers of percent-encoding is still seen. */
 export function safeUrl(url: string): string {
   const probe = lstrip(unquoteUrl(url).toLowerCase());
   const head = probe.split("/", 1)[0]!;

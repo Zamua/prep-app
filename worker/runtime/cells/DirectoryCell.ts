@@ -19,9 +19,8 @@ import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
 const DUMP_TABLES = ['users', 'account_merges', 'merge_markers', 'tombstones'] as const;
 
 const REAP_STATE_KEY = 'reap';
-/** The migration's one-way flag. Never cleared: once the cutover verifies,
- * a stale runbook step or a second run of the migrator must not be able to
- * write into a fleet that is already serving. */
+/** The import's one-way flag. Never cleared: once a fleet is verified and
+ * serving, no repeat run may write into it. */
 const MIGRATION_SEAL_KEY = 'migration_sealed';
 /** Which snapshot this fleet is being built from, and when that run opened.
  * The verifier reads it back so it cannot compare a fleet against a snapshot
@@ -93,7 +92,7 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
    * flag is fleet-wide. */
   async sealMigration(): Promise<void> {
     await this.storage.put<boolean>(MIGRATION_SEAL_KEY, true);
-    // The cutover is over, so the retention sweep goes back on.
+    // Sealing ends the run, so the retention sweep goes back on.
     await this.storage.delete(MIGRATION_RUN_KEY);
   }
 
