@@ -2,9 +2,9 @@
 # Pre-commit hook for prep.
 #
 # Staged TypeScript in worker/ gates on the worker's typecheck and its
-# vitest suite; staged Python gates on ruff. Wired up with
-# `git config core.hooksPath .githooks` (`make hooks`, also part of
-# `make setup`). Bypass with `git commit --no-verify`; use sparingly.
+# vitest suite. Wired up with `git config core.hooksPath .githooks`
+# (`make hooks`, also part of `make setup`). Bypass with
+# `git commit --no-verify`; use sparingly.
 
 set -e
 
@@ -14,36 +14,8 @@ staged_files() {
     git diff --cached --name-only --diff-filter=ACM -z | tr '\0' '\n'
 }
 
-py_files=$(staged_files | grep -E '\.py$' | grep -vE '^\.venv/' || true)
 ts_files=$(staged_files | grep -E '^worker/.*\.(ts|mts|mjs)$' || true)
 
-# ---- Python: ruff format-check + lint -----------------------------------
-
-if [ -n "$py_files" ]; then
-    if [ ! -x .venv/bin/ruff ]; then
-        echo "pre-commit: .venv/bin/ruff not found: run \`make setup\` first" >&2
-        exit 1
-    fi
-
-    echo "pre-commit: ruff format --check"
-    # shellcheck disable=SC2086  # word-split intended
-    if ! .venv/bin/ruff format --check $py_files; then
-        echo "" >&2
-        echo "pre-commit: formatting issues: run \`make format\` and re-stage." >&2
-        exit 1
-    fi
-
-    echo "pre-commit: ruff check"
-    # shellcheck disable=SC2086
-    if ! .venv/bin/ruff check $py_files; then
-        echo "" >&2
-        echo "pre-commit: lint issues: fix, or \`.venv/bin/ruff check --fix <files>\`." >&2
-        exit 1
-    fi
-fi
-
-# ---- worker: typecheck + vitest -----------------------------------------
-#
 # The suite is the gate the deploy leans on and runs in seconds, so it
 # runs whole rather than filtered down to the staged files.
 
@@ -65,17 +37,6 @@ if [ -n "$ts_files" ]; then
         echo "" >&2
         echo "pre-commit: tests failing: fix or add coverage before committing." >&2
         echo "(use \`git commit --no-verify\` to bypass for an emergency)" >&2
-        exit 1
-    fi
-fi
-
-# ---- Python tests --------------------------------------------------------
-
-if [ -n "$py_files" ] && [ -x .venv/bin/pytest ]; then
-    echo "pre-commit: pytest -x"
-    if ! .venv/bin/pytest -x --tb=short -q; then
-        echo "" >&2
-        echo "pre-commit: tests failing: fix or add coverage before committing." >&2
         exit 1
     fi
 fi

@@ -3,9 +3,7 @@
 # `mise exec --` so no shell activation is required.
 #
 # node  the worker: build, typecheck, vitest
-# python  the browser test harness
-# bun     rebuilds static/cm-bundle.js from static/cm/ when CodeMirror
-#         or its language modes move; not needed for a normal build
+# bun   rebuilds static/cm-bundle.js from static/cm/ when CodeMirror
+#       or its language modes move; not needed for a normal build
 node 26
-python 3.11
 bun 1.1.0

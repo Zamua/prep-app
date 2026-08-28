@@ -3,13 +3,7 @@ worker/build/
 worker/dist/
 node_modules/
 
-# Python
-.venv
-__pycache__/
-*.pyc
-*.pyo
-
-# SQLite: snapshots the migration tool reads, and anything it writes
+# SQLite: local node state
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
@@ -32,7 +26,5 @@ push-subscriptions.json.archived-*
 .vscode/
 *.swp
 
-# Test output: flow screenshots, pixel diffs, the rendered report
+# Local run output
 artifacts/
-report/
-results.xml

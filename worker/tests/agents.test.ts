@@ -19,8 +19,8 @@ import { FREE_TIER_MAX_OUTPUT_TOKENS, FreeTierAgent, freeTierConfig, INSTANT_MAX
 import { InvalidKeyShape, messagesFor, OpenAICompatAgent, scrubExtraBody } from '../runtime/adapters/agents/openaiCompat.js';
 import { agentFor, DEFAULT_TIMEOUT_MS, RefusingAgent, SelectedAgent } from '../runtime/adapters/agents/select.js';
 
-const REPO = new URL('../..', import.meta.url).pathname;
-const LLM_FIXTURES = join(REPO, 'tests', 'fixtures', 'llm');
+const WORKER = new URL('..', import.meta.url).pathname;
+const LLM_FIXTURES = join(WORKER, 'tests', 'fixtures', 'llm');
 
 const FREE_ENV = {
   PREP_FREE_INFERENCE_BASE_URL: 'https://inference.example/v1',
@@ -411,7 +411,7 @@ interface Stub {
 }
 
 async function bootStub(fixtures: string): Promise<Stub> {
-  const proc = spawn(join(REPO, '.venv', 'bin', 'python'), ['-m', 'tests.support.llm_stub', '--port', '0', '--fixtures', fixtures], { cwd: REPO });
+  const proc = spawn(process.execPath, [join(WORKER, 'scripts', 'llm-stub.mjs'), '--port', '0', '--fixtures', fixtures], { cwd: WORKER });
   const line = await new Promise<string>((resolve, reject) => {
     const rl = createInterface({ input: proc.stdout });
     rl.once('line', resolve);

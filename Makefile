@@ -5,8 +5,7 @@
 #
 # Linux: install mise (see CONTRIBUTING.md), then the same three.
 #
-# The application is the TypeScript worker under worker/. Python remains
-# for the browser test harness (tests/); `make setup` provisions both.
+# The application is the TypeScript worker under worker/.
 #
 # Deploy targets are operator-only and live in a private repo. This
 # Makefile never deploys anything.
@@ -16,34 +15,29 @@
 MISE ?= mise
 RUN  := $(MISE) exec --
 NPM  := $(RUN) npm --prefix worker
-PY   := $(RUN) .venv/bin/python
 
-.PHONY: help setup tools node-deps py-deps build test typecheck \
-        lint format hooks dev dev-stop llm-stub e2e ci clean
+.PHONY: help setup tools node-deps build test typecheck \
+        lint format hooks dev dev-stop llm-stub ci clean
 
 help:
 	@echo "Setup:"
-	@echo "  make setup       mise install + npm install + uv sync + git hooks"
+	@echo "  make setup       mise install + npm install + git hooks"
 	@echo ""
 	@echo "The worker (the application):"
 	@echo "  make build       templates, icons, service worker, dist/assets"
 	@echo "  make test        vitest"
 	@echo "  make typecheck   tsc over the worker and its tests"
+	@echo "  make lint        typecheck, read-only"
+	@echo "  make format      no-op; formatting is the editor's job"
 	@echo "  make dev         build, deploy and start a local celld node"
 	@echo "  make dev-stop    stop the node this checkout started"
 	@echo "  make llm-stub    the canned LLM a local node calls for AI flows"
 	@echo ""
-	@echo "Python tools:"
-	@echo "  make e2e         browser suites against a running target"
-	@echo ""
-	@echo "Both:"
-	@echo "  make lint        ruff format-check + check, read-only"
-	@echo "  make format      ruff format + fix (writes)"
 	@echo "  make hooks       install the pre-commit hook (part of setup)"
-	@echo "  make ci          lint + typecheck + test"
+	@echo "  make ci          typecheck + test"
 	@echo "  make clean       drop generated build output"
 
-setup: tools node-deps py-deps hooks
+setup: tools node-deps hooks
 
 tools:
 	@command -v $(MISE) >/dev/null 2>&1 || { \
@@ -53,11 +47,6 @@ tools:
 node-deps: tools
 	$(NPM) install --silent
 
-py-deps: tools
-	$(RUN) uv sync --group dev --quiet
-
-# ----- the worker -----
-
 build: node-deps
 	$(NPM) run build
 
@@ -66,6 +55,11 @@ typecheck: node-deps
 
 test: node-deps
 	cd worker && $(RUN) npx vitest run
+
+lint: typecheck
+
+format:
+	@echo "nothing to run: the worker has no formatter of its own"
 
 # A local celld node: builds, deploys to the scratch bucket, starts on
 # 127.0.0.1:8791. Needs the celld binary and the scratch MinIO
@@ -77,25 +71,8 @@ dev-stop:
 	worker/scripts/run-node.sh stop
 
 # The canned LLM a local node calls. AI flows need it running.
-llm-stub: py-deps
-	$(PY) -m tests.support.llm_stub --port 8089
-
-# ----- python tools -----
-
-# Browser suites against a running target. PARITY_BASE_URL names it; the
-# suites skip with the reason when it is unset.
-e2e: py-deps
-	$(PY) -m pytest tests/e2e
-
-# ----- both -----
-
-lint: py-deps
-	$(RUN) .venv/bin/ruff format --check .
-	$(RUN) .venv/bin/ruff check .
-
-format: py-deps
-	$(RUN) .venv/bin/ruff format .
-	$(RUN) .venv/bin/ruff check --fix .
+llm-stub: node-deps
+	cd worker && $(RUN) node scripts/llm-stub.mjs --port 8089
 
 # Wire .githooks/ as this checkout's hooks dir. Idempotent. Bypass a
 # single commit with `git commit --no-verify`.
@@ -103,7 +80,7 @@ hooks:
 	@git config core.hooksPath .githooks
 	@echo "git hooks installed (.githooks/pre-commit)"
 
-ci: lint typecheck test
+ci: typecheck test
 
 clean:
 	rm -rf worker/build worker/dist artifacts
