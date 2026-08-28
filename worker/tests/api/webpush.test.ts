@@ -1,7 +1,8 @@
-// Web push, pinned two ways: the encrypted body against a vector another
-// implementation produced (fixtures/webpush-vector.json, written by the
-// library pywebpush encrypts with), and the VAPID header against a
-// verifier holding only the public key.
+// Web push, pinned two ways: the encrypted body against an RFC 8291 vector
+// an independent implementation produced (fixtures/webpush-vector.json), and
+// the VAPID header against a verifier holding only the public key. Nothing
+// here is self-referential: a bug that encrypts and decrypts consistently
+// would still fail both.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { b64uDecode, b64uEncode } from '../../domain/base64.js';

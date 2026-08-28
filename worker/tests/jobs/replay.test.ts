@@ -149,7 +149,7 @@ function expectMonotonic(run: Run): void {
   expect([...new Set(run.transitions)].sort((a, b) => a - b)).toEqual(Array.from({ length: high }, (_, i) => i + 1));
 }
 
-describe('the reference run', () => {
+describe('a clean run of each kind', () => {
   const runs = new Map<JobKind, Run>();
 
   it('takes each kind to done, each step key once', async () => {

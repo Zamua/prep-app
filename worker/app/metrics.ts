@@ -1,11 +1,10 @@
 // The Prometheus surface: three histogram families and the text exposition
 // encoder for them.
 //
-// The families keep the reference app's names, label names, bucket
-// boundaries and help text, so a query or a dashboard panel written against
-// them still resolves. The help text is verbatim down to its mention of a
-// framework this runtime does not use: two targets in one scrape job that
-// disagree on a family's HELP are an inconsistency Prometheus reports.
+// Names, label names, bucket boundaries and help text are fixed: a query or
+// a dashboard panel is written against them, and two targets in one scrape
+// job that disagree on a family's HELP are an inconsistency Prometheus
+// reports.
 //
 // The registry is module-level. On this runtime that means per isolate: the
 // counters belong to whichever isolate answered the scrape, and they go when
@@ -75,7 +74,7 @@ export class Histogram {
   }
 
   /** The bucket a value falls in. A value no bound admits, `NaN` included,
-   * lands in `+Inf`, as it does in the reference. */
+   * lands in `+Inf`. */
   private slot(seconds: number): number {
     for (let i = 0; i < this.spec.buckets.length; i++) if (seconds <= this.spec.buckets[i]!) return i;
     return this.spec.buckets.length;

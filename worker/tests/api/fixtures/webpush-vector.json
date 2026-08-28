@@ -1,5 +1,5 @@
 {
-  "source": "http_ece 1.2.1 (the library pywebpush encrypts with)",
+  "source": "RFC 8291 aes128gcm: one message, its keys and the ciphertext an independent implementation produced for them",
   "plaintext": "{\"title\":\"Prep\",\"body\":\"one card is due\",\"url\":\"/study/world-capitals\"}",
   "ua_public": "BFFcPW6545a5BNP-yn9U_c0MwemXvzddylFa0KbDtANfRTa-OlDzGPv5pUdZAqIhUCvvDVfgjFOyzApW8X2fk1Q",
   "ua_private": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",

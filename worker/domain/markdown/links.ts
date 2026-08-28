@@ -139,7 +139,8 @@ function parseAngleLinkHref(src: string, pos: number): [string, number] | [null,
   return [null, null];
 }
 
-// util.unikey: the reference label's lookup key.
+// A reference label's lookup key: whitespace collapsed and case folded, so
+// `[Foo  Bar]` and `[foo bar]` resolve to the same definition.
 export function unikey(s: string): string {
   return splitWhitespace(s).join(" ").toLowerCase().toUpperCase();
 }

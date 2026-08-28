@@ -20,13 +20,12 @@ export const OTHER_METHOD = '<other>';
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT']);
 
 /**
- * The routes the entry worker answers itself, written as the reference
- * templates them so the `route` label reads the same on both. `{name}`
- * matches one segment, `{name:path}` the rest.
+ * The routes the entry worker answers itself, as route TEMPLATES: `{name}`
+ * matches one segment, `{name:path}` the rest. The `route` label is the
+ * template, never the raw URL, which is what keeps cardinality bounded.
  *
  * `tests/routeTable.test.ts` reads this as its entry-worker inventory: a
- * route added here has to be one the reference serves, and one added to the
- * worker without landing here would label as `<unmatched>`.
+ * route the worker answers without landing here labels as `<unmatched>`.
  */
 export const ENTRY_ROUTES: readonly (readonly [string, string])[] = [
   ['GET', '/healthz'],
@@ -49,9 +48,9 @@ export const ENTRY_ROUTES: readonly (readonly [string, string])[] = [
   ['GET', '/static/js/v{build}/{path:path}'],
 ];
 
-/** Routes this runtime adds, which need a label of their own or a readiness
- * probe every few seconds buries real 404s under `<unmatched>`. Separate from
- * `ENTRY_ROUTES`, which is the reference's inventory and stays that. */
+/** Infrastructure routes, which need a label of their own or a readiness
+ * probe every few seconds buries real 404s under `<unmatched>`. Kept apart
+ * from `ENTRY_ROUTES` so the product inventory stays readable. */
 const LOCAL_ROUTES: readonly (readonly [string, string])[] = [['GET', '/readyz']];
 
 const CELL_ROUTES: readonly Route[] = [...pageRoutes, ...jobRoutes, ...apiRoutes];
@@ -62,9 +61,8 @@ export function serveMetrics(request: Request, url: URL): Response | null {
   return new Response(renderMetrics(), { headers: { 'content-type': METRICS_CONTENT_TYPE, 'cache-control': 'no-store' } });
 }
 
-/** One request, the way the reference middleware records one: the route
- * template if something matched, `<unmatched>` otherwise, and the status a
- * thrown request would have carried. */
+/** One request: the route template if something matched, `<unmatched>`
+ * otherwise, and the status a thrown request would have carried. */
 export function observe(method: string, path: string, status: number, seconds: number): void {
   try {
     observeHttpRequest(METHODS.has(method) ? method : OTHER_METHOD, routeLabel(method, path), status, seconds);

@@ -99,8 +99,8 @@ export default {
       observed = await handle(request, url, env);
       return observed;
     } finally {
-      // A thrown request is a 500, the way the reference middleware records
-      // the response it never got.
+      // A thrown request is observed as a 500: the timer has to record the
+      // response the client never got, or an outage reads as no traffic.
       observe(request.method, url.pathname, observed?.status ?? 500, (Date.now() - started) / 1000);
     }
   },
