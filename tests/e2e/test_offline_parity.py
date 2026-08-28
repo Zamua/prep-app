@@ -3,7 +3,7 @@
 The JS ports (static/js/offline/grader.js and scheduler.js) run against
 the shared fixture files in tests/fixtures/offline/, imported into a
 real Chromium page one case at a time.
-`worker/tests/domain/grading.oracle.test.ts` holds the same grader
+`worker/tests/domain/grading.client.test.ts` holds the same grader
 corpus to the worker's own domain, so a semantic change on either side
 breaks a fixture case loudly.
 

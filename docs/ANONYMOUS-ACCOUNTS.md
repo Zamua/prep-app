@@ -704,7 +704,7 @@ are and the audit row says why.
 
 The set of user-scoped tables is not discovered at request time. It is
 the static policy map below, and
-`worker/tests/domain/merge.oracle.test.ts` asserts that the map names
+`worker/tests/domain/merge.test.ts` asserts that the map names
 every user-scoped column the schema declares: a table the schema has
 and the map does not name fails the suite.
 
