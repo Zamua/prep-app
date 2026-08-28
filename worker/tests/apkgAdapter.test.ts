@@ -90,6 +90,35 @@ describe('SqlJsApkg', () => {
     await expect(new SqlJsApkg().notes(blob)).rejects.toThrow('not a valid .apkg — no collection.anki2 / collection.anki21 inside');
   });
 
+  // A version-3 package leaves a note reading "Please update to the latest
+  // Anki version" where the collection used to be, so importing it succeeds
+  // with one nonsense card. The version is what makes that legible.
+  it('refuses a package version whose collection it cannot reach, naming the export setting', async () => {
+    const stub = await new SqlJsApkg().build(COL, [note(1, 'Please update to the latest Anki version.\x1f')], []);
+    const collection = zip.read(stub).find((e) => e.name === 'collection.anki21')!.bytes;
+    const blob = zip.write([
+      { name: 'collection.anki2', bytes: collection },
+      { name: 'collection.anki21b', bytes: enc.encode('zstd frame') },
+      { name: 'media', bytes: enc.encode('{}') },
+      { name: 'meta', bytes: new Uint8Array([0x08, 0x03]) },
+    ]);
+    await expect(new SqlJsApkg().notes(blob)).rejects.toThrow(NotAnApkg);
+    await expect(new SqlJsApkg().notes(blob)).rejects.toThrow(/version 3.*Support older Anki versions/s);
+  });
+
+  it('reads the versions that do carry a plain collection, and one that declares none', async () => {
+    const built = await new SqlJsApkg().build(COL, [note(4, 'front\x1fback')], []);
+    const collection = zip.read(built).find((e) => e.name === 'collection.anki21')!.bytes;
+    for (const meta of [[0x08, 0x01], [0x08, 0x02]]) {
+      const blob = zip.write([
+        { name: 'collection.anki21', bytes: collection },
+        { name: 'meta', bytes: new Uint8Array(meta) },
+      ]);
+      expect(await new SqlJsApkg().notes(blob), String(meta[1])).toEqual([{ id: 4, flds: 'front\x1fback' }]);
+    }
+    expect(await new SqlJsApkg().notes(built)).toEqual([{ id: 4, flds: 'front\x1fback' }]);
+  });
+
   it('refuses a collection that is not a sqlite database', async () => {
     const blob = zip.write([{ name: 'collection.anki21', bytes: enc.encode('SQLite format 3 is what this is not') }]);
     await expect(new SqlJsApkg().notes(blob)).rejects.toThrow(NotAnApkg);

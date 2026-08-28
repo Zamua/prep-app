@@ -18,6 +18,25 @@ import { FflateZip } from './zip.js';
 /** Anki prefers the newer scheduler's collection, and so does this. */
 const COLLECTION_NAMES = ['collection.anki21', 'collection.anki2'] as const;
 
+/** Anki's `meta` entry: a protobuf whose first field is the package version. */
+const META_NAME = 'meta';
+
+/**
+ * From version 3 the collection is zstd-compressed under `collection.anki21b`
+ * and the plain entries hold a placeholder note telling the reader to upgrade.
+ * Importing that placeholder is worse than refusing, so the version is read
+ * first and anything this high is turned away with the export setting to fix it.
+ */
+const UNREADABLE_PACKAGE_VERSION = 3;
+
+const READ_NAMES = [...COLLECTION_NAMES, META_NAME] as const;
+
+/** The version varint, or null when there is no `meta` to read it from. */
+function packageVersion(meta: Uint8Array | undefined): number | null {
+  if (!meta || meta.length < 2 || meta[0] !== 0x08) return null;
+  return meta[1]!;
+}
+
 /** Cribbed from anki/rslib/src/storage/sqlite.rs: minimal but complete, since
  * importers refuse a schema they do not recognise. */
 const SCHEMA = `
@@ -88,13 +107,19 @@ function collectionOf(blob: Uint8Array, opts: { maxEntryBytes?: number; maxTotal
   try {
     // The media stays compressed in the central directory: a real `.apkg` is
     // mostly media, and none of it is read.
-    entries = new FflateZip().read(blob, { ...opts, only: COLLECTION_NAMES });
+    entries = new FflateZip().read(blob, { ...opts, only: READ_NAMES });
   } catch (e) {
     if (e instanceof ZipEntryTooLarge) throw e;
     if (e instanceof NotAZip) throw new NotAnApkg(`not a valid .apkg (zip parse failed): ${e.message}`);
     throw e;
   }
   const byName = new Map(entries.map((e) => [e.name, e.bytes]));
+  const version = packageVersion(byName.get(META_NAME));
+  if (version !== null && version >= UNREADABLE_PACKAGE_VERSION) {
+    throw new NotAnApkg(
+      `this .apkg is Anki package version ${version}, which stores its collection compressed — re-export it from Anki with "Support older Anki versions" turned on`,
+    );
+  }
   for (const name of COLLECTION_NAMES) {
     const found = byName.get(name);
     if (found) return found;
