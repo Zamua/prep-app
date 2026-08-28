@@ -310,14 +310,14 @@ function harness(opts: { at?: Date } = {}): Harness {
     JOB: unreachableNamespace(),
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) } as unknown as Fetcher,
     PREP_ENV: 'dev',
-    PREP_PARITY_MODE: '1',
+    PREP_TEST_MODE: '1',
     PREP_BUILD_ID: 'ce11d0000000',
-    PREP_INTERNAL_TOKEN: 'parity-internal-token',
+    PREP_INTERNAL_TOKEN: 'test-internal-token',
     // A funded tier: without one the plan declines to dispatch a refill at
     // all, which is right and is its own test.
     PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:9/v1',
-    PREP_FREE_INFERENCE_API_KEY: 'parity-free-tier-key',
-    PREP_FREE_INFERENCE_MODEL: 'parity-model',
+    PREP_FREE_INFERENCE_API_KEY: 'test-free-tier-key',
+    PREP_FREE_INFERENCE_MODEL: 'test-model',
   };
 
   const c = composeWith(env, {
@@ -374,7 +374,7 @@ function unreachableNamespace(): DurableObjectNamespace {
 /** A profile with a device, the state every SRS notification needs. */
 function seedUser(h: Harness, opts: { push?: boolean } = {}): void {
   const repos = h.repos();
-  repos.prefs.upsert(USER, { email: USER, displayName: 'Parity' });
+  repos.prefs.upsert(USER, { email: USER, displayName: 'Seed' });
   if (opts.push !== false) repos.pushSubs.upsert('https://push.example/1', 'p256dh', 'auth');
 }
 

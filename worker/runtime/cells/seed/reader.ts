@@ -76,11 +76,11 @@ export async function profileReader(ctx: SeedContext): Promise<Record<string, un
   repos.pins.notificationSentAt(n2, at({ days: -1 }));
 
   // A PAT with a known plaintext, so its masked prefix is stable.
-  const plaintext = 'prep_pat_ParityCliToken0000000000000000000000';
-  const token = repos.tokens.insert(await ctx.hasher.sha256Hex(plaintext), maskToken(plaintext), 'Parity CLI');
+  const plaintext = 'prep_pat_SeedCliToken000000000000000000000000';
+  const token = repos.tokens.insert(await ctx.hasher.sha256Hex(plaintext), maskToken(plaintext), 'Seed CLI');
   repos.pins.tokenCreatedAt(token.id, at({ days: -3 }));
 
-  const wid = 'transform-world-capitals-parity01';
+  const wid = 'transform-world-capitals-seed01';
   repos.jobs.register({ workflowId: wid, workflowType: 'transform', deckId: a, deckName: 'world-capitals', urlPath: `/transform/${wid}`, initialStatus: 'computing' });
   repos.pins.workflowStartedAt(wid, at({ minutes: -5 }));
 

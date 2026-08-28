@@ -1,5 +1,5 @@
 // The unauthenticated JSON surface: the recorded OpenAPI document and the
-// two FastAPI doc shells, whose vendor tags are stripped under parity so
+// two FastAPI doc shells, whose vendor tags are stripped in test mode so
 // the pixel harness never reaches a CDN.
 import { describe, expect, it } from 'vitest';
 import { OPENAPI_DOCUMENT, redocShell, servePublic, swaggerShell } from '../../runtime/routes/openapi.js';
@@ -27,13 +27,13 @@ describe('GET /openapi.json', () => {
 });
 
 describe('the doc shells', () => {
-  it('match the recorded parity bodies exactly', () => {
+  it('match the recorded bodies exactly', () => {
     const corpus = loadCorpus('api');
     expect(swaggerShell(true)).toBe(corpus.pairs.find((p) => p.name === 'docs-shell')!.response.text);
     expect(redocShell(true)).toBe(corpus.pairs.find((p) => p.name === 'redoc-shell')!.response.text);
   });
 
-  it('carry the vendor bundles off parity, and only the indentation on it', () => {
+  it('carry the vendor bundles off testMode, and only the indentation on it', () => {
     expect(swaggerShell(false)).toContain('cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js');
     expect(redocShell(false)).toContain('cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js');
     expect(swaggerShell(true)).not.toContain('cdn.jsdelivr.net');
@@ -46,7 +46,7 @@ describe('the doc shells', () => {
 });
 
 describe('the routes that need no identity', () => {
-  const env = { parity: true, vapidPublicKey: 'BCT1' };
+  const env = { testMode: true, vapidPublicKey: 'BCT1' };
 
   it('answers the four of them and nothing else', () => {
     for (const path of ['/openapi.json', '/docs', '/redoc', '/notify/vapid-public-key']) {

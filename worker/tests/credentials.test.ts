@@ -10,7 +10,7 @@ import type { Signer } from '../app/ports';
 import { FakeDirectory, FakeUserCells } from './fakes/cells';
 import { fakeEnv, namespaceOf, req, spyRenderer } from './helpers';
 
-const PARITY_NOW = 1773500400;
+const TEST_NOW = 1773500400;
 const ANON = 'anon:' + 'ab'.repeat(16);
 const OWNER = 'user_2token';
 const AT = '2026-03-14T15:00:00+00:00';
@@ -31,7 +31,7 @@ beforeEach(async () => {
 });
 
 const withCookie = async (id: string, path = '/api/offline/snapshot') =>
-  worker.fetch(req(path, { headers: { accept: 'application/json', cookie: `prep_anon=${await mintCookie(signer, id, PARITY_NOW)}` } }), env);
+  worker.fetch(req(path, { headers: { accept: 'application/json', cookie: `prep_anon=${await mintCookie(signer, id, TEST_NOW)}` } }), env);
 
 describe('a cookie whose account is gone', () => {
   it('is refused by the cell and cleared by the response hook', async () => {

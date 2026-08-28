@@ -77,29 +77,29 @@ export function fakeEnv(overrides: Partial<Env> = {}): Env {
     JOB: unreachable(),
     ASSETS: { fetch: async () => new Response('asset') } as unknown as Fetcher,
     PREP_ENV: 'dev',
-    PREP_PARITY_MODE: '1',
+    PREP_TEST_MODE: '1',
     PREP_FAKE_NOW: '2026-03-14T15:00:00Z',
     PREP_BUILD_ID: 'ce11d0000000',
     PREP_PLACEHOLDER_INDEX: '0',
-    PREP_INTERNAL_TOKEN: 'parity-internal-token',
+    PREP_INTERNAL_TOKEN: 'test-internal-token',
     // A free tier configured, so the agent-available branches are reachable.
     PREP_KEY_ENCRYPTION_SECRET: '11'.repeat(32),
     PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:9/v1',
-    PREP_FREE_INFERENCE_API_KEY: 'parity-free-tier-key',
-    PREP_FREE_INFERENCE_MODEL: 'parity-model',
+    PREP_FREE_INFERENCE_API_KEY: 'test-free-tier-key',
+    PREP_FREE_INFERENCE_MODEL: 'test-model',
     ...overrides,
   };
   return env;
 }
 
-/** What the parity harness sends: the fake provider only trusts the
+/** What the seeded harness sends: the fake provider only trusts the
  * tailscale headers when the internal token rides along (decision 7.0). */
 export const IDENTIFIED = {
-  'tailscale-user-login': 'parity@example.com',
-  'tailscale-user-name': 'Parity',
-  'x-internal-token': 'parity-internal-token',
+  'tailscale-user-login': 'seed@example.com',
+  'tailscale-user-name': 'Seed',
+  'x-internal-token': 'test-internal-token',
 };
 
 export function req(path: string, init: RequestInit = {}): Request {
-  return new Request(`https://parity.example.test${path}`, init);
+  return new Request(`https://prep.example.test${path}`, init);
 }

@@ -136,7 +136,7 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
   }
 
   /**
-   * The parity seed's reset, driven only from `/_parity/seed`. A run mints
+   * The seed's reset, driven only from `/_test/seed`. A run mints
    * the ids the run before it did, so without this a `start` lands on a cell
    * that already holds a finished ledger and answers with that run's outcome
    * instead of doing the work again. The schema goes back immediately: the

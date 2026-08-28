@@ -77,7 +77,7 @@ describe("the renderer", () => {
   it("hands the created-token dialog the absolute app root", () => {
     const html = makeRenderer("/prep").render(
       "settings_api.html",
-      baseContext({ tokens: [], created_plaintext: "prep_pat_parity", flash: null, app_base: "https://prep.example.test" }),
+      baseContext({ tokens: [], created_plaintext: "prep_pat_seed", flash: null, app_base: "https://prep.example.test" }),
     );
     expect(html).toContain('data-app-base="https://prep.example.test/prep"');
     expect(html).not.toContain("undefined");
@@ -165,7 +165,7 @@ describe("the renderer", () => {
 
 function baseContext(overrides: Record<string, unknown>): Record<string, unknown> {
   return {
-    user: { tailscale_login: "parity@example.com", display_name: "Parity", is_anonymous: 0, editor_input_mode: "vim" },
+    user: { tailscale_login: "seed@example.com", display_name: "Seed", is_anonymous: 0, editor_input_mode: "vim" },
     agent_available: true,
     static_css_mtime: "ce11d0000000",
     auth_provider: "tailscale",
@@ -176,7 +176,7 @@ function baseContext(overrides: Record<string, unknown>): Record<string, unknown
     clerk_frontend_api_host: null,
     notif_unseen_count: 0,
     deck_display: { capitals: "World Capitals" },
-    app_base: "https://parity.example.test",
+    app_base: "https://prep.example.test",
     ...overrides,
   };
 }

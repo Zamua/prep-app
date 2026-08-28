@@ -9,7 +9,7 @@ async function openSession(h: Harness): Promise<string[]> {
   expect(res.status).toBe(303);
   const location = res.headers.get('location')!;
   expect(location.startsWith(`/trivia/session/${DECK}?cards=`)).toBe(true);
-  return new URL(location, 'https://parity.example.test').searchParams.get('cards')!.split(',');
+  return new URL(location, 'https://prep.example.test').searchParams.get('cards')!.split(',');
 }
 
 describe('GET /trivia/session/{deck}', () => {

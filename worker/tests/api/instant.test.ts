@@ -6,7 +6,7 @@ import { ANON_MAX_DECKS } from '../../domain/limits.js';
 import { clientIp, MAX_BODY_BYTES } from '../../runtime/routes/instant.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
-import { ORIGIN, PARITY_USER, replayEnv, seed } from './harness.js';
+import { ORIGIN, SEED_USER, replayEnv, seed } from './harness.js';
 
 const DECK = JSON.stringify([
   { q: 'Q1?', a: 'a1', r: 'a1' },
@@ -37,7 +37,7 @@ async function generate(env: Env, body: unknown, headers: Record<string, string>
   return { status: res.status, json: (await res.clone().json()) as Record<string, unknown>, res };
 }
 
-const SIGNED_IN = { 'tailscale-user-login': PARITY_USER, 'tailscale-user-name': 'Parity', 'x-internal-token': 'parity-internal-token' };
+const SIGNED_IN = { 'tailscale-user-login': SEED_USER, 'tailscale-user-name': 'Seed', 'x-internal-token': 'test-internal-token' };
 
 describe('the limiter bucket', () => {
   const at = (header: string | null, value?: string) =>
@@ -109,7 +109,7 @@ describe('POST /api/instant/generate', () => {
 
   it('charges the same IP a minute-scoped refusal on the second try', async () => {
     const { env } = replayEnv();
-    await seed(env, 'reader', PARITY_USER);
+    await seed(env, 'reader', SEED_USER);
     const first = await generate(env, { topic: 'the French Revolution' }, { ...SIGNED_IN, 'x-real-ip': '198.51.100.7' });
     expect(first.status).toBe(200);
     const second = await generate(env, { topic: 'the French Revolution' }, { ...SIGNED_IN, 'x-real-ip': '198.51.100.7' });

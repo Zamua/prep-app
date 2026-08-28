@@ -77,8 +77,8 @@ describe('the dump is gated exactly as the rest of /_migrate is', () => {
     expect((await get(env, `user=${ALICE}&table=decks`)).status).toBe(200);
   });
 
-  it('runs outside parity, because the data it verifies lives in production', async () => {
-    const { env } = replayEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined });
+  it('runs outside testMode, because the data it verifies lives in production', async () => {
+    const { env } = replayEnv({ PREP_ENV: 'prod', PREP_TEST_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined });
     await seed(env);
     const page = await body(await get(env, `user=${ALICE}&table=decks`));
     expect(page.rows).toHaveLength(1);

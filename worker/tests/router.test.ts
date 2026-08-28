@@ -63,11 +63,11 @@ const call = (path: string, init: RequestInit = {}) => worker.fetch(req(path, in
  * the request itself. */
 function expectCorpus(file: string, index = 0) {
   const want = expectedPage('anonymous', file);
-  expect(renderer.calls[index]).toEqual({ template: want.template, context: { ...want.context, app_base: 'https://parity.example.test' } });
+  expect(renderer.calls[index]).toEqual({ template: want.template, context: { ...want.context, app_base: 'https://prep.example.test' } });
 }
 
 describe('liveness and readiness', () => {
-  const broken = () => fakeEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: '1' });
+  const broken = () => fakeEnv({ PREP_ENV: 'prod', PREP_TEST_MODE: '1' });
 
   it('liveness answers without composing', async () => {
     const res = await worker.fetch(req('/healthz'), broken());
@@ -128,7 +128,7 @@ describe('unauthenticated pages', () => {
       user: null,
       instant_enabled: true,
       topic_placeholder: TOPIC_PLACEHOLDER,
-      app_base: 'https://parity.example.test',
+      app_base: 'https://prep.example.test',
     });
     expect(forwarded).toEqual([]);
   });
@@ -141,39 +141,39 @@ describe('unauthenticated pages', () => {
   });
 
   it('anonymous elsewhere is the 404 page', async () => {
-    const res = await call('/no-such-page-parity');
+    const res = await call('/no-such-page-unknown');
     expect(res.status).toBe(404);
-    expectCorpus('05-GET-no-such-page-parity');
+    expectCorpus('05-GET-no-such-page-unknown');
     expect(res.headers.get('cache-control')).toBe('no-cache');
   });
 });
 
-describe('the parity routes', () => {
+describe('the test-mode routes', () => {
   it('raise renders the 500 and 429 pages', async () => {
-    expect((await call('/_parity/raise')).status).toBe(500);
-    expectCorpus('06-GET-_parity-raise', 0);
-    expect((await call('/_parity/raise?status=429')).status).toBe(429);
-    expectCorpus('07-GET-_parity-raise-status-429', 1);
+    expect((await call('/_test/raise')).status).toBe(500);
+    expectCorpus('06-GET-_test-raise', 0);
+    expect((await call('/_test/raise?status=429')).status).toBe(429);
+    expectCorpus('07-GET-_test-raise-status-429', 1);
   });
 
   it('reauth and sign-out render their shells', async () => {
-    expect((await call('/_parity/reauth')).status).toBe(200);
-    expectCorpus('03-GET-_parity-reauth', 0);
-    expect((await call('/_parity/sign-out')).status).toBe(200);
-    expectCorpus('04-GET-_parity-sign-out', 1);
+    expect((await call('/_test/reauth')).status).toBe(200);
+    expectCorpus('03-GET-_test-reauth', 0);
+    expect((await call('/_test/sign-out')).status).toBe(200);
+    expectCorpus('04-GET-_test-sign-out', 1);
   });
 
   it('seed checks the internal token, then forwards to the user cell', async () => {
-    const body = JSON.stringify({ user: 'parity@example.com', profile: 'reader' });
-    expect((await call('/_parity/seed', { method: 'POST', body })).status).toBe(401);
-    expect((await call('/_parity/seed', { method: 'POST', body, headers: { 'x-internal-token': 'wrong' } })).status).toBe(401);
-    const ok = await call('/_parity/seed', { method: 'POST', body, headers: { 'x-internal-token': 'parity-internal-token' } });
+    const body = JSON.stringify({ user: 'seed@example.com', profile: 'reader' });
+    expect((await call('/_test/seed', { method: 'POST', body })).status).toBe(401);
+    expect((await call('/_test/seed', { method: 'POST', body, headers: { 'x-internal-token': 'wrong' } })).status).toBe(401);
+    const ok = await call('/_test/seed', { method: 'POST', body, headers: { 'x-internal-token': 'test-internal-token' } });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ user: 'parity@example.com', profile: 'reader' });
+    expect(await ok.json()).toEqual({ user: 'seed@example.com', profile: 'reader' });
     // The wipe is its own RPC and precedes the rows it makes room for.
     expect(seeded).toEqual([
-      { name: 'parity@example.com', profile: 'wipe:reader' },
-      { name: 'parity@example.com', profile: 'reader' },
+      { name: 'seed@example.com', profile: 'wipe:reader' },
+      { name: 'seed@example.com', profile: 'reader' },
     ]);
   });
 
@@ -182,43 +182,43 @@ describe('the parity routes', () => {
       active_workflows: [{ workflow_id: 'plan-a' }, { workflow_id: 'grade-b' }],
       job_progress: [{ workflow_id: 'grade-b' }],
     };
-    const body = JSON.stringify({ user: 'parity@example.com', profile: 'workflows' });
-    const ok = await call('/_parity/seed', { method: 'POST', body, headers: { 'x-internal-token': 'parity-internal-token' } });
+    const body = JSON.stringify({ user: 'seed@example.com', profile: 'workflows' });
+    const ok = await call('/_test/seed', { method: 'POST', body, headers: { 'x-internal-token': 'test-internal-token' } });
     expect(ok.status).toBe(200);
     expect(jobsWiped).toEqual(['plan-a', 'grade-b']);
   });
 
   it('abandon empties the job cell and leaves its owner nothing to answer with', async () => {
-    const headers = { 'x-internal-token': 'parity-internal-token' };
-    const body = JSON.stringify({ id: 'plan-a-1', owner: 'parity@example.com' });
-    expect((await call('/_parity/job/abandon', { method: 'POST', body })).status).toBe(401);
-    expect((await call('/_parity/job/abandon', { method: 'POST', body: '{"id":"x"}', headers })).status).toBe(422);
-    const ok = await call('/_parity/job/abandon', { method: 'POST', body, headers });
+    const headers = { 'x-internal-token': 'test-internal-token' };
+    const body = JSON.stringify({ id: 'plan-a-1', owner: 'seed@example.com' });
+    expect((await call('/_test/job/abandon', { method: 'POST', body })).status).toBe(401);
+    expect((await call('/_test/job/abandon', { method: 'POST', body: '{"id":"x"}', headers })).status).toBe(422);
+    const ok = await call('/_test/job/abandon', { method: 'POST', body, headers });
     expect(ok.status).toBe(200);
     expect(jobsWiped).toEqual(['plan-a-1']);
-    expect(forgotten).toEqual([{ owner: 'parity@example.com', jobId: 'plan-a-1' }]);
+    expect(forgotten).toEqual([{ owner: 'seed@example.com', jobId: 'plan-a-1' }]);
   });
 
   it('seed fails closed without a configured token', async () => {
     const bare = fakeEnv({ PREP_INTERNAL_TOKEN: undefined, USER: env.USER });
     const res = await worker.fetch(
-      req('/_parity/seed', { method: 'POST', body: '{"user":"u","profile":"reader"}', headers: { 'x-internal-token': '' } }),
+      req('/_test/seed', { method: 'POST', body: '{"user":"u","profile":"reader"}', headers: { 'x-internal-token': '' } }),
       bare,
     );
     expect(res.status).toBe(503);
   });
 
   it('seed rejects a malformed body', async () => {
-    const headers = { 'x-internal-token': 'parity-internal-token' };
-    expect((await call('/_parity/seed', { method: 'POST', body: 'nope', headers })).status).toBe(400);
-    expect((await call('/_parity/seed', { method: 'POST', body: '{"user":"u"}', headers })).status).toBe(422);
+    const headers = { 'x-internal-token': 'test-internal-token' };
+    expect((await call('/_test/seed', { method: 'POST', body: 'nope', headers })).status).toBe(400);
+    expect((await call('/_test/seed', { method: 'POST', body: '{"user":"u"}', headers })).status).toBe(422);
   });
 
-  it('do not exist outside parity', async () => {
-    const plain = fakeEnv({ PREP_PARITY_MODE: undefined });
+  it('do not exist outside test mode', async () => {
+    const plain = fakeEnv({ PREP_TEST_MODE: undefined });
     composeWith(plain, { renderer });
-    expect((await worker.fetch(req('/_parity/raise'), plain)).status).toBe(404);
-    expect((await worker.fetch(req('/_parity/seed', { method: 'POST' }), plain)).status).toBe(404);
+    expect((await worker.fetch(req('/_test/raise'), plain)).status).toBe(404);
+    expect((await worker.fetch(req('/_test/seed', { method: 'POST' }), plain)).status).toBe(404);
   });
 });
 
@@ -228,16 +228,16 @@ describe('identified requests', () => {
     expect(await res.text()).toBe('from cell');
     expect(res.headers.get('cache-control')).toBe('no-cache');
     expect(forwarded).toHaveLength(1);
-    expect(forwarded[0]?.name).toBe('parity@example.com');
-    expect(forwarded[0]?.request.headers.get(SUBJECT_HEADER)).toBe('parity@example.com');
-    expect(forwarded[0]?.request.headers.get(DISPLAY_NAME_HEADER)).toBe('Parity');
+    expect(forwarded[0]?.name).toBe('seed@example.com');
+    expect(forwarded[0]?.request.headers.get(SUBJECT_HEADER)).toBe('seed@example.com');
+    expect(forwarded[0]?.request.headers.get(DISPLAY_NAME_HEADER)).toBe('Seed');
     expect(forwarded[0]?.request.method).toBe('GET');
   });
 
   it('strip inbound copies of the identity headers', async () => {
     await call('/', { headers: { ...IDENTIFIED, [SUBJECT_HEADER]: 'evil', [DISPLAY_NAME_HEADER]: 'Evil' } });
-    expect(forwarded[0]?.request.headers.get(SUBJECT_HEADER)).toBe('parity@example.com');
-    expect(forwarded[0]?.request.headers.get(DISPLAY_NAME_HEADER)).toBe('Parity');
+    expect(forwarded[0]?.request.headers.get(SUBJECT_HEADER)).toBe('seed@example.com');
+    expect(forwarded[0]?.request.headers.get(DISPLAY_NAME_HEADER)).toBe('Seed');
     const res = await call('/', { headers: { [SUBJECT_HEADER]: 'evil' } });
     expect(forwarded).toHaveLength(1);
     expect(renderer.calls.at(-1)?.template).toBe('landing.html');
@@ -259,12 +259,12 @@ describe('identified requests', () => {
       req('/settings/agent/byok/anthropic-api/connect', {
         method: 'POST',
         headers: { ...IDENTIFIED, 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ api_key: 'sk-parity' }).toString(),
+        body: new URLSearchParams({ api_key: 'sk-test' }).toString(),
       }),
       cellEnv,
     );
     expect(res.status).toBe(200);
-    expect(seen).toEqual(['sk-parity']);
+    expect(seen).toEqual(['sk-test']);
   });
 
   it('render the 500 page when the cell throws', async () => {
@@ -289,10 +289,10 @@ describe('router and cell together', () => {
     });
     composeWith(live, { renderer });
     const seed = await worker.fetch(
-      req('/_parity/seed', {
+      req('/_test/seed', {
         method: 'POST',
-        body: JSON.stringify({ user: 'parity@example.com', profile: 'empty' }),
-        headers: { 'x-internal-token': 'parity-internal-token' },
+        body: JSON.stringify({ user: 'seed@example.com', profile: 'empty' }),
+        headers: { 'x-internal-token': 'test-internal-token' },
       }),
       live,
     );
@@ -303,13 +303,13 @@ describe('router and cell together', () => {
     expect(res.headers.get('cache-control')).toBe('no-cache');
     expect(renderer.calls.at(-1)).toEqual({
       template: 'index.html',
-      context: { ...expectedPage('empty', '01-GET-root').context, app_base: 'https://parity.example.test' },
+      context: { ...expectedPage('empty', '01-GET-root').context, app_base: 'https://prep.example.test' },
     });
     const bad = await worker.fetch(
-      req('/_parity/seed', {
+      req('/_test/seed', {
         method: 'POST',
-        body: JSON.stringify({ user: 'parity@example.com', profile: 'nope' }),
-        headers: { 'x-internal-token': 'parity-internal-token' },
+        body: JSON.stringify({ user: 'seed@example.com', profile: 'nope' }),
+        headers: { 'x-internal-token': 'test-internal-token' },
       }),
       live,
     );
@@ -319,7 +319,7 @@ describe('router and cell together', () => {
 
 describe('the fake provider is gated on the internal token', () => {
   it('ignores the tailscale headers without it, which is a visitor', async () => {
-    const res = await call('/', { headers: { 'tailscale-user-login': 'parity@example.com' } });
+    const res = await call('/', { headers: { 'tailscale-user-login': 'seed@example.com' } });
     expect(res.status).toBe(200);
     expect(renderer.calls.at(-1)?.template).toBe('landing.html');
     expect(forwarded).toEqual([]);
@@ -334,7 +334,7 @@ describe('the fake provider is gated on the internal token', () => {
     await call('/', { headers: { ...IDENTIFIED, 'tailscale-user-profile-pic': 'https://img.test/p.png' } });
     const sent = forwarded[0]!.request.headers;
     expect(sent.get(KIND_HEADER)).toBe('fake');
-    expect(decodeURIComponent(sent.get(EMAIL_HEADER)!)).toBe('parity@example.com');
+    expect(decodeURIComponent(sent.get(EMAIL_HEADER)!)).toBe('seed@example.com');
     expect(decodeURIComponent(sent.get(PICTURE_HEADER)!)).toBe('https://img.test/p.png');
   });
 });
@@ -426,7 +426,7 @@ describe('the provider flows', () => {
     const res = await call('/forget-device', { method: 'POST', headers: { 'sec-fetch-site': 'cross-site' } });
     expect(res.status).toBe(403);
     expect(res.headers.get('set-cookie')).toBeNull();
-    const byOrigin = await call('/forget-device', { method: 'POST', headers: { origin: 'https://evil.test', host: 'parity.example.test' } });
+    const byOrigin = await call('/forget-device', { method: 'POST', headers: { origin: 'https://evil.test', host: 'prep.example.test' } });
     expect(byOrigin.status).toBe(403);
   });
 
@@ -474,10 +474,10 @@ describe('a dormant provider session', () => {
 
 describe('a bearer token', () => {
   it('routes to the owner named in the token, with its hash', async () => {
-    const token = assembleToken('parity@example.com', new Uint8Array(32).fill(9));
+    const token = assembleToken('seed@example.com', new Uint8Array(32).fill(9));
     const res = await call('/api/v1/decks', { headers: { authorization: `Bearer ${token}` } });
     expect(res.status).toBe(200);
-    expect(forwarded[0]?.name).toBe('parity@example.com');
+    expect(forwarded[0]?.name).toBe('seed@example.com');
     const sent = forwarded[0]!.request.headers;
     expect(sent.get(KIND_HEADER)).toBe('pat');
     expect(sent.get(PAT_HASH_HEADER)).toBe(await new WebCryptoHasher().sha256Hex(token));
@@ -495,7 +495,7 @@ describe('a bearer token', () => {
   });
 
   it('is not consulted on a page route, where the cookie rules', async () => {
-    const token = assembleToken('parity@example.com', new Uint8Array(32));
+    const token = assembleToken('seed@example.com', new Uint8Array(32));
     await call('/deck/x', { headers: { ...IDENTIFIED, authorization: `Bearer ${token}` } });
     expect(forwarded[0]?.request.headers.get(KIND_HEADER)).toBe('pat');
   });

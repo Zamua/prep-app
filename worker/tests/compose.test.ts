@@ -3,12 +3,12 @@ import { compose, composeWith, noCacheHtml } from '../runtime/compose.js';
 import { fakeEnv, IDENTIFIED, req } from './helpers.js';
 
 /** A prod-shaped env: no pin of any kind. */
-const PROD = { PREP_ENV: 'prod', PREP_PARITY_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined };
+const PROD = { PREP_ENV: 'prod', PREP_TEST_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined };
 
 describe('compose', () => {
   it.each([
-    ['parity on prod', { ...PROD, PREP_PARITY_MODE: '1' }, 'PREP_PARITY_MODE'],
-    ['parity with no PREP_ENV at all', { ...PROD, PREP_ENV: undefined as unknown as string, PREP_PARITY_MODE: '1' }, 'PREP_PARITY_MODE'],
+    ['test mode on prod', { ...PROD, PREP_TEST_MODE: '1' }, 'PREP_TEST_MODE'],
+    ['test mode with no PREP_ENV at all', { ...PROD, PREP_ENV: undefined as unknown as string, PREP_TEST_MODE: '1' }, 'PREP_TEST_MODE'],
     ['a frozen clock on prod', { ...PROD, PREP_FAKE_NOW: '2026-03-14T15:00:00Z' }, 'PREP_FAKE_NOW'],
     ['a pinned placeholder under a misspelt env', { ...PROD, PREP_ENV: 'production', PREP_PLACEHOLDER_INDEX: '0' }, 'PREP_PLACEHOLDER_INDEX'],
   ])('refuses %s', (_name, overrides, pin) => {
@@ -28,18 +28,18 @@ describe('compose', () => {
 
   it('composes prod without pins, on the system clock', () => {
     const c = compose(fakeEnv(PROD));
-    expect(c.parity).toBe(false);
+    expect(c.testMode).toBe(false);
     expect(Math.abs(c.clock.now().getTime() - Date.now())).toBeLessThan(5_000);
   });
 
-  it('composes the fake provider under parity on staging', async () => {
-    const c = compose(fakeEnv({ PREP_ENV: 'staging', PREP_PARITY_MODE: '1' }));
-    expect(c.parity).toBe(true);
+  it('composes the fake provider in test mode on staging', async () => {
+    const c = compose(fakeEnv({ PREP_ENV: 'staging', PREP_TEST_MODE: '1' }));
+    expect(c.testMode).toBe(true);
     expect(await c.identity.identify(req('/', { headers: IDENTIFIED }))).toEqual({
-      subject: 'parity@example.com',
+      subject: 'seed@example.com',
       kind: 'fake',
-      displayName: 'Parity',
-      email: 'parity@example.com',
+      displayName: 'Seed',
+      email: 'seed@example.com',
       profilePicUrl: null,
     });
     expect(await c.identity.identify(req('/'))).toBeNull();
@@ -48,9 +48,9 @@ describe('compose', () => {
     expect(await c.identity.identify(req('/', { headers: unsigned }))).toBeNull();
   });
 
-  it('has no identity provider without parity', async () => {
+  it('has no identity provider outside test mode', async () => {
     const c = compose(fakeEnv(PROD));
-    expect(c.parity).toBe(false);
+    expect(c.testMode).toBe(false);
     expect(await c.identity.identify(req('/', { headers: IDENTIFIED }))).toBeNull();
   });
 
@@ -58,7 +58,7 @@ describe('compose', () => {
     const c = compose(fakeEnv());
     expect(c.clock.now().toISOString()).toBe('2026-03-14T15:00:00.000Z');
     expect(c.buildToken).toBe('ce11d0000000');
-    expect(c.internalToken).toBe('parity-internal-token');
+    expect(c.internalToken).toBe('test-internal-token');
   });
 
   it('is memoized per env', () => {

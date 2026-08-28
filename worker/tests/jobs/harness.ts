@@ -13,7 +13,7 @@ import { UserCell } from '../../runtime/cells/UserCell.js';
 import type { Env } from '../../runtime/env.js';
 import { AlarmBus } from '../fakes/alarms.js';
 import { fakeCellState, type FakeCellStorage } from '../fakes/sqlStorage.js';
-import { MutableClock, PARITY_NOW, USER } from '../repos/setup.js';
+import { MutableClock, TEST_NOW, USER } from '../repos/setup.js';
 
 export interface SentPush {
   endpoint: string;
@@ -54,7 +54,7 @@ export interface JobHarness {
 }
 
 export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; agent?: AgentPort; at?: Date; wallClock?: Clock } = { graphs: {} }): JobHarness {
-  const clock = new MutableClock(opts.at ?? PARITY_NOW);
+  const clock = new MutableClock(opts.at ?? TEST_NOW);
   const bus = new AlarmBus(clock);
   const registry = new StepRegistry();
   const pushes: SentPush[] = [];
@@ -96,9 +96,9 @@ export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; 
     JOB: namespace(jobEntry),
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) } as unknown as Fetcher,
     PREP_ENV: 'dev',
-    PREP_PARITY_MODE: '1',
+    PREP_TEST_MODE: '1',
     PREP_BUILD_ID: 'ce11d0000000',
-    PREP_INTERNAL_TOKEN: 'parity-internal-token',
+    PREP_INTERNAL_TOKEN: 'test-internal-token',
   };
 
   const statusWrites: JobStatusWrite[] = [];
@@ -194,6 +194,6 @@ export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; 
  * needs before it can register a badge row or fire a notification. */
 export function seedOwner(h: JobHarness, owner = USER, opts: { push?: boolean } = {}): void {
   const repos = h.repos(owner);
-  repos.prefs.upsert(owner, { email: owner, displayName: 'Parity' });
+  repos.prefs.upsert(owner, { email: owner, displayName: 'Seed' });
   if (opts.push !== false) repos.pushSubs.upsert('https://push.example/1', 'p256dh', 'auth');
 }

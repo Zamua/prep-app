@@ -41,7 +41,7 @@ import { jobRoutes } from './routes/jobs.js';
 import { pageRoutes } from './routes/pages.js';
 import { createUser, isAnonymousProfile, PROFILES, type Delta } from './seed/index.js';
 
-const SESSION_COUNTER_KEY = 'parity_session_counter';
+const SESSION_COUNTER_KEY = 'test_session_counter';
 /** A profile with no rows: the seed wipes and returns `{}`. */
 const ANONYMOUS_PROFILE = 'anonymous';
 /** What the partials render for a job whose record no longer answers. */
@@ -214,7 +214,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     repos.prefs.setIdBase(idx);
   }
 
-  // ---- the parity seed --------------------------------------------------------
+  // ---- the seed --------------------------------------------------------
 
   /**
    * Step one of a re-seed, alone in its RPC: `deleteAll` and a profile's rows

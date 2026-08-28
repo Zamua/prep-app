@@ -17,9 +17,9 @@ describe('the overview payload', () => {
     c.repos.trivia.appendCard(qid, trivia);
 
     const payload = overviewPayload(c.repos, c.repos.prefs.get());
-    expect(payload['user']).toEqual({ display_name: 'Parity', is_anonymous: false });
+    expect(payload['user']).toEqual({ display_name: 'Seed', is_anonymous: false });
     expect(payload).toMatchObject({ due: 1, total: 2, unsynced: null });
-    expect(JSON.stringify(payload)).not.toContain('parity@example.com');
+    expect(JSON.stringify(payload)).not.toContain('seed@example.com');
     const decks = payload['decks'] as Record<string, unknown>[];
     expect(decks.find((d) => d['slug'] === 'world-capitals')).toMatchObject({ display_name: 'World Capitals', deck_type: 'srs', trivia_stats: null });
     expect(decks.find((d) => d['slug'] === 'quiz')).toMatchObject({ trivia_stats: { total: 1, unanswered: 1, wrong: 0, mastered: 0 } });

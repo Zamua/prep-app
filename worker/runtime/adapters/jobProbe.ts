@@ -2,7 +2,7 @@
 // nothing else: one outbound call per LLM step, one idempotent row per write
 // step. It exists so the crash matrix can kill a node between any two step
 // boundaries before the four real workflows are written, and it is composed
-// only under `PREP_PARITY_MODE`, which the composition root refuses outside
+// only under `PREP_TEST_MODE`, which the composition root refuses outside
 // dev and staging.
 //
 // The control server the LLM step calls decides what happens: how many items

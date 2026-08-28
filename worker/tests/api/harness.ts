@@ -12,13 +12,13 @@ import worker from '../../runtime/worker.js';
 import { fakeCellState, type FakeCellStorage } from '../fakes/sqlStorage.js';
 import { WebCryptoHasher } from '../../runtime/adapters/hash.js';
 import { userRepos } from '../../runtime/adapters/sql/index.js';
-import { ParitySessionIds, SeededRandom } from '../../runtime/adapters/random.js';
+import { SeededSessionIds, SeededRandom } from '../../runtime/adapters/random.js';
 import { assembleToken, maskToken } from '../../domain/pat.js';
 
 export const FIXTURES = join(new URL('..', import.meta.url).pathname, 'fixtures');
-export const PARITY_USER = 'parity@example.com';
-export const INTERNAL_TOKEN = 'parity-internal-token';
-export const ORIGIN = 'https://parity.example.test';
+export const SEED_USER = 'seed@example.com';
+export const INTERNAL_TOKEN = 'test-internal-token';
+export const ORIGIN = 'https://prep.example.test';
 
 export interface Pair {
   name: string;
@@ -75,7 +75,7 @@ export interface ReplayEnv {
   userStorage(id: string): FakeCellStorage;
 }
 
-/** The parity environment a recorded node runs with, minus the paths. */
+/** The environment a seeded node runs with, minus the paths. */
 export function replayEnv(overrides: Partial<Env> = {}): ReplayEnv {
   const users = cells((state) => new UserCell(state, env));
   const directory = cells((state) => new DirectoryCell(state, env));
@@ -87,15 +87,15 @@ export function replayEnv(overrides: Partial<Env> = {}): ReplayEnv {
     JOB: cells(() => ({})) as unknown as DurableObjectNamespace,
     ASSETS: { fetch: async () => new Response(null, { status: 404 }) } as unknown as Fetcher,
     PREP_ENV: 'dev',
-    PREP_PARITY_MODE: '1',
+    PREP_TEST_MODE: '1',
     PREP_FAKE_NOW: '2026-03-14T15:00:00Z',
     PREP_BUILD_ID: 'ce11d0000000',
     PREP_PLACEHOLDER_INDEX: '0',
     PREP_INTERNAL_TOKEN: INTERNAL_TOKEN,
     PREP_KEY_ENCRYPTION_SECRET: '11'.repeat(32),
     PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:9/v1',
-    PREP_FREE_INFERENCE_API_KEY: 'parity-free-tier-key',
-    PREP_FREE_INFERENCE_MODEL: 'parity-model',
+    PREP_FREE_INFERENCE_API_KEY: 'test-free-tier-key',
+    PREP_FREE_INFERENCE_MODEL: 'test-model',
     PREP_CLIENT_IP_HEADER: 'x-real-ip',
     PREP_VAPID_PUBLIC_KEY: 'BCT1EPH4xriWIwlJllh05zjCEDDXMj0G_-IzKI5Zp-42-Kk0tAjtpxKl2cPvIDToNDxQlXOXUXivZmMV2BuMku8',
     ...overrides,
@@ -164,10 +164,10 @@ export async function replay(env: Env, pair: Pair, extraHeaders: Record<string, 
   return record(await worker.fetch(requestOf(pair, extraHeaders, jsonOverride), env));
 }
 
-/** `POST /_parity/seed` through the entry worker, as the recording does. */
-export async function seed(env: Env, profile: string, user = PARITY_USER): Promise<Record<string, unknown>> {
+/** `POST /_test/seed` through the entry worker, as the recording does. */
+export async function seed(env: Env, profile: string, user = SEED_USER): Promise<Record<string, unknown>> {
   const res = await worker.fetch(
-    new Request(`${ORIGIN}/_parity/seed`, {
+    new Request(`${ORIGIN}/_test/seed`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-token': INTERNAL_TOKEN },
       body: JSON.stringify({ user, profile }),
@@ -189,7 +189,7 @@ export async function mintToken(storage: FakeCellStorage, subject: string, label
     clock: { now: () => new Date('2026-03-14T15:00:00Z') },
     random: new SeededRandom(20260316),
     fuzz: false,
-    sessionIds: new ParitySessionIds({ get: async () => counter, set: async (n) => void (counter = n) }),
+    sessionIds: new SeededSessionIds({ get: async () => counter, set: async (n) => void (counter = n) }),
   });
   repos.tokens.insert(await hasher.sha256Hex(token), maskToken(token), label);
   return token;

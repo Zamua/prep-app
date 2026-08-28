@@ -35,7 +35,7 @@ describe('POST /deck/{name}/pin', () => {
 
   it('follows a same-origin Referer and ignores a cross-site one', async () => {
     const h = await seeded('reader');
-    const same = await h.post('/deck/world-capitals/pin', { pinned: 'on' }, { headers: { referer: 'https://parity.example.test/?tab=decks' } });
+    const same = await h.post('/deck/world-capitals/pin', { pinned: 'on' }, { headers: { referer: 'https://prep.example.test/?tab=decks' } });
     expect(same.headers.get('location')).toBe('/?tab=decks');
     const cross = await h.post('/deck/world-capitals/pin', { pinned: '' }, { headers: { referer: 'https://evil.example/steal' } });
     expect(cross.headers.get('location')).toBe('/deck/world-capitals');

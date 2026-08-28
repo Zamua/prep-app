@@ -5,7 +5,7 @@ import { AesGcmCipher, KEY_LEN, loadMasterKey, MasterKeyError, NONCE_LEN } from 
 
 const MASTER_HEX = '11'.repeat(32);
 const MASTER = hexToBytes(MASTER_HEX)!;
-const SECRET = 'sk-ant-api03-parity-fixture-key-0000';
+const SECRET = 'sk-ant-api03-test-fixture-key-0000';
 
 /** A counter, not randomness: the nonce only has to be fresh per message. */
 function counterRandom(seed = 0) {

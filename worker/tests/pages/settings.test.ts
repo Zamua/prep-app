@@ -16,9 +16,9 @@ describe('the recorded settings pages', () => {
   });
 
   it('renders /notify as recorded once the VAPID key is filled in', async () => {
-    const h = await seeded('reader', { PREP_VAPID_PUBLIC_KEY: 'BParityPublicKey' });
+    const h = await seeded('reader', { PREP_VAPID_PUBLIC_KEY: 'BSeedPublicKey' });
     expect((await h.get('/notify')).status).toBe(200);
-    expect(renderedContext(h)).toEqual({ ...expectedContext('reader', '20-GET-notify'), vapid_key: 'BParityPublicKey' });
+    expect(renderedContext(h)).toEqual({ ...expectedContext('reader', '20-GET-notify'), vapid_key: 'BSeedPublicKey' });
   });
 
   it('marks the log seen, so the badge on that very page reads zero', async () => {
@@ -174,6 +174,6 @@ describe('/settings/account', () => {
   it('404s on a deploy whose identity has no upstream account', async () => {
     const h = await seeded('reader');
     expect((await h.get('/settings/account')).status).toBe(404);
-    expect((await h.post('/settings/account/delete', { confirm: 'parity@example.com' })).status).toBe(404);
+    expect((await h.post('/settings/account/delete', { confirm: 'seed@example.com' })).status).toBe(404);
   });
 });

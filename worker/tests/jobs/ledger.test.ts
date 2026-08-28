@@ -436,7 +436,7 @@ describe('the post-restart window', () => {
   });
 });
 
-describe('the parity reset', () => {
+describe('the seed reset', () => {
   it('empties the ledger, so a run that mints the same id starts over', async () => {
     register(h);
     const id = await startDemo(h);

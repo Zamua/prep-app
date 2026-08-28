@@ -1,12 +1,12 @@
 import type { Identity, IdentityProvider, SignInUrls } from '../../app/ports.js';
 
-// The headers a Tailscale Serve front door injects, which a parity-mode
+// The headers a Tailscale Serve front door injects, which a test-mode
 // node trusts in place of a real identity provider.
 export const LOGIN_HEADER = 'tailscale-user-login';
 export const NAME_HEADER = 'tailscale-user-name';
 export const PIC_HEADER = 'tailscale-user-profile-pic';
 export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
-export const DEFAULT_DISPLAY_NAME = 'Parity';
+export const DEFAULT_DISPLAY_NAME = 'Seed';
 
 /** Auth is implicit on the tailnet shape, so there is no in-app flow to
  * point at and the templates hide the sign-in chrome. */
@@ -22,7 +22,7 @@ function tagsEqual(a: string, b: string): boolean {
 /**
  * Identity from the tailscale headers, which nothing verifies, so the same
  * request must also carry the harness's `X-Internal-Token` (decision 7.0,
- * option c). Without that gate the parity host would hand any caller any
+ * option c). Without that gate the test host would hand any caller any
  * user's cell.
  */
 export class FakeIdentityProvider implements IdentityProvider {

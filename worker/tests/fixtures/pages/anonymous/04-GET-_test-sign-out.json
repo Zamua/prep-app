@@ -17,7 +17,7 @@
   "content-type": "text/html; charset=utf-8"
  },
  "method": "GET",
- "path": "/_parity/sign-out",
+ "path": "/_test/sign-out",
  "sets": [],
  "status": 200,
  "template": "sign_out_interstitial.html"

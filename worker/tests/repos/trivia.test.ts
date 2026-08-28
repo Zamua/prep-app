@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SeededRandom } from '../../runtime/adapters/random.js';
 import { shuffle } from '../../runtime/adapters/sql/triviaRepo.js';
-import { cell, H, PARITY_NOW, at } from './setup.js';
+import { cell, H, TEST_NOW, at } from './setup.js';
 
 function triviaDeck(c: ReturnType<typeof cell>, prompts: string[]) {
   const d = c.repos.decks.createTrivia('t', { topic: 'History', intervalMinutes: 60, displayName: 'T' });
@@ -93,8 +93,8 @@ describe('TriviaRepo: sessions', () => {
     const c = cell();
     const { d, ids } = triviaDeck(c, ['a', 'b', 'c']);
     const s = await c.repos.trivia.startOrResume(d, { queue: [ids[0]!, ids[1]!], done: [] });
-    expect(s).toEqual({ id: '81426e386f04220d', deck_id: d, started_at: '2026-03-14T15:00:00+00:00', last_active: '2026-03-14T15:00:00+00:00', status: 'active', queue: [ids[0], ids[1]], done: [] });
-    c.clock.set(at(PARITY_NOW, H));
+    expect(s).toEqual({ id: '06d904444c991b8d', deck_id: d, started_at: '2026-03-14T15:00:00+00:00', last_active: '2026-03-14T15:00:00+00:00', status: 'active', queue: [ids[0], ids[1]], done: [] });
+    c.clock.set(at(TEST_NOW, H));
     const resumed = await c.repos.trivia.startOrResume(d, { queue: [ids[2]!], done: [[ids[0]!, 'r']] });
     expect(resumed).toMatchObject({ id: s.id, queue: [ids[0], ids[1]], last_active: '2026-03-14T16:00:00+00:00' });
     c.repos.trivia.persistState(d, { queue: [ids[1]!], done: [[ids[0]!, 'w']] });
@@ -118,7 +118,7 @@ describe('TriviaRepo: sessions', () => {
     const c = cell();
     const { d } = triviaDeck(c, ['a']);
     await c.repos.trivia.startOrResume(d, { queue: [], done: [] });
-    c.clock.set(at(PARITY_NOW, 8 * 24 * H));
+    c.clock.set(at(TEST_NOW, 8 * 24 * H));
     expect(c.repos.trivia.listActiveSessions()).toEqual([]);
     expect(c.storage.rows('trivia_sessions')[0]?.['status']).toBe('abandoned');
   });

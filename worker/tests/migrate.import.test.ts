@@ -223,10 +223,10 @@ async function getStatus(env: Env, user: string): Promise<MigrationStatus> {
 const dump = (env: Env, user: string): Promise<CellSnapshot> =>
   (env.USER.get(env.USER.idFromName(user)) as unknown as { dump(): Promise<CellSnapshot> }).dump();
 
-/** The directory's own rows, through the parity dump so the test never has
+/** The directory's own rows, through the test-only dump so the test never has
  * to know which name addresses the singleton. */
 const directoryUsers = async (env: Env): Promise<Row[]> => {
-  const res = await worker.fetch(request('/_parity/dump?cell=directory'), env);
+  const res = await worker.fetch(request('/_test/dump?cell=directory'), env);
   expect(res.status).toBe(200);
   return ((await res.json()) as { tables: Record<string, Row[]> }).tables['users'] ?? [];
 };
@@ -248,8 +248,8 @@ describe('the import endpoint', () => {
 
   // It has to run where the data goes, so it cannot be one of the pins the
   // composition refuses outside dev and staging.
-  it('serves on a host with parity mode off', async () => {
-    const prod = replayEnv({ PREP_ENV: 'prod', PREP_PARITY_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined }).env;
+  it('serves on a host with test mode off', async () => {
+    const prod = replayEnv({ PREP_ENV: 'prod', PREP_TEST_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined }).env;
     const [alice] = fixture();
     const res = await post(prod, '/_migrate/import', { user: alice!.user, idx: alice!.idx, table: null, rows: [], profile: alice!.profile });
     expect(res.status).toBe(200);

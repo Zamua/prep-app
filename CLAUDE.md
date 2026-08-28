@@ -510,7 +510,7 @@ minus headroom so an LLM step gets its full budget.
 
 ## Gotchas worth knowing
 
-**Parity mode is a local and staging-only switch.** `PREP_PARITY_MODE=1`
+**Parity mode is a local and staging-only switch.** `PREP_TEST_MODE=1`
 enables a fake identity provider that trusts a header, a pinned clock, a
 seed endpoint and the probe job graphs. The composition root refuses it
 on prod. Never set it on a deploy that serves real users.

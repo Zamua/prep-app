@@ -3,7 +3,7 @@
 // which is how the recording was made.
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { comparable, type VolatileRule } from './compare.js';
-import { loadCorpus, PARITY_USER, replay, replayEnv, seed, type Pair } from './harness.js';
+import { loadCorpus, SEED_USER, replay, replayEnv, seed, type Pair } from './harness.js';
 import type { Env } from '../../runtime/env.js';
 
 // The five cards the canned LLM answers a generation with.
@@ -34,10 +34,10 @@ function withoutApkgDeck(name: string, json: unknown): unknown {
 /** The instant each pair was recorded at, which the corpus states in its
  * notes rather than a header: the refresh window is reached by moving the
  * clock, not by waiting. A name here changes the clock from that pair on. */
-const PARITY_NOW = '2026-03-14T15:00:00Z';
+const TEST_NOW = '2026-03-14T15:00:00Z';
 const CLOCK_FROM: Record<string, string> = {
   'cookie-refreshed-after-window': '2026-04-13T15:00:01Z',
-  'cookie-from-the-future-cleared': PARITY_NOW,
+  'cookie-from-the-future-cleared': TEST_NOW,
 };
 
 const corpus = loadCorpus('api');
@@ -69,10 +69,10 @@ function bodyFor(pair: Pair): unknown {
   return { ...recorded, params: { ...recorded.params, arguments: { ...recorded.params.arguments, card_id: cardId } } };
 }
 
-let clockNow = PARITY_NOW;
+let clockNow = TEST_NOW;
 
 function headersFor(pair: Pair): Record<string, string> {
-  const extra: Record<string, string> = { 'x-parity-now': clockNow };
+  const extra: Record<string, string> = { 'x-prep-test-now': clockNow };
   // Every bearer pair follows the mint, so the replay carries the token the
   // settings page just issued, exactly as the recording did.
   if (pair.name !== 'v1-decks-bad-token' && pair.request.headers['authorization']?.startsWith('Bearer prep_pat_')) {
@@ -91,7 +91,7 @@ beforeAll(async () => {
     }
     throw new Error(`unexpected outbound fetch to ${url}`);
   });
-  await seed(env, 'reader', PARITY_USER);
+  await seed(env, 'reader', SEED_USER);
   for (const pair of corpus.pairs) {
     clockNow = CLOCK_FROM[pair.name] ?? clockNow;
     if (PHASE_5.has(pair.name)) continue;

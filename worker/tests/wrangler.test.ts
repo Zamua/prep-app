@@ -10,8 +10,8 @@ const CELLS = ['UserCell', 'DirectoryCell', 'InstantLimiterCell', 'JobCell'];
 const PUBLIC_VARS = new Set([
   'PREP_ENV',
   'CELLD_FETCH_TIMEOUT_S',
-  'PREP_PARITY_MODE',
-  'PREP_PARITY_NO_PERIODIC',
+  'PREP_TEST_MODE',
+  'PREP_TEST_NO_PERIODIC',
   'PREP_FAKE_NOW',
   'PREP_BUILD_ID',
   'PREP_PLACEHOLDER_INDEX',
@@ -27,10 +27,10 @@ const SECRET_NAME = /SECRET|TOKEN|KEY|PASSWORD/;
 /** Named like a credential and public by construction: the publishable key
  * ships in every page's markup. */
 const NOT_A_SECRET = new Set(['CLERK_PUBLISHABLE_KEY']);
-/** The parity pins, committable in `dev` alone. `PREP_INTERNAL_TOKEN` is one
+/** The test pins, committable in `dev` alone. `PREP_INTERNAL_TOKEN` is one
  * of them and is what gates the fake identity provider (decision 7.0), so
  * anywhere else it is a secret and arrives as `CELLD_VAR_`. */
-const DEV_ONLY = /^(PREP_PARITY|PREP_FAKE|PREP_INTERNAL|PREP_BUILD_ID)/;
+const DEV_ONLY = /^(PREP_TEST|PREP_FAKE|PREP_INTERNAL|PREP_BUILD_ID)/;
 
 /** JSON with `//` comments; a `//` inside a string is not a comment. */
 function stripComments(src: string): string {
@@ -87,12 +87,12 @@ describe('the three wrangler files', () => {
     for (const env of ENVS) expect(files[env].vars.PREP_ENV).toBe(env);
   });
 
-  it('carry the parity pins in dev only', () => {
+  it('carry the test pins in dev only', () => {
     for (const key of Object.keys(files.staging.vars)) expect(key).not.toMatch(DEV_ONLY);
     for (const key of Object.keys(files.prod.vars)) expect(key).not.toMatch(DEV_ONLY);
-    expect(files.dev.vars.PREP_PARITY_MODE).toBe('1');
+    expect(files.dev.vars.PREP_TEST_MODE).toBe('1');
     expect(files.dev.vars.PREP_BUILD_ID).toBe('ce11d0000000');
-    expect(files.dev.vars.PREP_INTERNAL_TOKEN).toBe('parity-internal-token');
+    expect(files.dev.vars.PREP_INTERNAL_TOKEN).toBe('test-internal-token');
   });
 
   it('hold only public var names', () => {

@@ -11,7 +11,7 @@ import { SqlJsApkg } from '../../runtime/adapters/apkg.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
 import { cell } from '../repos/setup.js';
-import { loadCorpus, mintToken, ORIGIN, PARITY_USER, replayEnv, seed } from './harness.js';
+import { loadCorpus, mintToken, ORIGIN, SEED_USER, replayEnv, seed } from './harness.js';
 
 let env: Env;
 let bearer: string;
@@ -41,8 +41,8 @@ async function tool(name: string, args: Record<string, unknown> = {}): Promise<{
 beforeAll(async () => {
   const replay = replayEnv();
   env = replay.env;
-  await seed(env, 'reader', PARITY_USER);
-  bearer = await mintToken(replay.userStorage(PARITY_USER), PARITY_USER, 'mcp');
+  await seed(env, 'reader', SEED_USER);
+  bearer = await mintToken(replay.userStorage(SEED_USER), SEED_USER, 'mcp');
 }, 60_000);
 
 describe('the tool catalog', () => {

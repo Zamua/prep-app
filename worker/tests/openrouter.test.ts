@@ -35,7 +35,7 @@ describe('the PKCE challenge', () => {
     expect(seen.size).toBe(5);
   });
 
-  it('is reproducible under the parity generator, so a recorded flow replays', async () => {
+  it('is reproducible under the seeded generator, so a recorded flow replays', async () => {
     const first = await new OpenRouterOAuth(new SeededRandom(20260314)).startChallenge();
     const again = await new OpenRouterOAuth(new SeededRandom(20260314)).startChallenge();
     expect(again).toEqual(first);
@@ -86,8 +86,8 @@ describe('the connect flow', () => {
     startChallenge: async () => ({ verifier: 'the-verifier', challenge: 'the-challenge' }),
     exchange: async () => 'sk-or-v1-minted',
   };
-  const deps = { freeTierConfigured: false, cipher: plainCipher(), auth, appBase: 'https://parity.example.test' };
-  const SUBJECT = 'parity@example.com';
+  const deps = { freeTierConfigured: false, cipher: plainCipher(), auth, appBase: 'https://prep.example.test' };
+  const SUBJECT = 'seed@example.com';
 
   const request = (cookies: Record<string, string>, query = 'code=the-code'): PageRequest => ({
     params: {},

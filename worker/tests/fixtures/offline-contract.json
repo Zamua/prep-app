@@ -54,12 +54,12 @@
     }
    },
    "sessions": {
-    "active": "81426e386f04220d",
-    "snoozed": "951ddc296f6f0ff5"
+    "active": "06d904444c991b8d",
+    "snoozed": "e08536edd0fb14f4"
    },
-   "user": "parity@example.com",
+   "user": "seed@example.com",
    "workflows": {
-    "transform": "transform-world-capitals-parity01"
+    "transform": "transform-world-capitals-seed01"
    }
   },
   "profile": "reader"
@@ -71,8 +71,8 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": null,
@@ -237,8 +237,8 @@
      ],
      "generated_at": "2026-03-14T15:00:00+00:00",
      "user": {
-      "display_name": "Parity",
-      "id": "parity@example.com",
+      "display_name": "Seed",
+      "id": "seed@example.com",
       "previous_ids": []
      }
     },
@@ -274,12 +274,12 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": {
-     "device_id": "parity-device",
+     "device_id": "seed-device",
      "new_cards": [
       {
        "answer": "Lima",
@@ -640,12 +640,12 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": {
-     "device_id": "parity-device",
+     "device_id": "seed-device",
      "new_cards": [
       {
        "answer": "Lima",
@@ -1006,8 +1006,8 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": null,
@@ -1242,8 +1242,8 @@
      ],
      "generated_at": "2026-03-14T15:00:00+00:00",
      "user": {
-      "display_name": "Parity",
-      "id": "parity@example.com",
+      "display_name": "Seed",
+      "id": "seed@example.com",
       "previous_ids": []
      }
     },
@@ -1259,12 +1259,12 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": {
-     "device_id": "parity-device",
+     "device_id": "seed-device",
      "new_cards": [],
      "reviews": []
     },
@@ -1290,8 +1290,8 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": {},
@@ -1317,8 +1317,8 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": {
@@ -2373,8 +2373,8 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": {
@@ -10435,8 +10435,8 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json"
     },
     "json": {
@@ -10489,8 +10489,8 @@
    "request": {
     "form": null,
     "headers": {
-     "Tailscale-User-Login": "parity@example.com",
-     "Tailscale-User-Name": "Parity",
+     "Tailscale-User-Login": "seed@example.com",
+     "Tailscale-User-Name": "Seed",
      "accept": "application/json",
      "content-type": "application/json"
     },
@@ -10530,7 +10530,7 @@
     "form": null,
     "headers": {},
     "json": {
-     "device_id": "parity-device",
+     "device_id": "seed-device",
      "new_cards": [
       {
        "answer": "Lima",

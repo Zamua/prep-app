@@ -70,7 +70,7 @@ describe('POST /notify/prefs', () => {
 });
 
 describe('subscriptions', () => {
-  const SUB = { endpoint: 'https://push.example.test/parity', keys: { p256dh: 'p256', auth: 'auth' } };
+  const SUB = { endpoint: 'https://push.example.test/sub', keys: { p256dh: 'p256', auth: 'auth' } };
 
   it('stores a device and counts it on the settings page', () => {
     const d = deps();

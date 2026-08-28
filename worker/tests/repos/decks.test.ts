@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DeckNameTaken } from '../../app/ports.js';
 import { RowCapReached } from '../../domain/limits.js';
 import { ANON_MAX_DECKS } from '../../domain/limits.js';
-import { cell, H, PARITY_NOW } from './setup.js';
+import { cell, H, TEST_NOW } from './setup.js';
 
 const q = (prompt: string) => ({ type: 'short' as const, prompt, answer: 'a' });
 
@@ -74,7 +74,7 @@ describe('DeckRepo', () => {
       ['bravo', 0, 0, 'srs', false],
       ['trivia', 1, 0, 'trivia', false],
     ]);
-    clock.set(PARITY_NOW);
+    clock.set(TEST_NOW);
     expect(repos.decks.setPinned(b, true)).toBe(true);
     expect(repos.decks.listSummaries().map((d) => d.name)).toEqual(['bravo', 'alpha', 'trivia']);
     expect(storage.rows('decks').find((r) => r['id'] === b)?.['pinned_at']).toBe('2026-03-14T15:00:00+00:00');
@@ -145,7 +145,7 @@ describe('DeckRepo', () => {
 
   it('stamps timestamps from the request clock', () => {
     const { repos, clock, storage } = cell();
-    clock.set(new Date(PARITY_NOW.getTime() + 2 * H + 123));
+    clock.set(new Date(TEST_NOW.getTime() + 2 * H + 123));
     repos.decks.create('d');
     expect(storage.rows('decks')[0]?.['created_at']).toBe('2026-03-14T17:00:00.123000+00:00');
   });

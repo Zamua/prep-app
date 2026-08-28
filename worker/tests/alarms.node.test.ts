@@ -25,7 +25,7 @@ const WAKER_TICK_MS = Number(process.env['CELLD_WAKER_TICK_MS'] ?? 60_000);
 const DECK_INTERVAL_MS = 60_000;
 
 /**
- * One login for the whole file: the parity seed pins the directory's id
+ * One login for the whole file: the seed pins the directory's id
  * block 0 to whoever it seeds, so a second name would collide with the first.
  * Each test re-seeds it, which wipes the cell it is about to use.
  */
@@ -33,7 +33,7 @@ const LOGIN = 'wake@example.test';
 
 const identity = (login: string): Record<string, string> => ({
   'tailscale-user-login': login,
-  'tailscale-user-name': 'Parity',
+  'tailscale-user-name': 'Seed',
   'x-internal-token': INTERNAL_TOKEN,
 });
 
@@ -63,7 +63,7 @@ interface Seeded {
 }
 
 async function seed(login: string): Promise<Seeded> {
-  const res = await call('/_parity/seed', {
+  const res = await call('/_test/seed', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-internal-token': INTERNAL_TOKEN },
     body: JSON.stringify({ user: login, profile: 'reader' }),

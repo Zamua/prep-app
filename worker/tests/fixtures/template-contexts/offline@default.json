@@ -1,7 +1,7 @@
 {
  "context": {
   "agent_available": true,
-  "app_base": "https://parity.example.test",
+  "app_base": "https://prep.example.test",
   "auth_provider": "tailscale",
   "build": "ce11d0000000",
   "clerk_frontend_api_host": null,

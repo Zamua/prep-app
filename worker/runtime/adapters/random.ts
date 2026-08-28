@@ -118,7 +118,7 @@ export class SeededRandom implements Random {
     return k === 32 ? this.next32() : this.next32() >>> (32 - k);
   }
 
-  /** `token_bytes(n)` as the parity harness draws it: one `getrandbits(8)` per byte. */
+  /** `token_bytes(n)` as the seeded harness draws it: one `getrandbits(8)` per byte. */
   bytes(n: number): Uint8Array {
     const out = new Uint8Array(n);
     for (let i = 0; i < n; i++) out[i] = this.getrandbits(8);
@@ -151,14 +151,14 @@ export class RandomSessionIds implements SessionIds {
   }
 }
 
-/** `sha1("parity-session-<n>")[:16]` over a per-cell counter, reset by the seed. */
-export class ParitySessionIds implements SessionIds {
+/** `sha1("seed-session-<n>")[:16]` over a per-cell counter, reset by the seed. */
+export class SeededSessionIds implements SessionIds {
   constructor(private readonly counter: { get(): Promise<number>; set(n: number): Promise<void> }) {}
 
   async next(): Promise<string> {
     const n = (await this.counter.get()) + 1;
     await this.counter.set(n);
-    const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(`parity-session-${n}`));
+    const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(`seed-session-${n}`));
     return hex(new Uint8Array(digest)).slice(0, 16);
   }
 }

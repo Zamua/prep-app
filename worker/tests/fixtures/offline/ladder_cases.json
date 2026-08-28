@@ -1,5 +1,5 @@
 {
-  "description": "Shared local-ladder parity cases (docs/OFFLINE.md section 5). Same case shape as grader_cases.json, against static/js/offline/scheduler.js. ladder_minutes is the table both sides must export/derive. Timestamp args always carry an explicit offset: JS Date.parse reads naive ISO strings as LOCAL time, so a naive instant would make parity machine-dependent.",
+  "description": "Shared local-ladder cases, against static/js/offline/scheduler.js. `ladder_minutes` is the table the module must export. Timestamp args always carry an explicit offset: Date.parse reads a naive ISO string as LOCAL time, so a naive instant would make a case machine-dependent.",
   "ladder_minutes": [
     10,
     1440,

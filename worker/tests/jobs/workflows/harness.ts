@@ -8,7 +8,7 @@ import type { AgentPort, AgentRequest, Clock, JobStatus, JobTransition, UserRepo
 import type { WriteStepContext } from '../../../app/jobs/registry.js';
 import { composeWith } from '../../../runtime/compose.js';
 import { jobHarness, seedOwner, type JobHarness } from '../harness.js';
-import { PARITY_NOW, USER } from '../../repos/setup.js';
+import { TEST_NOW, USER } from '../../repos/setup.js';
 
 export type Reply = string | Error;
 export type Script = (prompt: string, call: number) => Reply;
@@ -43,7 +43,7 @@ export interface WorkflowHarness extends JobHarness {
   stepStatuses(id: string, name: string): string[];
 }
 
-export function workflowHarness(script: Script, at: Date = PARITY_NOW): WorkflowHarness {
+export function workflowHarness(script: Script, at: Date = TEST_NOW): WorkflowHarness {
   const agent = new FakeAgent(script);
   const h = jobHarness({ graphs: JOB_GRAPHS, agent, at });
   // An LLM step asks for an agent per activation, so the seam a workflow test

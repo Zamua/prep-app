@@ -21,8 +21,8 @@ const FAVICON = '<link rel="shortcut icon" href="https://fastapi.tiangolo.com/im
 const INDENT = '    ';
 const line = (body: string) => INDENT + body;
 
-export function swaggerShell(parity: boolean): string {
-  const tag = (t: string) => line(parity ? '' : t);
+export function swaggerShell(testMode: boolean): string {
+  const tag = (t: string) => line(testMode ? '' : t);
   return [
     '',
     line('<!DOCTYPE html>'),
@@ -59,8 +59,8 @@ export function swaggerShell(parity: boolean): string {
   ].join('\n');
 }
 
-export function redocShell(parity: boolean): string {
-  const tag = (t: string) => line(parity ? '' : t);
+export function redocShell(testMode: boolean): string {
+  const tag = (t: string) => line(testMode ? '' : t);
   return [
     '',
     line('<!DOCTYPE html>'),
@@ -97,7 +97,7 @@ export function redocShell(parity: boolean): string {
 }
 
 export interface PublicRouteEnv {
-  parity: boolean;
+  testMode: boolean;
   vapidPublicKey: string;
 }
 
@@ -107,11 +107,11 @@ const HTML = 'text/html; charset=utf-8';
 export function servePublic(request: Request, url: URL, env: PublicRouteEnv): Response | null {
   if (request.method !== 'GET') return null;
   if (url.pathname === '/openapi.json') return Response.json(OPENAPI_DOCUMENT);
-  if (url.pathname === '/docs') return new Response(swaggerShell(env.parity), { headers: { 'content-type': HTML } });
+  if (url.pathname === '/docs') return new Response(swaggerShell(env.testMode), { headers: { 'content-type': HTML } });
   // Named by the shell's `oauth2RedirectUrl`, so it must exist or Swagger's
   // authorize flow dead-ends on a 404.
   if (url.pathname === '/docs/oauth2-redirect') return new Response(OAUTH2_REDIRECT_HTML, { headers: { 'content-type': HTML } });
-  if (url.pathname === '/redoc') return new Response(redocShell(env.parity), { headers: { 'content-type': HTML } });
+  if (url.pathname === '/redoc') return new Response(redocShell(env.testMode), { headers: { 'content-type': HTML } });
   if (url.pathname === '/llms.txt') return llmsTxt();
   // Unauthenticated by design: the PWA subscribe handshake does not
   // reliably carry the identity headers.

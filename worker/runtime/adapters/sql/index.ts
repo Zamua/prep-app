@@ -12,7 +12,7 @@ import { SqlJobProgressRepo } from './jobProgressRepo.js';
 import { SqlJobStatusRepo } from './jobStatusRepo.js';
 import { SqlNotifyRepo, SqlPushSubRepo } from './notifyRepo.js';
 import { SqlOfflineRepo } from './offlineRepo.js';
-import { SqlParityPins } from './parityPins.js';
+import { SqlTestPins } from './testPins.js';
 import { SqlPrefsRepo } from './prefsRepo.js';
 import { SqlQuestionRepo } from './questionRepo.js';
 import { SqlReviewRepo } from './reviewRepo.js';
@@ -56,7 +56,7 @@ export function userRepos(raw: CellStorage, deps: RepoDeps): UserRepos {
     instant: new SqlInstantRepo(storage, clock, deps.random),
     tombstone: new SqlTombstoneRepo(storage),
     tx: { sync: <T>(fn: () => T) => storage.transactionSync(fn) },
-    pins: new SqlParityPins(storage),
+    pins: new SqlTestPins(storage),
   };
 }
 

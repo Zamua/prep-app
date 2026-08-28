@@ -6,7 +6,7 @@ import { anonAccess, cookieVerdict } from '../app/auth/anonymous.js';
 import type { Clock, UserCellRpc } from '../app/ports.js';
 import { RowCapReached } from '../domain/limits.js';
 import type { Row } from '../domain/merge.js';
-import { PARITY_SEED } from '../runtime/compose.js';
+import { TEST_SEED } from '../runtime/compose.js';
 import { namespaceUserCells, retrying } from '../runtime/adapters/cells.js';
 import { SeededRandom } from '../runtime/adapters/random.js';
 import { DATA_TABLES } from '../runtime/adapters/sql/schema.js';
@@ -457,7 +457,7 @@ describe('the deletion survives a lost durability ack', () => {
 
 describe('hexFrom', () => {
   it('draws the suffix the fixture resolves the collision to', () => {
-    expect(hexFrom(new SeededRandom(PARITY_SEED + 1))(3)).toBe(SUFFIX);
+    expect(hexFrom(new SeededRandom(TEST_SEED + 1))(3)).toBe(SUFFIX);
   });
 });
 

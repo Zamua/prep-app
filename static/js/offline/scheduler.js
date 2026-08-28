@@ -4,14 +4,11 @@
 //
 // Offline devices cannot run FSRS (the scheduler needs the full
 // per-card float state and the upstream library), so offline
-// re-surfacing uses the ladder prep used before FSRS. It only ever
-// decides what to show while offline: at sync the server recomputes
-// truth from the review log through FSRS, and the snapshot refresh
-// discards every local interval. Parity with the Python-side
-// reference is pinned through tests/offline/fixtures/
-// ladder_cases.json (Python side: tests/offline/
-// test_parity_fixtures.py, which also pins the table to what
-// prep/domain/srs.py still exports).
+// re-surfacing uses a fixed ladder. It only ever decides what to show
+// while offline: at sync the server recomputes truth from the review
+// log through FSRS, and the snapshot refresh discards every local
+// interval. The table is pinned by
+// worker/tests/fixtures/offline/ladder_cases.json.
 
 // step:      0     1    2    3    4     5
 // interval:  10m   1d   3d   7d   14d   30d

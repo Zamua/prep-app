@@ -1,6 +1,6 @@
 // One seeded user cell, driven through its own route table, with the
 // rendered template and context captured. The corpus under
-// tests/fixtures/parity/pages is the oracle for both.
+// tests/fixtures/pages holds the expected template and context.
 import type { Composition } from '../../runtime/compose.js';
 import { composeWith } from '../../runtime/compose.js';
 import { UserCell } from '../../runtime/cells/UserCell.js';
@@ -9,14 +9,14 @@ import type { Env } from '../../runtime/env.js';
 import { fakeCellState } from '../fakes/sqlStorage.js';
 import { expectedPage, fakeEnv, req, spyRenderer } from '../helpers.js';
 
-export const USER = 'parity@example.com';
+export const USER = 'seed@example.com';
 
-/** The parity server's own free-tier pins, so `agent_available` and the
+/** A funded free tier, so `agent_available` and the
  * free-tier callout read as the corpus recorded them. */
 export const FREE_TIER = {
   PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:1/v1',
-  PREP_FREE_INFERENCE_API_KEY: 'parity-free-tier-key',
-  PREP_FREE_INFERENCE_MODEL: 'parity-model',
+  PREP_FREE_INFERENCE_API_KEY: 'test-free-tier-key',
+  PREP_FREE_INFERENCE_MODEL: 'test-model',
 };
 
 export interface Harness {
@@ -37,7 +37,7 @@ export function harness(overrides: Partial<Env> = {}): Harness {
   const c = composeWith(env, { renderer });
   const state = fakeCellState();
   const cell = new UserCell(state, env);
-  const identity = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Parity', [KIND_HEADER]: 'fake' };
+  const identity = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Seed', [KIND_HEADER]: 'fake' };
   const send = (path: string, init: RequestInit) =>
     cell.fetch(req(path, { ...init, headers: { ...identity, ...(init.headers as Record<string, string>) } }));
   return {

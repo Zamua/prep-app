@@ -398,8 +398,8 @@ export interface Transactions {
   sync<T>(fn: () => T): T;
 }
 
-/** The column pins the parity seed profiles write past the repositories. */
-export interface ParityPins {
+/** The column pins the seed profiles write past the repositories. */
+export interface TestPins {
   session(sid: string, lastActive: string, createdAt?: string | null): void;
   answerInSession(sid: string, qid: number, answeredAt: string, result: string): void;
   pinnedAt(deckId: number, pinnedAt: string): void;
@@ -443,7 +443,7 @@ export interface UserRepos {
   instant: InstantRepo;
   tombstone: TombstoneRepo;
   tx: Transactions;
-  pins: ParityPins;
+  pins: TestPins;
 }
 
 // ---- deck interchange codecs ----------------------------------------------
@@ -761,8 +761,8 @@ export interface JobProgressRepo {
   upsert(row: { workflowId: string; transition: number; status: string; progress: Record<string, unknown> }): void;
   /** Rows whose workflow is gone from `active_workflows`; the per-user prune. */
   pruneOrphans(): number;
-  /** One row, dropped while its badge row stands: the parity abandon, which
-   * stands in for an execution deleted out from under a status read. */
+  /** One row, dropped while its badge row stands: stands in for an execution
+   * deleted out from under a status read. */
   remove(workflowId: string): boolean;
 }
 
@@ -802,7 +802,7 @@ export interface Limiter {
   reassign(fromId: string, toId: string): Promise<number>;
 }
 
-/** The parity seed's reset of the global instant ledger. Not part of
+/** The seed's reset of the global instant ledger. Not part of
  * serving: a durable limiter cell would otherwise carry one run's spend
  * into the next against a clock that never advances. */
 export interface LedgerReset {

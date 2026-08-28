@@ -15,7 +15,7 @@ import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
 
-/** What a parity dump of the directory carries. */
+/** What a test-only dump of the directory carries. */
 const DUMP_TABLES = ['users', 'account_merges', 'merge_markers', 'tombstones'] as const;
 
 const REAP_STATE_KEY = 'reap';
@@ -71,7 +71,7 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
     this.repo = c.directoryRepo(storage);
   }
 
-  /** The directory's own rows, in rowid order. Parity only: a test that
+  /** The directory's own rows, in rowid order. Test only: a test that
    * used to read the merge audit out of the shared database has nowhere
    * else to look for it. */
   async dumpTables(): Promise<Record<string, Record<string, unknown>[]>> {
@@ -235,7 +235,7 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
     return stored ?? { nextAt: isoUtc(this.c.clock.now()), cursor: null, lastReapAt: null };
   }
 
-  /** Same kill switch the user cells honour: a parity target pins the clock,
+  /** Same kill switch the user cells honour: a test target pins the clock,
    * so a never-swept directory would read as due at once and destroy accounts
    * under the corpus. */
   private async ensureAlarm(): Promise<void> {

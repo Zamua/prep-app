@@ -56,7 +56,7 @@ import { WebCryptoHasher } from './adapters/hash.js';
 import { SqlJsApkg } from './adapters/apkg.js';
 import { FflateZip } from './adapters/zip.js';
 import { createRenderer } from './adapters/nunjucks/index.js';
-import { ParitySessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from './adapters/random.js';
+import { SeededSessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from './adapters/random.js';
 import { DATA_TABLES } from './adapters/sql/schema.js';
 import {
   countRows,
@@ -83,13 +83,13 @@ const DEFAULT_JOB_LLM_TIMEOUT_S = 300;
 /** Room for the adapter to turn a refused fetch into a step failure. */
 const FETCH_HEADROOM_S = 5;
 
-/** The seed a parity-mode node draws every random value from. */
-export const PARITY_SEED = 20260314;
+/** The seed a test-mode node draws every random value from. */
+export const TEST_SEED = 20260314;
 /** The IANA `sub` claim a push service contacts about operational issues. */
 export const DEFAULT_VAPID_SUB = 'mailto:noreply@example.com';
 export const NOW_HEADER = 'x-prep-now';
-export const PARITY_NOW_HEADER = 'x-parity-now';
-const SESSION_COUNTER_KEY = 'parity_session_counter';
+export const TEST_NOW_HEADER = 'x-prep-test-now';
+const SESSION_COUNTER_KEY = 'test_session_counter';
 
 /** Three generators, seeded apart so one draw cannot shift another's. */
 export interface Randoms {
@@ -146,8 +146,8 @@ export interface Composition {
   authUrls: AuthUrls;
   renderer: Renderer;
   buildToken: string;
-  parity: boolean;
-  /** False only on a parity target replaying the corpus; see `periodicWork`. */
+  testMode: boolean;
+  /** False only on a test target replaying the corpus; see `periodicWork`. */
   periodicWork: boolean;
   internalToken: string;
   authProvider: string;
@@ -165,7 +165,7 @@ export interface Composition {
   sessionIds(storage: CellStorage): SessionIds;
   directoryRepo(storage: CellStorage): Sync<Directory>;
   limiterRepo(storage: CellStorage): Sync<Limiter> & LedgerReset;
-  /** Re-seeds the parity generators; a no-op outside parity. */
+  /** Re-seeds the seeded generators; a no-op outside test mode. */
   resetRandom(): void;
   /** Each cell class's migrations, idempotent, version written last. */
   migrateUserCell(storage: CellStorage): number;
@@ -186,15 +186,15 @@ export interface Composition {
 
 const compositions = new WeakMap<Env, Composition>();
 
-/** The parity pins: the fake identity provider (a trusted header, an open
+/** The test pins: the fake identity provider (a trusted header, an open
  * door anywhere real), the frozen clock and the fixed landing placeholder.
- * Only the two parity hosts may carry any of them; an unknown or missing
+ * Only the two test hosts may carry any of them; an unknown or missing
  * PREP_ENV is refused rather than trusted. */
-const PIN = /^PREP_(PARITY|FAKE|PLACEHOLDER)/;
-const PARITY_HOSTS = new Set(['dev', 'staging']);
+const PIN = /^PREP_(TEST|FAKE|PLACEHOLDER)/;
+const TEST_HOSTS = new Set(['dev', 'staging']);
 
-function refusePinsOutsideParityHosts(env: Env): void {
-  if (PARITY_HOSTS.has(env.PREP_ENV)) return;
+function refusePinsOutsideTestHosts(env: Env): void {
+  if (TEST_HOSTS.has(env.PREP_ENV)) return;
   const vars = env as unknown as Record<string, unknown>;
   const pins = Object.keys(vars).filter((k) => PIN.test(k) && vars[k] != null);
   if (pins.length) {
@@ -224,7 +224,7 @@ export function limitsFromEnv(env: InstantLimitEnv): Limits {
 }
 
 function seededRandoms(): Randoms {
-  return { instant: new SeededRandom(PARITY_SEED), merge: new SeededRandom(PARITY_SEED + 1), tokens: new SeededRandom(PARITY_SEED + 2) };
+  return { instant: new SeededRandom(TEST_SEED), merge: new SeededRandom(TEST_SEED + 1), tokens: new SeededRandom(TEST_SEED + 2) };
 }
 
 /** Empty strings, not nulls: the templates test truthiness on these. */
@@ -242,10 +242,10 @@ function authUrlsOf(clerk: ClerkProvider | null, identity: IdentityProvider): Au
   };
 }
 
-/** Clerk only outside parity, and only when its five vars are all set: a
+/** Clerk only outside testMode, and only when its five vars are all set: a
  * half-configured provider must not silently become "nobody is signed in". */
 function clerkOrNull(env: Env, clock: Clock): { provider: ClerkProvider; config: ClerkConfig } | null {
-  if (env.PREP_PARITY_MODE === '1') return null;
+  if (env.PREP_TEST_MODE === '1') return null;
   if (!(env.CLERK_ISSUER ?? '').trim()) return null;
   let config: ClerkConfig;
   try {
@@ -273,15 +273,15 @@ function cipherOrNull(env: Env, random: Random, warn: (msg: string) => void): Ci
 }
 
 /**
- * Whether the per-user alarm runs its tasks. Off only while a parity target
+ * Whether the per-user alarm runs its tasks. Off only while a test target
  * replays the corpus: that target pins the clock, so every schedule reads as
  * due at once and the digest, refill and trivia notifications would land in
- * the middle of a recorded page. Honoured under parity mode alone, so no
+ * the middle of a recorded page. Honoured under test mode alone, so no
  * deploy can turn its own scheduler off. The alarm keeps its own gate in
  * tests/alarms.test.ts, which does not set this.
  */
-function periodicWorkEnabled(env: Env, parity: boolean): boolean {
-  return !(parity && env.PREP_PARITY_NO_PERIODIC === '1');
+function periodicWorkEnabled(env: Env, testMode: boolean): boolean {
+  return !(testMode && env.PREP_TEST_NO_PERIODIC === '1');
 }
 
 /** The real sender once both VAPID halves are set; a deploy without them
@@ -303,12 +303,12 @@ function webPushOf(env: Env, clock: Clock, warn: (msg: string) => void): WebPush
 /**
  * The handlers, registered once per isolate: module-level state is shared by
  * every cell of a node, which is right for code and wrong for anything
- * per-cell. The probe graphs only exist under parity mode.
+ * per-cell. The probe graphs only exist in test mode.
  */
-function stepRegistryFor(parity: boolean): StepRegistry {
+function stepRegistryFor(testMode: boolean): StepRegistry {
   const registry = new StepRegistry();
   registerWorkflowSteps(registry);
-  if (parity) registerProbe(registry);
+  if (testMode) registerProbe(registry);
   return registry;
 }
 
@@ -324,16 +324,16 @@ export function jobLlmTimeoutMs(env: PublicServiceVars & { PREP_JOB_LLM_TIMEOUT_
 export function compose(env: Env, warn: (msg: string) => void = console.warn): Composition {
   const memo = compositions.get(env);
   if (memo) return memo;
-  refusePinsOutsideParityHosts(env);
-  const parity = env.PREP_PARITY_MODE === '1';
+  refusePinsOutsideTestHosts(env);
+  const testMode = env.PREP_TEST_MODE === '1';
   const clock = clockFromEnv(env);
   const webRandom = new WebCryptoRandom();
   const clerk = clerkOrNull(env, clock);
   const freeTier = freeTierConfig(env, { warn });
   const instantTier = freeTierConfig(env, { maxTokens: INSTANT_MAX_OUTPUT_TOKENS, warn });
   const selectDeps: SelectDeps = { env, cipher: cipherOrNull(env, webRandom, warn), warn };
-  const identity: IdentityProvider = parity
-    ? new FakeIdentityProvider(env.PREP_INTERNAL_TOKEN ?? '', env.PREP_PARITY_SIGN_OUT_URL ?? '')
+  const identity: IdentityProvider = testMode
+    ? new FakeIdentityProvider(env.PREP_INTERNAL_TOKEN ?? '', env.PREP_TEST_SIGN_OUT_URL ?? '')
     : (clerk?.provider ?? new NoIdentityProvider());
   let signerOnce: Promise<Signer | null> | null = null;
   const composition: Composition = {
@@ -369,8 +369,8 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
             clock,
           }),
     jobCells: namespaceJobs(env.JOB),
-    jobGraphs: parity ? { ...JOB_GRAPHS, ...PROBE_GRAPHS } : { ...JOB_GRAPHS },
-    stepRegistry: stepRegistryFor(parity),
+    jobGraphs: testMode ? { ...JOB_GRAPHS, ...PROBE_GRAPHS } : { ...JOB_GRAPHS },
+    stepRegistry: stepRegistryFor(testMode),
     jobLlmTimeoutMs: jobLlmTimeoutMs(env),
     jobLedger: (storage) => new SqlJobLedger(storage),
     webPush: webPushOf(env, clock, warn),
@@ -381,12 +381,12 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     authUrls: authUrlsOf(clerk?.provider ?? null, identity),
     renderer: createRenderer({ clock, root: '' }),
     buildToken: resolveBuildToken(env.PREP_BUILD_ID),
-    parity,
-    periodicWork: periodicWorkEnabled(env, parity),
+    testMode,
+    periodicWork: periodicWorkEnabled(env, testMode),
     internalToken: env.PREP_INTERNAL_TOKEN ?? '',
-    authProvider: parity ? 'tailscale' : 'clerk',
-    randoms: parity ? seededRandoms() : { instant: webRandom, merge: webRandom, tokens: webRandom },
-    fuzz: parity ? false : { random: () => webRandom.bytes(4).reduce((acc, b) => acc * 256 + b, 0) / 2 ** 32 },
+    authProvider: testMode ? 'tailscale' : 'clerk',
+    randoms: testMode ? seededRandoms() : { instant: webRandom, merge: webRandom, tokens: webRandom },
+    fuzz: testMode ? false : { random: () => webRandom.bytes(4).reduce((acc, b) => acc * 256 + b, 0) / 2 ** 32 },
     hasher: new WebCryptoHasher(),
     limits: limitsFromEnv(env),
     directory: namespaceDirectory(env.DIRECTORY),
@@ -396,8 +396,8 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     userRepos: (storage, requestClock) =>
       userRepos(storage, { clock: requestClock, sessionIds: composition.sessionIds(storage), random: composition.randoms.instant, fuzz: composition.fuzz }),
     sessionIds: (storage) =>
-      parity
-        ? new ParitySessionIds({
+      testMode
+        ? new SeededSessionIds({
             get: async () => (await storage.get<number>(SESSION_COUNTER_KEY)) ?? 0,
             set: (n) => storage.put(SESSION_COUNTER_KEY, n),
           })
@@ -405,7 +405,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     directoryRepo: (storage) => new SqlDirectoryRepo(storage),
     limiterRepo: (storage) => new SqlLimiterRepo(storage, composition.limits),
     resetRandom: () => {
-      if (parity) composition.randoms = seededRandoms();
+      if (testMode) composition.randoms = seededRandoms();
     },
     migrateUserCell: (storage) => migrate(storage.sql, USER_MIGRATIONS),
     migrateDirectory: (storage) => migrate(storage.sql, DIRECTORY_MIGRATIONS),
@@ -421,13 +421,13 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
   return composition;
 }
 
-/** The clock a request runs on: the parity instant it carries, else the
+/** The clock a request runs on: the pinned instant it carries, else the
  * composition's. Both spellings are read, because the entry worker's response
- * hooks see the inbound request (`x-parity-now`) while a cell sees the
+ * hooks see the inbound request (`x-prep-test-now`) while a cell sees the
  * forwarded one (`x-prep-now`); one clock per request either way. */
 export function clockFor(c: Composition, request: Request): Clock {
-  if (!c.parity) return c.clock;
-  const raw = request.headers.get(NOW_HEADER) ?? request.headers.get(PARITY_NOW_HEADER);
+  if (!c.testMode) return c.clock;
+  const raw = request.headers.get(NOW_HEADER) ?? request.headers.get(TEST_NOW_HEADER);
   if (!raw) return c.clock;
   return new FixedClock(parseFakeNow(raw));
 }

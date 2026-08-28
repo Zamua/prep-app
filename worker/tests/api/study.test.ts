@@ -5,7 +5,7 @@ import { DurationError, FOREVER_ISO, parseUntil } from '../../app/durations.js';
 import * as study from '../../app/study/api.js';
 import { buildMessage, DEFAULT_PROVIDER, providerUrls, quoteAll } from '../../app/study/handoff.js';
 import { RunnerUnavailable, type WorkflowRunner } from '../../app/ports.js';
-import { cell, PARITY_NOW } from '../repos/setup.js';
+import { cell, TEST_NOW } from '../repos/setup.js';
 
 const IDLE = { signal: async () => null, status: async () => null, terminate: async () => {} };
 
@@ -107,13 +107,13 @@ describe('the snooze', () => {
 
 describe('parseUntil', () => {
   it('maps every preset and refuses the rest', () => {
-    expect(parseUntil({ preset: 'forever', now: PARITY_NOW })).toBe(FOREVER_ISO);
-    expect(parseUntil({ preset: '2w', now: PARITY_NOW })).toBe('2026-03-28T15:00:00+00:00');
-    expect(() => parseUntil({ preset: 'never', now: PARITY_NOW })).toThrow(DurationError);
-    expect(() => parseUntil({ custom: '0', unit: 'hours', now: PARITY_NOW })).toThrow(/out of range/);
-    expect(() => parseUntil({ custom: 'many', unit: 'hours', now: PARITY_NOW })).toThrow(/must be an integer/);
-    expect(() => parseUntil({ custom: '2', unit: 'fortnights', now: PARITY_NOW })).toThrow(/unknown unit/);
-    expect(() => parseUntil({ now: PARITY_NOW })).toThrow(/missing preset/);
+    expect(parseUntil({ preset: 'forever', now: TEST_NOW })).toBe(FOREVER_ISO);
+    expect(parseUntil({ preset: '2w', now: TEST_NOW })).toBe('2026-03-28T15:00:00+00:00');
+    expect(() => parseUntil({ preset: 'never', now: TEST_NOW })).toThrow(DurationError);
+    expect(() => parseUntil({ custom: '0', unit: 'hours', now: TEST_NOW })).toThrow(/out of range/);
+    expect(() => parseUntil({ custom: 'many', unit: 'hours', now: TEST_NOW })).toThrow(/must be an integer/);
+    expect(() => parseUntil({ custom: '2', unit: 'fortnights', now: TEST_NOW })).toThrow(/unknown unit/);
+    expect(() => parseUntil({ now: TEST_NOW })).toThrow(/missing preset/);
   });
 });
 

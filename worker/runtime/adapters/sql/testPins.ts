@@ -1,10 +1,9 @@
-// Column pins the parity seed writes past the repositories, as
-// prep/dev/parity_seed.py does: timestamps the profiles fix relative to the
-// clock.
-import type { ParityPins } from '../../../app/ports.js';
+// Column pins the seed writes past the repositories: timestamps the
+// profiles fix relative to the clock, which no repository method exposes.
+import type { TestPins } from '../../../app/ports.js';
 import { Db, type CellStorage } from './storage.js';
 
-export class SqlParityPins implements ParityPins {
+export class SqlTestPins implements TestPins {
   private readonly db: Db;
 
   constructor(storage: CellStorage) {

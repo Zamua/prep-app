@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_NOTIFICATION_PREFS } from '../../app/entities.js';
-import { cell, D, H, PARITY_NOW, at } from './setup.js';
+import { cell, D, H, TEST_NOW, at } from './setup.js';
 
 describe('NotifyRepo', () => {
   it('appends at second precision, lists newest first, counts and marks seen', () => {
     const { repos, clock, storage } = cell();
-    clock.set(new Date(PARITY_NOW.getTime() + 500));
+    clock.set(new Date(TEST_NOW.getTime() + 500));
     const a = repos.notify.append({ title: 'A', body: 'b', url: '/a', source: 'digest' });
-    clock.set(at(PARITY_NOW, H));
+    clock.set(at(TEST_NOW, H));
     const b = repos.notify.append({ title: 'B', body: 'b', url: '/b', source: 'when-ready' });
     expect(storage.rows('notifications_log')[0]?.['sent_at']).toBe('2026-03-14T15:00:00+00:00');
     expect(repos.notify.listRecent().map((n) => n.id)).toEqual([b, a]);
@@ -24,7 +24,7 @@ describe('PushSubRepo', () => {
   it('upserts by endpoint, lists, counts and prunes', () => {
     const { repos, clock, storage } = cell();
     repos.pushSubs.upsert('https://push/1', 'p1', 'a1');
-    clock.set(at(PARITY_NOW, H));
+    clock.set(at(TEST_NOW, H));
     repos.pushSubs.upsert('https://push/1', 'p2', 'a2');
     repos.pushSubs.upsert('https://push/2', 'p', 'a');
     expect(repos.pushSubs.list()).toEqual([
@@ -45,7 +45,7 @@ describe('ByokRepo', () => {
     expect(meta).toEqual({ provider: 'anthropic-api', key_prefix: 'sk-ant-…x9zT', created_at: '2026-03-14T15:00:00+00:00', last_used_at: null });
     repos.byok.touchLastUsed('anthropic-api');
     expect(repos.byok.metadata('anthropic-api')?.last_used_at).toBe('2026-03-14T15:00:00+00:00');
-    clock.set(at(PARITY_NOW, D));
+    clock.set(at(TEST_NOW, D));
     repos.byok.store('anthropic-api', 'ct2', 'sk-ant-…abcd');
     expect(repos.byok.getCiphertext('anthropic-api')).toBe('ct2');
     expect(repos.byok.metadata('anthropic-api')).toEqual({ provider: 'anthropic-api', key_prefix: 'sk-ant-…abcd', created_at: '2026-03-15T15:00:00+00:00', last_used_at: null });
@@ -63,7 +63,7 @@ describe('TokenRepo', () => {
     const { repos, clock } = cell();
     const a = repos.tokens.insert('hash-a', 'prep_pat_Aa…x9zT', 'CLI');
     expect(a).toEqual({ id: 1, label: 'CLI', key_prefix: 'prep_pat_Aa…x9zT', created_at: '2026-03-14T15:00:00+00:00', last_used_at: null });
-    clock.set(at(PARITY_NOW, H));
+    clock.set(at(TEST_NOW, H));
     const b = repos.tokens.insert('hash-b', 'prep_pat_Bb…0000', null);
     expect(repos.tokens.list().map((t) => t.id)).toEqual([b.id, a.id]);
     expect(repos.tokens.lookup('hash-a')).toEqual({ id: a.id });
@@ -109,16 +109,16 @@ describe('PrefsRepo', () => {
   it('reads the profile as the account record', () => {
     const { repos } = cell({ profile: false });
     expect(repos.prefs.get()).toBeNull();
-    const p = repos.prefs.upsert('parity@example.com', { email: 'parity@example.com', displayName: 'Parity' });
+    const p = repos.prefs.upsert('seed@example.com', { email: 'seed@example.com', displayName: 'Seed' });
     expect(p).toEqual({
-      tailscale_login: 'parity@example.com',
-      display_name: 'Parity',
+      tailscale_login: 'seed@example.com',
+      display_name: 'Seed',
       profile_pic_url: null,
       created_at: '2026-03-14T15:00:00+00:00',
       last_seen_at: '2026-03-14T15:00:00+00:00',
       notification_prefs: null,
       editor_input_mode: null,
-      email: 'parity@example.com',
+      email: 'seed@example.com',
       active_byok_provider: null,
       desired_retention: null,
       is_anonymous: 0,
@@ -143,10 +143,10 @@ describe('PrefsRepo', () => {
     repos.prefs.touch();
     expect(repos.prefs.get()).toBeNull();
     repos.prefs.upsert('u', { email: 'u@x', displayName: 'U', profilePicUrl: 'pic' });
-    clock.set(at(PARITY_NOW, H));
+    clock.set(at(TEST_NOW, H));
     const again = repos.prefs.upsert('u', {});
     expect(again).toMatchObject({ email: 'u@x', display_name: 'U', profile_pic_url: 'pic', created_at: '2026-03-14T15:00:00+00:00', last_seen_at: '2026-03-14T16:00:00+00:00' });
-    clock.set(at(PARITY_NOW, 2 * H));
+    clock.set(at(TEST_NOW, 2 * H));
     repos.prefs.touch();
     expect(repos.prefs.get()?.last_seen_at).toBe('2026-03-14T17:00:00+00:00');
     expect(repos.prefs.upsert('u', { displayName: 'New' }).display_name).toBe('New');
@@ -217,7 +217,7 @@ describe('JobStatusRepo', () => {
     expect(repos.jobs.listForUser()[0]?.deck_display_name).toBe('World Capitals');
     repos.jobs.updateStatus('w1', 'awaiting_apply');
     repos.jobs.markNotified('w1', 'action');
-    clock.set(at(PARITY_NOW, H));
+    clock.set(at(TEST_NOW, H));
     repos.jobs.markNotified('w1', 'action');
     expect(repos.jobs.get('w1')?.notified_action_at).toBe('2026-03-14T15:00:00+00:00');
     expect(() => repos.jobs.markNotified('w1', 'x' as 'action')).toThrow(RangeError);
@@ -227,7 +227,7 @@ describe('JobStatusRepo', () => {
     expect(repos.jobs.get('w1')?.terminal_at).toBe('2026-03-14T16:00:00+00:00');
     expect(repos.jobs.listNonTerminal()).toEqual([]);
     expect(repos.jobs.listForUser().map((w) => w.workflow_id)).toEqual(['w1']);
-    clock.set(at(PARITY_NOW, H + 61_000));
+    clock.set(at(TEST_NOW, H + 61_000));
     expect(repos.jobs.listForUser()).toEqual([]);
     expect(repos.jobs.cleanupStaleTerminal()).toBe(1);
     expect(repos.jobs.get('w1')).toBeNull();
@@ -236,7 +236,7 @@ describe('JobStatusRepo', () => {
   it('orders newest first and prunes on the reconciler window', () => {
     const { repos, clock } = cell();
     repos.jobs.register({ workflowId: 'old', workflowType: 'plan', deckId: null, deckName: null, urlPath: '/a' });
-    clock.set(at(PARITY_NOW, H));
+    clock.set(at(TEST_NOW, H));
     repos.jobs.register({ workflowId: 'new', workflowType: 'plan', deckId: null, deckName: null, urlPath: '/b' });
     expect(repos.jobs.listForUser().map((w) => w.workflow_id)).toEqual(['new', 'old']);
     expect(repos.jobs.listNonTerminal().map((w) => w.workflow_id)).toEqual(['old', 'new']);

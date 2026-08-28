@@ -1,4 +1,4 @@
-// The crash harness's only door into a JobCell. Parity-only and behind the
+// The crash harness's only door into a JobCell. Test-only and behind the
 // internal token, because the app itself never addresses a job cell from
 // outside its owner: routes go through the runner, which goes through the
 // owner's cell.
@@ -11,7 +11,7 @@ import type { JobCellRpc } from '../../app/ports.js';
 import type { Composition } from '../compose.js';
 import type { Env } from '../env.js';
 
-export const PARITY_JOB_PREFIX = '/_parity/job';
+export const TEST_JOB_PREFIX = '/_test/job';
 
 interface StartBody {
   id?: unknown;
@@ -31,7 +31,7 @@ interface AbandonBody {
   owner?: unknown;
 }
 
-/** The two parity-only resets, which no port declares: a job cell empties
+/** The two test-only resets, which no port declares: a job cell empties
  * itself, and an owner drops what a deleted execution left behind. */
 interface JobReset {
   wipe(): Promise<void>;
@@ -41,13 +41,13 @@ interface OwnerReset {
 }
 
 /** Null when the path is not one of ours, so the caller falls through. */
-export async function serveParityJobs(request: Request, url: URL, env: Env, c: Composition, at: string): Promise<Response | null> {
-  if (!c.parity || !url.pathname.startsWith(PARITY_JOB_PREFIX)) return null;
+export async function serveTestJobs(request: Request, url: URL, env: Env, c: Composition, at: string): Promise<Response | null> {
+  if (!c.testMode || !url.pathname.startsWith(TEST_JOB_PREFIX)) return null;
   if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
   if (request.headers.get('x-internal-token') !== c.internalToken) return Response.json({ detail: 'invalid X-Internal-Token' }, { status: 401 });
 
   const cell = (id: string): JobCellRpc => env.JOB.get(env.JOB.idFromName(id)) as unknown as JobCellRpc;
-  const rest = url.pathname.slice(PARITY_JOB_PREFIX.length);
+  const rest = url.pathname.slice(TEST_JOB_PREFIX.length);
 
   if (request.method === 'POST' && rest === '/start') {
     const body = (await request.json()) as StartBody;
@@ -61,7 +61,7 @@ export async function serveParityJobs(request: Request, url: URL, env: Env, c: C
         kind: body.kind,
         owner: body.owner,
         input,
-        urlPath: `/_parity/job/${body.id}`,
+        urlPath: `/_test/job/${body.id}`,
         workflowType: body.kind,
         deckId: null,
         deckName: typeof input['deckName'] === 'string' ? (input['deckName'] as string) : null,

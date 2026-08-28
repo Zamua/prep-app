@@ -52,7 +52,7 @@ export class InstantLimiterCell extends DurableObject<Env> implements Limiter {
     return this.repo.reassign(fromId, toId);
   }
 
-  /** Parity only, from `POST /_parity/seed`: the ledger is global, so a
+  /** Test only, from `POST /_test/seed`: the ledger is global, so a
    * run's spend has to leave with the data it was recorded against. */
   async wipe(): Promise<void> {
     this.repo.wipe();

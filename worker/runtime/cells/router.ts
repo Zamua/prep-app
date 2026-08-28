@@ -14,7 +14,7 @@ export const EMAIL_HEADER = 'x-prep-email';
 export const PICTURE_HEADER = 'x-prep-picture';
 /** SHA-256 of the presented token; the owner's cell matches it against `api_tokens`. */
 export const PAT_HASH_HEADER = 'x-prep-pat-hash';
-/** The request clock under parity, ISO; absent outside it. */
+/** The request clock under testMode, ISO; absent outside it. */
 export const NOW_HEADER = 'x-prep-now';
 export const IDENTITY_HEADERS = [
   SUBJECT_HEADER,

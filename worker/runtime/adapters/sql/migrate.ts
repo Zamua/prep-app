@@ -85,7 +85,7 @@ export const ID_BLOCK = 2 ** 32;
 
 /**
  * Seeds every autoincrement counter to the start of the cell's id block so
- * ids are unique across cells. Block 0 (idx 0) is the parity seed's and the
+ * ids are unique across cells. Block 0 (idx 0) is the seed's and the
  * migration importer's; a counter already past its block start is left.
  */
 export function seedSequences(sql: Sql, idx: number): void {
@@ -135,7 +135,7 @@ export function countRows(sql: Sql, table: string): number {
   return Number(db.first<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table}"`)?.n ?? 0);
 }
 
-/** Drops every counter so ids restart at 1: the parity seed pins block 0. */
+/** Drops every counter so ids restart at 1: the seed pins block 0. */
 export function resetSequences(sql: Sql): void {
   new Db(sql).run('DELETE FROM sqlite_sequence');
 }

@@ -18,7 +18,7 @@ describe('the token format', () => {
   });
 
   it('carries a subject with an @ and non-ASCII through unchanged', () => {
-    for (const subject of ['parity@example.com', 'user+tag@example.com', 'zoë@example.com', 'anon:' + 'ab'.repeat(16)]) {
+    for (const subject of ['seed@example.com', 'user+tag@example.com', 'zoë@example.com', 'anon:' + 'ab'.repeat(16)]) {
       expect(parseToken(assembleToken(subject, new Uint8Array(SECRET_BYTES)))?.subject).toBe(subject);
     }
   });
@@ -44,12 +44,12 @@ describe('the display mask', () => {
   it('keeps the prefix and the last four, whatever the format', () => {
     expect(
       [
-        'prep_pat_ParityCliToken0000000000000000000000',
+        'prep_pat_SeedCliToken0000000000000000000000',
         'prep_pat_dXNlcl8yYWJj.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         'prep_pat_short',
         '',
       ].map(maskToken),
-    ).toEqual(['prep_pat_Pa…0000', 'prep_pat_dX…AAAA', '…', '…']);
+    ).toEqual(['prep_pat_Se…0000', 'prep_pat_dX…AAAA', '…', '…']);
   });
 });
 
@@ -87,13 +87,13 @@ describe('issuing and routing', () => {
 });
 
 describe('the e2e seed token', () => {
-  it('parses and routes to its owner, unlike the legacy parity fixture', () => {
+  it('parses and routes to its owner, unlike the legacy seed fixture', () => {
     const user = 'e2e@example.com';
     const parsed = parseToken(apiE2eToken(user));
     expect(parsed?.subject).toBe(user);
     // The reader profile's fixture is legacy on purpose: it must never
     // authenticate.
-    expect(parseToken('prep_pat_ParityCliToken0000000000000000000000')).toBeNull();
+    expect(parseToken('prep_pat_SeedCliToken0000000000000000000000')).toBeNull();
   });
 
   it('hashes to what the profile stores, so the bearer path matches it', async () => {

@@ -15,7 +15,7 @@ import { composeWith } from '../../runtime/compose.js';
 import { fakeCellState } from '../fakes/sqlStorage.js';
 import { fakeEnv, req } from '../helpers.js';
 
-const USER = 'parity@example.com';
+const USER = 'seed@example.com';
 const DECK = 'distributed-systems';
 const TRIVIA_DECK = 'world-history';
 
@@ -60,7 +60,7 @@ async function harness(): Promise<Harness> {
   const cell = new UserCell(state, env);
   await state.ready();
   await cell.seed('reader', USER, null);
-  const identity = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Parity', [KIND_HEADER]: 'fake' };
+  const identity = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Seed', [KIND_HEADER]: 'fake' };
   const send = (path: string, init: RequestInit = {}) => cell.fetch(req(path, { ...init, headers: { ...identity, ...(init.headers as Record<string, string>) } }));
   const registry = new StepRegistry();
   registerWorkflowSteps(registry);

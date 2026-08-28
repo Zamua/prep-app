@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SLUG_ALPHABET } from '../app/entities.js';
-import { hex, ParitySessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from '../runtime/adapters/random.js';
+import { hex, SeededSessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from '../runtime/adapters/random.js';
 
 /** The draws the instant, merge and token paths make, in order. A seeded
  * node has to reproduce them exactly: an e2e run seeds a cell and then
@@ -74,14 +74,14 @@ describe('WebCryptoRandom', () => {
 });
 
 describe('session ids', () => {
-  it('seeded ids are sha1("parity-session-<n>")[:16] over a counter', async () => {
+  it('seeded ids are sha1("seed-session-<n>")[:16] over a counter', async () => {
     let n = 0;
-    const ids = new ParitySessionIds({ get: async () => n, set: async (v) => void (n = v) });
-    expect(await ids.next()).toBe('81426e386f04220d');
-    expect(await ids.next()).toBe('951ddc296f6f0ff5');
+    const ids = new SeededSessionIds({ get: async () => n, set: async (v) => void (n = v) });
+    expect(await ids.next()).toBe('06d904444c991b8d');
+    expect(await ids.next()).toBe('e08536edd0fb14f4');
     expect(n).toBe(2);
     n = 0;
-    expect(await ids.next()).toBe('81426e386f04220d');
+    expect(await ids.next()).toBe('06d904444c991b8d');
   });
 
   it('production ids are token_hex(8)', async () => {

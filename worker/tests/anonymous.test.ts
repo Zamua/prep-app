@@ -14,7 +14,7 @@ const ANON = 'anon:' + 'ab'.repeat(16);
 const AT = '2026-03-14T15:00:00+00:00';
 
 const live: Precheck = { exists: true, isAnonymous: true, tombstoned: null };
-const marker: MergeMarker = { anon_id: ANON, target_id: 'parity@example.com', audit_id: 1, started_at: AT };
+const marker: MergeMarker = { anon_id: ANON, target_id: 'seed@example.com', audit_id: 1, started_at: AT };
 
 describe('anonAccess', () => {
   it('serves a live anonymous account', () => {

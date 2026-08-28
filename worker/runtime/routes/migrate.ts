@@ -1,8 +1,8 @@
 // The migration's door into the fleet: one chunk in, the resume point out,
 // and the seal that closes it.
 //
-// Gated on `X-Internal-Token` exactly as `/_parity/seed` is, but not on
-// parity mode: this has to run where the data goes, which is production.
+// Gated on `X-Internal-Token` exactly as `/_test/seed` is, but not on test
+// mode: this has to run where the data goes, which is production.
 // The seal is what keeps that safe after the cutover - from then on every
 // route here answers 410.
 import { importUserChunk } from '../../app/migrate/import.js';

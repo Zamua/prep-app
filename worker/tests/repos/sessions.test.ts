@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SessionNotFound, StaleVersionError } from '../../app/ports.js';
-import { cell, D, H, M, PARITY_NOW, at } from './setup.js';
+import { cell, D, H, M, TEST_NOW, at } from './setup.js';
 
 const short = (prompt: string, extra: Record<string, unknown> = {}) => ({ type: 'short' as const, prompt, answer: 'a', ...extra });
 
@@ -19,7 +19,7 @@ describe('SessionRepo', () => {
     const c = cell();
     const { d, ids } = deckWithDue(c, ['2026-03-14T12:00:00+00:00', '2026-03-14T13:00:00+00:00', '2026-03-20T00:00:00+00:00']);
     const sid = await c.repos.sessions.create(d, 'iPhone');
-    expect(sid).toBe('81426e386f04220d');
+    expect(sid).toBe('06d904444c991b8d');
     const s = c.repos.sessions.get(sid);
     expect(s).toMatchObject({
       id: sid,
@@ -95,7 +95,7 @@ describe('SessionRepo', () => {
     expect(recent[0]).toMatchObject({ deck_name: 'd', deck_display_name: 'Deck', current_question_id: ids[0], current_prompt: 'q0', current_type: 'code', device_label: 'fresh', snoozed_until: null });
     expect(c.repos.sessions.get(old)?.status).toBe('abandoned');
     expect(c.repos.sessions.listSnoozed().map((r) => [r.id, r.snoozed_until])).toEqual([[snoozed, '2026-03-14T18:00:00+00:00']]);
-    c.clock.set(at(PARITY_NOW, 4 * H));
+    c.clock.set(at(TEST_NOW, 4 * H));
     expect(c.repos.sessions.listRecent().map((r) => r.id)).toEqual([snoozed, fresh]);
     c.repos.sessions.snooze(fresh, null);
     expect(c.repos.sessions.listRecent(1)).toHaveLength(1);
@@ -111,7 +111,7 @@ describe('SessionRepo', () => {
     c.repos.sessions.markCompleted(b);
     expect(c.repos.sessions.get(b)).toMatchObject({ status: 'completed', version: 2 });
     const e = await c.repos.sessions.create(d, 'z');
-    c.clock.set(at(PARITY_NOW, D + M));
+    c.clock.set(at(TEST_NOW, D + M));
     expect(c.repos.sessions.abandonAllForDeck(d)).toBe(1);
     expect(c.repos.sessions.get(e)).toMatchObject({ status: 'abandoned', last_active: '2026-03-15T15:01:00+00:00' });
   });

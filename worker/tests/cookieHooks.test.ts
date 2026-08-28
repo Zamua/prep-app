@@ -23,7 +23,7 @@ const pair = (name: string): Pair => {
   return found;
 };
 
-const PARITY_NOW = 1773500400;
+const TEST_NOW = 1773500400;
 const MASTER = '11'.repeat(32);
 /** `expires` on a delete is the wall clock at recording time, so only its
  * presence and the rest of the value are the contract. */
@@ -40,7 +40,7 @@ beforeEach(() => {
 /** One recorded request replayed through the resolver and the response hook. */
 async function replay(name: string, opts: { now?: number; ask?: string } = {}): Promise<string[]> {
   const p = pair(name);
-  const now = opts.now ?? PARITY_NOW;
+  const now = opts.now ?? TEST_NOW;
   const headers = { ...(p.request.headers ?? {}) };
   const request = req(p.request.path, { method: p.request.method, headers });
   const resolution = await resolveIdentity(request, {
@@ -72,12 +72,12 @@ describe('the contract corpus Set-Cookie sequences', () => {
   });
 
   it('a cookie past the refresh window is re-minted to the recorded value', async () => {
-    const later = PARITY_NOW + REFRESH_AFTER_SECONDS + 1;
+    const later = TEST_NOW + REFRESH_AFTER_SECONDS + 1;
     expect(await replay('cookie-refreshed-after-window', { now: later })).toEqual(expected('cookie-refreshed-after-window'));
   });
 
   it('the re-minted value is then accepted without another refresh', async () => {
-    const later = PARITY_NOW + REFRESH_AFTER_SECONDS + 1;
+    const later = TEST_NOW + REFRESH_AFTER_SECONDS + 1;
     expect(await replay('cookie-refreshed-value-accepted', { now: later })).toEqual([]);
   });
 
@@ -95,7 +95,7 @@ describe('the contract corpus Set-Cookie sequences', () => {
 describe('the hook precedence', () => {
   const stale: CookieVerdict = { kind: 'stale' };
   const refresh: CookieVerdict = { kind: 'refresh', externalId: 'anon:' + 'ab'.repeat(16) };
-  const at = { 'x-prep-now': new Date(PARITY_NOW * 1000).toISOString() };
+  const at = { 'x-prep-now': new Date(TEST_NOW * 1000).toISOString() };
 
   const run = async (verdict: CookieVerdict, ask?: string) => {
     const res = new Response(null);
@@ -130,22 +130,22 @@ describe('the hook precedence', () => {
 
   it('omits Secure on a plain-http request', async () => {
     const res = new Response(null, { headers: { [ANON_COOKIE_HEADER]: 'clear' } });
-    const out = await cookieHooks(c, new Request('http://parity.example.test/', { headers: at }), { kind: 'none' }, res);
+    const out = await cookieHooks(c, new Request('http://prep.example.test/', { headers: at }), { kind: 'none' }, res);
     expect(out.headers.get('set-cookie')).not.toMatch(/Secure/);
   });
 
   it('honours a forwarded https scheme, because TLS ends at the ingress', async () => {
     const res = new Response(null, { headers: { [ANON_COOKIE_HEADER]: 'clear' } });
-    const request = new Request('http://parity.example.test/', { headers: { ...at, 'x-forwarded-proto': 'https,http' } });
+    const request = new Request('http://prep.example.test/', { headers: { ...at, 'x-forwarded-proto': 'https,http' } });
     expect((await cookieHooks(c, request, { kind: 'none' }, res)).headers.get('set-cookie')).toMatch(/Secure$/);
   });
 
   it('mints on the instant the router resolved on, not the composition default', async () => {
-    // The hook sees the inbound request, which spells the parity clock
-    // `x-parity-now`; resolving a refresh on one clock and stamping it on
+    // The hook sees the inbound request, which spells the pinned clock
+    // `x-prep-test-now`; resolving a refresh on one clock and stamping it on
     // another re-refreshes the cookie on every later request.
-    const advanced = PARITY_NOW + REFRESH_AFTER_SECONDS + 1;
-    const request = req('/', { headers: { 'x-parity-now': new Date(advanced * 1000).toISOString() } });
+    const advanced = TEST_NOW + REFRESH_AFTER_SECONDS + 1;
+    const request = req('/', { headers: { 'x-prep-test-now': new Date(advanced * 1000).toISOString() } });
     const out = await cookieHooks(c, request, { kind: 'refresh', externalId: 'anon:' + 'ab'.repeat(16) }, new Response(null));
     expect(out.headers.get('set-cookie')!.split('.')[2]).toBe(String(advanced));
   });

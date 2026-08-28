@@ -1,7 +1,7 @@
 {
  "context": {
   "agent_available": true,
-  "app_base": "https://parity.example.test",
+  "app_base": "https://prep.example.test",
   "auth_provider": "tailscale",
   "clerk_frontend_api_host": null,
   "clerk_publishable_key": null,
@@ -21,7 +21,7 @@
     "source": "trivia",
     "title": "trivia nudge",
     "url": "/deck/capitals",
-    "user_id": "parity@example.com"
+    "user_id": "seed@example.com"
    },
    {
     "body": "3 cards are due in World Capitals.",
@@ -31,7 +31,7 @@
     "source": "srs-when-ready",
     "title": "srs-when-ready nudge",
     "url": "/deck/capitals",
-    "user_id": "parity@example.com"
+    "user_id": "seed@example.com"
    },
    {
     "body": "3 cards are due in World Capitals.",
@@ -41,7 +41,7 @@
     "source": "srs-digest",
     "title": "srs-digest nudge",
     "url": "/deck/capitals",
-    "user_id": "parity@example.com"
+    "user_id": "seed@example.com"
    },
    {
     "body": "3 cards are due in World Capitals.",
@@ -51,7 +51,7 @@
     "source": "manual",
     "title": "manual nudge",
     "url": "/deck/capitals",
-    "user_id": "parity@example.com"
+    "user_id": "seed@example.com"
    }
   ],
   "notif_unseen_count": 0,
@@ -62,13 +62,13 @@
   "user": {
    "created_at": "2026-02-12T15:00:00+00:00",
    "desired_retention": null,
-   "display_name": "Parity",
+   "display_name": "Seed",
    "editor_input_mode": "vim",
-   "email": "parity@example.com",
+   "email": "seed@example.com",
    "is_anonymous": 0,
    "last_seen_at": "2026-03-14T15:00:00+00:00",
    "profile_pic_url": null,
-   "tailscale_login": "parity@example.com"
+   "tailscale_login": "seed@example.com"
   }
  },
  "template": "notify/log.html"

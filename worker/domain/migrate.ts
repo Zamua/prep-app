@@ -49,7 +49,7 @@ export interface UserChunk {
   kind: 'user';
   user: string;
   /** The exporter's rank, which seeds this cell's id block. Never 0: block 0
-   * is the parity seed's. */
+   * is the seed's. */
   idx: number;
   /** Null on the chunk that carries only the profile, which is how a user
    * with no rows at all still gets one. */

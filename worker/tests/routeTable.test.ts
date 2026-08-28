@@ -69,7 +69,7 @@ describe('the cell route table', () => {
   });
 
   it('answers the public routes it claims', () => {
-    const env = { parity: false, vapidPublicKey: 'BCT1' };
+    const env = { testMode: false, vapidPublicKey: 'BCT1' };
     for (const path of ['/openapi.json', '/docs', '/docs/oauth2-redirect', '/redoc', '/llms.txt', '/notify/vapid-public-key']) {
       const url = new URL(`https://prep.example.test${path}`);
       expect(servePublic(new Request(url), url, env), `${path} is not served`).not.toBeNull();

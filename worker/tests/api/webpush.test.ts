@@ -130,7 +130,7 @@ describe('the VAPID authorization', () => {
 });
 
 describe('the sender', () => {
-  const subscription = { endpoint: 'https://push.example.test/parity', p256dh: VECTOR.ua_public, auth: VECTOR.auth_secret };
+  const subscription = { endpoint: 'https://push.example.test/sub', p256dh: VECTOR.ua_public, auth: VECTOR.auth_secret };
   const keys = { publicKey: VECTOR.as_public, privateKey: VECTOR.as_private, subject: 'mailto:ops@example.test' };
   const at = () => new Date('2026-03-14T15:00:00Z');
 

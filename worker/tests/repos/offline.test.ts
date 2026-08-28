@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncItemRejected } from '../../app/ports.js';
-import { cell, D, H, PARITY_NOW, at } from './setup.js';
+import { cell, D, H, TEST_NOW, at } from './setup.js';
 
 describe('OfflineRepo: snapshot', () => {
   it('lists SRS decks in dashboard order with totals, and every unsuspended SRS card with its step', () => {
@@ -58,18 +58,18 @@ describe('OfflineRepo: sync writes', () => {
     const { repos, storage } = cell();
     const d = repos.decks.create('d');
     const qid = repos.questions.add(d, { type: 'short', prompt: 'p', answer: 'a' });
-    expect(repos.offline.applyReview('r1', qid, 'right', 'a', at(PARITY_NOW, -H), 'auto')).toBe('applied');
+    expect(repos.offline.applyReview('r1', qid, 'right', 'a', at(TEST_NOW, -H), 'auto')).toBe('applied');
     const card = repos.cards.srsState(qid)!;
     expect(card.last_review).toBe('2026-03-14T14:00:00+00:00');
     expect(card.stability).not.toBeNull();
-    expect(repos.offline.applyReview('r2', qid, 'wrong', 'b', at(PARITY_NOW, -2 * H), 'auto')).toBe('logged_no_reschedule');
+    expect(repos.offline.applyReview('r2', qid, 'wrong', 'b', at(TEST_NOW, -2 * H), 'auto')).toBe('logged_no_reschedule');
     expect(repos.cards.srsState(qid)).toEqual(card);
     expect(storage.rows('reviews').map((r) => [r['ts'], r['result']])).toEqual([
       ['2026-03-14T14:00:00+00:00', 'right'],
       ['2026-03-14T13:00:00+00:00', 'wrong'],
     ]);
     expect(repos.idempotency.findSync('r2')).toEqual({ kind: 'review', status: 'logged_no_reschedule', question_id: qid });
-    expect(() => repos.offline.applyReview('r3', 999, 'right', 'a', PARITY_NOW, '')).toThrow(SyncItemRejected);
+    expect(() => repos.offline.applyReview('r3', 999, 'right', 'a', TEST_NOW, '')).toThrow(SyncItemRejected);
     expect(repos.idempotency.findSync('r3')).toBeNull();
   });
 

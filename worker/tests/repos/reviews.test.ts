@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { QuestionNotFound } from '../../app/ports.js';
-import { cell, D, H, M, PARITY_NOW, at } from './setup.js';
+import { cell, D, H, M, TEST_NOW, at } from './setup.js';
 
 describe('ReviewRepo.record', () => {
   const { repos, clock, storage } = cell();
@@ -23,7 +23,7 @@ describe('ReviewRepo.record', () => {
   });
 
   it('the second review a day later persists the scheduler output and the review row', () => {
-    clock.set(at(PARITY_NOW, D));
+    clock.set(at(TEST_NOW, D));
     const r2 = repos.reviews.record(qid, 'wrong', 'b', 'n');
     const row = storage.rows('cards')[0]!;
     expect(row).toMatchObject({ question_id: qid, last_review: '2026-03-15T15:00:00+00:00', fsrs_state: 1 });
@@ -96,7 +96,7 @@ describe('ReviewRepo and CardRepo', () => {
     expect(repos.cards.nextDueMinutes()).toBe(1);
     expect(repos.cards.nextDueMinutes(d)).toBe(1);
     expect(repos.cards.nextDueMinutes(paused)).toBeNull();
-    clock.set(at(PARITY_NOW, H));
+    clock.set(at(TEST_NOW, H));
     expect(repos.cards.countDue()).toBe(2);
     expect(repos.cards.nextDueMinutes()).toBeNull();
     expect(repos.cards.dueQuestions(d, 5).map((x) => x.id).sort()).toEqual([a, b]);

@@ -2,13 +2,13 @@
  "context": {
   "agent_available": false,
   "auth_provider": "tailscale",
-  "blurb": "More requests than the service can take at the moment. (parity: deliberate throttle)",
+  "blurb": "More requests than the service can take at the moment. (test: deliberate throttle)",
   "clerk_frontend_api_host": null,
   "clerk_publishable_key": null,
   "deck_display": {},
   "headline": "Busy right now.",
   "notif_unseen_count": 0,
-  "path": "/_parity/raise",
+  "path": "/_test/raise",
   "sign_in_url": "",
   "sign_out_url": "",
   "sign_up_url": "",
@@ -20,7 +20,7 @@
   "content-type": "text/html; charset=utf-8"
  },
  "method": "GET",
- "path": "/_parity/raise?status=429",
+ "path": "/_test/raise?status=429",
  "sets": [],
  "status": 429,
  "template": "error.html"

@@ -3,7 +3,7 @@ import { appBase } from '../runtime/appBase.js';
 
 describe('appBase', () => {
   it('is the request origin', () => {
-    expect(appBase(new Request('https://parity.example.test/settings/api?x=1'))).toBe('https://parity.example.test');
+    expect(appBase(new Request('https://prep.example.test/settings/api?x=1'))).toBe('https://prep.example.test');
     expect(appBase(new Request('http://127.0.0.1:8791/'))).toBe('http://127.0.0.1:8791');
   });
 

@@ -184,13 +184,13 @@ describe('the route label', () => {
 
 describe('GET /metrics', () => {
   it('answers the exposition, uncached, and refuses another method', () => {
-    const url = new URL('https://parity.example.test/metrics');
+    const url = new URL('https://prep.example.test/metrics');
     const response = serveMetrics(new Request(url), url)!;
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe(METRICS_CONTENT_TYPE);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(serveMetrics(new Request(url, { method: 'POST' }), url)!.status).toBe(405);
-    const other = new URL('https://parity.example.test/healthz');
+    const other = new URL('https://prep.example.test/healthz');
     expect(serveMetrics(new Request(other), other)).toBeNull();
   });
 

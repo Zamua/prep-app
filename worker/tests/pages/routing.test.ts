@@ -55,7 +55,7 @@ describe('the OpenRouter hand-off', () => {
     expect(res.status).toBe(303);
     const target = new URL(res.headers.get('location')!);
     expect(target.origin + target.pathname).toBe('https://openrouter.ai/auth');
-    expect(target.searchParams.get('callback_url')).toBe('https://parity.example.test/settings/agent/openrouter/callback');
+    expect(target.searchParams.get('callback_url')).toBe('https://prep.example.test/settings/agent/openrouter/callback');
     expect(target.searchParams.get('code_challenge_method')).toBe('S256');
     expect(target.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const cookie = res.headers.get('set-cookie')!;

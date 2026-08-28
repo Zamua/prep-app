@@ -6,7 +6,7 @@ import { UserCell } from '../runtime/cells/UserCell.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
 import { PAGES, fakeEnv, spyRenderer } from './helpers.js';
 
-const USER = 'parity@example.com';
+const USER = 'seed@example.com';
 
 function seeded(profile: string) {
   const env = fakeEnv();
@@ -49,8 +49,8 @@ describe('the seed profiles', () => {
     expect(sessions[ids.sessions.active]).toMatchObject({ deck_id: 1, current_question_id: ids.questions.srs_a['mcq'], last_active: '2026-03-14T14:40:00+00:00', created_at: '2026-03-14T14:35:00+00:00', device_label: 'iPhone' });
     expect(sessions[ids.sessions.snoozed]).toMatchObject({ deck_id: 2, current_question_id: 7, snoozed_until: '2026-03-14T18:00:00+00:00' });
     expect(state.fake.rows('notifications_log').map((n) => n['sent_at'])).toEqual(['2026-03-14T12:00:00+00:00', '2026-03-13T15:00:00+00:00']);
-    expect(state.fake.rows('api_tokens')[0]).toMatchObject({ key_prefix: 'prep_pat_Pa…0000', label: 'Parity CLI', created_at: '2026-03-11T15:00:00+00:00', token_hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
-    expect(state.fake.rows('active_workflows')[0]).toMatchObject({ workflow_id: 'transform-world-capitals-parity01', started_at: '2026-03-14T14:55:00+00:00', status: 'computing', deck_id: 1 });
+    expect(state.fake.rows('api_tokens')[0]).toMatchObject({ key_prefix: 'prep_pat_Se…0000', label: 'Seed CLI', created_at: '2026-03-11T15:00:00+00:00', token_hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(state.fake.rows('active_workflows')[0]).toMatchObject({ workflow_id: 'transform-world-capitals-seed01', started_at: '2026-03-14T14:55:00+00:00', status: 'computing', deck_id: 1 });
     expect(state.fake.rows('profile')[0]?.['notification_prefs']).toContain('"tz":"America/New_York"');
   });
 
@@ -59,7 +59,7 @@ describe('the seed profiles', () => {
     const ids = (await seed) as { deck: { id: number; slug: string }; questions: Record<string, number>; session_id: string };
     expect(ids.deck).toEqual({ id: 1, slug: 'geography', display: 'Geography' });
     expect(Object.keys(ids.questions).sort()).toEqual(['code', 'mcq', 'multi', 'short_plain', 'short_regex', 'warmup']);
-    expect(ids.session_id).toBe('81426e386f04220d');
+    expect(ids.session_id).toBe('06d904444c991b8d');
     const session = state.fake.rows('study_sessions')[0];
     expect(session).toMatchObject({ current_question_id: ids.questions['mcq'], last_active: '2026-03-14T14:58:00+00:00' });
     expect(state.fake.rows('study_session_answers')).toEqual([{ session_id: ids.session_id, question_id: ids.questions['warmup'], answered_at: '2026-03-14T14:56:00+00:00', result: 'right', workflow_id: null }]);
@@ -177,6 +177,6 @@ describe('the e2e seed profiles', () => {
   it('a non-anonymous profile keeps the named account row', async () => {
     const { state, seed } = seeded('offline_e2e');
     await seed;
-    expect(state.fake.rows('profile')[0]).toMatchObject({ is_anonymous: 0, display_name: 'Parity' });
+    expect(state.fake.rows('profile')[0]).toMatchObject({ is_anonymous: 0, display_name: 'Seed' });
   });
 });

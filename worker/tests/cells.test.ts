@@ -10,10 +10,10 @@ import type { Env } from '../runtime/env.js';
 import { fakeCellState, FakeCellStorage } from './fakes/sqlStorage.js';
 import { expectedPage, fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
 
-const USER = 'parity@example.com';
+const USER = 'seed@example.com';
 const ANON = 'anon:' + 'ab'.repeat(16);
 const AT = '2026-03-14T15:00:00+00:00';
-const IDENTIFIED = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Parity' };
+const IDENTIFIED = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Seed' };
 
 let env: Env;
 let c: Composition;
@@ -31,7 +31,7 @@ beforeEach(() => {
 
 const identified = (path: string, init: RequestInit = {}) => req(path, { ...init, headers: { ...IDENTIFIED, ...(init.headers as Record<string, string>) } });
 
-/** The two RPCs `POST /_parity/seed` makes, in order: the wipe cannot share
+/** The two RPCs `POST /_test/seed` makes, in order: the wipe cannot share
  * a call with the rows it makes room for. */
 const reseed = (target: UserCell, profile: string, at: string | null = null) =>
   target.wipe(profile).then(() => target.seed(profile, USER, at));
@@ -70,12 +70,12 @@ describe('UserCell.seed', () => {
     await reseed(cell, 'reader');
     expect(state.fake.rows('decks').map((d) => d['id'])).toEqual([1, 2, 3, 4]);
     expect(await c.directory.lookup(USER)).toMatchObject({ idx: 0, is_anonymous: false });
-    expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Parity', email: USER, id_base: 0 });
+    expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Seed', email: USER, id_base: 0 });
     await reseed(cell, 'anonymous');
     expect(state.fake.rows('profile')).toEqual([]);
   });
 
-  it('runs on the parity instant the router forwards', async () => {
+  it('runs on the pinned instant the router forwards', async () => {
     const seed = await reseed(cell, 'empty', '2026-03-15T10:00:00Z');
     expect(seed['now']).toBe('2026-03-15T10:00:00+00:00');
     expect(state.fake.rows('profile')[0]?.['created_at']).toBe('2026-03-15T10:00:00+00:00');
@@ -105,7 +105,7 @@ describe('UserCell.fetch', () => {
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
       const ctx = renderer.calls[0]!.context;
       expect(renderer.calls[0]!.template).toBe('deck.html');
-      expect(ctx).toMatchObject({ deck_name: 'world-capitals', decks: 4, notif_unseen_count: 2, agent_available: true, auth_provider: 'tailscale', app_base: 'https://parity.example.test' });
+      expect(ctx).toMatchObject({ deck_name: 'world-capitals', decks: 4, notif_unseen_count: 2, agent_available: true, auth_provider: 'tailscale', app_base: 'https://prep.example.test' });
       expect(ctx['deck_display']).toEqual({ 'distributed-systems': 'Distributed Systems', 'world-capitals': 'World Capitals', scratch: 'Scratch', 'world-history': 'World History Trivia' });
       expect((ctx['user'] as { last_seen_at: string }).last_seen_at).toBe('2026-03-14T16:00:00+00:00');
     });
@@ -141,7 +141,7 @@ describe('UserCell.fetch', () => {
     const route: Route = { method: 'GET', pattern: '/x', gate: 'user', handler: () => ({ empty: true }) };
     await withRoutes([route], async () => {
       const guest = await anonymousCell();
-      const claims = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon', 'x-prep-display-name': 'Parity', [NOW_HEADER]: '2026-03-14T16:00:00Z' };
+      const claims = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon', 'x-prep-display-name': 'Seed', [NOW_HEADER]: '2026-03-14T16:00:00Z' };
       expect((await guest.cell.fetch(req('/x', { headers: claims }))).status).toBe(204);
       // Touched, never upserted: the bump lands, the presented claims do not.
       expect(guest.state.fake.rows('profile')).toMatchObject([{ id: ANON, display_name: 'Guest', is_anonymous: 1, last_seen_at: '2026-03-14T16:00:00+00:00' }]);
@@ -149,7 +149,7 @@ describe('UserCell.fetch', () => {
       expect((await cell.fetch(identified('/x'))).status).toBe(204);
       expect(await cell.precheck()).toEqual({ exists: true, isAnonymous: false, tombstoned: null });
       expect(await c.directory.lookup(USER)).toMatchObject({ idx: 1 });
-      expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Parity', id_base: 1 });
+      expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Seed', id_base: 1 });
     });
   });
 

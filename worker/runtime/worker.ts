@@ -3,7 +3,7 @@
 // is forwarded to its UserCell with the identity asserted in headers.
 import { isRefusal } from '../domain/jobs/refusal.js';
 import { appBase } from './appBase.js';
-import { ANON_COOKIE_HEADER, clockFor, compose, cookieHooks, noCacheHtml, NOW_HEADER, PARITY_NOW_HEADER, type Composition } from './compose.js';
+import { ANON_COOKIE_HEADER, clockFor, compose, cookieHooks, noCacheHtml, NOW_HEADER, TEST_NOW_HEADER, type Composition } from './compose.js';
 import type { Env } from './env.js';
 import { anonymousContext, errorPage, htmlResponse } from './errors.js';
 import { serveStatic } from './assets.js';
@@ -37,7 +37,7 @@ import { observe, serveMetrics } from './routes/metrics.js';
 import { servePublic } from './routes/openapi.js';
 import { serveMigrate } from './routes/migrate.js';
 import { serveMigrateDump } from './routes/migrateDump.js';
-import { serveParityJobs } from './routes/parityJobs.js';
+import { serveTestJobs } from './routes/testJobs.js';
 
 export { UserCell } from './cells/UserCell.js';
 export { DirectoryCell } from './cells/DirectoryCell.js';
@@ -72,7 +72,7 @@ interface JobSeedApi {
   wipe(): Promise<void>;
 }
 
-/** The directory's own rows, which only the parity dump reads. */
+/** The directory's own rows, which only the test-only dump reads. */
 interface DirectorySeedApi {
   dumpTables(): Promise<Record<string, Record<string, unknown>[]>>;
 }
@@ -161,40 +161,40 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
   if (pwa) return plain(pwa);
   if (path === '/offline') return plain(readOnly ? page('offline.html', { build: offlineBuild(url, c.buildToken) }) : methodNotAllowed());
   if (path === '/privacy') return plain(readOnly ? page('privacy.html') : methodNotAllowed());
-  const publicApi = servePublic(request, url, { parity: c.parity, vapidPublicKey: c.vapidPublicKey });
+  const publicApi = servePublic(request, url, { testMode: c.testMode, vapidPublicKey: c.vapidPublicKey });
   if (publicApi) return plain(publicApi);
   // Signed by svix, not by any user credential, so it precedes identification.
   if (path === '/webhooks/clerk') return plain(request.method === 'POST' ? await clerkWebhook(request, c) : methodNotAllowed());
-  // Outside the parity block on purpose: the migration runs where the data
+  // Outside the test-mode block on purpose: the migration runs where the data
   // goes. Its own token gate and the directory's seal are what bound it.
   const migration = (await serveMigrate(request, url, c)) ?? (await serveMigrateDump(request, url, c));
   if (migration) return plain(migration);
 
-  if (c.parity) {
-    if (request.method === 'GET' && path === '/_parity/raise') {
+  if (c.testMode) {
+    if (request.method === 'GET' && path === '/_test/raise') {
       return plain(
         url.searchParams.get('status') === '429'
-          ? errorPage(c.renderer, c.buildToken, 429, request, 'parity: deliberate throttle')
+          ? errorPage(c.renderer, c.buildToken, 429, request, 'test: deliberate throttle')
           : errorPage(c.renderer, c.buildToken, 500, request),
       );
     }
-    if (request.method === 'GET' && path === '/_parity/reauth') return plain(page('reauth.html'));
-    if (request.method === 'GET' && path === '/_parity/sign-out') {
+    if (request.method === 'GET' && path === '/_test/reauth') return plain(page('reauth.html'));
+    if (request.method === 'GET' && path === '/_test/sign-out') {
       return plain(page('sign_out_interstitial.html', { redirect_url: '/' }));
     }
-    if (request.method === 'POST' && path === '/_parity/seed') return plain(await seed(request, env, c));
-    if (request.method === 'GET' && path === '/_parity/dump') return plain(await dumpCell(request, url, env, c));
-    const job = await serveParityJobs(request, url, env, c, isoUtc(clockFor(c, request).now()));
+    if (request.method === 'POST' && path === '/_test/seed') return plain(await seed(request, env, c));
+    if (request.method === 'GET' && path === '/_test/dump') return plain(await dumpCell(request, url, env, c));
+    const job = await serveTestJobs(request, url, env, c, isoUtc(clockFor(c, request).now()));
     if (job) return plain(job);
   }
 
   // Inbound copies of the identity headers are stripped before anything
-  // reads them: only the router may assert an identity to a cell. Under
-  // parity the request clock travels the same way.
+  // reads them: only the router may assert an identity to a cell. In test
+  // mode the request clock travels the same way.
   const headers = new Headers(request.headers);
   for (const name of IDENTITY_HEADERS) headers.delete(name);
-  const parityNow = c.parity ? request.headers.get(PARITY_NOW_HEADER) : null;
-  if (parityNow) headers.set(NOW_HEADER, parityNow);
+  const testNow = c.testMode ? request.headers.get(TEST_NOW_HEADER) : null;
+  if (testNow) headers.set(NOW_HEADER, testNow);
   const clock = clockFor(c, new Request(request.url, { headers }));
 
   // A personal access token names its owner, so it routes without any
@@ -431,7 +431,7 @@ async function clearAnonymous(c: Composition): Promise<void> {
 
 /**
  * One cell's rows, for a test that used to open the server's database file.
- * Read-only and parity-only, behind the same token the seed takes.
+ * Read-only and test-only, behind the same token the seed takes.
  */
 async function dumpCell(request: Request, url: URL, env: Env, c: Composition): Promise<Response> {
   if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
@@ -487,7 +487,7 @@ async function seed(request: Request, env: Env, c: Composition): Promise<Respons
   }
   const stub = env.USER.get(env.USER.idFromName(body.user)) as unknown as SeedApi;
   try {
-    // The instant ledger is global and durable, and the parity clock never
+    // The instant ledger is global and durable, and the pinned clock never
     // advances, so one run's spend would refuse the next run's first
     // generation. It leaves with the data it was recorded against.
     await (c.limiter as unknown as LimiterSeedApi).wipe();
@@ -499,7 +499,7 @@ async function seed(request: Request, env: Env, c: Composition): Promise<Respons
     await clearJobs(stub, c);
     // Two RPCs: the wipe cannot share a call with the rows it makes room for.
     await stub.wipe(body.profile);
-    return Response.json(await stub.seed(body.profile, body.user, request.headers.get(PARITY_NOW_HEADER)));
+    return Response.json(await stub.seed(body.profile, body.user, request.headers.get(TEST_NOW_HEADER)));
   } catch (e) {
     if (e instanceof UnknownProfile) return Response.json({ detail: e.message }, { status: 400 });
     throw e;

@@ -16,7 +16,7 @@ export const PORT = Number(process.env['PREP_CRASH_PORT'] ?? 8795);
 export const CONTROL_PORT = Number(process.env['PREP_CRASH_CONTROL_PORT'] ?? 8796);
 export const BASE = `http://127.0.0.1:${PORT}`;
 export const CONTROL = `http://127.0.0.1:${CONTROL_PORT}/step`;
-export const INTERNAL_TOKEN = 'parity-internal-token';
+export const INTERNAL_TOKEN = 'test-internal-token';
 export const OWNER = 'crash@example.test';
 
 /** The scratch MinIO's root credential, which run-node.sh refuses to default. */
@@ -47,7 +47,7 @@ function writeConfig(): string {
   delete vars['PREP_FAKE_NOW'];
   // Same reason: a scheduler held still for the corpus proves nothing about
   // the alarm these suites exist to drive.
-  delete vars['PREP_PARITY_NO_PERIODIC'];
+  delete vars['PREP_TEST_NO_PERIODIC'];
   // The deploy name stays the dev one: a second name in the same bucket is a
   // second deployment, and which one a node serves is not the test's to guess.
   const config = { ...dev, vars };
@@ -171,7 +171,7 @@ export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 
 export async function startJob(id: string, kind: string, input: Record<string, unknown>): Promise<JobView> {
   return retrying(async () => {
-    const res = await fetch(`${BASE}/_parity/job/start`, { method: 'POST', headers, body: JSON.stringify({ id, kind, owner: OWNER, input }) });
+    const res = await fetch(`${BASE}/_test/job/start`, { method: 'POST', headers, body: JSON.stringify({ id, kind, owner: OWNER, input }) });
     if (!res.ok) throw new Error(`start ${id}: ${res.status} ${await res.text()}`);
     return (await res.json()) as JobView;
   });
@@ -179,7 +179,7 @@ export async function startJob(id: string, kind: string, input: Record<string, u
 
 export async function signalJob(id: string, name: string): Promise<JobView | null> {
   return retrying(async () => {
-    const res = await fetch(`${BASE}/_parity/job/signal`, { method: 'POST', headers, body: JSON.stringify({ id, name }) });
+    const res = await fetch(`${BASE}/_test/job/signal`, { method: 'POST', headers, body: JSON.stringify({ id, name }) });
     if (!res.ok) throw new Error(`signal ${id}: ${res.status} ${await res.text()}`);
     return (await res.json()) as JobView | null;
   });
@@ -187,7 +187,7 @@ export async function signalJob(id: string, name: string): Promise<JobView | nul
 
 export async function readJob(id: string): Promise<JobView | null> {
   return retrying(async () => {
-    const res = await fetch(`${BASE}/_parity/job/${id}`, { headers });
+    const res = await fetch(`${BASE}/_test/job/${id}`, { headers });
     if (!res.ok) throw new Error(`read ${id}: ${res.status} ${await res.text()}`);
     return (await res.json()) as JobView | null;
   });

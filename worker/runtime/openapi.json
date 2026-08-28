@@ -4273,7 +4273,7 @@
     },
     "/trivia/session/{deck_name}/abandon": {
       "post": {
-        "description": "Abandon any active trivia mini-session for this (user, deck).\nUser-initiated discard from the index \"Continue trivia\" strip —\nparity with /session/{sid}/abandon for SRS. Soft delete: row\nflips to status='abandoned' and falls out of `list_active`,\ncards already answered keep their verdict history. Redirects\nto home; the JS on the index intercepts to do an optimistic\nremove without the round-trip.",
+        "description": "Abandon any active trivia mini-session for this (user, deck).\nUser-initiated discard from the index \"Continue trivia\" strip —\nthe same shape as /session/{sid}/abandon for SRS. Soft delete: row\nflips to status='abandoned' and falls out of `list_active`,\ncards already answered keep their verdict history. Redirects\nto home; the JS on the index intercepts to do an optimistic\nremove without the round-trip.",
         "operationId": "trivia_session_abandon_trivia_session__deck_name__abandon_post",
         "parameters": [
           {

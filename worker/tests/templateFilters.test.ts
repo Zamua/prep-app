@@ -21,7 +21,7 @@ import {
 } from "../runtime/adapters/nunjucks/filters";
 import { makeIconGlobal, renderIcon } from "../runtime/adapters/nunjucks/icons";
 
-// The parity instant (docs/PARITY-GATE.md section 0).
+// The instant every fixture is pinned to.
 const NOW = new Date("2026-03-14T15:00:00Z");
 const clock = { now: () => NOW };
 
@@ -285,7 +285,7 @@ describe("parseIso", () => {
   });
 });
 
-describe("wakes_in: every branch of prep.app._wakes_in at the parity instant", () => {
+describe("wakes_in: every branch of prep.app._wakes_in at the pinned instant", () => {
   it.each([
     ["", ""],
     [null, ""],
@@ -321,7 +321,7 @@ describe("wakes_in: every branch of prep.app._wakes_in at the parity instant", (
   });
 });
 
-describe("relative_time: every branch of prep.app._relative_time at the parity instant", () => {
+describe("relative_time: every branch of prep.app._relative_time at the pinned instant", () => {
   it.each([
     ["", ""],
     [null, ""],

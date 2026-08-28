@@ -1,5 +1,5 @@
 {
-  "description": "Shared grader parity cases. Each case is {id, module, fn, args, expected[, expected_py][, note]}: the browser suite imports static/js/offline/grader.js and asserts module[fn](...args) deep-equals expected; tests/offline/test_parity_fixtures.py re-derives the same expectation from prep/domain/grading.py (using expected_py where the engines deliberately diverge). All instants and strings are plain JSON data.",
+  "description": "Shared grader cases. Each case is {id, module, fn, args, expected[, note]}: the worker suite and the browser bundle (static/js/offline/grader.js) both assert module[fn](...args) deep-equals expected, so an offline verdict and an online one cannot disagree. All instants and strings are plain JSON data.",
   "cases": [
     {
       "id": "mcq-exact-right",
@@ -579,9 +579,6 @@
         "paris"
       ],
       "expected": null,
-      "expected_py": {
-        "verdict": "right"
-      },
       "note": "deliberate divergence: \\A/\\Z are Python anchors; under the JS u flag they throw, so the offline grader falls to self-verdict instead of silently matching the literal letters A/Z"
     },
     {
@@ -677,7 +674,6 @@
         "café"
       ],
       "expected": null,
-      "expected_py": true,
       "note": "JS \\w is ASCII-only even under u; Python's is Unicode. Shorthand + non-ASCII falls to self-verdict in JS instead of a false wrong."
     },
     {

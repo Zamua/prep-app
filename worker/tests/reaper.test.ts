@@ -119,10 +119,10 @@ describe('the reaper walk', () => {
 
   it('never lists a provider account', async () => {
     const f = fixture();
-    await f.directory.register('parity@example.com', false, IDLE);
+    await f.directory.register('seed@example.com', false, IDLE);
     await mint(f, 'anon:a1', IDLE);
     expect(await reapIdleAnonymous(f.deps)).toMatchObject({ scanned: 1, reaped: 1 });
-    expect([...f.directory.users.keys()]).toEqual(['parity@example.com']);
+    expect([...f.directory.users.keys()]).toEqual(['seed@example.com']);
   });
 
   it('clears a directory row whose account is already tombstoned', async () => {

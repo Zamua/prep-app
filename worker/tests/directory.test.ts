@@ -7,7 +7,7 @@ import { fakeEnv } from './helpers.js';
 const T0 = '2026-03-14T15:00:00+00:00';
 const T1 = '2026-03-14T15:00:01+00:00';
 const ANON = 'anon:' + 'ab'.repeat(16);
-const TARGET = 'parity@example.com';
+const TARGET = 'seed@example.com';
 
 describe.each([
   ['DirectoryCell', () => new DirectoryCell(fakeCellState(), fakeEnv())],
@@ -18,7 +18,7 @@ describe.each([
     dir = make();
   });
 
-  it('registers with a fresh idx, idempotently, and pins idx 0 for the parity seed', async () => {
+  it('registers with a fresh idx, idempotently, and pins idx 0 for the seed', async () => {
     expect(await dir.register(TARGET, false, T0, { idx: 0 })).toEqual({ idx: 0 });
     expect(await dir.register(TARGET, false, T1)).toEqual({ idx: 0 });
     expect(await dir.register('a', false, T0)).toEqual({ idx: 1 });

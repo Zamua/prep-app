@@ -12,7 +12,7 @@ import { composeWith } from '../../runtime/compose.js';
 import { fakeCellState } from '../fakes/sqlStorage.js';
 import { fakeEnv, req, type Rendered } from '../helpers.js';
 
-const USER = 'parity@example.com';
+const USER = 'seed@example.com';
 const PLAN_WID = 'plan-world-capitals-0123456789';
 const TRIVIA_WID = 'trivia-world-history-0123456789';
 
@@ -84,7 +84,7 @@ async function harness(profile = 'reader', overrides: Record<string, string> = {
   const cell = new UserCell(state, env);
   await cell.seed(profile, USER, null);
   renderer.calls.length = 0;
-  const identity = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Parity', [KIND_HEADER]: 'fake' };
+  const identity = { [SUBJECT_HEADER]: USER, 'x-prep-display-name': 'Seed', [KIND_HEADER]: 'fake' };
   const send = (path: string, init: RequestInit = {}) => cell.fetch(req(path, { ...init, headers: { ...identity, ...(init.headers as Record<string, string>) } }));
   return {
     runner,

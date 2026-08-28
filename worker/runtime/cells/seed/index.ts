@@ -1,7 +1,6 @@
-// The parity seed profiles (prep/dev/parity_seed.py), written through the
-// repositories so ids and timestamps come out as Python's do. The e2e
-// profiles join them here: a cell has no database file to open, so what the
-// suite used to write with sqlite is a profile.
+// The seed profiles, written through the repositories so ids and timestamps
+// come out of the same code paths a real write does. A cell has no database
+// file to open, so a fixture is a profile rather than a dump.
 import type { Hasher, UserRepos } from '../../../app/ports.js';
 import { profileApiE2e } from './apiE2e.js';
 import { profileDeviceWipe } from './deviceWipe.js';
@@ -13,8 +12,8 @@ import { profileReader } from './reader.js';
 import { profileStudy } from './study.js';
 import { profileWorkflows } from './workflows.js';
 
-export const PARITY_TZ = 'America/New_York';
-export const PARITY_DISPLAY_NAME = 'Parity';
+export const SEED_TZ = 'America/New_York';
+export const SEED_DISPLAY_NAME = 'Seed';
 export const DEVICE_LABEL = 'iPhone';
 
 export interface Delta {
@@ -52,12 +51,12 @@ const ANONYMOUS_PROFILES: ReadonlySet<string> = new Set(['merge_anon']);
 
 export const isAnonymousProfile = (profile: string): boolean => ANONYMOUS_PROFILES.has(profile);
 
-/** The user row as `create_user` writes it: upserted with the parity name and
+/** The user row as `create_user` writes it: upserted with the seed name and
  * timezone, or an anonymous row for a visitor profile. */
 export function createUser(repos: UserRepos, user: string, profile = ''): void {
   if (isAnonymousProfile(profile)) repos.prefs.createAnonymous(user, 'Guest');
-  else repos.prefs.upsert(user, { email: user, displayName: PARITY_DISPLAY_NAME });
+  else repos.prefs.upsert(user, { email: user, displayName: SEED_DISPLAY_NAME });
   const prefs = repos.prefs.getNotificationPrefs();
-  prefs.tz = PARITY_TZ;
+  prefs.tz = SEED_TZ;
   repos.prefs.setNotificationPrefs(prefs);
 }

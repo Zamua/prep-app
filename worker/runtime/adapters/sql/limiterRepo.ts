@@ -31,7 +31,7 @@ export class SqlLimiterRepo {
     this.db = new Db(storage.sql);
   }
 
-  /** The whole ledger, for the parity seed: a durable limiter cell would
+  /** The whole ledger, for the seed: a durable limiter cell would
    * otherwise carry one run's spend into the next against a pinned clock. */
   wipe(): void {
     this.db.run('DELETE FROM instant_generations');

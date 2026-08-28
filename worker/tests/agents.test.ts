@@ -25,7 +25,7 @@ const LLM_FIXTURES = join(WORKER, 'tests', 'fixtures', 'llm');
 const FREE_ENV = {
   PREP_FREE_INFERENCE_BASE_URL: 'https://inference.example/v1',
   PREP_FREE_INFERENCE_API_KEY: 'free-key',
-  PREP_FREE_INFERENCE_MODEL: 'parity-model',
+  PREP_FREE_INFERENCE_MODEL: 'test-model',
 };
 
 // ---- fakes ------------------------------------------------------------------
@@ -129,7 +129,7 @@ describe('the chat-completions body', () => {
     expect(await agent().complete({ system: '', user: 'hello' })).toBe('answer');
     expect(sent).toHaveLength(1);
     expect(sent[0]!.url).toBe('https://inference.example/v1/chat/completions');
-    expect(sent[0]!.body).toEqual({ model: 'parity-model', max_tokens: 32768, messages: [{ role: 'user', content: 'hello' }] });
+    expect(sent[0]!.body).toEqual({ model: 'test-model', max_tokens: 32768, messages: [{ role: 'user', content: 'hello' }] });
     expect(sent[0]!.headers['Authorization']).toBe('Bearer free-key');
   });
 

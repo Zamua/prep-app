@@ -40,18 +40,18 @@ export interface Env extends InstantLimitEnv, ClerkVars, SecretVars, PublicServi
   JOB: DurableObjectNamespace;
   ASSETS: Fetcher;
   PREP_ENV: string;
-  /** Parity pins (docs/PARITY-GATE.md section 0): dev and the staging parity
-   * host only; the composition root refuses them on prod. */
-  PREP_PARITY_MODE?: string;
-  /** '1' silences the per-user alarm; honoured under parity mode only. */
-  PREP_PARITY_NO_PERIODIC?: string;
+  /** Test pins: dev and the staging host only; the composition root refuses
+   * them on prod. */
+  PREP_TEST_MODE?: string;
+  /** '1' silences the per-user alarm; honoured in test mode only. */
+  PREP_TEST_NO_PERIODIC?: string;
   PREP_FAKE_NOW?: string;
   PREP_BUILD_ID?: string;
   PREP_PLACEHOLDER_INDEX?: string;
   PREP_INTERNAL_TOKEN?: string;
-  /** Where the fake provider's sign-out points; unset means no sign-out row,
-   * which is what the tailnet shape and the recorded corpus have. */
-  PREP_PARITY_SIGN_OUT_URL?: string;
+  /** Where the fake provider's sign-out points; unset means no sign-out
+   * row, which is what the tailnet shape has. */
+  PREP_TEST_SIGN_OUT_URL?: string;
 }
 
 /** The instant limiter's windows; unset means the default. */

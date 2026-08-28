@@ -1,10 +1,9 @@
 import { insertCards, q } from './cards.js';
 import type { SeedContext } from './index.js';
 
-/** The import, export and split screens (`prep/dev/parity_seed.py`
- * `profile_io`). One SRS deck whose cards carry every field an export
- * writes, and one trivia deck, because the export hub is the only page that
- * renders differently for the two. */
+/** The import, export and split screens. One SRS deck whose cards carry
+ * every field an export writes, and one trivia deck, because the export hub
+ * is the only page that renders differently for the two. */
 export async function profileIo(ctx: SeedContext): Promise<Record<string, unknown>> {
   const { repos, at } = ctx;
   const decks = repos.decks;
