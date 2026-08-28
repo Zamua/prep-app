@@ -9,7 +9,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Directory, Sync } from '../../app/ports.js';
 import type { DirectoryUser, MergeAudit, MergeMarker, TombstoneReason } from '../../app/entities.js';
 import { reapIdleAnonymous } from '../../app/auth/reaper.js';
-import { isoUtc, parseIso } from '../../domain/py.js';
+import { isoUtc, parseIso } from '../../domain/time.js';
 import { MIGRATION_RECHECK_MS, migrationHolds } from '../../domain/reaper.js';
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';

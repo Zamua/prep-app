@@ -1,7 +1,6 @@
 // /settings/account: the delete-account flow. Only a provider with
 // first-class accounts has one; a proxy-supplied identity would just come
 // back on the next request, so the route 404s there.
-import { pyStrip } from '../../domain/py.js';
 import { notFound } from '../errors.js';
 import { page, type PageRequest, type PageResult } from '../pageResult.js';
 import type { UserRepos } from '../ports.js';
@@ -35,8 +34,8 @@ export function accountSettings(deps: AccountDeps): PageResult {
 
 export async function accountDelete(repos: UserRepos, req: PageRequest, deps: AccountDeps): Promise<PageResult> {
   const deleter = deleterFor(deps);
-  const expected = pyStrip(repos.prefs.get()?.tailscale_login ?? '');
-  if (pyStrip(req.form.get('confirm') ?? '') !== expected) return page('settings_account.html', { error: MISMATCH }, 400);
+  const expected = (repos.prefs.get()?.tailscale_login ?? '').trim();
+  if ((req.form.get('confirm') ?? '').trim() !== expected) return page('settings_account.html', { error: MISMATCH }, 400);
   try {
     await deleter.deleteUpstream(expected);
   } catch (e) {

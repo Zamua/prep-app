@@ -1,6 +1,5 @@
 // The card sets the profiles share, with the column pins each card takes.
 import type { NewQuestion, QuestionType } from '../../../app/entities.js';
-import { pyJsonDumps } from '../../../domain/py.js';
 import type { SeedContext } from './index.js';
 
 export interface CardPins {
@@ -31,7 +30,7 @@ export function capitalsCards(at: SeedContext['at']): SeedCard[] {
     ],
     [
       'multi',
-      q('multi', 'Which of these are national capitals?', pyJsonDumps(['Ottawa', 'Lima']), {
+      q('multi', 'Which of these are national capitals?', JSON.stringify(['Ottawa', 'Lima']), {
         choices: ['Ottawa', 'Toronto', 'Lima', 'Rio de Janeiro'],
         topic: 'americas',
       }),

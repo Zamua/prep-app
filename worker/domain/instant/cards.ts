@@ -1,6 +1,5 @@
 // Topic hygiene, the prompt, and the parse of model output into wire
 // cards. Lengths are code points.
-import { PY_SPACE, codePoints, pyStrip } from '../py';
 
 export const TOPIC_MAX_CHARS = 500;
 export const DISPLAY_NAME_MAX_CHARS = 60;
@@ -25,10 +24,9 @@ export interface InstantCard {
 /** `validateRegexUpdate(pattern, expectedLiteral)` of `domain/grading`. */
 export type RegexValidator = (pattern: unknown, expectedLiteral: string) => string | null;
 
-// Python `\s`: the str.isspace() set, not JS's.
-const SPACES = new RegExp(`[${PY_SPACE}]+`, 'g');
-const LEADING_FENCE = new RegExp(`^\`\`\`(?:json)?[${PY_SPACE}]*`, 'i');
-const TRAILING_FENCE = new RegExp(`[${PY_SPACE}]*\`\`\`[${PY_SPACE}]*$`);
+const SPACES = /\s+/g;
+const LEADING_FENCE = /^```(?:json)?\s*/i;
+const TRAILING_FENCE = /\s*```\s*$/;
 
 /**
  * Cleaned topic text, or null when unusable. Tabs and newlines become
@@ -36,7 +34,7 @@ const TRAILING_FENCE = new RegExp(`[${PY_SPACE}]*\`\`\`[${PY_SPACE}]*$`);
  */
 export function sanitizeTopic(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const chars = codePoints(raw);
+  const chars = [...raw];
   // Cleaning never grows the string: past twice the cap it cannot come back.
   if (chars.length > TOPIC_MAX_CHARS * 2) return null;
   let out = '';
@@ -44,14 +42,14 @@ export function sanitizeTopic(raw: unknown): string | null {
     if (ch === '\t' || ch === '\r' || ch === '\n') out += ' ';
     else if (!/\p{Cc}/u.test(ch)) out += ch;
   }
-  const cleaned = pyStrip(out);
-  if (!cleaned || codePoints(cleaned).length > TOPIC_MAX_CHARS) return null;
+  const cleaned = out.trim();
+  if (!cleaned || [...cleaned].length > TOPIC_MAX_CHARS) return null;
   return cleaned;
 }
 
 export function displayNameFor(topic: string): string {
-  const collapsed = pyStrip(topic.replace(SPACES, ' '));
-  return pyStrip(codePoints(collapsed).slice(0, DISPLAY_NAME_MAX_CHARS).join(''));
+  const collapsed = topic.replace(SPACES, ' ').trim();
+  return [...collapsed].slice(0, DISPLAY_NAME_MAX_CHARS).join('').trim();
 }
 
 // Derived from the trivia generation prompt, minus the explanation field
@@ -117,7 +115,7 @@ export function buildPrompt(topic: string): string {
  * leading note. Throws `QaParseError` when there is none.
  */
 export function parseQaPairs(stdout: string): unknown[] {
-  let text = pyStrip(stdout);
+  let text = stdout.trim();
   text = text.replace(LEADING_FENCE, '');
   text = text.replace(TRAILING_FENCE, '');
   const start = text.indexOf('[');
@@ -135,7 +133,7 @@ export function parseQaPairs(stdout: string): unknown[] {
 
 const isDict = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Python truthiness over JSON values. */
+/** Empty JSON values are falsey, containers included. */
 function truthy(v: unknown): boolean {
   if (v === null || v === undefined || v === false || v === 0 || v === '') return false;
   if (Array.isArray(v)) return v.length > 0;
@@ -153,10 +151,10 @@ export function extractCards(text: string, validateRegex: RegexValidator): Insta
   for (const raw of items) {
     if (cards.length === MAX_CARDS) break;
     if (!isDict(raw)) continue;
-    const q = typeof raw['q'] === 'string' ? pyStrip(raw['q']) : '';
-    const a = typeof raw['a'] === 'string' ? pyStrip(raw['a']) : '';
+    const q = typeof raw['q'] === 'string' ? raw['q'].trim() : '';
+    const a = typeof raw['a'] === 'string' ? raw['a'].trim() : '';
     if (!q || !a) continue;
-    if (codePoints(q).length > CARD_PROMPT_MAX_CHARS || codePoints(a).length > CARD_ANSWER_MAX_CHARS) continue;
+    if ([...q].length > CARD_PROMPT_MAX_CHARS || [...a].length > CARD_ANSWER_MAX_CHARS) continue;
     const r = raw['r'];
     cards.push({ prompt: q, answer: a, answer_regex: truthy(r) ? validateRegex(r, a) : null });
   }

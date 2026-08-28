@@ -2,7 +2,6 @@
 // prep/decks/service.py owns, minus the workflow orchestration (phase 4).
 import type { NewQuestion } from '../entities.js';
 import type { UserRepos } from '../ports.js';
-import { pyStrip } from '../../domain/py.js';
 
 /** A split refused for a reason the form re-renders verbatim. */
 export class SplitRejected extends Error {}
@@ -29,7 +28,7 @@ export async function splitDeck(
   repos: UserRepos,
   input: { sourceDeckId: number; newDeckName: string; questionIds: readonly number[]; newTopicPrompt: string | null },
 ): Promise<number> {
-  const cleaned = pyStrip(input.newDeckName || '');
+  const cleaned = (input.newDeckName || '').trim();
   if (!cleaned) throw new SplitRejected('new deck name is required');
   if (!input.questionIds.length) throw new SplitRejected('select at least one card to move');
   if (repos.decks.findId(cleaned) !== null) throw new SplitRejected(`a deck named "${cleaned}" already exists`);
@@ -37,7 +36,7 @@ export async function splitDeck(
   const sourceType = repos.decks.getType(input.sourceDeckId);
   if (sourceType === null) throw new SplitRejected('source deck not found');
 
-  const topicPrompt = pyStrip(input.newTopicPrompt ?? '') || null;
+  const topicPrompt = (input.newTopicPrompt ?? '').trim() || null;
   let newId: number;
   if (sourceType === 'trivia') {
     const src = repos.decks.getTriviaSourceMeta(input.sourceDeckId);

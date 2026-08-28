@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { llmStep, writeStep } from '../../app/jobs/registry.js';
 import type { StepGraph } from '../../domain/jobs/graph.js';
 import { DurabilityUnproven, MAX_DELIVERY_ATTEMPTS, MAX_REFUSALS } from '../../domain/jobs/refusal.js';
-import { isoUtc } from '../../domain/py.js';
+import { isoUtc } from '../../domain/time.js';
 import { jobHarness, seedOwner, type JobHarness } from './harness.js';
 import { MutableClock, USER } from '../repos/setup.js';
 

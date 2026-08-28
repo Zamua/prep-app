@@ -1,6 +1,5 @@
 // The synchronous grader: mcq, multi and "I don't know", plus the regex
 // half of short-answer grading. Free text is graded elsewhere.
-import { codePoints, pyStrip } from '../py';
 import { JsonDecodeError, PyTypeError, loads, sameSet, toSet, type PyScalar } from './pyjson';
 import { GradingError, pyReprList, pySorted } from './pyrepr';
 import { matchRegex } from './regex';
@@ -34,7 +33,7 @@ export function grade(question: Question, userAnswer: string, idk = false): Grad
     return {
       result: 'wrong',
       feedback: IDK_FEEDBACK,
-      model_answer_summary: codePoints(answerText(question)).slice(0, 400).join(''),
+      model_answer_summary: [...answerText(question)].slice(0, 400).join(''),
     };
   }
   const qtype = question.type;
@@ -44,7 +43,7 @@ export function grade(question: Question, userAnswer: string, idk = false): Grad
 }
 
 function gradeMcq(question: Question, userAnswer: string): GradeResult {
-  const correct = pyStrip(userAnswer || '') === pyStrip(answerText(question));
+  const correct = (userAnswer || '').trim() === answerText(question).trim();
   return {
     result: correct ? 'right' : 'wrong',
     feedback: correct ? 'Correct.' : 'Wrong choice.',

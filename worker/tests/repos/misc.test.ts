@@ -152,7 +152,7 @@ describe('PrefsRepo', () => {
     expect(repos.prefs.upsert('u', { displayName: 'New' }).display_name).toBe('New');
   });
 
-  it('notification prefs merge over the defaults and store Python-shaped JSON', () => {
+  it('notification prefs merge over the defaults and store as JSON', () => {
     const { repos, storage } = cell();
     expect(repos.prefs.getNotificationPrefs()).toEqual(DEFAULT_NOTIFICATION_PREFS);
     const prefs = repos.prefs.getNotificationPrefs();
@@ -160,7 +160,7 @@ describe('PrefsRepo', () => {
     prefs.mode = 'digest';
     repos.prefs.setNotificationPrefs(prefs);
     expect(storage.rows('profile')[0]?.['notification_prefs']).toBe(
-      '{"mode": "digest", "digest_hour": 9, "tz": "Europe/Paris", "threshold": 3, "quiet_hours_enabled": false, "quiet_start_hour": 22, "quiet_end_hour": 8, "last_digest_date": null, "last_when_ready_at": null}',
+      '{"mode":"digest","digest_hour":9,"tz":"Europe/Paris","threshold":3,"quiet_hours_enabled":false,"quiet_start_hour":22,"quiet_end_hour":8,"last_digest_date":null,"last_when_ready_at":null}',
     );
     expect(repos.prefs.getNotificationPrefs()).toEqual({ ...DEFAULT_NOTIFICATION_PREFS, tz: 'Europe/Paris', mode: 'digest' });
   });

@@ -5,7 +5,7 @@
 // only the batch caps are a parse-level rule.
 import { RowCapReached } from '../../domain/limits.js';
 import { validateRegexUpdate } from '../../domain/grading/index.js';
-import { IsoFormatError, parseIso } from '../../domain/py.js';
+import { IsoFormatError, parseIso } from '../../domain/time.js';
 import type { ReviewResult } from '../entities.js';
 import { SyncItemRejected, type Clock, type UserRepos } from '../ports.js';
 import { listTooLong, listType, modelAttributesType, RequestValidationError, type PydanticError } from '../validation.js';

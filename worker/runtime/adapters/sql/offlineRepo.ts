@@ -6,7 +6,7 @@ import { DeckNameTaken, SyncItemRejected } from '../../../app/ports.js';
 import type { ReviewResult, SnapshotCard, SnapshotDeck } from '../../../app/entities.js';
 import { scheduleReview, stepForStability, type Fuzz, type FsrsStateValue } from '../../../domain/fsrs/index.js';
 import { INBOX_DECK_NAME, MAX_DECK_SLUG_ATTEMPTS, slugForDeckName } from '../../../domain/offline/slug.js';
-import { parseIso } from '../../../domain/py.js';
+import { parseIso } from '../../../domain/time.js';
 import { refuseOverRowCap } from './caps.js';
 import { decodeChoices } from './questionRepo.js';
 import { Db, type CellStorage } from './storage.js';

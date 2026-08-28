@@ -13,7 +13,7 @@ import { agentAvailable } from '../../../app/pageContext.js';
 import * as study from '../../../app/study/api.js';
 import { gradingPoll } from '../../../app/study/grading.js';
 import { jsonInvalid, pythonJsonError, RequestValidationError } from '../../../app/validation.js';
-import { isoUtc } from '../../../domain/py.js';
+import { isoUtc } from '../../../domain/time.js';
 import type { CellRequest, Handled, Route } from '../router.js';
 
 /** A body pydantic would have parsed: a decode failure is the model's 422. */

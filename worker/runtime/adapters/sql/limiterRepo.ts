@@ -9,7 +9,7 @@ import {
   type GenerationRow,
   type Limits,
 } from '../../../domain/instant/limiter.js';
-import { parseIso } from '../../../domain/py.js';
+import { parseIso } from '../../../domain/time.js';
 import { Db, type CellStorage } from './storage.js';
 import { DAY_MS, isoUtc, shifted } from './time.js';
 

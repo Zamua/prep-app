@@ -9,7 +9,6 @@ import { agentAvailable } from '../pageContext.js';
 import { page, redirect, type PageRequest, type PageResult } from '../pageResult.js';
 import type { Question } from '../entities.js';
 import type { UserRepos, WorkflowRunner } from '../ports.js';
-import { pyStrip } from '../../domain/py.js';
 import { flatten, gone } from '../jobs/view.js';
 import { NO_FUNDING, pyInt } from './pages.js';
 import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
@@ -220,7 +219,7 @@ export async function transformReject(repos: UserRepos, req: PageRequest, deps: 
 
 export async function deckTransform(repos: UserRepos, req: PageRequest, deps: TransformDeps): Promise<PageResult> {
   const name = req.params['name'] ?? '';
-  const prompt = pyStrip(req.form.get('prompt') ?? '');
+  const prompt = (req.form.get('prompt') ?? '').trim();
   if (!prompt) throw badRequest('empty prompt');
   // The deck is materialised first, as Python does: a transform names a
   // deck that may not have rows yet.
@@ -258,7 +257,7 @@ export function reorganizeForm(repos: UserRepos): PageResult {
 }
 
 export async function reorganizeSubmit(repos: UserRepos, req: PageRequest, deps: TransformDeps): Promise<PageResult> {
-  const prompt = pyStrip(req.form.get('prompt') ?? '');
+  const prompt = (req.form.get('prompt') ?? '').trim();
   if (!prompt) throw badRequest('empty prompt');
   // Unlike the deck and card starts, an unfunded reorganize re-renders its
   // own form with the refusal rather than throwing the error page.

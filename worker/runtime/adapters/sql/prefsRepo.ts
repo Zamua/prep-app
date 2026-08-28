@@ -9,7 +9,6 @@ import {
   type Profile,
   type ProfileClaims,
 } from '../../../app/entities.js';
-import { pyJsonDumps, type JsonValue } from '../../../domain/py.js';
 import { accountRows } from './caps.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow } from './time.js';
@@ -109,7 +108,7 @@ export class SqlPrefsRepo implements PrefsRepo {
   }
 
   setNotificationPrefs(prefs: NotificationPrefs): void {
-    this.db.run('UPDATE profile SET notification_prefs = ?', pyJsonDumps(prefs as unknown as JsonValue));
+    this.db.run('UPDATE profile SET notification_prefs = ?', JSON.stringify(prefs));
   }
 
   getActiveByokProvider(): string | null {

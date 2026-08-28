@@ -9,7 +9,7 @@ import { externalIdFromBytes, ID_BYTES } from '../../domain/anonCookie.js';
 import { validateRegexUpdate } from '../../domain/grading/index.js';
 import { buildPrompt, displayNameFor, extractCards, sanitizeTopic } from '../../domain/instant/index.js';
 import { RowCapReached } from '../../domain/limits.js';
-import { codePoints, isoUtc } from '../../domain/py.js';
+import { isoUtc } from '../../domain/time.js';
 import { AgentBusy, AgentTimeout, type AgentPort, type Clock, type Directory, type Limiter, type Random, type UserCells } from '../ports.js';
 
 export const ANON_DISPLAY_NAME = 'Guest';
@@ -76,7 +76,7 @@ export async function generateInstantDeck(deps: InstantDeps, req: InstantRequest
   const at = isoUtc(deps.clock.now());
   let gate;
   try {
-    gate = await deps.limiter.reserve({ ip: req.ip, topicChars: codePoints(topic).length, userId: req.userId, userIsAnonymous: req.userIsAnonymous, at });
+    gate = await deps.limiter.reserve({ ip: req.ip, topicChars: [...topic].length, userId: req.userId, userIsAnonymous: req.userIsAnonymous, at });
   } catch {
     return refusal(429, 'busy');
   }

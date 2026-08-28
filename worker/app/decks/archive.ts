@@ -1,10 +1,8 @@
-// The `.prepdeck` archive, transcribed from prep/decks/archive.py. A zip of
-// meta.json plus cards.csv, reviews.csv and, for a trivia deck,
-// trivia_queue.csv. Unlike the plain CSV it carries FSRS state, the review
-// log and the queue, so an import restores a deck rather than appending to
-// one. `prompt` is the join key across the three CSVs because a restore
-// assigns fresh question ids.
-import { pyFormatG, pyJsonDumpsIndent, pyStrip, type JsonValue } from '../../domain/py.js';
+// The `.prepdeck` archive: a zip of meta.json plus cards.csv, reviews.csv
+// and, for a trivia deck, trivia_queue.csv. Unlike the plain CSV it carries
+// FSRS state, the review log and the queue, so an import restores a deck
+// rather than appending to one. `prompt` is the join key across the three
+// CSVs because a restore assigns fresh question ids.
 import { pyRepr, pyReprList } from '../../domain/grading/pyrepr.js';
 import { parseDict, writeRow } from '../api/csv.js';
 import { CSV_COLUMNS, questionToRow, questionsForExport, type DeckIoRepos } from '../api/deckIo.js';
@@ -33,12 +31,25 @@ const REQUIRED_ENTRIES = ['cards.csv', 'meta.json', 'reviews.csv'] as const;
  * compressed, the way one `zf.read(name)` per entry leaves it. */
 const ARCHIVE_ENTRIES = [...REQUIRED_ENTRIES, 'trivia_queue.csv'] as const;
 
+interface ArchiveMeta {
+  format_version: number;
+  exported_at: string;
+  deck: {
+    name: string | null;
+    deck_type: string;
+    context_prompt: string | null;
+    notification_interval_minutes: number | null;
+    trivia_session_size: number;
+    desired_retention: number | null;
+  };
+}
+
 const enc = new TextEncoder();
 const dec = new TextDecoder('utf-8');
 
 // ---- export ---------------------------------------------------------------
 
-function buildMeta(repos: UserRepos, deckId: number, exportedAt: string): JsonValue {
+function buildMeta(repos: UserRepos, deckId: number, exportedAt: string): ArchiveMeta {
   const deckType = repos.decks.getType(deckId);
   if (deckType === null) throw new Error(`deck ${deckId} not found`);
   const meta = repos.decks.getMeta(deckId);
@@ -56,8 +67,8 @@ function buildMeta(repos: UserRepos, deckId: number, exportedAt: string): JsonVa
   };
 }
 
-const stateCell = (v: number | null | undefined): string => (v === null || v === undefined ? '' : String(v));
-const floatCell = (v: number | null | undefined): string => (v === null || v === undefined ? '' : pyFormatG(v, 6));
+/** A number column; an unset one is an empty cell the reader tolerates. */
+const numCell = (v: number | null | undefined): string => (v === null || v === undefined ? '' : String(v));
 
 function cardsCsv(repos: DeckIoRepos & { cards: CardRepo }, deckId: number): string {
   const questions = questionsForExport(repos, deckId);
@@ -69,12 +80,12 @@ function cardsCsv(repos: DeckIoRepos & { cards: CardRepo }, deckId: number): str
     const s = stateByPrompt.get(q.prompt);
     out += writeRow([
       ...questionToRow(q),
-      stateCell(s?.step),
+      numCell(s?.step),
       s?.next_due || '',
       s?.last_review || '',
-      floatCell(s?.stability),
-      floatCell(s?.difficulty),
-      stateCell(s?.fsrs_state),
+      numCell(s?.stability),
+      numCell(s?.difficulty),
+      numCell(s?.fsrs_state),
     ]);
   }
   return out;
@@ -102,12 +113,11 @@ function triviaQueueCsv(repos: UserRepos, deckId: number): string {
 }
 
 /** meta.json, cards.csv, reviews.csv, then trivia_queue.csv for a trivia
- * deck. The order is part of the format: the reader takes entries by name,
- * but the byte gate compares the archive whole. */
+ * deck. Readers take entries by name, so the order is a convention. */
 export function deckToPrepdeck(repos: UserRepos, deckId: number, zip: ZipCodec, exportedAt: string): Uint8Array {
   const meta = buildMeta(repos, deckId, exportedAt);
   const entries: ZipEntry[] = [
-    { name: 'meta.json', bytes: enc.encode(pyJsonDumpsIndent(meta, 2, true) + '\n') },
+    { name: 'meta.json', bytes: enc.encode(JSON.stringify(meta, null, 2) + '\n') },
     { name: 'cards.csv', bytes: enc.encode(cardsCsv(repos, deckId)) },
     { name: 'reviews.csv', bytes: enc.encode(reviewsCsv(repos.reviews, deckId)) },
   ];
@@ -140,7 +150,7 @@ const fail = (deckName: string, error: string): PrepdeckImportOutcome => ({
   errors: [error],
 });
 
-const cell = (row: Record<string, string | null>, name: string): string => pyStrip(row[name] ?? '');
+const cell = (row: Record<string, string | null>, name: string): string => (row[name] ?? '').trim();
 
 /**
  * Restore an archive into a deck named `deckName`, which must not exist:
@@ -285,7 +295,7 @@ function importCards(
     }
     // The fallback reads the raw cell, so a whitespace-only one stays truthy
     // and strips to a type no `QuestionType` names.
-    const typeRaw = pyStrip((row['type'] ?? '') || 'short').toLowerCase();
+    const typeRaw = ((row['type'] ?? '') || 'short').trim().toLowerCase();
     if (!QUESTION_TYPES.includes(typeRaw)) {
       errors.push(`cards.csv row ${i}: unknown type ${pyRepr(row['type'] ?? null)}`);
       continue;
@@ -297,7 +307,7 @@ function importCards(
     }
     const choices = cell(row, 'choices')
       .split(/\r\n|\r|\n/)
-      .map(pyStrip)
+      .map((s) => s.trim())
       .filter(Boolean);
     const question: NewQuestion = {
       type: typeRaw as QuestionType,
@@ -388,7 +398,7 @@ function importReviews(repos: UserRepos, csvText: string, qidByPrompt: Map<strin
 function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<string, number>, errors: string[], rowCap: number | undefined): number {
   const { rows } = parseDict(csvText);
   const pos = (row: Record<string, string | null>): number => {
-    const raw = pyStrip(row['queue_position'] ?? '') || '0';
+    const raw = (row['queue_position'] ?? '').trim() || '0';
     return /^[+-]?\d+$/.test(raw) ? Number(raw) : 0;
   };
   // Sorted so the rotation order survives, then numbered from row 2 the way
@@ -411,12 +421,12 @@ function importTriviaQueue(repos: UserRepos, csvText: string, qidByPrompt: Map<s
       errors.push(`trivia_queue.csv row ${i}: prompt ${pyRepr(prompt.slice(0, 40))} not in deck`);
       continue;
     }
-    const rawPos = pyStrip(row['queue_position'] ?? '') || '0';
+    const rawPos = (row['queue_position'] ?? '').trim() || '0';
     if (!/^[+-]?\d+$/.test(rawPos)) {
       errors.push(`trivia_queue.csv row ${i}: bad queue_position`);
       continue;
     }
-    const lacRaw = pyStrip(row['last_answered_correctly'] ?? '');
+    const lacRaw = (row['last_answered_correctly'] ?? '').trim();
     let lastAnsweredCorrectly: number | null = null;
     if (lacRaw !== '') {
       if (!/^[+-]?\d+$/.test(lacRaw)) {

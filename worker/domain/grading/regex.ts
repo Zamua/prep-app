@@ -1,8 +1,6 @@
-// Python `re` answer patterns run through a u-flag RegExp. A pattern is
-// translated where the two dialects spell one thing differently, refused
-// (null) where they would silently disagree, and otherwise left to the
-// engine, which throws on the escapes only re knows.
-import { PY_SPACE, codePoints, pyStrip } from '../py';
+// Answer patterns are authored in the `re` dialect, so they run through a
+// u-flag RegExp only after a pass that rewrites what the two dialects spell
+// differently and refuses (null) what they would grade differently.
 
 export const MAX_REGEX_LEN = 500;
 
@@ -37,23 +35,21 @@ interface Group {
 
 /**
  * One pass over the pattern. Translated: `(?P<n>` to `(?<n>`, `(?P=n)` to
- * `\k<n>`, `\s` and `\S` to the str.isspace() class, escaped punctuation
- * to bare, one leading `(?i)`/`(?s)` group dropped (both flags are always
- * on). Refused: JS-only syntax re rejects (`(?<n>`, `\k`, `\p`, `\P`,
- * `\c`, `\u{`, `[]`, `[^]`), scoped flag groups, lookbehind (re wants it
- * fixed-width), a reused group name, a reference to a group that may be
- * unset, a multi-digit `\NN`, an escaped surrogate, `\S` or a
- * range-adjacent `\s` in a class, and every other `(?` extension, which
- * one engine or the other lacks.
+ * `\k<n>`, escaped punctuation to bare, one leading `(?i)`/`(?s)` group
+ * dropped (both flags are always on). Refused: JS-only syntax re rejects
+ * (`(?<n>`, `\k`, `\p`, `\P`, `\c`, `\u{`, `[]`, `[^]`), scoped flag
+ * groups, lookbehind (re wants it fixed-width), a reused group name, a
+ * reference to a group that may be unset, a multi-digit `\NN`, an escaped
+ * surrogate, and every other `(?` extension, which one engine or the other
+ * lacks.
  */
 function scan(pattern: string): Scanned | null {
-  const cps = codePoints(pattern);
+  const cps = [...pattern];
   let out = '';
   let shorthand = false;
   let emptyDiverges = false;
   let inClass = false;
   let classOpen = false; // just after "[" or "[^", where re takes "]" literally
-  let afterRangeDash = false; // in a class, just after a "-" that joins a range
   const groups: Group[] = [];
   const named = new Map<string, Group>();
   const open: (Group | null)[] = [];
@@ -65,18 +61,9 @@ function scan(pattern: string): Scanned | null {
       if (next === undefined) return null;
       i++;
       classOpen = false;
-      afterRangeDash = false;
       if (isDigit(next) && next !== '0') {
         if (isDigit(cps[i + 1]) || !refOk(groups[Number(next) - 1])) return null;
         out += '\\' + next;
-      } else if (next === 's' || next === 'S') {
-        if (!inClass) {
-          out += next === 's' ? `[${PY_SPACE}]` : `[^${PY_SPACE}]`;
-        } else if (next === 'S' || afterRangeDash || (cps[i + 1] === '-' && cps[i + 2] !== ']')) {
-          return null;
-        } else {
-          out += PY_SPACE;
-        }
       } else if (isAsciiAlnum(next)) {
         if ('pPkc'.includes(next) || (next === 'u' && (cps[i + 1] === '{' || isSurrogateHex(cps.slice(i + 1, i + 5))))) return null;
         if ('wWbBdD'.includes(next)) shorthand = true;
@@ -94,7 +81,6 @@ function scan(pattern: string): Scanned | null {
         if (classOpen) return null;
         inClass = false;
       }
-      afterRangeDash = c === '-' && !classOpen && cps[i + 1] !== ']';
       classOpen = false;
       out += c;
       continue;
@@ -102,7 +88,6 @@ function scan(pattern: string): Scanned | null {
     if (c === '[') {
       inClass = true;
       classOpen = true;
-      afterRangeDash = false;
       out += '[';
       if (cps[i + 1] === '^') {
         out += '^';
@@ -202,8 +187,8 @@ function trusted(scanned: Scanned, pattern: string, subjects: string[]): boolean
  */
 export function matchRegex(pattern: unknown, given: unknown): boolean | null {
   if (typeof pattern !== 'string' || pattern === '') return null;
-  if (codePoints(pattern).length > MAX_REGEX_LEN) return null;
-  const answer = pyStrip(String(given ?? ''));
+  if ([...pattern].length > MAX_REGEX_LEN) return null;
+  const answer = String(given ?? '').trim();
   const scanned = scan(pattern);
   if (!scanned || !trusted(scanned, pattern, [answer])) return null;
   const re = compileFull(scanned.source);
@@ -221,10 +206,10 @@ export function validateRegexUpdate(
   priorGiven: string | null = null,
 ): string | null {
   if (typeof pattern !== 'string' || pattern === '') return null;
-  const stripped = pyStrip(pattern);
-  if (stripped === '' || codePoints(stripped).length > MAX_REGEX_LEN) return null;
-  const subjects = [pyStrip(expectedLiteral ?? '')];
-  if (priorGiven !== null) subjects.push(pyStrip(priorGiven));
+  const stripped = pattern.trim();
+  if (stripped === '' || [...stripped].length > MAX_REGEX_LEN) return null;
+  const subjects = [(expectedLiteral ?? '').trim()];
+  if (priorGiven !== null) subjects.push(priorGiven.trim());
   const scanned = scan(stripped);
   if (!scanned || !trusted(scanned, stripped, subjects)) return null;
   const re = compileFull(scanned.source);

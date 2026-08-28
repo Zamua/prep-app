@@ -2,7 +2,6 @@
 // mini-session whose queue rides in the URL, and the per-deck settings the
 // notif-edit popover posts to.
 import { formatDone, flipDoneVerdict, parseCardIds, parseDone, type DoneItem } from '../../domain/trivia.js';
-import { pyStrip } from '../../domain/py.js';
 import { DurationError, parseUntil } from '../durations.js';
 import type { Question } from '../entities.js';
 import { badRequest, notFound } from '../errors.js';
@@ -75,7 +74,7 @@ export async function triviaSession(req: PageRequest, deps: TriviaDeps): Promise
     // the user just tapped a notification and is waiting to study.
     const freshTarget = Math.max(1, Math.floor(targetSize / 2));
     if (repos.trivia.countUnanswered(id) < freshTarget) {
-      const topic = pyStrip(repos.decks.getContextPrompt(deckName) || deckName);
+      const topic = (repos.decks.getContextPrompt(deckName) || deckName).trim();
       if (topic) {
         try {
           await deps.runner.start('TriviaGenerate', triviaStartInput(repos, id, deckName, topic, deps.freeTierConfigured));
@@ -181,7 +180,7 @@ export function triviaSessionAbandon(req: PageRequest, deps: TriviaDeps): PageRe
 
 export function triviaSessionSnooze(req: PageRequest, deps: TriviaDeps): PageResult {
   const id = deckIdOf(deps.repos, req.params['deck_name']!);
-  const preset = pyStrip(req.form.get('preset') ?? '').toLowerCase();
+  const preset = (req.form.get('preset') ?? '').trim().toLowerCase();
   if (preset === 'wake') {
     deps.repos.trivia.snoozeActiveForDeck(id, null);
     return redirect('/');

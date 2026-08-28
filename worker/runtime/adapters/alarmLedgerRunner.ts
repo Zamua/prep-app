@@ -7,7 +7,7 @@ import { deliverJobStatus } from '../../app/jobs/status.js';
 import type { NotifyDeps } from '../../app/notify/routes.js';
 import type { Clock, JobCells, JobInputs, JobKind, JobStatus, JobStatusWrite, JobTransition, Random, WorkflowRunner } from '../../app/ports.js';
 import { gradeId, planId, SUFFIX_HEX_CHARS, transformId, triviaId } from '../../domain/jobs/ids.js';
-import { isoUtc } from '../../domain/py.js';
+import { isoUtc } from '../../domain/time.js';
 import { hex } from './random.js';
 
 export interface RunnerDeps {

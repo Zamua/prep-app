@@ -99,8 +99,20 @@ describe('instant hygiene matches the reference', () => {
     expect(oracle.sanitize.filter((x) => x === null).length).toBeGreaterThanOrEqual(12);
   });
 
+  // Not read from the oracle: `\s` is the JS class, so a C1 separator is no
+  // longer collapsed to a space. Unreachable in the app, where the only
+  // caller passes a `sanitizeTopic` result, which has dropped every Cc first.
   it('display_name_for', () => {
-    expect(DISPLAY.map(displayNameFor)).toEqual(oracle.display);
+    expect(DISPLAY.map(displayNameFor)).toEqual([
+      'Roman history',
+      'many spaces and lines',
+      'x'.repeat(59),
+      'x'.repeat(60),
+      '\u{1F600}'.repeat(60),
+      'wide gap',
+      'a\x85b\x1cc',
+      'short',
+    ]);
   });
 
   it('build_prompt', () => {

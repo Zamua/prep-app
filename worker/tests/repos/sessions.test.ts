@@ -56,7 +56,7 @@ describe('SessionRepo', () => {
     expect(c.repos.sessions.recordAnswerSync(sid, ids[0]!, 2, 'a', verdict, state)).toBe(3);
     const answered = c.repos.sessions.get(sid)!;
     expect(answered).toMatchObject({ state: 'showing-result', current_draft: null, last_answered_qid: ids[0], last_answered_verdict: verdict, last_answered_state: state, version: 3 });
-    expect(c.storage.rows('study_sessions')[0]?.['last_answered_verdict']).toBe('{"result": "right", "feedback": "ok"}');
+    expect(c.storage.rows('study_sessions')[0]?.['last_answered_verdict']).toBe('{"result":"right","feedback":"ok"}');
     expect(c.storage.rows('study_session_answers')).toEqual([{ session_id: sid, question_id: ids[0], answered_at: '2026-03-14T15:00:00+00:00', result: 'right', workflow_id: null }]);
     expect(c.repos.sessions.advance(sid, 3)).toBe(4);
     expect(c.repos.sessions.get(sid)).toMatchObject({ state: 'awaiting-answer', current_question_id: ids[1], last_answered_qid: null, last_answered_verdict: null });

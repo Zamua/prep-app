@@ -4,7 +4,6 @@ import type { Clock, QuestionRepo } from '../../../app/ports.js';
 import { QuestionNotFound } from '../../../app/ports.js';
 import type { DeckCard, NewQuestion, Question, QuestionType } from '../../../app/entities.js';
 import { transformCard, type TransformCard } from '../../../domain/jobs/snapshot.js';
-import { pyJsonDumps } from '../../../domain/py.js';
 import { refuseOverRowCap } from './caps.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow } from './time.js';
@@ -71,13 +70,13 @@ function rowToDeckCard(r: Row): DeckCard {
 
 /** The column forms of a `NewQuestion`: a `multi` answer list as JSON, a rubric list as bullets. */
 function columnsOf(q: NewQuestion) {
-  const answer = Array.isArray(q.answer) ? pyJsonDumps(q.answer) : q.answer;
+  const answer = Array.isArray(q.answer) ? JSON.stringify(q.answer) : q.answer;
   const rubric = Array.isArray(q.rubric) ? q.rubric.map((b) => `- ${b}`).join('\n') : (q.rubric ?? null);
   const isCode = q.type === 'code';
   return {
     answer,
     rubric,
-    choices: q.choices && q.choices.length ? pyJsonDumps(q.choices) : null,
+    choices: q.choices && q.choices.length ? JSON.stringify(q.choices) : null,
     skeleton: isCode && q.skeleton ? q.skeleton : null,
     language: isCode ? (q.language ?? null) : null,
   };

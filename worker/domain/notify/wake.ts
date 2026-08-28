@@ -6,7 +6,7 @@
 // the cross-user walk each opened with. A five-minute tick could decline to
 // act and simply come back; an alarm cannot, so every path that declines
 // names the instant it wants instead.
-import { isoUtc, parseIso } from '../py.js';
+import { isoUtc, parseIso } from '../time.js';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;

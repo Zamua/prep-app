@@ -1,6 +1,5 @@
 // URL-encoded trivia session state: the remaining queue (`?cards=1,2,3`)
 // and the verdict chain (`?done=1r,2w`).
-import { pyStrip } from './py';
 
 export type DoneVerdict = 'r' | 'w';
 export type DoneItem = readonly [qid: number, verdict: DoneVerdict];
@@ -19,7 +18,7 @@ export function parseCardIds(raw: string | null | undefined): number[] {
   if (!raw) return [];
   const out: number[] = [];
   for (const chunk of raw.split(',')) {
-    const s = pyStrip(chunk);
+    const s = chunk.trim();
     if (!ID.test(s)) continue;
     const id = safeId(s);
     if (id !== null) out.push(id);
@@ -32,7 +31,7 @@ export function parseDone(raw: string | null | undefined): DoneItem[] {
   if (!raw) return [];
   const out: DoneItem[] = [];
   for (const chunk of raw.split(',')) {
-    const m = DONE.exec(pyStrip(chunk));
+    const m = DONE.exec(chunk.trim());
     if (!m) continue;
     const id = safeId(m[1]!);
     if (id !== null) out.push([id, m[2] as DoneVerdict]);

@@ -584,7 +584,7 @@
        "type": "short"
       },
       {
-       "answer": "[\"Ottawa\", \"Lima\"]",
+       "answer": "[\"Ottawa\",\"Lima\"]",
        "answer_regex": null,
        "choices": [
         "Ottawa",
@@ -1468,7 +1468,7 @@
     "json": {
      "answer": "[\"Ottawa\"]",
      "card": {
-      "answer": "[\"Ottawa\", \"Lima\"]",
+      "answer": "[\"Ottawa\",\"Lima\"]",
       "choices": [
        "Ottawa",
        "Toronto",
@@ -4076,7 +4076,7 @@
        "type": "short"
       },
       {
-       "answer": "[\"Ottawa\", \"Lima\"]",
+       "answer": "[\"Ottawa\",\"Lima\"]",
        "answer_regex": null,
        "choices": [
         "Ottawa",
@@ -4194,7 +4194,7 @@
     "location": null,
     "set_cookie": [],
     "status": 200,
-    "text": "type,topic,prompt,answer,choices,rubric,skeleton,language,answer_regex,explanation\r\nmcq,oceania,Which city is the capital of Australia?,Canberra,\"Sydney\nCanberra\nMelbourne\nPerth\",,,,,\r\nshort,africa,Capital of Kenya?,Nairobi,,,,,(?i)^\\s*nairobi\\s*$,\r\nmulti,americas,Which of these are national capitals?,\"[\"\"Ottawa\"\", \"\"Lima\"\"]\",\"Ottawa\nToronto\nLima\nRio de Janeiro\",,,,,\r\ncode,python,\"Return the capital for a country code from `table`, or `None` when unknown.\",\"def capital(code, table):\n    return table.get(code)\n\",,\"- Uses dict.get\n- Returns None on a miss\",\"def capital(code, table):\n    ...\n\",python,,\r\nshort,americas,Capital of Peru?,Lima,,,,,,\r\nshort,africa,Capital of Ghana?,Accra,,,,,,\r\nshort,,Capital of Sweden?,Stockholm,,,,,,\r\n"
+    "text": "type,topic,prompt,answer,choices,rubric,skeleton,language,answer_regex,explanation\r\nmcq,oceania,Which city is the capital of Australia?,Canberra,\"Sydney\nCanberra\nMelbourne\nPerth\",,,,,\r\nshort,africa,Capital of Kenya?,Nairobi,,,,,(?i)^\\s*nairobi\\s*$,\r\nmulti,americas,Which of these are national capitals?,\"[\"\"Ottawa\"\",\"\"Lima\"\"]\",\"Ottawa\nToronto\nLima\nRio de Janeiro\",,,,,\r\ncode,python,\"Return the capital for a country code from `table`, or `None` when unknown.\",\"def capital(code, table):\n    return table.get(code)\n\",,\"- Uses dict.get\n- Returns None on a miss\",\"def capital(code, table):\n    ...\n\",python,,\r\nshort,americas,Capital of Peru?,Lima,,,,,,\r\nshort,africa,Capital of Ghana?,Accra,,,,,,\r\nshort,,Capital of Sweden?,Stockholm,,,,,,\r\n"
    }
   },
   {
@@ -5122,7 +5122,7 @@
      "result": {
       "content": [
        {
-        "text": "{\n  \"deck\": \"world-capitals\",\n  \"cards\": [\n    {\n      \"type\": \"mcq\",\n      \"topic\": \"oceania\",\n      \"prompt\": \"Which city is the capital of Australia?\",\n      \"answer\": \"Canberra\",\n      \"choices\": [\n        \"Sydney\",\n        \"Canberra\",\n        \"Melbourne\",\n        \"Perth\"\n      ],\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": \"africa\",\n      \"prompt\": \"Capital of Kenya?\",\n      \"answer\": \"Nairobi\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": \"(?i)^\\\\s*nairobi\\\\s*$\",\n      \"explanation\": null\n    },\n    {\n      \"type\": \"multi\",\n      \"topic\": \"americas\",\n      \"prompt\": \"Which of these are national capitals?\",\n      \"answer\": \"[\\\"Ottawa\\\", \\\"Lima\\\"]\",\n      \"choices\": [\n        \"Ottawa\",\n        \"Toronto\",\n        \"Lima\",\n        \"Rio de Janeiro\"\n      ],\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"code\",\n      \"topic\": \"python\",\n      \"prompt\": \"Return the capital for a country code from `table`, or `None` when unknown.\",\n      \"answer\": \"def capital(code, table):\\n    return table.get(code)\\n\",\n      \"choices\": null,\n      \"rubric\": \"- Uses dict.get\\n- Returns None on a miss\",\n      \"skeleton\": \"def capital(code, table):\\n    ...\\n\",\n      \"language\": \"python\",\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": \"americas\",\n      \"prompt\": \"Capital of Peru?\",\n      \"answer\": \"Lima\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": \"africa\",\n      \"prompt\": \"Capital of Ghana?\",\n      \"answer\": \"Accra\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": null,\n      \"prompt\": \"Capital of Sweden?\",\n      \"answer\": \"Stockholm\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    }\n  ]\n}",
+        "text": "{\n  \"deck\": \"world-capitals\",\n  \"cards\": [\n    {\n      \"type\": \"mcq\",\n      \"topic\": \"oceania\",\n      \"prompt\": \"Which city is the capital of Australia?\",\n      \"answer\": \"Canberra\",\n      \"choices\": [\n        \"Sydney\",\n        \"Canberra\",\n        \"Melbourne\",\n        \"Perth\"\n      ],\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": \"africa\",\n      \"prompt\": \"Capital of Kenya?\",\n      \"answer\": \"Nairobi\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": \"(?i)^\\\\s*nairobi\\\\s*$\",\n      \"explanation\": null\n    },\n    {\n      \"type\": \"multi\",\n      \"topic\": \"americas\",\n      \"prompt\": \"Which of these are national capitals?\",\n      \"answer\": \"[\\\"Ottawa\\\",\\\"Lima\\\"]\",\n      \"choices\": [\n        \"Ottawa\",\n        \"Toronto\",\n        \"Lima\",\n        \"Rio de Janeiro\"\n      ],\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"code\",\n      \"topic\": \"python\",\n      \"prompt\": \"Return the capital for a country code from `table`, or `None` when unknown.\",\n      \"answer\": \"def capital(code, table):\\n    return table.get(code)\\n\",\n      \"choices\": null,\n      \"rubric\": \"- Uses dict.get\\n- Returns None on a miss\",\n      \"skeleton\": \"def capital(code, table):\\n    ...\\n\",\n      \"language\": \"python\",\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": \"americas\",\n      \"prompt\": \"Capital of Peru?\",\n      \"answer\": \"Lima\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": \"africa\",\n      \"prompt\": \"Capital of Ghana?\",\n      \"answer\": \"Accra\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    },\n    {\n      \"type\": \"short\",\n      \"topic\": null,\n      \"prompt\": \"Capital of Sweden?\",\n      \"answer\": \"Stockholm\",\n      \"choices\": null,\n      \"rubric\": null,\n      \"skeleton\": null,\n      \"language\": null,\n      \"answer_regex\": null,\n      \"explanation\": null\n    }\n  ]\n}",
         "type": "text"
        }
       ],
@@ -5167,7 +5167,7 @@
      "result": {
       "content": [
        {
-        "text": "type,topic,prompt,answer,choices,rubric,skeleton,language,answer_regex,explanation\r\nmcq,oceania,Which city is the capital of Australia?,Canberra,\"Sydney\nCanberra\nMelbourne\nPerth\",,,,,\r\nshort,africa,Capital of Kenya?,Nairobi,,,,,(?i)^\\s*nairobi\\s*$,\r\nmulti,americas,Which of these are national capitals?,\"[\"\"Ottawa\"\", \"\"Lima\"\"]\",\"Ottawa\nToronto\nLima\nRio de Janeiro\",,,,,\r\ncode,python,\"Return the capital for a country code from `table`, or `None` when unknown.\",\"def capital(code, table):\n    return table.get(code)\n\",,\"- Uses dict.get\n- Returns None on a miss\",\"def capital(code, table):\n    ...\n\",python,,\r\nshort,americas,Capital of Peru?,Lima,,,,,,\r\nshort,africa,Capital of Ghana?,Accra,,,,,,\r\nshort,,Capital of Sweden?,Stockholm,,,,,,\r\n",
+        "text": "type,topic,prompt,answer,choices,rubric,skeleton,language,answer_regex,explanation\r\nmcq,oceania,Which city is the capital of Australia?,Canberra,\"Sydney\nCanberra\nMelbourne\nPerth\",,,,,\r\nshort,africa,Capital of Kenya?,Nairobi,,,,,(?i)^\\s*nairobi\\s*$,\r\nmulti,americas,Which of these are national capitals?,\"[\"\"Ottawa\"\",\"\"Lima\"\"]\",\"Ottawa\nToronto\nLima\nRio de Janeiro\",,,,,\r\ncode,python,\"Return the capital for a country code from `table`, or `None` when unknown.\",\"def capital(code, table):\n    return table.get(code)\n\",,\"- Uses dict.get\n- Returns None on a miss\",\"def capital(code, table):\n    ...\n\",python,,\r\nshort,americas,Capital of Peru?,Lima,,,,,,\r\nshort,africa,Capital of Ghana?,Accra,,,,,,\r\nshort,,Capital of Sweden?,Stockholm,,,,,,\r\n",
         "type": "text"
        }
       ],

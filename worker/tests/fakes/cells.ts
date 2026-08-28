@@ -4,7 +4,7 @@
 import type { DirectoryUser, MergeAudit, MergeMarker, TombstoneReason } from '../../app/entities.js';
 import type { Directory, JobCellRpc, JobCells, Limiter, ReserveResult, UserCellRpc, UserCells } from '../../app/ports.js';
 import { checkWindows, DEFAULT_LIMITS, RETENTION_DAYS, TERMINAL_OUTCOMES, type GenerationRow, type Limits } from '../../domain/instant/limiter.js';
-import { parseIso } from '../../domain/py.js';
+import { parseIso } from '../../domain/time.js';
 import { UserCell } from '../../runtime/cells/UserCell.js';
 import type { Env } from '../../runtime/env.js';
 import { fakeCellState, type FakeCellStorage } from './sqlStorage.js';

@@ -3,7 +3,7 @@
 import type { CardRepo, Clock } from '../../../app/ports.js';
 import type { CardRow, Question } from '../../../app/entities.js';
 import type { ScheduledReview } from '../../../domain/fsrs/index.js';
-import { parseIso } from '../../../domain/py.js';
+import { parseIso } from '../../../domain/time.js';
 import { rowToQuestion } from './questionRepo.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow, isoUtc } from './time.js';

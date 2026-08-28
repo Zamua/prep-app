@@ -139,7 +139,7 @@
     {
      "answer": "Bolivia",
      "answer_regex": null,
-     "choices": "[\"Bolivia\", \"Chile\", \"Peru\", \"Ecuador\"]",
+     "choices": "[\"Bolivia\",\"Chile\",\"Peru\",\"Ecuador\"]",
      "explanation": "Bolivia lost its coast in 1884.",
      "language": null,
      "prompt": "Which of these is landlocked?",
@@ -152,7 +152,7 @@
     {
      "answer": "[\"Austria\", \"Poland\"]",
      "answer_regex": null,
-     "choices": "[\"Austria\", \"Poland\", \"Spain\", \"Portugal\"]",
+     "choices": "[\"Austria\",\"Poland\",\"Spain\",\"Portugal\"]",
      "explanation": null,
      "language": null,
      "prompt": "Which border Germany?",
@@ -254,7 +254,7 @@
     {
      "answer": "Bolivia",
      "answer_regex": null,
-     "choices": "[\"Bolivia\", \"Chile\", \"Peru\", \"Ecuador\"]",
+     "choices": "[\"Bolivia\",\"Chile\",\"Peru\",\"Ecuador\"]",
      "explanation": "Bolivia lost its coast in 1884.",
      "language": null,
      "prompt": "Which of these is landlocked?",
@@ -267,7 +267,7 @@
     {
      "answer": "[\"Austria\", \"Poland\"]",
      "answer_regex": null,
-     "choices": "[\"Austria\", \"Poland\", \"Spain\", \"Portugal\"]",
+     "choices": "[\"Austria\",\"Poland\",\"Spain\",\"Portugal\"]",
      "explanation": null,
      "language": null,
      "prompt": "Which border Germany?",

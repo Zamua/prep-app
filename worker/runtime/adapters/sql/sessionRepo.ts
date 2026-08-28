@@ -5,7 +5,6 @@
 import type { Clock, SessionIds, SessionRepo } from '../../../app/ports.js';
 import { SessionNotFound, StaleVersionError } from '../../../app/ports.js';
 import type { RecentSession, SessionState, SessionStatus, StudySession } from '../../../app/entities.js';
-import { pyJsonDumps, type JsonValue } from '../../../domain/py.js';
 import { DUE_BUCKET } from './cardRepo.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 import { DAY_MS, isoNow, isoUtc, shifted } from './time.js';
@@ -176,8 +175,8 @@ export class SqlSessionRepo implements SessionRepo {
                 last_answered_verdict = ?, last_answered_state = ?, last_active = ?, version = ?
           WHERE id = ?`,
         questionId,
-        pyJsonDumps(verdict as JsonValue),
-        pyJsonDumps(state as JsonValue),
+        JSON.stringify(verdict),
+        JSON.stringify(state),
         ts,
         v,
         sid,
@@ -220,8 +219,8 @@ export class SqlSessionRepo implements SessionRepo {
                 last_answered_qid = ?, last_answered_verdict = ?, last_answered_state = ?, last_active = ?, version = version + 1
           WHERE id = ?`,
         questionId,
-        pyJsonDumps(verdict as JsonValue),
-        pyJsonDumps(state as JsonValue),
+        JSON.stringify(verdict),
+        JSON.stringify(state),
         ts,
         sid,
       );

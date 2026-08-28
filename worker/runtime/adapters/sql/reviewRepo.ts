@@ -5,7 +5,7 @@ import type { CardRepo, Clock, ReviewRepo } from '../../../app/ports.js';
 import { QuestionNotFound } from '../../../app/ports.js';
 import type { CardState, ReviewResult, ReviewRow } from '../../../app/entities.js';
 import { scheduleReview, type Fuzz, type FsrsStateValue } from '../../../domain/fsrs/index.js';
-import { parseIso } from '../../../domain/py.js';
+import { parseIso } from '../../../domain/time.js';
 import { Db, type CellStorage } from './storage.js';
 import { isoUtc } from './time.js';
 

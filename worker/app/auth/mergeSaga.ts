@@ -25,7 +25,7 @@ import {
   type Row,
   type Snapshot,
 } from '../../domain/merge.js';
-import { isoUtc } from '../../domain/py.js';
+import { isoUtc } from '../../domain/time.js';
 
 /** The instant ledger lives in the limiter cell, not a user cell, so its
  * reassign rule travels through the `Limiter` port instead of the import. */

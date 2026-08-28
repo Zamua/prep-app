@@ -1,16 +1,16 @@
+// Answer patterns are authored in the `re` dialect, so the translator decides
+// per pattern whether a u-flag RegExp grades it the same way: it rewrites
+// what the dialects spell differently, refuses what they would grade
+// differently, and leaves the rest to the engine. Each row carries the
+// verdict the engine owes, and refusal is `null`, which sends the answer to
+// self-verdict rather than to a guess.
 import { describe, expect, it } from 'vitest';
 import { matchRegex, translatePattern, validateRegexUpdate } from '../../domain/grading';
-import { PY_SPACE } from '../../domain/py';
-import { pythonJson } from '../pyoracle';
-
-// Every pattern runs through Python's match_regex too. The port may answer
-// null where Python has a verdict (self-verdict is safe) but must never
-// contradict it. The named groups pin which patterns translate and which
-// are refused, so an engine that starts accepting more (V8 already takes
-// scoped flag groups) cannot widen the port silently.
 
 type Row = [id: string, pattern: string, given: string];
+type Graded = [id: string, pattern: string, given: string, verdict: boolean | null];
 
+/** Rewritten by the scanner, and matching once rewritten. */
 const TRANSLATED: Row[] = [
   ['named-group', '(?P<x>yes|no)', 'YES'],
   ['named-backref', '(?P<w>ha)(?P=w)', 'haha'],
@@ -29,10 +29,7 @@ const TRANSLATED: Row[] = [
   ['escaped-bracket-in-class', '[a\\]]+', 'a]a'],
   ['escaped-slash', '\\/', '/'],
   ['escaped-backslash-then-w', 'x\\\\wé', 'x\\wé'],
-  ['space-nel', 'a\\sb', 'a\u0085b'],
-  ['space-file-separator', 'a\\sb', 'a\u001cb'],
   ['optional-space', 'new\\s?york', 'newyork'],
-  ['nonspace-bom', 'a\\Sb', 'a\ufeffb'],
   ['space-in-class', 'x[\\s,]y', 'x\u00a0y'],
   ['space-class-then-dash', 'x[\\s-]y', 'x-y'],
   ['space-class-after-dash', 'x[-\\s]y', 'x y'],
@@ -40,6 +37,7 @@ const TRANSLATED: Row[] = [
   ['ref-then-quantifier', '(a)\\1?', 'a'],
 ];
 
+/** Syntax one engine lacks or reads differently. */
 const REFUSED: Row[] = [
   ['anchors-A-Z', '\\Aparis\\Z', 'paris'],
   ['flag-x', '(?x)paris', 'paris'],
@@ -89,57 +87,49 @@ const REFUSED: Row[] = [
   ['two-digit-ref', '\\10', 'a'],
   ['surrogate-pair-escapes', '\\uD83D\\uDE00', '😀'],
   ['lone-surrogate-escape', '\\uD83D', 'x'],
-  ['nonspace-in-class', '[^\\S]', ' '],
   ['space-range-end', '[a-\\s]', 'x'],
   ['space-range-start', '[\\s-z]', 'x'],
 ];
 
-const PLAIN: Row[] = [
-  ['alternation', 'paris|par(is)?', 'Paris'],
-  ['anchored', '^paris$', 'paris'],
-  ['dotall', 'a.b', 'a\nb'],
-  ['digits', 'cat\\d+', 'cat42'],
-  ['boundary', '\\bcat\\b', 'cat'],
-  ['range-fold', '[a-z]+', 'Paris'],
-  ['optional', 'colou?r', 'COLOR'],
-  ['partial-miss', 'par', 'paris'],
-  ['numbered-backref', '(a)\\1', 'aa'],
-  ['hex-escape', '\\x41', 'a'],
-  ['unicode-escape', '\\u00e9', 'É'],
-  ['non-ascii-fold', 'é', 'É'],
-  ['sharp-s', 'straße', 'STRASSE'],
-  ['space-class', 'a\\sb', 'a b'],
-  ['unicode-strip', 'paris', ' paris　'],
-  ['bom-not-stripped', 'paris', '﻿paris'],
-  ['at-cap', 'a'.repeat(500), 'a'.repeat(500)],
-  ['over-cap', 'a'.repeat(501), 'a'.repeat(501)],
-  ['astral-cap-in-code-points', '😀'.repeat(300), '😀'.repeat(300)],
-  ['empty-answer', 'a?', ''],
-  ['space-vs-bom', 'a\\sb', 'a\ufeffb'],
-  ['nonspace-vs-nel', 'a\\Sb', 'a\u0085b'],
-  ['boundary-empty-answer', '\\b', ''],
+/** Left alone by the scanner. */
+const PLAIN: Graded[] = [
+  ['alternation', 'paris|par(is)?', 'Paris', true],
+  ['anchored', '^paris$', 'paris', true],
+  ['dotall', 'a.b', 'a\nb', true],
+  ['digits', 'cat\\d+', 'cat42', true],
+  ['boundary', '\\bcat\\b', 'cat', true],
+  ['range-fold', '[a-z]+', 'Paris', true],
+  ['optional', 'colou?r', 'COLOR', true],
+  ['partial-miss', 'par', 'paris', false],
+  ['numbered-backref', '(a)\\1', 'aa', true],
+  ['hex-escape', '\\x41', 'a', true],
+  ['unicode-escape', '\\u00e9', 'É', true],
+  ['non-ascii-fold', 'é', 'É', true],
+  ['sharp-s', 'straße', 'STRASSE', false],
+  ['space-class', 'a\\sb', 'a b', true],
+  ['unicode-strip', 'paris', ' paris　', true],
+  ['at-cap', 'a'.repeat(500), 'a'.repeat(500), true],
+  ['over-cap', 'a'.repeat(501), 'a'.repeat(501), null],
+  ['astral-cap-in-code-points', '😀'.repeat(300), '😀'.repeat(300), true],
+  ['empty-answer', 'a?', '', true],
+  ['boundary-empty-answer', '\\b', '', false],
 ];
 
-const ROWS = [...TRANSLATED, ...REFUSED, ...PLAIN];
+// The whitespace class is JavaScript's: `\s` and `String.trim()` take in the
+// BOM and leave out NEL and the C1 separators. These rows sit on that edge.
+const WHITESPACE: Graded[] = [
+  ['space-nel', 'a\\sb', 'a\u0085b', false],
+  ['space-file-separator', 'a\\sb', 'a\u001cb', false],
+  ['nonspace-bom', 'a\\Sb', 'a\ufeffb', false],
+  ['nonspace-in-class', '[^\\S]', ' ', false],
+  ['bom-not-stripped', 'paris', '﻿paris', true],
+  ['space-vs-bom', 'a\\sb', 'a\ufeffb', true],
+  ['nonspace-vs-nel', 'a\\Sb', 'a\u0085b', true],
+];
 
-const python = pythonJson<(boolean | null)[]>(
-  `import json
-from prep.domain.grading import match_regex
-rows = json.loads(${JSON.stringify(JSON.stringify(ROWS))})
-print(json.dumps([match_regex(p, g) for _, p, g in rows]))`,
-);
-const py = new Map(ROWS.map((r, i) => [r[0], python[i]]));
-
-describe('matchRegex never contradicts Python', () => {
-  it.each(ROWS.map((r) => [r[0], r[1], r[2]]))('%s', (id, pattern, given) => {
-    const ours = matchRegex(pattern, given);
-    if (ours !== null) expect(ours).toBe(py.get(id));
-  });
-});
-
-describe('translated patterns grade', () => {
-  it.each(TRANSLATED.map((r) => [r[0], r[1], r[2]]))('%s', (id, pattern, given) => {
-    expect(py.get(id)).toBe(true);
+describe('translated patterns are rewritten, and grade', () => {
+  it.each(TRANSLATED)('%s', (_id, pattern, given) => {
+    expect(translatePattern(pattern)).not.toBeNull();
     expect(matchRegex(pattern, given)).toBe(true);
   });
 
@@ -150,30 +140,14 @@ describe('translated patterns grade', () => {
     expect(translatePattern('a\\ b\\_\\#\\-[\\-\\ ]')).toBe('a b_#-[\\- ]');
     expect(translatePattern('\\.\\*\\/\\\\')).toBe('\\.\\*\\/\\\\');
     expect(translatePattern('[(?P<x]')).toBe('[(?P<x]');
-    expect(translatePattern('a\\sb')).toBe(`a[${PY_SPACE}]b`);
-    expect(translatePattern('a\\Sb')).toBe(`a[^${PY_SPACE}]b`);
-    expect(translatePattern('[\\s,]')).toBe(`[${PY_SPACE},]`);
-  });
-});
-
-describe('the translated \\s is str.isspace() on every BMP code point', () => {
-  const probe = [...Array.from({ length: 0xd800 }, (_, i) => i), ...Array.from({ length: 0x10000 - 0xe000 }, (_, i) => 0xe000 + i), 0x1680, 0x1f600, 0x10ffff];
-  const python = pythonJson<string[]>(
-    `import json, re
-cps = json.loads(${JSON.stringify(JSON.stringify(probe))})
-flags = re.I | re.S
-s = re.compile(r"\\s", flags); S = re.compile(r"\\S", flags)
-print(json.dumps(["".join("1" if s.fullmatch(chr(c)) else "0" for c in cps), "".join("1" if S.fullmatch(chr(c)) else "0" for c in cps)]))`,
-  );
-  it.each([['\\s', 0], ['\\S', 1]] as const)('%s', (pattern, column) => {
-    const re = new RegExp(`^(?:${translatePattern(pattern)})$`, 'isu');
-    const ours = probe.map((c) => (re.test(String.fromCodePoint(c)) ? '1' : '0')).join('');
-    expect(ours).toBe(python[column]);
+    expect(translatePattern('a\\sb')).toBe('a\\sb');
+    expect(translatePattern('a\\Sb')).toBe('a\\Sb');
+    expect(translatePattern('[\\s,]')).toBe('[\\s,]');
   });
 });
 
 describe('refused patterns fall to self-verdict', () => {
-  it.each(REFUSED.map((r) => [r[0], r[1], r[2]]))('%s', (_id, pattern, given) => {
+  it.each(REFUSED)('%s', (_id, pattern, given) => {
     expect(matchRegex(pattern, given)).toBeNull();
   });
 
@@ -184,18 +158,15 @@ describe('refused patterns fall to self-verdict', () => {
   });
 });
 
-describe('plain patterns agree exactly', () => {
-  it.each(PLAIN.map((r) => [r[0], r[1], r[2]]))('%s', (id, pattern, given) => {
-    expect(matchRegex(pattern, given)).toBe(py.get(id));
+describe('plain patterns reach the engine untouched', () => {
+  it.each(PLAIN)('%s', (_id, pattern, given, verdict) => {
+    expect(matchRegex(pattern, given)).toBe(verdict);
   });
 });
 
-describe('measured parity', () => {
-  it('has no contradictions and only the refused rows diverge', () => {
-    const diverged = ROWS.filter(([id, p, g]) => matchRegex(p, g) === null && py.get(id) !== null).map((r) => r[0]);
-    const refusedWithVerdict = REFUSED.filter(([id]) => py.get(id) !== null).map((r) => r[0]);
-    expect(diverged).toEqual(refusedWithVerdict);
-    expect(ROWS.length - diverged.length).toBe(TRANSLATED.length + PLAIN.length + (REFUSED.length - refusedWithVerdict.length));
+describe('the whitespace class is the JavaScript one', () => {
+  it.each(WHITESPACE)('%s', (_id, pattern, given, verdict) => {
+    expect(matchRegex(pattern, given)).toBe(verdict);
   });
 });
 
@@ -209,40 +180,28 @@ describe('validateRegexUpdate uses the same translation', () => {
   });
   it('applies the trust rule over the expected and prior answers', () => {
     expect(validateRegexUpdate('caf\\w+', 'cafe')).toBe('caf\\w+');
-    expect(validateRegexUpdate('\\w+', 'café')).toBeNull();
-    expect(validateRegexUpdate('\\w+', 'cafe', 'café')).toBeNull();
-    expect(validateRegexUpdate('\\D', '١')).toBeNull();
+    expect(validateRegexUpdate('\\w+', 'caf\u00e9')).toBeNull();
+    expect(validateRegexUpdate('\\w+', 'cafe', 'caf\u00e9')).toBeNull();
+    expect(validateRegexUpdate('\\D', '\u0661')).toBeNull();
     expect(validateRegexUpdate('a?\\B', '')).toBeNull();
     expect(validateRegexUpdate('(?<=a*)b', 'b')).toBeNull();
     expect(validateRegexUpdate('(a)?\\1b', 'b')).toBeNull();
     expect(validateRegexUpdate('new\\s?york', 'New York', 'newyork')).toBe('new\\s?york');
   });
-  it('never persists what Python refuses', () => {
-    const rows: [string, string, string | null][] = [
-      ['\\w+', 'café', null],
-      ['\\D', '١', null],
-      ['\\W', 'é', null],
+  it('refuses every pattern whose subjects it cannot be trusted on', () => {
+    const refused: [string, string, string | null][] = [
+      ['\\w+', 'caf\u00e9', null],
+      ['\\D', '\u0661', null],
+      ['\\W', '\u00e9', null],
       ['a?\\B', '', null],
       ['(?<=a*)b', 'b', null],
       ['(?P<n>a)|(?P<n>b)', 'b', null],
       ['(a)?\\1b', 'b', null],
-      ['new\\s?york', 'New York', 'newyork'],
-      ['a\\sb', 'a\u0085b', null],
     ];
-    const python = pythonJson<(string | null)[]>(
-      `import json
-from prep.domain.grading import validate_regex_update
-rows = json.loads(${JSON.stringify(JSON.stringify(rows))})
-print(json.dumps([validate_regex_update(p, expected_literal=e, prior_given=g) for p, e, g in rows]))`,
-    );
-    rows.forEach(([p, e, g], i) => {
-      const ours = validateRegexUpdate(p, e, g);
-      if (ours !== null) expect(ours, p).toBe(python[i]);
-    });
-    expect(validateRegexUpdate('new\\s?york', 'New York', 'newyork')).toBe(python[7]);
+    for (const [p, e, g] of refused) expect(validateRegexUpdate(p, e, g), p).toBeNull();
   });
   it('counts the cap in code points', () => {
-    expect(validateRegexUpdate('😀'.repeat(500), '😀'.repeat(500))).toBe('😀'.repeat(500));
-    expect(validateRegexUpdate('😀'.repeat(501), '😀'.repeat(501))).toBeNull();
+    expect(validateRegexUpdate('\ud83d\ude00'.repeat(500), '\ud83d\ude00'.repeat(500))).toBe('\ud83d\ude00'.repeat(500));
+    expect(validateRegexUpdate('\ud83d\ude00'.repeat(501), '\ud83d\ude00'.repeat(501))).toBeNull();
   });
 });

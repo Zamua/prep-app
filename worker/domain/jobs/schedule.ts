@@ -1,6 +1,6 @@
 // What the ledger says to do next, decided from the rows alone. Pure, so a
 // cold cell, an evicted cell and a duplicate alarm all reach the same answer.
-import { isoUtc, parseIso } from '../py.js';
+import { isoUtc, parseIso } from '../time.js';
 import { activeNodes, nodeAt, type Fanout, type StepGraph, type StepNode } from './graph.js';
 import { isFinished, type EventRow, type JobRow, type OutboxRow, type StepRow } from './ledger.js';
 import { isAbandoned } from './refusal.js';

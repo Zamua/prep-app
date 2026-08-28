@@ -28,7 +28,7 @@
    "email": "parity@example.com",
    "is_anonymous": 0,
    "last_seen_at": "2026-03-14T15:00:00+00:00",
-   "notification_prefs": "{\"mode\": \"off\", \"digest_hour\": 9, \"tz\": \"America/New_York\", \"threshold\": 3, \"quiet_hours_enabled\": false, \"quiet_start_hour\": 22, \"quiet_end_hour\": 8, \"last_digest_date\": null, \"last_when_ready_at\": null}",
+   "notification_prefs": "{\"mode\":\"off\",\"digest_hour\":9,\"tz\":\"America/New_York\",\"threshold\":3,\"quiet_hours_enabled\":false,\"quiet_start_hour\":22,\"quiet_end_hour\":8,\"last_digest_date\":null,\"last_when_ready_at\":null}",
    "profile_pic_url": null,
    "tailscale_login": "parity@example.com"
   }

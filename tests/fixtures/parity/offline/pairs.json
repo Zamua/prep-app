@@ -118,7 +118,7 @@
        "type": "short"
       },
       {
-       "answer": "[\"Ottawa\", \"Lima\"]",
+       "answer": "[\"Ottawa\",\"Lima\"]",
        "answer_regex": null,
        "choices": [
         "Ottawa",
@@ -388,7 +388,7 @@
        "graded_by": "self",
        "question_id": 3,
        "reviewed_at": "2099-01-01T00:00:00+00:00",
-       "user_answer": "[\"Ottawa\", \"Lima\"]",
+       "user_answer": "[\"Ottawa\",\"Lima\"]",
        "verdict": "right"
       },
       {
@@ -754,7 +754,7 @@
        "graded_by": "self",
        "question_id": 3,
        "reviewed_at": "2099-01-01T00:00:00+00:00",
-       "user_answer": "[\"Ottawa\", \"Lima\"]",
+       "user_answer": "[\"Ottawa\",\"Lima\"]",
        "verdict": "right"
       },
       {
@@ -1053,7 +1053,7 @@
        "type": "short"
       },
       {
-       "answer": "[\"Ottawa\", \"Lima\"]",
+       "answer": "[\"Ottawa\",\"Lima\"]",
        "answer_regex": null,
        "choices": [
         "Ottawa",
@@ -10639,7 +10639,7 @@
        "graded_by": "self",
        "question_id": 3,
        "reviewed_at": "2099-01-01T00:00:00+00:00",
-       "user_answer": "[\"Ottawa\", \"Lima\"]",
+       "user_answer": "[\"Ottawa\",\"Lima\"]",
        "verdict": "right"
       },
       {

@@ -1,7 +1,7 @@
 // The MCP-over-HTTP server, transcribed from prep/api/mcp.py: one
 // JSON-RPC 2.0 message per request, the tool catalog of tools.ts, and
 // the same user-scoped repositories the REST surface uses.
-import { parseIso } from '../../domain/py.js';
+import { parseIso } from '../../domain/time.js';
 import { ankiNotesToDeck } from '../decks/anki.js';
 import { buildApkg } from '../decks/ankiExport.js';
 import {

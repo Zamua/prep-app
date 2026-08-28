@@ -117,7 +117,7 @@
     {
      "answer": "Gossip",
      "answer_regex": null,
-     "choices": "[\"Raft\", \"Paxos\", \"Gossip\", \"Zab\"]",
+     "choices": "[\"Raft\",\"Paxos\",\"Gossip\",\"Zab\"]",
      "explanation": null,
      "language": null,
      "prompt": "Which is NOT a consensus protocol?",
@@ -201,7 +201,7 @@
     {
      "answer": "Gossip",
      "answer_regex": null,
-     "choices": "[\"Raft\", \"Paxos\", \"Gossip\", \"Zab\"]",
+     "choices": "[\"Raft\",\"Paxos\",\"Gossip\",\"Zab\"]",
      "explanation": null,
      "language": null,
      "prompt": "Which is NOT a consensus protocol?",

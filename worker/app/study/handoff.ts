@@ -1,7 +1,5 @@
-// The "discuss this card" payload, transcribed from prep/chat_handoff.py:
-// one prefilled chat URL per provider. The message embeds the whole card
-// context, so it is composed server-side.
-import { PY_SPACE, codePoints } from '../../domain/py.js';
+// The "discuss this card" payload: one prefilled chat URL per provider. The
+// message embeds the whole card context, so it is composed server-side.
 
 export const CHAT_PROVIDERS: Record<string, { label: string; url: string }> = {
   claude: { label: 'Claude', url: 'https://claude.ai/new?q={q}' },
@@ -15,11 +13,11 @@ export const DEFAULT_PROVIDER = 'claude';
 // truncated so the total stays well under them.
 const MAX_FIELD_CHARS = 4000;
 
-const TRAILING_SPACE = new RegExp(`[${PY_SPACE}]+$`);
+const TRAILING_SPACE = /\s+$/;
 
 function trim(s: unknown): string {
   if (typeof s !== 'string' || !s) return '';
-  const chars = codePoints(s);
+  const chars = [...s];
   if (chars.length <= MAX_FIELD_CHARS) return s;
   return chars.slice(0, MAX_FIELD_CHARS).join('').replace(TRAILING_SPACE, '') + '\n\u2026[truncated]';
 }

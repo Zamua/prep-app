@@ -1,7 +1,6 @@
 // /settings/agent: the free-tier callout, the BYOK rows, and the
 // OpenRouter PKCE hand-off. One render helper feeds every route so a new
 // context field surfaces on all of them at once.
-import { pyStrip } from '../../domain/py.js';
 import type { CredentialMetadata } from '../entities.js';
 import { notFound } from '../errors.js';
 import { page, type PageRequest, type PageResult } from '../pageResult.js';
@@ -115,7 +114,7 @@ export async function byokConnect(
   const render = (o: AgentRender) => renderAgentSettings(repos, deps.freeTierConfigured, o);
   if (info.provider === RETIRED_PROVIDER) return render({ byok_error: SUBSCRIPTION_RETIRED, status: 400 });
 
-  const secret = pyStrip(req.form.get('api_key') ?? '');
+  const secret = (req.form.get('api_key') ?? '').trim();
   if (!secret) return render({ byok_error: 'API key is required.', status: 400 });
   if (!info.key_prefixes.some((p) => secret.startsWith(p))) {
     return render({

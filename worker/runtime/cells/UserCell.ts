@@ -19,7 +19,7 @@ import { ANON_COOKIE_HEADER, clockFor, compose, type Composition } from '../comp
 import type { Env } from '../env.js';
 import { errorPage } from '../errors.js';
 import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
-import { isoUtc } from '../../domain/py.js';
+import { isoUtc } from '../../domain/time.js';
 import { pageContext } from '../../app/pageContext.js';
 import {
   applyGate,

@@ -3,7 +3,6 @@
 // API, so every in-session branch is decided client-side from one source
 // of truth; only an abandoned session redirects server-side.
 import { deviceLabelFromUa } from '../../domain/study/device.js';
-import { pyStrip } from '../../domain/py.js';
 import { DurationError, parseUntil } from '../durations.js';
 import { badRequest, notFound } from '../errors.js';
 import { page, redirect, type PageRequest, type PageResult } from '../pageResult.js';
@@ -56,7 +55,7 @@ export function sessionAbandon(req: PageRequest, deps: ShellDeps): PageResult {
 
 export function sessionSnooze(req: PageRequest, deps: ShellDeps): PageResult {
   const sid = req.params['sid']!;
-  const preset = pyStrip(req.form.get('preset') ?? '').toLowerCase();
+  const preset = (req.form.get('preset') ?? '').trim().toLowerCase();
   if (preset === 'wake') {
     deps.repos.sessions.snooze(sid, null);
     return redirect('/');

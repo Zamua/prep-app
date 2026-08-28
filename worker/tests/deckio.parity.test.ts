@@ -4,10 +4,11 @@
 // oracle built them through its repositories and this builds the same rows
 // through these, so a difference is the codec's and not the seed's.
 //
-// `.csv` and `.prepdeck` compare as bytes. `.apkg` cannot: Python's `csum` is
-// `abs(hash(front))` under a per-process hash salt and its zip stamps the wall
-// clock, so the gate is the canonical dump the oracle writes, with `csum` the
-// one excluded column.
+// `.csv` compares as bytes. `.prepdeck` cannot: its meta.json and float cells
+// are this writer's, so it is gated by reading the archive back. `.apkg`
+// cannot either, because the oracle's `csum` is salted per process and its zip
+// stamps the wall clock, so the gate is the canonical dump with `csum`
+// excluded.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -208,18 +209,31 @@ function deckRows(c: ReturnType<typeof cell>, deckName: string): unknown {
 
 const decoder = new TextDecoder();
 
+/** The deck's rows without its name, so a restore under a fresh name compares
+ * against the deck it was written from. */
+function named(rows: unknown): unknown {
+  const { deck, ...rest } = rows as { deck: Record<string, unknown> | null };
+  if (!deck) return rows;
+  const { name: _name, ...deckFields } = deck;
+  return { deck: deckFields, ...rest };
+}
+
 beforeAll(async () => {
   await sqlEngine();
 });
 
 describe('the export direction against the Python corpus', () => {
   for (const profile of spec.profiles) {
-    it(`${profile.name}: csv and prepdeck are byte-identical, apkg dumps equal`, async () => {
+    it(`${profile.name}: csv is byte-identical, the archive round-trips, apkg dumps equal`, async () => {
       const c = cell();
       const deckId = buildDeck(c.repos, profile);
 
       expect(deckToCsv(c.repos, deckId)).toBe(decoder.decode(golden(`${profile.name}.csv`)));
-      expect(deckToPrepdeck(c.repos, deckId, zip, EXPORTED_AT)).toEqual(golden(`${profile.name}.prepdeck`));
+
+      const written = deckToPrepdeck(c.repos, deckId, zip, EXPORTED_AT);
+      const restored = prepdeckToDeck(c.repos, 'round-trip', written, zip);
+      expect(restored.errors).toEqual([]);
+      expect(named(deckRows(c, 'round-trip'))).toEqual(named(deckRows(c, profile.deck.name)));
 
       const { col, notes, cards } = buildApkg(profile.deck.name, questionsForExport(c.repos, deckId), USER, NOW_MS, EXPORTED_AT.slice(0, 10));
       expect(await dumpApkg(await apkg.build(col, notes, cards))).toEqual(goldenJson(`${profile.name}.apkg.dump.json`));

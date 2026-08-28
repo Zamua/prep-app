@@ -3,7 +3,7 @@
 // It exceeds the cookie's own lifetime on purpose, so a cookie that still
 // verifies names a live account and "valid cookie, missing user" stays a rare
 // path rather than a routine one.
-import { isoUtc, parseIso } from './py.js';
+import { isoUtc, parseIso } from './time.js';
 
 export const IDLE_DAYS = 365;
 

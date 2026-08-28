@@ -1,7 +1,6 @@
-// Timestamps in the column format Python writes: `datetime.isoformat()`
-// of an aware UTC instant.
+// Timestamps in the column format: an aware UTC instant.
 import type { Clock } from '../../../app/ports.js';
-import { isoUtc } from '../../../domain/py.js';
+import { isoUtc } from '../../../domain/time.js';
 
 export { isoUtc };
 
@@ -9,7 +8,7 @@ export const isoNow = (clock: Clock): string => isoUtc(clock.now());
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** `isoformat(timespec="seconds")`. */
+/** Truncated to the second, for the columns that carry no finer stamp. */
 export function isoSeconds(d: Date): string {
   return (
     `${String(d.getUTCFullYear()).padStart(4, '0')}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +

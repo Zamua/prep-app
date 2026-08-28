@@ -2,7 +2,7 @@
 // (`pending`, `ok`, `failed_spent`) count toward every window; `failed_free`
 // refusals count toward the per-IP burst window only. Per-IP windows are
 // the anti-Sybil lever, per-user windows the anti-NAT lever; both must pass.
-import { parseIso } from '../py';
+import { parseIso } from '../time';
 
 // The per-minute cap's window defines what "per minute" means; the burst
 // window is a limit like the others.

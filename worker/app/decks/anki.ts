@@ -1,8 +1,7 @@
-// Anki `.apkg` import, transcribed from prep/decks/anki.py. One note becomes
-// one short-type card: first field is the prompt, the rest join into the
-// answer, HTML and media references are dropped, cloze notes are skipped.
-// Reading the zipped sqlite is the `ApkgReader` port's job; this half is pure.
-import { pyStrip } from '../../domain/py.js';
+// Anki `.apkg` import. One note becomes one short-type card: first field is
+// the prompt, the rest join into the answer, HTML and media references are
+// dropped, cloze notes are skipped. Reading the zipped sqlite is the
+// `ApkgReader` port's job; this half is pure.
 import type { NewQuestion } from '../entities.js';
 import type { ApkgNote, DeckRepo, QuestionRepo } from '../ports.js';
 import { rowCapMessage } from './importLimits.js';
@@ -17,8 +16,8 @@ const BLOCK_END_RE = /<\/\s*(?:p|div|li|h[1-6])\s*>/gi;
 const TAG_RE = /<[^>]+>/g;
 const MEDIA_RE = /\[(?:sound|anki):[^\]]*\]/gi;
 
-/** Replaced in Python's insertion order: `&amp;` runs after `&nbsp;`, so a
- * literal `&amp;nbsp;` survives as `&nbsp;` rather than collapsing to a space. */
+/** Order matters: `&amp;` runs after `&nbsp;`, so a literal `&amp;nbsp;`
+ * survives as `&nbsp;` rather than collapsing to a space. */
 const ENTITIES: readonly (readonly [string, string])[] = [
   ['&nbsp;', ' '],
   ['&amp;', '&'],
@@ -29,7 +28,7 @@ const ENTITIES: readonly (readonly [string, string])[] = [
   ['&apos;', "'"],
 ];
 
-/** Python's `str.splitlines`: its line-boundary set, and no empty tail. */
+/** Split on every Unicode line boundary, not just `\n`, and no empty tail. */
 function splitLines(s: string): string[] {
   const lines = s.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/);
   if (lines.length && lines[lines.length - 1] === '') lines.pop();
@@ -43,7 +42,7 @@ export function stripHtml(s: string): string {
   const kept: string[] = [];
   let prevBlank = false;
   for (const raw of splitLines(out)) {
-    const ln = pyStrip(raw);
+    const ln = raw.trim();
     if (!ln) {
       if (prevBlank) continue;
       prevBlank = true;
@@ -52,7 +51,7 @@ export function stripHtml(s: string): string {
     }
     kept.push(ln);
   }
-  return pyStrip(kept.join('\n'));
+  return kept.join('\n').trim();
 }
 
 /** Parallels `ImportOutcome`; `cloze_skipped` is broken out because a cloze

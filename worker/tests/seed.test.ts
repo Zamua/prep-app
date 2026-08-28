@@ -34,7 +34,7 @@ describe('the parity seed profiles', () => {
     expect(cards[ids.questions.srs_a['short_plain']!]).toMatchObject({ step: 4, next_due: '2026-03-19T15:00:00+00:00' });
     expect(cards[ids.questions.trivia['rome']!]).toBeUndefined();
     expect(state.fake.rows('questions').find((q) => q['id'] === ids.questions.srs_a['suspended'])?.['suspended']).toBe(1);
-    expect(state.fake.rows('questions').find((q) => q['id'] === ids.questions.srs_a['multi'])?.['answer']).toBe('["Ottawa", "Lima"]');
+    expect(state.fake.rows('questions').find((q) => q['id'] === ids.questions.srs_a['multi'])?.['answer']).toBe('["Ottawa","Lima"]');
     expect(state.fake.rows('reviews').map((r) => [r['question_id'], r['ts'], r['result'], r['user_answer'], r['grader_notes']])).toEqual([
       [1, '2026-03-12T15:00:00+00:00', 'right', 'Canberra', null],
       [1, '2026-03-08T15:00:00+00:00', 'wrong', 'Sydney', null],
@@ -51,7 +51,7 @@ describe('the parity seed profiles', () => {
     expect(state.fake.rows('notifications_log').map((n) => n['sent_at'])).toEqual(['2026-03-14T12:00:00+00:00', '2026-03-13T15:00:00+00:00']);
     expect(state.fake.rows('api_tokens')[0]).toMatchObject({ key_prefix: 'prep_pat_Pa…0000', label: 'Parity CLI', created_at: '2026-03-11T15:00:00+00:00', token_hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(state.fake.rows('active_workflows')[0]).toMatchObject({ workflow_id: 'transform-world-capitals-parity01', started_at: '2026-03-14T14:55:00+00:00', status: 'computing', deck_id: 1 });
-    expect(state.fake.rows('profile')[0]?.['notification_prefs']).toContain('"tz": "America/New_York"');
+    expect(state.fake.rows('profile')[0]?.['notification_prefs']).toContain('"tz":"America/New_York"');
   });
 
   it('study: every card due in its own hour, the warm-up already answered in the session', async () => {
@@ -117,7 +117,7 @@ describe('the parity seed profiles', () => {
     const questions = Object.fromEntries(state.fake.rows('questions').map((q) => [q['id'], q]));
     // Every column an exporter writes, so a round trip has something to lose.
     expect(questions[ids.questions.srs['binary']!]).toMatchObject({ type: 'code', language: 'python', topic: 'searching' });
-    expect(questions[ids.questions.srs['complexity']!]).toMatchObject({ choices: '["O(n)", "O(n log n)", "O(n^2)", "O(log n)"]' });
+    expect(questions[ids.questions.srs['complexity']!]).toMatchObject({ choices: '["O(n)","O(n log n)","O(n^2)","O(log n)"]' });
     expect(questions[ids.questions.srs['stability']!]).toMatchObject({ answer_regex: '(?i)merge' });
     expect(state.fake.rows('cards').find((c) => c['question_id'] === ids.questions.srs['binary'])).toMatchObject({
       step: 3,
@@ -142,7 +142,7 @@ describe('the e2e seed profiles', () => {
     expect(decks).toHaveLength(1);
     expect(decks[0]).toMatchObject({ name: 'offline-e2e', display_name: 'Offline E2E', deck_type: 'srs' });
     const questions = Object.fromEntries(state.fake.rows('questions').map((q) => [q['id'], q]));
-    expect(questions[ids['mcq_id']!]).toMatchObject({ type: 'mcq', prompt: 'Capital of France?', answer: 'Paris', choices: '["Paris", "Lyon", "Marseille"]' });
+    expect(questions[ids['mcq_id']!]).toMatchObject({ type: 'mcq', prompt: 'Capital of France?', answer: 'Paris', choices: '["Paris","Lyon","Marseille"]' });
     expect(questions[ids['regex_id']!]).toMatchObject({ type: 'short', answer_regex: 'lima' });
     expect(questions[ids['short_id']!]).toMatchObject({ type: 'short', answer_regex: null });
     expect(questions[ids['suspended_id']!]?.['suspended']).toBe(1);

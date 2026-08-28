@@ -77,9 +77,9 @@ describe('POST /deck/{name}/question/new', () => {
     const h = await seeded('reader');
     await h.post('/deck/world-capitals/question/new', { type: 'multi', prompt: 'Which?', answer: 'Ottawa\nLima', choices: 'Ottawa\nLima' });
     const fromLines = h.state.fake.rows('questions').at(-1)?.['answer'];
-    expect(fromLines).toBe('["Ottawa", "Lima"]');
+    expect(fromLines).toBe('["Ottawa","Lima"]');
     await h.post('/deck/world-capitals/question/new', { type: 'multi', prompt: 'Which two?', answer: '["Ottawa", "Lima"]', choices: 'Ottawa\nLima' });
-    expect(h.state.fake.rows('questions').at(-1)?.['answer']).toBe('["Ottawa", "Lima"]');
+    expect(h.state.fake.rows('questions').at(-1)?.['answer']).toBe('["Ottawa","Lima"]');
   });
 });
 

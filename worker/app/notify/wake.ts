@@ -8,7 +8,7 @@
 // through the same function, so what the alarm is armed for and what it does
 // when it fires cannot drift apart.
 import { formatDone, type DoneItem } from '../../domain/trivia.js';
-import { isoUtc, pyStrip } from '../../domain/py.js';
+import { isoUtc } from '../../domain/time.js';
 import { MAX_BACKOFF_DOUBLINGS, planWake, type TriviaDeckState, type WakeInputs, type WakePlan, type WakeTask } from '../../domain/notify/wake.js';
 import { fundingTier, requireFundedWorkflow } from '../agent/funding.js';
 import { WORKFLOW_TYPE } from '../jobs/graph.js';
@@ -63,7 +63,7 @@ export function readWakeInputs(repos: UserRepos, clock: Clock, canGenerate: bool
       sessionSize: d.trivia_session_size || DEFAULT_SESSION_SIZE,
       unanswered: stats.unanswered,
       queued: stats.total,
-      topic: pyStrip(d.context_prompt || d.name || ''),
+      topic: (d.context_prompt || d.name || '').trim(),
       lastRefillAt: lastRefill.get(d.id) ?? null,
       activeSince: session && session.queue.length ? session.last_active : null,
     };
@@ -168,7 +168,7 @@ async function whenReady(deps: WakeDeps, now: Date): Promise<void> {
 async function refill(deps: WakeDeps, deckId: number): Promise<void> {
   const deckName = deps.repos.decks.findName(deckId);
   if (deckName === null) return;
-  const topic = pyStrip(deps.repos.decks.getMeta(deckId).context_prompt || deckName);
+  const topic = (deps.repos.decks.getMeta(deckId).context_prompt || deckName).trim();
   if (!topic) return;
   try {
     requireFundedWorkflow(deps.repos, deps.freeTierConfigured);

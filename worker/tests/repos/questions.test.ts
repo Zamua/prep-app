@@ -4,7 +4,7 @@ import { ANON_MAX_QUESTIONS, RowCapReached } from '../../domain/limits.js';
 import { cell } from './setup.js';
 
 describe('QuestionRepo', () => {
-  it('stores a question as Python does: JSON choices, list answers and rubrics, code-only fields', () => {
+  it('stores JSON choices, list answers and rubrics, and the code-only fields', () => {
     const { repos, storage } = cell();
     const d = repos.decks.create('d');
     const mcq = repos.questions.add(d, { type: 'mcq', prompt: 'Capital?', answer: 'Canberra', choices: ['Sydney', 'Canberra'], topic: 'oceania' });
@@ -12,8 +12,8 @@ describe('QuestionRepo', () => {
     const short = repos.questions.add(d, { type: 'short', prompt: 'Short', answer: 'x', skeleton: 'ignored', language: 'ignored' });
     const code = repos.questions.add(d, { type: 'code', prompt: 'Code', answer: 'def f(): pass', skeleton: 'def f():\n    ...', language: 'python' });
     const rows = storage.rows('questions');
-    expect(rows[0]).toMatchObject({ id: mcq, choices: '["Sydney", "Canberra"]', topic: 'oceania', suspended: 0, created_at: '2026-03-14T15:00:00+00:00' });
-    expect(rows[1]).toMatchObject({ id: multi, answer: '["Ottawa", "Lima"]', rubric: '- one\n- two', choices: null });
+    expect(rows[0]).toMatchObject({ id: mcq, choices: '["Sydney","Canberra"]', topic: 'oceania', suspended: 0, created_at: '2026-03-14T15:00:00+00:00' });
+    expect(rows[1]).toMatchObject({ id: multi, answer: '["Ottawa","Lima"]', rubric: '- one\n- two', choices: null });
     expect(rows[2]).toMatchObject({ id: short, skeleton: null, language: null });
     expect(rows[3]).toMatchObject({ id: code, skeleton: 'def f():\n    ...', language: 'python' });
     expect(repos.questions.get(mcq)).toEqual({

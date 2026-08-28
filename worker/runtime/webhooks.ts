@@ -3,7 +3,7 @@
 // there before their first request. `user.deleted` retires the whole cell
 // through the same three-step deletion the merge and the reaper use.
 import { destroyAccount } from '../app/auth/mergeSaga.js';
-import { isoUtc } from '../domain/py.js';
+import { isoUtc } from '../domain/time.js';
 import { clockFor, type Composition } from './compose.js';
 
 export type ClerkUser = Record<string, unknown>;

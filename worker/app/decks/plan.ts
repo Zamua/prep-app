@@ -7,7 +7,6 @@ import { json } from '../http.js';
 import { page, redirect, type PageRequest, type PageResult } from '../pageResult.js';
 import { flatten, gone } from '../jobs/view.js';
 import type { UserRepos, WorkflowRunner } from '../ports.js';
-import { pyStrip } from '../../domain/py.js';
 
 export const PLAN_PARTIAL = 'partials/plan_progress.html';
 
@@ -79,7 +78,7 @@ async function signalled(deps: PlanDeps, wid: string, name: string, payload?: un
 export async function planFeedback(repos: UserRepos, req: PageRequest, deps: PlanDeps): Promise<PageResult> {
   const wid = req.params['wid'] ?? '';
   const deckName = requireOwnsPlan(repos, wid);
-  const feedback = pyStrip(req.form.get('feedback') ?? '');
+  const feedback = (req.form.get('feedback') ?? '').trim();
   if (!feedback) throw badRequest('empty feedback');
   return fragment(wid, deckName, await signalled(deps, wid, 'feedback', feedback));
 }

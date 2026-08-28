@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_SYNC_CARDS, MAX_SYNC_REVIEWS, parseBatch, syncBatch } from '../../app/offline/sync.js';
 import { RequestValidationError } from '../../app/validation.js';
-import { isoUtc } from '../../domain/py.js';
+import { isoUtc } from '../../domain/time.js';
 import { cell } from '../repos/setup.js';
 
 const at = (minutes: number) => isoUtc(new Date(Date.UTC(2026, 2, 14, 15, 0, 0) + minutes * 60_000));

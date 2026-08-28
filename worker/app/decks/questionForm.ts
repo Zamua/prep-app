@@ -1,12 +1,11 @@
 // The new-question and edit-question forms take the same fields in the
 // same shape, so one parse serves both: the entity when it validates, the
 // raw dict the template re-renders so typed input survives an error.
-import { pyJsonDumps, pyStrip, type JsonValue } from '../../domain/py.js';
 import type { NewQuestion, Question, QuestionType } from '../entities.js';
 
 const VALID_TYPES: readonly string[] = ['code', 'mcq', 'multi', 'short'];
 
-/** Python's `str.splitlines`: its line-boundary set, not just `\n`. */
+/** Split on every Unicode line boundary, not just `\n`. */
 export function splitLines(s: string): string[] {
   return s.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/);
 }
@@ -19,7 +18,7 @@ export interface ParsedQuestionForm {
   error: string | null;
 }
 
-const field = (form: URLSearchParams, name: string): string => pyStrip(form.get(name) ?? '');
+const field = (form: URLSearchParams, name: string): string => (form.get(name) ?? '').trim();
 
 export function parseQuestionForm(form: URLSearchParams): ParsedQuestionForm {
   const qtype = field(form, 'type');
@@ -31,7 +30,7 @@ export function parseQuestionForm(form: URLSearchParams): ParsedQuestionForm {
   const rubric = field(form, 'rubric') || null;
   const answerRegex = field(form, 'answer_regex') || null;
   const choicesRaw = field(form, 'choices');
-  const lines = splitLines(choicesRaw).map(pyStrip).filter(Boolean);
+  const lines = splitLines(choicesRaw).map((s) => s.trim()).filter(Boolean);
   const choices = lines.length ? lines : null;
 
   const raw: QuestionFormRaw = {
@@ -64,10 +63,10 @@ export function parseQuestionForm(form: URLSearchParams): ParsedQuestionForm {
     try {
       parsed = JSON.parse(answerRaw);
     } catch {
-      answer = pyJsonDumps(splitLines(answerRaw).map(pyStrip).filter(Boolean));
+      answer = JSON.stringify(splitLines(answerRaw).map((s) => s.trim()).filter(Boolean));
       parsed = undefined;
     }
-    if (Array.isArray(parsed)) answer = pyJsonDumps(parsed as JsonValue);
+    if (Array.isArray(parsed)) answer = JSON.stringify(parsed);
   }
 
   return {

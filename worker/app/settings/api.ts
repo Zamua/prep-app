@@ -2,7 +2,6 @@
 // the response that mints it and nowhere else - never persisted to a
 // session, never in a query string, never returned by a GET.
 import { assembleToken, maskToken, SECRET_BYTES } from '../../domain/pat.js';
-import { pyStrip } from '../../domain/py.js';
 import { HTML, page, type PageRequest, type PageResult } from '../pageResult.js';
 import type { Hasher, Random, UserRepos } from '../ports.js';
 
@@ -23,7 +22,7 @@ export async function apiTokenCreate(
   req: PageRequest,
   deps: { subject: string; random: Random; hasher: Hasher },
 ): Promise<PageResult> {
-  const label = pyStrip(req.form.get('label') ?? '') || null;
+  const label = (req.form.get('label') ?? '').trim() || null;
   const token = assembleToken(deps.subject, deps.random.bytes(SECRET_BYTES));
   repos.tokens.insert(await deps.hasher.sha256Hex(token), maskToken(token), label);
   return render(repos, { created_plaintext: token });

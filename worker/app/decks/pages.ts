@@ -3,7 +3,7 @@
 // redirect; the cell's route table turns that into a response.
 import { MAX_DESIRED_RETENTION, MIN_DESIRED_RETENTION } from '../../domain/fsrs/index.js';
 import { pyRepr } from '../../domain/grading/pyrepr.js';
-import { parseIso, pyStrip } from '../../domain/py.js';
+import { parseIso } from '../../domain/time.js';
 import { csvToDeck, deckToCsv, questionsForExport } from '../api/deckIo.js';
 import { ankiNotesToDeck } from './anki.js';
 import { buildApkg } from './ankiExport.js';
@@ -63,9 +63,9 @@ export function deckNewTriviaForm(): PageResult {
 }
 
 export async function deckNewSrsCreate(repos: UserRepos, req: PageRequest, deps: DeckDeps): Promise<PageResult> {
-  const name = pyStrip(req.form.get('name') ?? '');
-  const contextPrompt = pyStrip(req.form.get('context_prompt') ?? '');
-  const action = pyStrip(req.form.get('action') ?? '') || 'empty';
+  const name = (req.form.get('name') ?? '').trim();
+  const contextPrompt = (req.form.get('context_prompt') ?? '').trim();
+  const action = (req.form.get('action') ?? '').trim() || 'empty';
   const rerender = (error: string, status = 400): PageResult =>
     page('deck_new_srs.html', { name_value: name, context_value: contextPrompt, error }, status);
 
@@ -104,9 +104,9 @@ export async function deckNewSrsCreate(repos: UserRepos, req: PageRequest, deps:
 }
 
 export async function deckNewTriviaCreate(repos: UserRepos, req: PageRequest, deps: DeckDeps): Promise<PageResult> {
-  const name = pyStrip(req.form.get('name') ?? '');
-  const topic = pyStrip(req.form.get('topic') ?? '');
-  const rawInterval = pyStrip(req.form.get('notification_interval_minutes') ?? '') || '30';
+  const name = (req.form.get('name') ?? '').trim();
+  const topic = (req.form.get('topic') ?? '').trim();
+  const rawInterval = (req.form.get('notification_interval_minutes') ?? '').trim() || '30';
   const rerender = (error: string, status = 400): PageResult => {
     const parsed = pyInt(rawInterval);
     return page('deck_new_trivia.html', { name_value: name, topic_value: topic, interval_value: parsed ?? 30, error }, status);
@@ -180,7 +180,7 @@ export function deckView(repos: UserRepos, req: PageRequest): PageResult {
 export function deckDelete(repos: UserRepos, req: PageRequest): PageResult {
   const name = req.params['name']!;
   const id = deckId(repos, name);
-  const typed = pyStrip(req.form.get('confirm') ?? '');
+  const typed = (req.form.get('confirm') ?? '').trim();
   const expected = repos.decks.getMeta(id).display_name || name;
   // Either label works, so a renamed deck never locks its owner out.
   if (typed !== expected && typed !== name) throw badRequest("deck name didn't match — delete not performed");
@@ -192,7 +192,7 @@ export function deckUpdateTopic(repos: UserRepos, req: PageRequest): PageResult 
   const name = req.params['name']!;
   const id = deckId(repos, name);
   if (repos.decks.getType(id) !== 'trivia') throw badRequest('topic prompt only applies to trivia decks');
-  const cleaned = pyStrip(req.form.get('context_prompt') ?? '');
+  const cleaned = (req.form.get('context_prompt') ?? '').trim();
   if (!cleaned) throw badRequest('topic prompt cannot be empty');
   if (cleaned.length > MAX_TOPIC_PROMPT_CHARS) {
     throw badRequest(`topic prompt too long (${cleaned.length} chars; max ${MAX_TOPIC_PROMPT_CHARS})`);
@@ -279,7 +279,7 @@ export function deckImportCsvForm(): PageResult {
 export function deckImportCsvSubmit(repos: UserRepos, req: PageRequest): PageResult {
   const template = 'deck_import_csv.html';
   if (!req.upload) return importPage(template, null, 'Pick a CSV file to upload.', 400);
-  const named = importDeckName(template, pyStrip(req.form.get('name') ?? ''));
+  const named = importDeckName(template, (req.form.get('name') ?? '').trim());
   if ('refusal' in named) return named.refusal;
   // Undecodable bytes become replacement characters rather than a refusal:
   // a mostly-fine CSV with one bad byte still imports.
@@ -294,7 +294,7 @@ export function deckImportPrepdeckForm(): PageResult {
 export function deckImportPrepdeckSubmit(repos: UserRepos, req: PageRequest, deps: { zip: ZipCodec }): PageResult {
   const template = 'deck_import_prepdeck.html';
   if (!req.upload) return importPage(template, null, 'Pick a .prepdeck file to upload.', 400);
-  const named = importDeckName(template, pyStrip(req.form.get('name') ?? ''));
+  const named = importDeckName(template, (req.form.get('name') ?? '').trim());
   if ('refusal' in named) return named.refusal;
   try {
     const outcome = prepdeckToDeck(repos, named.name, req.upload.bytes, deps.zip, {
@@ -317,7 +317,7 @@ export function deckImportAnkiForm(): PageResult {
 export async function deckImportAnkiSubmit(repos: UserRepos, req: PageRequest, deps: { apkg: ApkgReader }): Promise<PageResult> {
   const template = 'deck_import_anki.html';
   if (!req.upload) return importPage(template, null, 'Pick an .apkg file to upload.', 400);
-  const named = importDeckName(template, pyStrip(req.form.get('name') ?? ''));
+  const named = importDeckName(template, (req.form.get('name') ?? '').trim());
   if ('refusal' in named) return named.refusal;
   let notes;
   try {
@@ -367,8 +367,8 @@ export function deckSplitForm(repos: UserRepos, req: PageRequest): PageResult {
 export async function deckSplitSubmit(repos: UserRepos, req: PageRequest): Promise<PageResult> {
   const name = req.params['name']!;
   const id = deckId(repos, name);
-  const newName = pyStrip(req.form.get('new_name') ?? '');
-  const newTopic = pyStrip(req.form.get('new_topic') ?? '');
+  const newName = (req.form.get('new_name') ?? '').trim();
+  const newTopic = (req.form.get('new_topic') ?? '').trim();
   const selected = req.form
     .getAll('question_ids')
     .map((v) => pyInt(v))
@@ -397,7 +397,7 @@ export function deckRetention(repos: UserRepos, req: PageRequest): PageResult {
   const name = req.params['name']!;
   const id = deckId(repos, name);
   if (repos.decks.getType(id) !== 'srs') throw badRequest('retention applies only to SRS decks');
-  const raw = pyStrip(req.form.get('retention') ?? '').toLowerCase();
+  const raw = (req.form.get('retention') ?? '').trim().toLowerCase();
   let value: number | null = null;
   if (raw !== 'default' && raw !== 'none' && raw !== '') {
     value = pyFloat(raw);
@@ -473,7 +473,7 @@ export async function questionImprove(repos: UserRepos, req: PageRequest, deps: 
   const qid = Number(req.params['qid']);
   const q = repos.questions.get(qid);
   if (q === null) throw notFound(QUESTION_NOT_FOUND);
-  const prompt = pyStrip(req.form.get('prompt') ?? '');
+  const prompt = (req.form.get('prompt') ?? '').trim();
   if (!prompt) throw badRequest('empty prompt');
   if (!agentAvailable(repos, deps.freeTierConfigured)) throw new AppError(403, NO_FUNDING);
   const deckName = repos.decks.findName(q.deck_id);
