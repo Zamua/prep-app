@@ -41,7 +41,7 @@ describe('QuestionRepo', () => {
     const trivia = repos.decks.createTrivia('t', { topic: 't', intervalMinutes: 60 });
     const a = repos.questions.add(srs, { type: 'short', prompt: 'p', answer: 'a' });
     repos.questions.add(trivia, { type: 'short', prompt: 'p', answer: 'a' });
-    expect(storage.rows('cards')).toEqual([{ question_id: a, step: 0, next_due: '2026-03-14T15:00:00+00:00', last_review: null, stability: null, difficulty: null, fsrs_state: 1 }]);
+    expect(storage.rows('cards')).toEqual([{ question_id: a, step: 0, next_due: '2026-03-14T15:00:00+00:00', last_review: null, stability: null, difficulty: null, fsrs_state: 1, learning_steps: 0 }]);
   });
 
   it('caps an anonymous account at ANON_MAX_QUESTIONS', () => {

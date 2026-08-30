@@ -14,6 +14,8 @@ export interface CardSRSState {
   difficulty: number | null;
   fsrsState: FsrsStateValue;
   lastReview: Date | null;
+  /** Rung of the (re)learning ladder the card stands on; 0 is its foot. */
+  learningSteps: number;
 }
 
 export interface ScheduledReview {
@@ -42,7 +44,7 @@ const DIFFICULTY_MAX = 10;
 export type Fuzz = false | { random: () => number };
 
 export function freshState(): CardSRSState {
-  return { stability: null, difficulty: null, fsrsState: FsrsState.Learning, lastReview: null };
+  return { stability: null, difficulty: null, fsrsState: FsrsState.Learning, lastReview: null, learningSteps: 0 };
 }
 
 /** Stability in days to the 0..5 ladder bucket. */
@@ -60,7 +62,7 @@ const STABILITY_BY_STEP: Record<number, number> = { 1: 1.0, 2: 3.0, 3: 7.0, 4: 1
 /** Import seed for a card at ladder `step`; difficulty is the FSRS midpoint. */
 export function seedStateFromLadderStep(step: number, now: Date): CardSRSState {
   if (step <= 0) return freshState();
-  return { stability: STABILITY_BY_STEP[step] ?? 30.0, difficulty: 5.0, fsrsState: FsrsState.Review, lastReview: now };
+  return { stability: STABILITY_BY_STEP[step] ?? 30.0, difficulty: 5.0, fsrsState: FsrsState.Review, lastReview: now, learningSteps: 0 };
 }
 
 /** Anything outside the supported band, NaN included, resolves inside it. */
@@ -76,25 +78,33 @@ function stateOf(raw: number | null | undefined): State {
   return State.Learning;
 }
 
+/** Clamp a row's rung to the ladder used by its state. */
+function ladderRung(raw: number | null | undefined, state: State): number {
+  const rung = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw!)) : 0;
+  const max = state === State.Learning ? LEARNING_STEPS.length - 1 : state === State.Relearning ? RELEARNING_STEPS.length - 1 : 0;
+  return Math.min(rung, max);
+}
+
 /**
  * The row as a ts-fsrs card. A row with no usable memory state has never been
  * scheduled whatever state it claims, so it enters as New; one outside the
  * supported band is brought inside it, since a card the scheduler refuses is a
- * card its owner can never study again. The (re)learning step is not
- * persisted, so a card resumes at the head of its ladder.
+ * card its owner can never study again. The (re)learning rung comes off the
+ * row, so a card resumes where it stopped rather than at the foot.
  */
 function toCard(state: CardSRSState, lastReview: Date | null, reviewedAt: Date): CardInput {
   const scheduled = Number.isFinite(state.stability) && Number.isFinite(state.difficulty);
+  const cardState = scheduled ? stateOf(state.fsrsState) : State.New;
   return {
     due: lastReview ?? reviewedAt,
     stability: scheduled ? Math.max(STABILITY_MIN, state.stability!) : 0,
     difficulty: scheduled ? Math.min(DIFFICULTY_MAX, Math.max(DIFFICULTY_MIN, state.difficulty!)) : 0,
     elapsed_days: 0,
     scheduled_days: 0,
-    learning_steps: 0,
+    learning_steps: scheduled ? ladderRung(state.learningSteps, cardState) : 0,
     reps: 0,
     lapses: 0,
-    state: scheduled ? stateOf(state.fsrsState) : State.New,
+    state: cardState,
     last_review: scheduled ? lastReview : null,
   };
 }
@@ -149,6 +159,7 @@ export function scheduleReview(
       difficulty: card.difficulty,
       fsrsState: (card.state === State.New ? FsrsState.Learning : card.state) as FsrsStateValue,
       lastReview: now,
+      learningSteps: card.learning_steps,
     },
     nextDue,
     intervalSeconds: Math.max(0, Math.trunc((nextDue.getTime() - now.getTime()) / 1000)),

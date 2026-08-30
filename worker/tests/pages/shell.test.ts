@@ -77,7 +77,7 @@ describe('GET /grading/{wid}', () => {
     const h = await seeded('reader');
     const sid = (await h.post('/study/world-capitals/begin')).headers.get('location')!.replace('/session/', '');
     expect((await h.get('/grading/grade-world-capitals-q2-abc123')).headers.get('location')).toBe('/study/world-capitals');
-    expect((await h.get(`/grading/grade-world-capitals-q2-abc123?sid=${sid}`)).headers.get('location')).toBe(`/session/${sid}`);
+    expect((await h.get(`/grading/grade-session-q2-${sid}v1?sid=${sid}`)).headers.get('location')).toBe(`/session/${sid}`);
   });
 
   it('refuses a crafted id rather than minting a deck through get-or-create', async () => {

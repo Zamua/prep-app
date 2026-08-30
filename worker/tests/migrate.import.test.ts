@@ -7,7 +7,7 @@ import { GLOBAL } from '../runtime/adapters/cells.js';
 import { DATA_TABLES } from '../runtime/adapters/sql/schema.js';
 import type { Env } from '../runtime/env.js';
 import worker from '../runtime/worker.js';
-import { INTERNAL_TOKEN, ORIGIN, replayEnv } from './api/harness.js';
+import { INTERNAL_TOKEN, ORIGIN, workerEnv } from './api/harness.js';
 
 type Row = Record<string, unknown>;
 
@@ -71,7 +71,8 @@ function fixture(): UserExport[] {
           last_review: i ? '2026-08-01T12:00:00+00:00' : null,
           stability: i ? 12.345678901234567 : null,
           difficulty: i ? 5.1 : null,
-          fsrs_state: i === 0 ? 1 : 2,
+          fsrs_state: i === 0 || (d === 0 && i === 1) ? 1 : 2,
+          learning_steps: d === 0 && i === 1 ? 1 : 0,
         })),
       ),
       reviews: Array.from({ length: 11 }, (_, i) => ({
@@ -111,7 +112,7 @@ function fixture(): UserExport[] {
     tables: {
       decks: [{ id: 21, name: 'inbox', created_at: '2026-07-01T00:00:00+00:00', deck_type: 'srs' }],
       questions: [0, 1].map((i) => ({ id: 200 + i, deck_id: 21, type: 'short', prompt: `b${i}`, answer: `c${i}`, created_at: '2026-07-02T00:00:00+00:00' })),
-      cards: [0, 1].map((i) => ({ question_id: 200 + i, step: 0, next_due: '2026-08-30T00:00:00+00:00', last_review: null, stability: null, difficulty: null, fsrs_state: 1 })),
+      cards: [0, 1].map((i) => ({ question_id: 200 + i, step: 0, next_due: '2026-08-30T00:00:00+00:00', last_review: null, stability: null, difficulty: null, fsrs_state: 1, learning_steps: 0 })),
       reviews: [0, 1, 2].map((i) => ({ id: 600 + i, question_id: 200 + (i % 2), ts: '2026-07-03T00:00:00+00:00', result: 'correct', user_answer: 'x', grader_notes: '' })),
     },
   };
@@ -236,11 +237,11 @@ const directoryUsers = async (env: Env): Promise<Row[]> => {
 describe('the import endpoint', () => {
   let env: Env;
   beforeEach(() => {
-    env = replayEnv().env;
+    env = workerEnv().env;
   });
 
   it('answers 503 unconfigured and 401 on a token mismatch, as the seed does', async () => {
-    const bare = replayEnv({ PREP_INTERNAL_TOKEN: '' }).env;
+    const bare = workerEnv({ PREP_INTERNAL_TOKEN: '' }).env;
     expect((await post(bare, '/_migrate/import', {})).status).toBe(503);
     expect((await post(env, '/_migrate/import', {}, 'wrong')).status).toBe(401);
     expect((await worker.fetch(request('/_migrate/status?user=x', {}, null), env)).status).toBe(401);
@@ -249,7 +250,7 @@ describe('the import endpoint', () => {
   // It has to run where the data goes, so it cannot be one of the pins the
   // composition refuses outside dev and staging.
   it('serves on a host with test mode off', async () => {
-    const prod = replayEnv({ PREP_ENV: 'prod', PREP_TEST_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined }).env;
+    const prod = workerEnv({ PREP_ENV: 'prod', PREP_TEST_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined }).env;
     const [alice] = fixture();
     const res = await post(prod, '/_migrate/import', { user: alice!.user, idx: alice!.idx, table: null, rows: [], profile: alice!.profile });
     expect(res.status).toBe(200);
@@ -293,7 +294,7 @@ describe('a full import', () => {
   let env: Env;
   let exported: UserExport[];
   beforeEach(() => {
-    env = replayEnv().env;
+    env = workerEnv().env;
     exported = fixture();
   });
 
@@ -319,6 +320,7 @@ describe('a full import', () => {
     // The credential is gone, so the column naming it must be too.
     expect(alice['active_byok_provider']).toBeNull();
     expect((await dump(env, ALICE)).tables['byok_credentials']!.map((r) => r['provider'])).toEqual(['openai']);
+    expect((await dump(env, ALICE)).tables['cards']!.find((r) => r['question_id'] === 101)).toMatchObject({ fsrs_state: 1, learning_steps: 1 });
 
     expect(await directoryUsers(env)).toEqual([
       { id: ALICE, is_anonymous: 0, created_at: '2024-01-02T03:04:05+00:00', idx: 1 },
@@ -340,7 +342,7 @@ describe('re-runnability', () => {
   let env: Env;
   let exported: UserExport[];
   beforeEach(() => {
-    env = replayEnv().env;
+    env = workerEnv().env;
     exported = fixture();
   });
 
@@ -361,7 +363,7 @@ describe('re-runnability', () => {
   });
 
   it('resumes a run killed mid-user and converges on the same rows', async () => {
-    const clean = replayEnv().env;
+    const clean = workerEnv().env;
     await runImport(clean, fixture());
     const whole = await Promise.all(exported.map((u) => dump(clean, u.user)));
 
@@ -414,7 +416,7 @@ describe('the second pass', () => {
   let env: Env;
   let exported: UserExport[];
   beforeEach(async () => {
-    env = replayEnv().env;
+    env = workerEnv().env;
     exported = fixture();
     await runImport(env, exported);
   });
@@ -423,7 +425,7 @@ describe('the second pass', () => {
    * moves. Nothing about the row's identity changes. */
   function studied(u: UserExport): Row {
     const card = u.tables['cards']![1]!;
-    return { ...card, step: Number(card['step']) + 5, next_due: '2026-12-01T00:00:00+00:00', last_review: '2026-08-27T10:00:00+00:00', stability: 42.5, difficulty: 6.25, fsrs_state: 2 };
+    return { ...card, step: Number(card['step']) + 5, next_due: '2026-12-01T00:00:00+00:00', last_review: '2026-08-27T10:00:00+00:00', stability: 42.5, difficulty: 6.25, fsrs_state: 2, learning_steps: 0 };
   }
 
   it('carries a changed row, which is the only reason the pass exists', async () => {
@@ -476,7 +478,7 @@ describe('the run header', () => {
   const SNAPSHOT = 'a'.repeat(64);
 
   it('records the snapshot the fleet is being built from, and the status hands it back', async () => {
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     const res = await post(env, '/_migrate/import', { snapshot: SNAPSHOT });
     expect(res.status).toBe(200);
     expect((await res.json()) as { run: { snapshot: string } }).toMatchObject({ run: { snapshot: SNAPSHOT } });
@@ -486,7 +488,7 @@ describe('the run header', () => {
   });
 
   it('refuses anything that is not a sha256 digest', async () => {
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     for (const snapshot of ['', 'nope', 'A'.repeat(64), 'a'.repeat(63)]) {
       const res = await post(env, '/_migrate/import', { snapshot });
       expect([snapshot, res.status, await res.json()]).toEqual([snapshot, 422, { detail: 'snapshot must be a sha256 hex digest' }]);
@@ -494,7 +496,7 @@ describe('the run header', () => {
   });
 
   it('is cleared by the seal, which is what puts the retention sweep back on', async () => {
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     await post(env, '/_migrate/import', { snapshot: SNAPSHOT });
     await post(env, '/_migrate/seal', {});
     const directory = env.DIRECTORY.get(env.DIRECTORY.idFromName(GLOBAL)) as unknown as { migrationRun(): Promise<unknown> };
@@ -508,7 +510,7 @@ describe('the id block', () => {
     // a second pass that re-derived the rank would collide. The answer names
     // both accounts rather than being an HTML error page the RPC layer also
     // spends its whole backoff on.
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     const [alice, bob] = fixture();
     await post(env, '/_migrate/import', { user: alice!.user, idx: 1, table: null, rows: [], profile: alice!.profile });
     const clash = await post(env, '/_migrate/import', { user: bob!.user, idx: 1, table: null, rows: [], profile: bob!.profile });
@@ -533,7 +535,7 @@ describe('the global cells', () => {
   ];
 
   it('carries account_merges and the limiter ledger with their ids, and a replay adds nothing', async () => {
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     await runImport(env, fixture());
     const merges = await post(env, '/_migrate/import', { cell: 'directory', table: 'account_merges', rows: MERGES });
     expect(await merges.json()).toEqual({ inserted: { account_merges: 2 }, dropped: 0 });
@@ -562,7 +564,7 @@ describe('the global cells', () => {
     // `account_merges` is not append-only: a merge `started` at the first
     // snapshot is `completed` at the second, and `previous_ids` reads the
     // completed row.
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     await runImport(env, fixture());
     await post(env, '/_migrate/import', { cell: 'directory', table: 'account_merges', rows: MERGES });
     const finished = { ...MERGES[1]!, status: 'completed', completed_at: '2026-06-01T00:00:02+00:00', counts: '{"decks":1}' };
@@ -578,7 +580,7 @@ describe('the global cells', () => {
   });
 
   it('refuses a global table its cell does not own', async () => {
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     // The directory's `users` rows are the per-user register's, which is also
     // what hands out the id block.
     const users = await post(env, '/_migrate/import', { cell: 'directory', table: 'users', rows: [] });
@@ -592,7 +594,7 @@ describe('the global cells', () => {
 
 describe('the seal', () => {
   it('closes every migrate route once the cutover verifies', async () => {
-    const env = replayEnv().env;
+    const env = workerEnv().env;
     await runImport(env, fixture());
     expect(await (await post(env, '/_migrate/seal', {})).json()).toEqual({ sealed: true });
 

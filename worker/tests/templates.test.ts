@@ -93,6 +93,20 @@ describe("the renderer", () => {
     expect(makeRenderer().render("privacy.html", baseContext({ user: null }))).toContain('href="/static/css/vce11d0000000/index.css"');
   });
 
+  it("keeps the offline shell standalone and build-pinned", () => {
+    const html = makeRenderer("/prep").render("offline.html", {
+      build: "abc1234",
+      user: { login: "seed@example.com" },
+      clerk_publishable_key: "pk_test_seed",
+      clerk_frontend_api_host: "clerk.example.test",
+    });
+    expect(html).toContain('href="/prep/static/css/vabc1234/index.css"');
+    expect(html).toContain('"@/": "/prep/static/js/vabc1234/"');
+    expect(html).not.toContain("seed@example.com");
+    expect(html).not.toContain("clerk");
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
   it("turns the deck_display table into the lookup the templates call", () => {
     const fn = prepareContext({ deck_display: { capitals: "World Capitals" } }, "")["deck_display"] as (s: unknown) => string;
     expect(fn("capitals")).toBe("World Capitals");

@@ -203,7 +203,7 @@ export interface CardRepo {
 export interface ReviewRepo {
   /** Records a review and advances the SRS state; the canonical grade path. */
   record(qid: number, result: ReviewResult, userAnswer: string, notes?: string): CardState;
-  listReviewsForDeck(deckId: number): ReviewRow[];
+  listReviewsForDeck(deckId: number): (ReviewRow & { question_id: number })[];
   importReview(qid: number, ts: string, result: ReviewResult, userAnswer?: string, graderNotes?: string | null): void;
   getLastUserAnswer(qid: number): string | null;
 }
@@ -217,6 +217,7 @@ export interface SessionRepo {
   snooze(sid: string, untilIso: string | null): void;
   listSnoozed(): RecentSession[];
   updateDraft(sid: string, draft: string, expectedVersion: number): number;
+  assertAnswerable(sid: string, questionId: number, expectedVersion: number): void;
   recordAnswerSync(
     sid: string,
     questionId: number,
@@ -686,7 +687,11 @@ export interface JobTransition extends JobStatus {
 
 export interface WorkflowRunner {
   /** Throws `RunnerUnavailable` on a deploy with jobs off. */
-  start<K extends JobKind>(kind: K, input: JobInputs[K]): Promise<{ workflowId: string }>;
+  start<K extends JobKind>(
+    kind: K,
+    input: JobInputs[K],
+    opts?: { idempotencyKey?: string },
+  ): Promise<{ workflowId: string }>;
   /** The post-signal status, so a route renders the transient fragment
    * without a second read. Null when no job owns the id. */
   signal(id: string, event: { name: string; payload?: unknown }): Promise<JobStatus | null>;
@@ -877,6 +882,8 @@ export interface JobCellRpc {
     deckId: number | null;
     deckName: string | null;
     at: string;
+    /** A retry key identifies the same operation even after it is terminal. */
+    preserveTerminal?: boolean;
   }): Promise<JobTransition>;
   signal(event: { name: string; payload?: unknown; at: string }): Promise<JobTransition | null>;
   terminate(reason: string, at: string): Promise<void>;

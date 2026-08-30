@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncItemRejected } from '../../app/ports.js';
-import { cell, D, H, TEST_NOW, at } from './setup.js';
+import { cell, D, H, M, TEST_NOW, at } from './setup.js';
 
 describe('OfflineRepo: snapshot', () => {
   it('lists SRS decks in dashboard order with totals, and every unsuspended SRS card with its step', () => {
@@ -71,6 +71,17 @@ describe('OfflineRepo: sync writes', () => {
     expect(repos.idempotency.findSync('r2')).toEqual({ kind: 'review', status: 'logged_no_reschedule', question_id: qid });
     expect(() => repos.offline.applyReview('r3', 999, 'right', 'a', TEST_NOW, '')).toThrow(SyncItemRejected);
     expect(repos.idempotency.findSync('r3')).toBeNull();
+  });
+
+  it('persists the learning rung across successive offline reviews', () => {
+    const { repos } = cell();
+    const deck = repos.decks.create('d');
+    const qid = repos.questions.add(deck, { type: 'short', prompt: 'p', answer: 'a' });
+
+    expect(repos.offline.applyReview('r1', qid, 'right', 'a', TEST_NOW, '')).toBe('applied');
+    expect(repos.cards.srsState(qid)).toMatchObject({ fsrs_state: 1, learning_steps: 1 });
+    expect(repos.offline.applyReview('r2', qid, 'right', 'a', at(TEST_NOW, 10 * M), '')).toBe('applied');
+    expect(repos.cards.srsState(qid)).toMatchObject({ fsrs_state: 2, learning_steps: 0 });
   });
 
   it('resolves the inbox and named decks SRS-only, suffixing past taken slugs', () => {

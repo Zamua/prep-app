@@ -6,7 +6,7 @@ import { ANON_MAX_DECKS } from '../../domain/limits.js';
 import { clientIp, MAX_BODY_BYTES } from '../../runtime/routes/instant.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
-import { ORIGIN, SEED_USER, replayEnv, seed } from './harness.js';
+import { ORIGIN, SEED_USER, workerEnv, seed } from './harness.js';
 
 const DECK = JSON.stringify([
   { q: 'Q1?', a: 'a1', r: 'a1' },
@@ -63,7 +63,7 @@ describe('POST /api/instant/generate', () => {
   beforeEach(() => stubAgent());
 
   it('refuses an unusable topic before it reaches the limiter', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     for (const body of [{ topic: '' }, { topic: ' \n ' }, { topic: 'x'.repeat(501) }, { nope: 1 }, 'not json']) {
       const { status, json } = await generate(env, body);
       expect(status).toBe(422);
@@ -72,7 +72,7 @@ describe('POST /api/instant/generate', () => {
   });
 
   it('refuses a body past the cap without reading it', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     const res = await worker.fetch(
       new Request(`${ORIGIN}/api/instant/generate`, {
         method: 'POST',
@@ -85,21 +85,21 @@ describe('POST /api/instant/generate', () => {
   });
 
   it('refuses when the deploy funds no free tier', async () => {
-    const { env } = replayEnv({ PREP_FREE_INFERENCE_API_KEY: '' });
+    const { env } = workerEnv({ PREP_FREE_INFERENCE_API_KEY: '' });
     const { status, json } = await generate(env, { topic: 'the French Revolution' });
     expect(status).toBe(503);
     expect(json).toEqual({ kind: 'not_configured', message: "Instant decks aren't available on this deploy." });
   });
 
   it('refuses a visitor when anonymous accounts are off', async () => {
-    const { env } = replayEnv({ PREP_KEY_ENCRYPTION_SECRET: '', PREP_ANON_COOKIE_SECRET: '' });
+    const { env } = workerEnv({ PREP_KEY_ENCRYPTION_SECRET: '', PREP_ANON_COOKIE_SECRET: '' });
     const { status, json } = await generate(env, { topic: 'the French Revolution' });
     expect(status).toBe(503);
     expect(json['kind']).toBe('not_configured');
   });
 
   it('mints an account, stores the deck and asks for the cookie', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     const { status, json, res } = await generate(env, { topic: '  Roman   emperors\n' }, { 'x-real-ip': '198.51.100.8' });
     expect(status).toBe(200);
     expect(json['kind']).toBe('ok');
@@ -108,7 +108,7 @@ describe('POST /api/instant/generate', () => {
   });
 
   it('charges the same IP a minute-scoped refusal on the second try', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env, 'reader', SEED_USER);
     const first = await generate(env, { topic: 'the French Revolution' }, { ...SIGNED_IN, 'x-real-ip': '198.51.100.7' });
     expect(first.status).toBe(200);
@@ -125,14 +125,14 @@ describe('POST /api/instant/generate', () => {
 
   it('counts a degenerate answer as spend and reads as a failed generation', async () => {
     stubAgent(JSON.stringify([{ q: 'only', a: 'one' }]));
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     const { status, json } = await generate(env, { topic: 'thin topic' }, { 'x-real-ip': '203.0.113.5' });
     expect(status).toBe(502);
     expect(json).toEqual({ kind: 'generation_failed', message: "That didn't work. Try again." });
   });
 
   it('refuses a guest already at its deck cap', async () => {
-    const { env, userStorage } = replayEnv();
+    const { env, userStorage } = workerEnv();
     const minted = await generate(env, { topic: 'first topic' }, { 'x-real-ip': '203.0.113.9' });
     const cookie = minted.res.headers.get('set-cookie')!.split(';')[0]!;
     // Fill the account to its ceiling past the repository: the cap guard

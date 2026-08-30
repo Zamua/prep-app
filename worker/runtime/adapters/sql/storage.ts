@@ -68,12 +68,10 @@ export class Db {
  * cells mint from disjoint id blocks, so a collision is a bug and the
  * target's row is the one to keep.
  *
- * `update` overwrites it when it differs. That is the migration's, and the
- * delta pass is why: every table but `cards` is also inserted into, but
- * `cards` is only ever rewritten - each review moves `stability`,
- * `difficulty`, `next_due`, `step` and `fsrs_state` - so an import that can
- * only insert carries a user's pre-window schedule forward, and no re-run of
- * the same import can repair it.
+ * `update` overwrites it when it differs. Every table except `cards` is also
+ * inserted into during normal use; reviews rewrite existing card scheduler
+ * state. Without updates, re-running an import cannot carry schedule changes
+ * made during the migration window.
  */
 export type ConflictMode = 'ignore' | 'update';
 

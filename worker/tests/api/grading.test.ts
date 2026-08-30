@@ -60,6 +60,7 @@ const RESULT = {
 describe('parseGradingWid', () => {
   it('walks from the right, so a hyphenated deck name survives', () => {
     expect(parseGradingWid('grade-world-capitals-q42-abcdef')).toEqual(['world-capitals', 42]);
+    expect(parseGradingWid('grade-session-q42-0123456789abcdefv1')).toEqual(['session', 42]);
     expect(parseGradingWid('grade-x-q1-a')).toEqual(['x', 1]);
   });
 

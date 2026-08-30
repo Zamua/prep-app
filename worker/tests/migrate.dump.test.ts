@@ -8,7 +8,7 @@ import { GLOBAL } from '../runtime/adapters/cells.js';
 import type { Env } from '../runtime/env.js';
 import { MAX_DUMP_ROWS } from '../runtime/routes/migrateDump.js';
 import worker from '../runtime/worker.js';
-import { INTERNAL_TOKEN, ORIGIN, replayEnv } from './api/harness.js';
+import { INTERNAL_TOKEN, ORIGIN, workerEnv } from './api/harness.js';
 
 const ALICE = 'alice@example.com';
 const REVIEWS = 12;
@@ -50,6 +50,7 @@ async function seed(env: Env): Promise<void> {
           stability: 12.345678901234567,
           difficulty: 5,
           fsrs_state: 2,
+          learning_steps: 0,
         },
       ],
       reviews: Array.from({ length: REVIEWS }, (_, i) => ({
@@ -68,9 +69,9 @@ async function seed(env: Env): Promise<void> {
 
 describe('the dump is gated exactly as the rest of /_migrate is', () => {
   it('answers 503 unconfigured, 401 on a wrong token, 200 on the right one', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
-    const bare = replayEnv({ PREP_INTERNAL_TOKEN: undefined }).env;
+    const bare = workerEnv({ PREP_INTERNAL_TOKEN: undefined }).env;
     expect((await get(bare, `user=${ALICE}&table=decks`)).status).toBe(503);
     expect((await get(env, `user=${ALICE}&table=decks`, 'wrong')).status).toBe(401);
     expect((await get(env, `user=${ALICE}&table=decks`, null)).status).toBe(401);
@@ -78,14 +79,14 @@ describe('the dump is gated exactly as the rest of /_migrate is', () => {
   });
 
   it('runs outside testMode, because the data it verifies lives in production', async () => {
-    const { env } = replayEnv({ PREP_ENV: 'prod', PREP_TEST_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined });
+    const { env } = workerEnv({ PREP_ENV: 'prod', PREP_TEST_MODE: undefined, PREP_FAKE_NOW: undefined, PREP_PLACEHOLDER_INDEX: undefined });
     await seed(env);
     const page = await body(await get(env, `user=${ALICE}&table=decks`));
     expect(page.rows).toHaveLength(1);
   });
 
   it('answers 410 once the fleet is sealed', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const sealed = await worker.fetch(
       new Request(`${ORIGIN}/_migrate/seal`, { method: 'POST', headers: { 'x-internal-token': INTERNAL_TOKEN } }),
@@ -98,7 +99,7 @@ describe('the dump is gated exactly as the rest of /_migrate is', () => {
 
 describe('one bounded page at a time', () => {
   it('pages by rowid and stops with a null cursor', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const seen: unknown[] = [];
     let after: number | null = null;
@@ -116,7 +117,7 @@ describe('one bounded page at a time', () => {
 
   it('is bounded by the same argument the import is', async () => {
     expect(MAX_DUMP_ROWS).toBe(MAX_CHUNK_ROWS);
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const over = await body(await get(env, `user=${ALICE}&table=reviews&limit=${MAX_DUMP_ROWS * 10}`));
     expect(over.rows).toHaveLength(REVIEWS);
@@ -130,7 +131,7 @@ describe('one bounded page at a time', () => {
   });
 
   it('refuses a cursor that is not a non-negative integer instead of reading from the start', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     expect((await get(env, `user=${ALICE}&table=reviews&after=abc`)).status).toBe(400);
     expect((await get(env, `user=${ALICE}&table=reviews&after=-1`)).status).toBe(400);
@@ -138,7 +139,7 @@ describe('one bounded page at a time', () => {
   });
 
   it('refuses a zero limit rather than answering that the table is empty', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const res = await get(env, `user=${ALICE}&table=reviews&limit=0`);
     expect([res.status, await res.json()]).toEqual([400, { detail: 'limit must be a positive integer' }]);
@@ -147,7 +148,7 @@ describe('one bounded page at a time', () => {
 
 describe('what a page carries', () => {
   it('returns every column verbatim, doubles included', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const page = await body(await get(env, `user=${ALICE}&table=cards`));
     expect(page.rows).toEqual([
@@ -159,12 +160,13 @@ describe('what a page carries', () => {
         stability: 12.345678901234567,
         difficulty: 5,
         fsrs_state: 2,
+        learning_steps: 0,
       },
     ]);
   });
 
   it('projects to the named columns, so a key check does not carry the bodies', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const page = await body(await get(env, `user=${ALICE}&table=reviews&columns=id`));
     expect(page.rows[0]).toEqual({ id: 500 });
@@ -172,7 +174,7 @@ describe('what a page carries', () => {
   });
 
   it('never leaks the rowid it paged on', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const page = await body(await get(env, `user=${ALICE}&table=decks`));
     expect(Object.keys(page.rows[0]!)).not.toContain('_rowid');
@@ -181,7 +183,7 @@ describe('what a page carries', () => {
 
 describe('the global cells', () => {
   it('dumps the directory and the limiter by name', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     const directory = env.DIRECTORY.get(env.DIRECTORY.idFromName(GLOBAL)) as unknown as {
       register(id: string, anon: boolean, at: string, opts?: { idx?: number }): Promise<unknown>;
     };
@@ -201,7 +203,7 @@ describe('the global cells', () => {
 
 describe('a name the cell does not have is the diagnosis, not a 500', () => {
   it('refuses an unknown table, an unknown column and a missing argument', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     await seed(env);
     const table = await get(env, `user=${ALICE}&table=sqlite_master`);
     expect(table.status).toBe(422);
@@ -215,7 +217,7 @@ describe('a name the cell does not have is the diagnosis, not a 500', () => {
   });
 
   it('answers 405 to a write', async () => {
-    const { env } = replayEnv();
+    const { env } = workerEnv();
     const res = await worker.fetch(
       new Request(`${ORIGIN}/_migrate/dump?user=${ALICE}&table=decks`, { method: 'POST', headers: { 'x-internal-token': INTERNAL_TOKEN } }),
       env,

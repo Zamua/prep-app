@@ -76,3 +76,26 @@ describe('the id block', () => {
     expect(2_000_000 * ID_BLOCK + ID_BLOCK).toBeLessThan(2 ** 53);
   });
 });
+
+describe('the learning rung migration', () => {
+  it('defaults existing rows to zero, is idempotent and matches the fresh schema', () => {
+    const upgraded = new FakeCellStorage();
+    migrate(upgraded.sql, USER_MIGRATIONS.filter((m) => m.version < 4));
+    const db = new Db(upgraded.sql);
+    db.script('ALTER TABLE cards DROP COLUMN learning_steps');
+    db.run("INSERT INTO decks (id, name, created_at) VALUES (1, 'd', '2026-03-14T15:00:00+00:00')");
+    db.run("INSERT INTO questions (id, deck_id, type, prompt, answer, created_at) VALUES (1, 1, 'short', 'q', 'a', '2026-03-14T15:00:00+00:00')");
+    db.run("INSERT INTO cards (question_id, step, next_due, last_review, stability, difficulty, fsrs_state) VALUES (1, 1, '2026-03-14T15:10:00+00:00', '2026-03-14T15:00:00+00:00', 2.3065, 2.11810397, 1)");
+    const before = db.first('SELECT * FROM cards');
+
+    expect(migrate(upgraded.sql, USER_MIGRATIONS)).toBe(4);
+    expect(db.first('SELECT * FROM cards')).toEqual({ ...before, learning_steps: 0 });
+    const once = db.all('SELECT * FROM cards');
+    USER_MIGRATIONS.find((m) => m.version === 4)!.apply(db);
+    expect(db.all('SELECT * FROM cards')).toEqual(once);
+
+    const fresh = new FakeCellStorage();
+    migrate(fresh.sql, USER_MIGRATIONS);
+    expect(db.all("PRAGMA table_info('cards')")).toEqual(new Db(fresh.sql).all("PRAGMA table_info('cards')"));
+  });
+});

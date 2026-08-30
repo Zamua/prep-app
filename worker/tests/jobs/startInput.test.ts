@@ -20,9 +20,17 @@ const DECK = 'distributed-systems';
 const TRIVIA_DECK = 'world-history';
 
 class CapturingRunner {
-  readonly starts: { kind: JobKind; input: Record<string, unknown> }[] = [];
-  async start<K extends JobKind>(kind: K, input: JobInputs[K]): Promise<{ workflowId: string }> {
-    this.starts.push({ kind, input: input as unknown as Record<string, unknown> });
+  readonly starts: {
+    kind: JobKind;
+    input: Record<string, unknown>;
+    opts: { idempotencyKey?: string };
+  }[] = [];
+  async start<K extends JobKind>(
+    kind: K,
+    input: JobInputs[K],
+    opts: { idempotencyKey?: string } = {},
+  ): Promise<{ workflowId: string }> {
+    this.starts.push({ kind, input: input as unknown as Record<string, unknown>, opts });
     return { workflowId: `${kind}-0123456789` };
   }
   async signal(): Promise<null> {
@@ -162,6 +170,23 @@ describe('a GradeAnswer start carries the question its grade step is shown', () 
     const prompt = await h.prompt('grade', input);
     expect(prompt).toContain(q.prompt);
     expect(prompt).toContain(q.answer);
+  });
+  it('keys a session grade to the session version', async () => {
+    const h = await harness();
+    const deckId = h.repos.decks.create('session-grade');
+    const qid = h.repos.questions.add(deckId, { type: 'short', prompt: 'Capital of Peru?', answer: 'Lima' });
+    const sid = await h.repos.sessions.create(deckId, 'test');
+    const session = h.repos.sessions.get(sid)!;
+
+    const res = await h.json(`/api/study/sessions/${sid}/submit`, {
+      question_id: qid,
+      version: session.version,
+      answer: 'Lima',
+      idk: false,
+    });
+
+    expect(res.status).toBe(200);
+    expect(h.runner.starts[0]?.opts).toEqual({ idempotencyKey: `${sid}v${session.version}` });
   });
 });
 

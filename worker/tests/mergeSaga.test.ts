@@ -90,7 +90,7 @@ function loadTables(storage: FakeCellStorage, user: string): void {
  */
 function loadDerived(storage: FakeCellStorage, opts: { questionId: number; sessionId: string }): void {
   insertRows(storage, 'cards', [
-    { question_id: opts.questionId, step: 2, next_due: NOW, stability: 7.5, difficulty: 5.0, fsrs_state: 2, last_review: NOW },
+    { question_id: opts.questionId, step: 1, next_due: NOW, stability: 2.3065, difficulty: 2.11810397, fsrs_state: 1, last_review: NOW, learning_steps: 1 },
   ]);
   insertRows(storage, 'reviews', [{ id: 1, question_id: opts.questionId, ts: NOW, result: 'right', user_answer: 'Paris' }]);
   insertRows(storage, 'study_session_answers', [
@@ -182,7 +182,7 @@ describe('the merge saga over the seeded scenario', () => {
 
   it('carries the anonymous derived rows the fixture cannot pin', async () => {
     const tables = await targetTables(f);
-    expect(tables['cards']).toEqual([expect.objectContaining({ question_id: 1, step: 2, fsrs_state: 2 })]);
+    expect(tables['cards']).toEqual([expect.objectContaining({ question_id: 1, fsrs_state: 1, learning_steps: 1 })]);
     expect(tables['reviews']).toEqual([expect.objectContaining({ question_id: 1, result: 'right' })]);
     expect(tables['study_session_answers']).toEqual([expect.objectContaining({ session_id: 'anonsession000001', question_id: 1 })]);
     expect(tables['trivia_queue']).toEqual([expect.objectContaining({ question_id: 1, queue_position: 1 })]);

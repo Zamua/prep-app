@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS cards (
   last_review TEXT,
   stability   REAL,
   difficulty  REAL,
-  fsrs_state  INTEGER NOT NULL DEFAULT 1
+  fsrs_state  INTEGER NOT NULL DEFAULT 1,
+  learning_steps INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(next_due);
 

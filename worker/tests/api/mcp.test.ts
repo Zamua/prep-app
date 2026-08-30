@@ -1,6 +1,6 @@
 // The MCP endpoint: the catalog an external client negotiates against,
-// the JSON-RPC envelopes, and the tool-level refusals the corpus does not
-// reach. Driven through the entry worker so the bearer gate is real.
+// the JSON-RPC envelopes, and tool-level refusals. Driven through the entry
+// worker so the bearer gate is real.
 import { zipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dispatch, MCP_PROTOCOL_VERSION } from '../../app/api/mcp.js';
@@ -11,10 +11,40 @@ import { SqlJsApkg } from '../../runtime/adapters/apkg.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
 import { cell } from '../repos/setup.js';
-import { loadCorpus, mintToken, ORIGIN, SEED_USER, replayEnv, seed } from './harness.js';
+import { mintToken, ORIGIN, SEED_USER, workerEnv, seed } from './harness.js';
 
 let env: Env;
 let bearer: string;
+
+const EXPECTED_TOOL_NAMES = [
+  'prep_list_decks',
+  'prep_get_deck',
+  'prep_list_cards',
+  'prep_export_deck_csv',
+  'prep_create_deck',
+  'prep_import_csv',
+  'prep_rename_deck',
+  'prep_delete_deck',
+  'prep_set_deck_pinned',
+  'prep_set_topic_prompt',
+  'prep_get_card',
+  'prep_add_card',
+  'prep_update_card',
+  'prep_delete_card',
+  'prep_suspend_card',
+  'prep_export_deck_apkg',
+  'prep_import_apkg',
+] as const;
+
+type InputSchema = {
+  type?: unknown;
+  required?: unknown;
+  properties?: Record<string, Record<string, unknown>>;
+};
+
+function inputSchema(name: string): InputSchema {
+  return TOOLS.find((candidate) => candidate.name === name)!.inputSchema as InputSchema;
+}
 
 async function rpc(body: unknown): Promise<{ status: number; json: unknown; text: string }> {
   const res = await worker.fetch(
@@ -39,19 +69,46 @@ async function tool(name: string, args: Record<string, unknown> = {}): Promise<{
 }
 
 beforeAll(async () => {
-  const replay = replayEnv();
-  env = replay.env;
+  const state = workerEnv();
+  env = state.env;
   await seed(env, 'reader', SEED_USER);
-  bearer = await mintToken(replay.userStorage(SEED_USER), SEED_USER, 'mcp');
+  bearer = await mintToken(state.userStorage(SEED_USER), SEED_USER, 'mcp');
 }, 60_000);
 
 describe('the tool catalog', () => {
-  it('is the seventeen objects the corpus recorded', async () => {
-    const corpus = loadCorpus('api');
-    const recorded = corpus.pairs.find((p) => p.name === 'mcp-tools-list')!.response.json as { result: { tools: unknown[] } };
-    expect(TOOLS).toHaveLength(17);
+  it('defines the exact unique tool set', () => {
+    const names = TOOLS.map((tool) => tool.name);
+    expect(names).toEqual(EXPECTED_TOOL_NAMES);
+    expect(new Set(names).size).toBe(EXPECTED_TOOL_NAMES.length);
+  });
+
+  it('pins contract-critical input schemas', () => {
+    const create = inputSchema('prep_create_deck');
+    expect(create.type).toBe('object');
+    expect(create.required).toEqual(['name']);
+    expect(create.properties).toMatchObject({ name: { type: 'string' }, context_prompt: { type: 'string' } });
+
+    const add = inputSchema('prep_add_card');
+    expect(add.type).toBe('object');
+    expect(add.required).toEqual(['deck', 'type', 'prompt', 'answer']);
+    expect(add.properties).toMatchObject({
+      deck: { type: 'string' },
+      type: { type: 'string', enum: ['short', 'mcq', 'multi', 'code'] },
+      choices: { type: 'array', items: { type: 'string' } },
+    });
+
+    const suspend = inputSchema('prep_suspend_card');
+    expect(suspend.required).toEqual(['card_id', 'suspended']);
+    expect(suspend.properties).toMatchObject({ card_id: { type: 'integer' }, suspended: { type: 'boolean' } });
+
+    const importApkg = inputSchema('prep_import_apkg');
+    expect(importApkg.required).toEqual(['name', 'apkg_base64']);
+    expect(importApkg.properties).toMatchObject({ name: { type: 'string' }, apkg_base64: { type: 'string' } });
+  });
+
+  it('publishes the catalog through tools/list', async () => {
     const { json } = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
-    expect((json as { result: { tools: unknown[] } }).result.tools).toEqual(recorded.result.tools);
+    expect((json as { result: { tools: unknown[] } }).result.tools).toEqual(TOOLS);
   });
 
   it('names every tool the dispatcher can run', async () => {

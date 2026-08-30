@@ -22,9 +22,24 @@ export interface RunnerDeps {
 export class AlarmLedgerRunner implements WorkflowRunner {
   constructor(private readonly deps: RunnerDeps) {}
 
-  async start<K extends JobKind>(kind: K, input: JobInputs[K]): Promise<{ workflowId: string }> {
+  async start<K extends JobKind>(
+    kind: K,
+    input: JobInputs[K],
+    opts: { idempotencyKey?: string } = {},
+  ): Promise<{ workflowId: string }> {
     const record = input as unknown as Record<string, unknown>;
-    const id = workflowId(kind, record, hex(this.deps.random.bytes(SUFFIX_HEX_CHARS / 2)));
+    const key = opts.idempotencyKey;
+    if (key !== undefined && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(key)) {
+      throw new TypeError('workflow idempotency key must be 1-64 lowercase letters, digits or hyphens');
+    }
+    const suffix = key === undefined
+      ? hex(this.deps.random.bytes(SUFFIX_HEX_CHARS / 2))
+      : encodeIdempotencyKey(key);
+    // A session can outlive a deck rename, so its keyed ID cannot use the
+    // mutable deck name.
+    const id = key !== undefined && kind === 'GradeAnswer'
+      ? gradeId('session', Number(record['questionId']), suffix)
+      : workflowId(kind, record, suffix);
     const route = jobRoute(kind, id, record);
     const status = await this.deps.jobs.cell(id).start({
       id,
@@ -36,6 +51,7 @@ export class AlarmLedgerRunner implements WorkflowRunner {
       deckId: route.deckId,
       deckName: route.deckName,
       at: isoUtc(this.deps.clock.now()),
+      preserveTerminal: key !== undefined,
     });
     await this.apply(id, kind, record, status);
     return { workflowId: id };
@@ -92,6 +108,10 @@ export class AlarmLedgerRunner implements WorkflowRunner {
 }
 
 
+
+function encodeIdempotencyKey(key: string): string {
+  return key.replaceAll('z', 'zz').replaceAll('-', 'zx');
+}
 
 function workflowId(kind: JobKind, input: Record<string, unknown>, suffix: string): string {
   const deck = String(input['deckName'] ?? '');

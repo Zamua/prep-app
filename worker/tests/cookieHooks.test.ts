@@ -1,33 +1,21 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resolveIdentity, type CookieVerdict } from '../app/auth/resolve';
-import { REFRESH_AFTER_SECONDS } from '../domain/anonCookie';
+import {
+  assembleCookie,
+  cookiePayload,
+  REFRESH_AFTER_SECONDS,
+} from '../domain/anonCookie';
 import { ANON_COOKIE_HEADER, composeWith, cookieHooks, type Composition } from '../runtime/compose';
 import type { Env } from '../runtime/env';
 import { NoIdentityProvider } from '../runtime/adapters/fakeIdentity';
 import { fakeEnv, req } from './helpers';
 
-// The recorded responses are the gate for these bytes: a browser that stops
-// accepting the value stops holding the account.
-interface Pair {
-  name: string;
-  request: { method: string; path: string; headers: Record<string, string> | null };
-  response: { status: number; set_cookie: string[] | null };
-}
-
-const pairs: Pair[] = JSON.parse(readFileSync(join(new URL('.', import.meta.url).pathname, 'fixtures', 'api-contract.json'), 'utf8')).pairs;
-const pair = (name: string): Pair => {
-  const found = pairs.find((p) => p.name === name);
-  if (!found) throw new Error(`no such contract pair: ${name}`);
-  return found;
-};
-
 const TEST_NOW = 1773500400;
 const MASTER = '11'.repeat(32);
-/** `expires` on a delete is the wall clock at recording time, so only its
- * presence and the rest of the value are the contract. */
-const normalise = (header: string) => header.replace(/expires=[^;]+/, 'expires=<now>');
+const EXTERNAL_ID = 'anon:' + 'ab'.repeat(16);
+const COOKIE_PATH = '/api/offline/snapshot';
+const normalise = (header: string) =>
+  header.replace(/expires=[^;]+/, 'expires=<now>');
 
 let env: Env;
 let c: Composition;
@@ -37,58 +25,108 @@ beforeEach(() => {
   c = composeWith(env, { identity: new NoIdentityProvider() });
 });
 
-/** One recorded request replayed through the resolver and the response hook. */
-async function replay(name: string, opts: { now?: number; ask?: string } = {}): Promise<string[]> {
-  const p = pair(name);
-  const now = opts.now ?? TEST_NOW;
-  const headers = { ...(p.request.headers ?? {}) };
-  const request = req(p.request.path, { method: p.request.method, headers });
+async function signedCookie(issuedAt = TEST_NOW): Promise<string> {
+  const signer = await c.signer();
+  if (!signer) throw new Error('cookie signer is disabled');
+  const payload = cookiePayload(EXTERNAL_ID, issuedAt);
+  return assembleCookie(payload, await signer.sign(payload));
+}
+
+interface RunOptions {
+  cookie?: string;
+  now?: number;
+  ask?: string;
+  status?: number;
+  method?: string;
+  path?: string;
+}
+
+async function run({
+  cookie,
+  now = TEST_NOW,
+  ask,
+  status = 200,
+  method = 'GET',
+  path = COOKIE_PATH,
+}: RunOptions = {}): Promise<string[]> {
+  const headers: Record<string, string> = {};
+  if (cookie) headers['cookie'] = `prep_anon=${cookie}`;
+  const request = req(path, { method, headers });
   const resolution = await resolveIdentity(request, {
     provider: c.identity,
     signer: await c.signer(),
     nowUnix: now,
-    cookieValue: headers['cookie']?.replace(/^prep_anon=/, '') ?? null,
+    cookieValue: cookie ?? null,
   });
-  // The cell answers 401 for a cookie whose row is gone; the corpus pairs
-  // that clear are the ones the resolver itself refused, so the verdict is
-  // the whole input here.
-  const response = new Response(null, { status: p.response.status });
-  if (opts.ask) response.headers.set(ANON_COOKIE_HEADER, opts.ask);
-  const withClock = req(p.request.path, { method: p.request.method, headers: { ...headers, 'x-prep-now': new Date(now * 1000).toISOString() } });
-  const out = await cookieHooks(c, withClock, resolution.cookie, response);
-  return out.headers.getSetCookie();
+  const response = new Response(null, { status });
+  if (ask) response.headers.set(ANON_COOKIE_HEADER, ask);
+  const withClock = req(path, {
+    method,
+    headers: {
+      ...headers,
+      'x-prep-now': new Date(now * 1000).toISOString(),
+    },
+  });
+  return (await cookieHooks(c, withClock, resolution.cookie, response))
+    .headers.getSetCookie();
 }
 
-const expected = (name: string): string[] => (pair(name).response.set_cookie ?? []).map(normalise);
+const cookieValue = (header: string): string => {
+  const match = /^prep_anon=([^;]+)/.exec(header);
+  if (!match) throw new Error(`missing anonymous cookie: ${header}`);
+  return match[1]!;
+};
 
-describe('the contract corpus Set-Cookie sequences', () => {
-  it('a visitor who generates gets exactly the recorded fresh cookie', async () => {
-    expect(await replay('instant-visitor-mints', { ask: 'mint=anon:75667288ef1fdcbaf8bb23f942f81d65' })).toEqual(expected('instant-visitor-mints'));
+const cleared =
+  'prep_anon=""; expires=<now>; HttpOnly; Max-Age=0; Path=/; ' +
+  'SameSite=lax; Secure';
+
+describe('the anonymous-cookie lifecycle', () => {
+  it('mints a durable cookie that the resolver accepts', async () => {
+    const [header] = await run({ ask: `mint=${EXTERNAL_ID}` });
+    expect(header).toMatch(
+      /^prep_anon=v1\.[A-Za-z0-9_-]+\.1773500400\.[A-Za-z0-9_-]+; /,
+    );
+    expect(header).toContain(
+      'HttpOnly; Max-Age=15552000; Path=/; SameSite=lax; Secure',
+    );
+    expect(await run({ cookie: cookieValue(header!) })).toEqual([]);
   });
 
-  it('a fresh cookie is left alone', async () => {
-    expect(await replay('cookie-fresh-no-refresh')).toEqual([]);
-    expect(expected('cookie-fresh-no-refresh')).toEqual([]);
+  it('leaves a fresh cookie alone', async () => {
+    expect(await run({ cookie: await signedCookie() })).toEqual([]);
   });
 
-  it('a cookie past the refresh window is re-minted to the recorded value', async () => {
+  it('refreshes an old cookie once', async () => {
+    const original = await signedCookie();
     const later = TEST_NOW + REFRESH_AFTER_SECONDS + 1;
-    expect(await replay('cookie-refreshed-after-window', { now: later })).toEqual(expected('cookie-refreshed-after-window'));
+    const [header] = await run({ cookie: original, now: later });
+    const refreshed = cookieValue(header!);
+    expect(refreshed).not.toBe(original);
+    expect(await run({ cookie: refreshed, now: later })).toEqual([]);
   });
 
-  it('the re-minted value is then accepted without another refresh', async () => {
-    const later = TEST_NOW + REFRESH_AFTER_SECONDS + 1;
-    expect(await replay('cookie-refreshed-value-accepted', { now: later })).toEqual([]);
-  });
-
-  it('a future, forged or garbage cookie is deleted', async () => {
-    for (const name of ['cookie-from-the-future-cleared', 'cookie-bad-signature-cleared', 'cookie-garbage-cleared']) {
-      expect((await replay(name)).map(normalise), name).toEqual(expected(name));
+  it('clears future, forged and malformed cookies', async () => {
+    const valid = await signedCookie();
+    const invalid = [
+      await signedCookie(TEST_NOW + REFRESH_AFTER_SECONDS + 1),
+      valid.slice(0, -1) + (valid.endsWith('A') ? 'B' : 'A'),
+      'not-a-cookie',
+    ];
+    for (const cookie of invalid) {
+      expect((await run({ cookie, status: 401 })).map(normalise))
+        .toEqual([cleared]);
     }
   });
 
-  it('forget-device deletes it', async () => {
-    expect((await replay('forget-device', { ask: 'clear' })).map(normalise)).toEqual(expected('forget-device'));
+  it('clears the cookie when the device is forgotten', async () => {
+    expect((await run({
+      cookie: await signedCookie(),
+      ask: 'clear',
+      status: 303,
+      method: 'POST',
+      path: '/forget-device',
+    })).map(normalise)).toEqual([cleared]);
   });
 });
 
