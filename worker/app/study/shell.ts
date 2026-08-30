@@ -88,8 +88,11 @@ export function gradingView(req: PageRequest, deps: ShellDeps): PageResult {
   const [deckName, qid] = parsed;
   const { repos } = deps;
   if (repos.questions.get(qid) === null) throw notFound(NO_SUCH_JOB);
-  if (repos.decks.findId(deckName) === null) throw notFound(NO_SUCH_JOB);
   const sid = req.query.get('sid') ?? '';
-  if (sid && repos.sessions.get(sid) !== null) return redirect(`/session/${sid}`);
+  if (sid) {
+    if (repos.sessions.get(sid) === null) throw notFound(NO_SUCH_JOB);
+    return redirect(`/session/${sid}`);
+  }
+  if (repos.decks.findId(deckName) === null) throw notFound(NO_SUCH_JOB);
   return redirect(`/study/${deckName}`);
 }

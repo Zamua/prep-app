@@ -13,6 +13,7 @@ export const USER_MIGRATIONS: readonly Migration[] = [
   { version: 1, apply: (db) => db.script(USER_SCHEMA) },
   { version: 2, apply: addJobProgress },
   { version: 3, apply: addStepResults },
+  { version: 4, apply: addLearningSteps },
 ];
 
 /** The read model `WorkflowRunner.status` answers from, on cells created
@@ -38,6 +39,11 @@ function addStepResults(db: Db): void {
   created_at      TEXT NOT NULL
 )`,
   );
+}
+
+function addLearningSteps(db: Db): void {
+  const has = db.first("SELECT name FROM pragma_table_info('cards') WHERE name = 'learning_steps'");
+  if (!has) db.script('ALTER TABLE cards ADD COLUMN learning_steps INTEGER NOT NULL DEFAULT 0');
 }
 
 export const JOB_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(JOB_SCHEMA) }];

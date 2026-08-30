@@ -221,6 +221,14 @@ async function submit(
   const idk = Boolean(body.idk);
   const session = s !== null ? sessionPayload(s, deckName) : null;
   if (s !== null && body.version === null) return error(422, 'version_required', 'session submissions must carry the version');
+  if (s !== null) {
+    try {
+      repos.sessions.assertAnswerable(s.id, q.id, body.version as number);
+    } catch (e) {
+      if (e instanceof StaleVersionError) return stale(e);
+      throw e;
+    }
+  }
 
   // A self-grade decision arrives after the reveal, so it is already a
   // verdict: record it like any deterministic one.
@@ -244,7 +252,7 @@ async function submit(
         idk,
         sessionId: s ? s.id : '',
         card: gradeCard({ type: q.type, prompt: q.prompt, answer: q.answer, rubric: q.rubric ?? '' }),
-      });
+      }, s ? { idempotencyKey: `${s.id}v${String(body.version)}` } : undefined);
       wid = started.workflowId;
       if (s !== null) repos.sessions.setGrading(s.id, q.id, wid, body.version as number);
       repos.jobs.register({
@@ -293,8 +301,11 @@ function record(
   }
   let state: CardState;
   try {
-    state = repos.reviews.record(q.id, verdict['result'] as 'right' | 'wrong', userAnswer, String(verdict['feedback'] || ''));
-    repos.sessions.recordAnswerSync(s.id, q.id, body.version as number, userAnswer, verdict, state as unknown as Record<string, unknown>);
+    state = repos.tx.sync(() => {
+      const recorded = repos.reviews.record(q.id, verdict['result'] as 'right' | 'wrong', userAnswer, String(verdict['feedback'] || ''));
+      repos.sessions.recordAnswerSync(s.id, q.id, body.version as number, userAnswer, verdict, recorded as unknown as Record<string, unknown>);
+      return recorded;
+    });
   } catch (e) {
     if (e instanceof StaleVersionError) return stale(e);
     throw e;

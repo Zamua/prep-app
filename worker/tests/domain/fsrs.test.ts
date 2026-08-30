@@ -7,6 +7,8 @@ import {
   seedStateFromLadderStep,
   stepForStability,
   type CardSRSState,
+  type ScheduledReview,
+  type Verdict,
 } from '../../domain/fsrs';
 
 const NOW = new Date('2026-03-14T15:00:00Z');
@@ -19,8 +21,30 @@ const review = (over: Partial<CardSRSState> = {}): CardSRSState => ({
   difficulty: 5,
   fsrsState: FsrsState.Review,
   lastReview: new Date(NOW.getTime() - 7 * DAY * 1000),
+  learningSteps: 0,
   ...over,
 });
+
+const midLadder = (learningSteps: number): CardSRSState => ({
+  stability: 2.3065,
+  difficulty: 2.11810397,
+  fsrsState: FsrsState.Learning,
+  lastReview: NOW,
+  learningSteps,
+});
+
+const streak = (from: CardSRSState, start: Date, verdicts: readonly Verdict[]): ScheduledReview[] => {
+  const out: ScheduledReview[] = [];
+  let state = from;
+  let now = start;
+  for (const verdict of verdicts) {
+    const r = scheduleReview(state, verdict, now, OFF);
+    out.push(r);
+    state = r.state;
+    now = r.nextDue;
+  }
+  return out;
+};
 
 describe('the ladder bucket', () => {
   it('is the stability thresholds 1, 3, 7, 14, 30', () => {
@@ -38,14 +62,14 @@ describe('the ladder bucket', () => {
 
 describe('the states a card row can hold', () => {
   it('freshState is a never-studied Learning card', () => {
-    expect(freshState()).toEqual({ stability: null, difficulty: null, fsrsState: FsrsState.Learning, lastReview: null });
+    expect(freshState()).toEqual({ stability: null, difficulty: null, fsrsState: FsrsState.Learning, lastReview: null, learningSteps: 0 });
   });
 
   it('seedStateFromLadderStep follows the ladder table', () => {
     expect(seedStateFromLadderStep(0, NOW)).toEqual(freshState());
     expect(seedStateFromLadderStep(-1, NOW)).toEqual(freshState());
-    expect(seedStateFromLadderStep(1, NOW)).toEqual({ stability: 1, difficulty: 5, fsrsState: FsrsState.Review, lastReview: NOW });
-    expect(seedStateFromLadderStep(3, NOW)).toEqual({ stability: 7, difficulty: 5, fsrsState: FsrsState.Review, lastReview: NOW });
+    expect(seedStateFromLadderStep(1, NOW)).toEqual({ stability: 1, difficulty: 5, fsrsState: FsrsState.Review, lastReview: NOW, learningSteps: 0 });
+    expect(seedStateFromLadderStep(3, NOW)).toEqual({ stability: 7, difficulty: 5, fsrsState: FsrsState.Review, lastReview: NOW, learningSteps: 0 });
     expect(seedStateFromLadderStep(5, NOW).stability).toBe(30);
     expect(seedStateFromLadderStep(9, NOW).stability).toBe(30);
   });
@@ -104,6 +128,45 @@ describe('the two verdicts move a card through the states', () => {
     expect(right.state.difficulty).toBeLessThanOrEqual(10);
   });
 
+  it('a fresh card graduates on the second right and keeps growing', () => {
+    const got = streak(freshState(), NOW, ['right', 'right', 'right']);
+    expect(got[0]).toMatchObject({ state: { fsrsState: FsrsState.Learning }, intervalSeconds: 10 * MINUTE });
+    expect(got[1]!.state.fsrsState).toBe(FsrsState.Review);
+    expect(got[1]!.intervalSeconds).toBeGreaterThan(got[0]!.intervalSeconds);
+    expect(got[2]!.state.fsrsState).toBe(FsrsState.Review);
+    expect(got[2]!.intervalSeconds).toBeGreaterThan(got[1]!.intervalSeconds);
+  });
+
+  it('a wrong answer in learning drops a rung and the card climbs back', () => {
+    const got = streak(freshState(), NOW, ['right', 'wrong', 'right', 'right', 'right']);
+    expect(got.map((r) => [r.state.fsrsState, r.intervalSeconds])).toEqual([
+      [FsrsState.Learning, 10 * MINUTE],
+      [FsrsState.Learning, MINUTE],
+      [FsrsState.Learning, 10 * MINUTE],
+      [FsrsState.Review, DAY],
+      [FsrsState.Review, 3 * DAY],
+    ]);
+  });
+
+  it('a card resumed mid-ladder takes the rung it stopped on', () => {
+    const later = new Date(NOW.getTime() + 10 * MINUTE * 1000);
+    expect(scheduleReview(midLadder(1), 'right', later, OFF).state.fsrsState).toBe(FsrsState.Review);
+    expect(scheduleReview(midLadder(0), 'right', later, OFF).intervalSeconds).toBe(10 * MINUTE);
+  });
+
+  it('clamps an invalid rung to the ladder used by the state', () => {
+    const later = new Date(NOW.getTime() + 10 * MINUTE * 1000);
+    const learning = (learningSteps: number) => scheduleReview(midLadder(learningSteps), 'right', later, OFF);
+    for (const junk of [-1, -0.5, NaN, Infinity, -Infinity, undefined as unknown as number]) {
+      expect(learning(junk), String(junk)).toEqual(learning(0));
+    }
+    expect(learning(1.9)).toEqual(learning(1));
+    expect(learning(99)).toEqual(learning(1));
+    expect(scheduleReview(review({ learningSteps: 99 }), 'wrong', NOW, OFF)).toEqual(scheduleReview(review(), 'wrong', NOW, OFF));
+    const relearning = review({ fsrsState: FsrsState.Relearning, learningSteps: 99 });
+    expect(scheduleReview(relearning, 'right', NOW, OFF)).toEqual(scheduleReview({ ...relearning, learningSteps: 0 }, 'right', NOW, OFF));
+  });
+
   it('a right answer on a review card keeps it in review, days out', () => {
     const r = scheduleReview(review(), 'right', NOW, OFF);
     expect(r.state.fsrsState).toBe(FsrsState.Review);
@@ -112,8 +175,6 @@ describe('the two verdicts move a card through the states', () => {
     expect(r.intervalSeconds).toBeGreaterThanOrEqual(DAY);
   });
 
-  // The lapse path: wrong sends a review card to relearning, and the next
-  // right graduates it back with a day-scale interval.
   it('a wrong answer lapses to relearning and a right answer graduates back', () => {
     const lapse = scheduleReview(review(), 'wrong', NOW, OFF);
     expect(lapse.state.fsrsState).toBe(FsrsState.Relearning);
@@ -186,8 +247,6 @@ describe('fuzz', () => {
     }
   });
 
-  // FSRS fuzz is a band around the interval, not a free hand. The bound is
-  // the widest band FSRS itself draws from, not the spread this case shows.
   it('stays within three days plus six percent of the unfuzzed interval', () => {
     const days = plain.intervalSeconds / DAY;
     for (let i = 0; i < 64; i++) {
@@ -228,7 +287,7 @@ describe('fuzz', () => {
 
 describe('elapsed time', () => {
   const late = new Date('2026-03-10T22:00:00Z');
-  const card = (): CardSRSState => ({ stability: 30, difficulty: 5, fsrsState: FsrsState.Review, lastReview: late });
+  const card = (): CardSRSState => ({ stability: 30, difficulty: 5, fsrsState: FsrsState.Review, lastReview: late, learningSteps: 0 });
   const after = (hours: number) =>
     scheduleReview(card(), 'right', new Date(late.getTime() + hours * 3600_000), { desiredRetention: 0.9, fuzz: false })
       .intervalSeconds / DAY;

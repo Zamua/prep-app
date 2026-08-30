@@ -11,7 +11,7 @@ const COLUMNS: Record<string, string[]> = {
   active_workflows: ["workflow_id", "workflow_type", "deck_id", "deck_name", "status", "started_at", "terminal_at", "url_path", "notified_action_at", "notified_terminal_at"],
   api_tokens: ["id", "token_hash", "label", "key_prefix", "created_at", "last_used_at"],
   byok_credentials: ["provider", "ciphertext", "key_prefix", "created_at", "last_used_at"],
-  cards: ["question_id", "step", "next_due", "last_review", "stability", "difficulty", "fsrs_state"],
+  cards: ["question_id", "step", "next_due", "last_review", "stability", "difficulty", "fsrs_state", "learning_steps"],
   decks: ["id", "name", "created_at", "context_prompt", "deck_type", "notification_interval_minutes", "last_notified_at", "notifications_enabled", "notification_ignored_streak", "trivia_session_size", "pinned_at", "notifications_muted_until", "desired_retention", "display_name"],
   grading_idempotency: ["idempotency_key", "question_id", "step", "next_due", "interval_minutes", "created_at"],
   job_progress: ["workflow_id", "payload", "transition", "updated_at"],

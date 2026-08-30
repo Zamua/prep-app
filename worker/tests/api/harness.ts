@@ -1,9 +1,4 @@
-// Replays a pinned corpus against the app: the entry worker over real
-// cells whose storage is the SqlStorage fake. One env, one isolate, so a
-// pair sees what the pairs before it wrote, in the order the corpus lists
-// them.
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+// A Worker environment backed by real cell classes and fake SQLite storage.
 import { DirectoryCell } from '../../runtime/cells/DirectoryCell.js';
 import { InstantLimiterCell } from '../../runtime/cells/InstantLimiterCell.js';
 import { UserCell } from '../../runtime/cells/UserCell.js';
@@ -15,41 +10,9 @@ import { userRepos } from '../../runtime/adapters/sql/index.js';
 import { SeededSessionIds, SeededRandom } from '../../runtime/adapters/random.js';
 import { assembleToken, maskToken } from '../../domain/pat.js';
 
-export const FIXTURES = join(new URL('..', import.meta.url).pathname, 'fixtures');
 export const SEED_USER = 'seed@example.com';
 export const INTERNAL_TOKEN = 'test-internal-token';
 export const ORIGIN = 'https://prep.example.test';
-
-export interface Pair {
-  name: string;
-  note: string | null;
-  request: {
-    method: string;
-    path: string;
-    headers: Record<string, string>;
-    json: unknown;
-    form: Record<string, string> | null;
-    text: string | null;
-  };
-  response: {
-    status: number;
-    content_type: string | null;
-    json: unknown;
-    text: string | null;
-    location: string | null;
-    set_cookie: string[];
-  };
-}
-
-export interface Corpus {
-  header: { volatile?: { pairs: string; pointer: string; regex: string }[]; ids: Record<string, unknown> };
-  pairs: Pair[];
-}
-
-/** The request/response pairs an API surface is pinned to. */
-export function loadCorpus(name: string): Corpus {
-  return JSON.parse(readFileSync(join(FIXTURES, `${name}-contract.json`), 'utf8')) as Corpus;
-}
 
 /** A namespace whose stubs are the real cell class over fake storage. */
 function cells<T>(make: (state: DurableObjectState) => T): DurableObjectNamespace & { storage(name: string): FakeCellStorage } {
@@ -70,13 +33,13 @@ function cells<T>(make: (state: DurableObjectState) => T): DurableObjectNamespac
   } as unknown as DurableObjectNamespace & { storage(name: string): FakeCellStorage };
 }
 
-export interface ReplayEnv {
+export interface WorkerEnv {
   env: Env;
   userStorage(id: string): FakeCellStorage;
 }
 
-/** The environment a seeded node runs with, minus the paths. */
-export function replayEnv(overrides: Partial<Env> = {}): ReplayEnv {
+/** An entry-worker environment backed by fake cells. */
+export function workerEnv(overrides: Partial<Env> = {}): WorkerEnv {
   const users = cells((state) => new UserCell(state, env));
   const directory = cells((state) => new DirectoryCell(state, env));
   const limiter = cells((state) => new InstantLimiterCell(state, env));
@@ -103,68 +66,7 @@ export function replayEnv(overrides: Partial<Env> = {}): ReplayEnv {
   return { env, userStorage: (id) => users.storage(id) };
 }
 
-export interface Recorded {
-  status: number;
-  contentType: string | null;
-  json: unknown;
-  text: string | null;
-  location: string | null;
-  setCookie: string[];
-}
-
-function requestOf(pair: Pair, extraHeaders: Record<string, string> = {}, jsonOverride?: unknown): Request {
-  const headers = new Headers();
-  for (const [k, v] of Object.entries(pair.request.headers)) headers.set(k, v);
-  for (const [k, v] of Object.entries(extraHeaders)) headers.set(k, v);
-  // The fake identity provider only trusts the tailscale headers when the
-  // internal token rides along, as the corpus sends them.
-  if (headers.has('tailscale-user-login')) headers.set('x-internal-token', INTERNAL_TOKEN);
-  let body: BodyInit | undefined;
-  const json = jsonOverride === undefined ? pair.request.json : jsonOverride;
-  if (json !== null && json !== undefined) {
-    body = JSON.stringify(json);
-    if (!headers.has('content-type')) headers.set('content-type', 'application/json');
-  } else if (pair.request.text !== null) {
-    body = pair.request.text;
-  } else if (pair.request.form !== null) {
-    body = new URLSearchParams(pair.request.form).toString();
-    headers.set('content-type', 'application/x-www-form-urlencoded');
-  }
-  if (body !== undefined) headers.set('content-length', String(new TextEncoder().encode(String(body)).length));
-  return new Request(`${ORIGIN}${pair.request.path}`, { method: pair.request.method, headers, body });
-}
-
-export async function record(res: Response): Promise<Recorded> {
-  const contentType = res.headers.get('content-type');
-  const raw = await res.text();
-  const isJson = (contentType ?? '').startsWith('application/json');
-  let json: unknown = null;
-  if (isJson && raw) {
-    try {
-      json = JSON.parse(raw);
-    } catch {
-      json = null;
-    }
-  }
-  return {
-    status: res.status,
-    contentType,
-    json,
-    // The corpus holds `response.text` for any non-JSON body, so an empty one
-    // is '' and never null; collapsing it loses a 303's empty body.
-    text: isJson ? null : raw,
-    location: res.headers.get('location'),
-    // `get('set-cookie')` comma-joins a sequence, so two cookies would record
-    // as one malformed value; `getSetCookie` keeps them apart.
-    setCookie: res.headers.getSetCookie(),
-  };
-}
-
-export async function replay(env: Env, pair: Pair, extraHeaders: Record<string, string> = {}, jsonOverride?: unknown): Promise<Recorded> {
-  return record(await worker.fetch(requestOf(pair, extraHeaders, jsonOverride), env));
-}
-
-/** `POST /_test/seed` through the entry worker, as the corpus does. */
+/** Seed a test user through the entry worker. */
 export async function seed(env: Env, profile: string, user = SEED_USER): Promise<Record<string, unknown>> {
   const res = await worker.fetch(
     new Request(`${ORIGIN}/_test/seed`, {
@@ -178,9 +80,7 @@ export async function seed(env: Env, profile: string, user = SEED_USER): Promise
   return (await res.json()) as Record<string, unknown>;
 }
 
-/** A personal access token for `subject`, written straight into its cell:
- * the settings page that mints one is another lane's, and the corpus
- * treats the bearer as volatile anyway. */
+/** Mint a personal access token directly in the subject's cell. */
 export async function mintToken(storage: FakeCellStorage, subject: string, label: string): Promise<string> {
   const hasher = new WebCryptoHasher();
   const token = assembleToken(subject, new SeededRandom(20260315).bytes(32));

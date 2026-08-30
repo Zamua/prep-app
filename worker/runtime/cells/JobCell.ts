@@ -67,14 +67,18 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     deckId: number | null;
     deckName: string | null;
     at: string;
+    preserveTerminal?: boolean;
   }): Promise<JobTransition> {
-    // A job id is unique for the life of a deploy, so an existing row for
-    // this id whose creation instant differs is a re-used id: the ledger
-    // belongs to a job that is gone. Answering from it would report the
-    // old job's outcome for a new one. Only a terminal ledger is reset,
-    // so a duplicate start of a live job still de-duplicates.
+    // A generated ID reused at another creation instant belongs to a new run.
+    // An explicit retry key identifies one operation even after it is terminal.
     const prior = this.ledger.read();
-    if (prior && prior.job.id === job.id && prior.job.created_at !== job.at && prior.job.state === 'terminal') {
+    if (
+      prior &&
+      prior.job.id === job.id &&
+      prior.job.created_at !== job.at &&
+      prior.job.state === 'terminal' &&
+      job.preserveTerminal !== true
+    ) {
       await this.wipe();
     }
     const fresh = this.ledger.create({

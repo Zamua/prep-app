@@ -35,6 +35,7 @@ export class SqlReviewRepo implements ReviewRepo {
           difficulty: card.difficulty,
           fsrsState: (card.fsrs_state || 1) as FsrsStateValue,
           lastReview: card.last_review ? parseIso(card.last_review) : null,
+          learningSteps: card.learning_steps,
         },
         result,
         now,
@@ -48,16 +49,17 @@ export class SqlReviewRepo implements ReviewRepo {
     });
   }
 
-  listReviewsForDeck(deckId: number): ReviewRow[] {
+  listReviewsForDeck(deckId: number): (ReviewRow & { question_id: number })[] {
     return this.db
       .all(
-        `SELECT q.prompt, r.ts, r.result, r.user_answer, r.grader_notes
+        `SELECT r.question_id, q.prompt, r.ts, r.result, r.user_answer, r.grader_notes
            FROM reviews r JOIN questions q ON q.id = r.question_id
           WHERE q.deck_id = ?
           ORDER BY r.ts ASC, r.id ASC`,
         deckId,
       )
       .map((r) => ({
+        question_id: Number(r['question_id']),
         prompt: String(r['prompt']),
         ts: String(r['ts']),
         result: String(r['result']),

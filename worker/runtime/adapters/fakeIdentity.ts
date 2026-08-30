@@ -50,8 +50,6 @@ export class FakeIdentityProvider implements IdentityProvider {
     return false;
   }
 
-  /** A sign-out URL only where one is configured: the masthead's sign-out row
-   * follows the provider, and the recorded corpus has none. */
   urls(): SignInUrls {
     return this.signOutUrl ? { ...NO_URLS, sign_out: this.signOutUrl } : NO_URLS;
   }

@@ -452,6 +452,11 @@ inside `blockConcurrencyWhile`, guarded and idempotent. There is a
 step there plus the row mapping in the repo; the round-trip test catches
 a half-done change.
 
+`cards.step` is the rendered 0..5 stability bucket. `cards.learning_steps`
+is the scheduler's position within the learning or relearning ladder. They
+are independent state and must survive reviews, offline sync and archives
+independently.
+
 ---
 
 ## Observability

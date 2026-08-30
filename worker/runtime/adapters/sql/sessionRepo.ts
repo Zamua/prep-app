@@ -140,6 +140,34 @@ export class SqlSessionRepo implements SessionRepo {
     return { deck_id: Number(row.deck_id) };
   }
 
+  private checkedAnswerable(sid: string, questionId: number, expectedVersion: number): { deck_id: number } {
+    const row = this.db.first<{
+      version: number;
+      deck_id: number;
+      status: string;
+      state: string;
+      current_question_id: number | null;
+    }>(
+      'SELECT version, deck_id, status, state, current_question_id FROM study_sessions WHERE id = ?',
+      sid,
+    );
+    if (!row) throw new SessionNotFound(`session ${sid} not found for user`);
+    const currentVersion = Number(row.version);
+    if (
+      currentVersion !== expectedVersion ||
+      row.status !== 'active' ||
+      row.state !== 'awaiting-answer' ||
+      Number(row.current_question_id) !== questionId
+    ) {
+      throw new StaleVersionError(currentVersion);
+    }
+    return { deck_id: Number(row.deck_id) };
+  }
+
+  assertAnswerable(sid: string, questionId: number, expectedVersion: number): void {
+    this.checkedAnswerable(sid, questionId, expectedVersion);
+  }
+
   updateDraft(sid: string, draft: string, expectedVersion: number): number {
     const ts = isoNow(this.clock);
     return this.storage.transactionSync(() => {
@@ -160,7 +188,7 @@ export class SqlSessionRepo implements SessionRepo {
   ): number {
     const ts = isoNow(this.clock);
     return this.storage.transactionSync(() => {
-      this.checkedVersion(sid, expectedVersion);
+      this.checkedAnswerable(sid, questionId, expectedVersion);
       const v = expectedVersion + 1;
       this.db.run(
         `INSERT OR REPLACE INTO study_session_answers (session_id, question_id, answered_at, result, workflow_id) VALUES (?, ?, ?, ?, NULL)`,
@@ -184,10 +212,10 @@ export class SqlSessionRepo implements SessionRepo {
     });
   }
 
-  setGrading(sid: string, _questionId: number, workflowId: string, expectedVersion: number): number {
+  setGrading(sid: string, questionId: number, workflowId: string, expectedVersion: number): number {
     const ts = isoNow(this.clock);
     return this.storage.transactionSync(() => {
-      this.checkedVersion(sid, expectedVersion);
+      this.checkedAnswerable(sid, questionId, expectedVersion);
       const v = expectedVersion + 1;
       this.db.run(
         `UPDATE study_sessions SET state = 'grading', current_grading_workflow_id = ?, last_active = ?, version = ? WHERE id = ?`,
@@ -203,8 +231,20 @@ export class SqlSessionRepo implements SessionRepo {
   gradingCompleted(sid: string, questionId: number, verdict: Record<string, unknown>, state: Record<string, unknown>, workflowId: string): void {
     const ts = isoNow(this.clock);
     this.storage.transactionSync(() => {
-      const row = this.db.first<{ state: string }>('SELECT state, version FROM study_sessions WHERE id = ?', sid);
-      if (!row || row.state !== 'grading') return;
+      const row = this.db.first<{
+        state: string;
+        current_question_id: number | null;
+        current_grading_workflow_id: string | null;
+      }>(
+        'SELECT state, current_question_id, current_grading_workflow_id FROM study_sessions WHERE id = ?',
+        sid,
+      );
+      if (
+        !row ||
+        row.state !== 'grading' ||
+        Number(row.current_question_id) !== questionId ||
+        row.current_grading_workflow_id !== workflowId
+      ) return;
       this.db.run(
         `INSERT OR REPLACE INTO study_session_answers (session_id, question_id, answered_at, result, workflow_id) VALUES (?, ?, ?, ?, ?)`,
         sid,

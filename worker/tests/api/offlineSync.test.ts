@@ -1,5 +1,3 @@
-// Sync semantics the corpus does not reach: the order reviews replay in,
-// a client_id repeated inside one batch, and the two parse-level caps.
 import { describe, expect, it } from 'vitest';
 import { MAX_SYNC_CARDS, MAX_SYNC_REVIEWS, parseBatch, syncBatch } from '../../app/offline/sync.js';
 import { RequestValidationError } from '../../app/validation.js';

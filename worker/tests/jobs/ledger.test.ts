@@ -165,6 +165,47 @@ describe('start', () => {
     const id = await startDemo(pinned);
     expect(pinned.jobStorage(id).alarmAt).toBe(wall.now().getTime() + 1);
   });
+  it('reuses a caller idempotency key across outer retries', async () => {
+    const actual = jobHarness({ graphs: { GradeAnswer: { ...LINEAR, kind: 'GradeAnswer' } } });
+    seedOwner(actual);
+    register(actual);
+    const runner = actual.runner();
+    const input = {
+      questionId: 12,
+      deckName: 'capitals',
+      userAnswer: 'Lima',
+      idk: false,
+      sessionId: '0123456789abcdef',
+      card: { type: 'short', prompt: 'Capital of Peru?', answer: 'Lima', rubric: '' },
+    };
+
+    const key = '0123456789abcdefv1';
+    const first = await runner.start('GradeAnswer', input, { idempotencyKey: key });
+    const second = await runner.start(
+      'GradeAnswer',
+      { ...input, deckName: 'renamed-capitals' },
+      { idempotencyKey: key },
+    );
+
+    expect(first.workflowId).toBe('grade-session-q12-0123456789abcdefv1');
+    expect(second).toEqual(first);
+    expect(actual.ledger(first.workflowId).outbox).toHaveLength(1);
+
+    await actual.settle();
+    const terminal = actual.ledger(first.workflowId);
+    expect(terminal.job['state']).toBe('terminal');
+    actual.clock.set(new Date(actual.clock.now().getTime() + 1_000));
+
+    const afterCompletion = await runner.start(
+      'GradeAnswer',
+      { ...input, deckName: 'renamed-again' },
+      { idempotencyKey: key },
+    );
+
+    expect(afterCompletion).toEqual(first);
+    expect(actual.ledger(first.workflowId).job['created_at']).toBe(terminal.job['created_at']);
+    expect(actual.ledger(first.workflowId).outbox).toHaveLength(terminal.outbox.length);
+  });
 });
 
 describe('driving to a gate', () => {

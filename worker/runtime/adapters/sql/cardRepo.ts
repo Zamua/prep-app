@@ -20,6 +20,7 @@ export function rowToCard(r: Row): CardRow {
     stability: r['stability'] == null ? null : Number(r['stability']),
     difficulty: r['difficulty'] == null ? null : Number(r['difficulty']),
     fsrs_state: Number(r['fsrs_state'] || 1),
+    learning_steps: Number(r['learning_steps'] ?? 0),
   };
 }
 
@@ -34,7 +35,7 @@ export class SqlCardRepo implements CardRepo {
   }
 
   srsState(qid: number): CardRow | null {
-    const row = this.db.first('SELECT question_id, step, next_due, last_review, stability, difficulty, fsrs_state FROM cards WHERE question_id = ?', qid);
+    const row = this.db.first('SELECT question_id, step, next_due, last_review, stability, difficulty, fsrs_state, learning_steps FROM cards WHERE question_id = ?', qid);
     return row ? rowToCard(row) : null;
   }
 
@@ -52,13 +53,14 @@ export class SqlCardRepo implements CardRepo {
 
   writeScheduled(qid: number, scheduled: ScheduledReview, reviewedAt: string): void {
     this.db.run(
-      `UPDATE cards SET step = ?, next_due = ?, last_review = ?, stability = ?, difficulty = ?, fsrs_state = ? WHERE question_id = ?`,
+      `UPDATE cards SET step = ?, next_due = ?, last_review = ?, stability = ?, difficulty = ?, fsrs_state = ?, learning_steps = ? WHERE question_id = ?`,
       scheduled.stepBucket,
       isoUtc(scheduled.nextDue),
       reviewedAt,
       scheduled.state.stability,
       scheduled.state.difficulty,
       scheduled.state.fsrsState,
+      scheduled.state.learningSteps,
       qid,
     );
   }
@@ -66,7 +68,7 @@ export class SqlCardRepo implements CardRepo {
   listCardStateForDeck(deckId: number): (CardRow & { prompt: string })[] {
     return this.db
       .all(
-        `SELECT q.prompt, c.question_id, c.step, c.next_due, c.last_review, c.stability, c.difficulty, c.fsrs_state
+        `SELECT q.prompt, c.question_id, c.step, c.next_due, c.last_review, c.stability, c.difficulty, c.fsrs_state, c.learning_steps
            FROM cards c JOIN questions q ON q.id = c.question_id
           WHERE q.deck_id = ?`,
         deckId,

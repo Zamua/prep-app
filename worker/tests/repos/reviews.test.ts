@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { QuestionNotFound } from '../../app/ports.js';
+import { parseIso } from '../../domain/time.js';
 import { cell, D, H, M, TEST_NOW, at } from './setup.js';
 
 describe('ReviewRepo.record', () => {
@@ -19,6 +20,7 @@ describe('ReviewRepo.record', () => {
       stability: 2.3065,
       difficulty: 2.11810397,
       fsrs_state: 1,
+      learning_steps: 1,
     });
   });
 
@@ -34,6 +36,7 @@ describe('ReviewRepo.record', () => {
       stability: 0.57129918,
       difficulty: 7.39450274,
       fsrs_state: 1,
+      learning_steps: 0,
     });
     expect(storage.rows('reviews').map(({ id: _id, ...r }) => r)).toEqual([
       { question_id: qid, ts: '2026-03-14T15:00:00+00:00', result: 'right', user_answer: 'a', grader_notes: '' },
@@ -71,13 +74,13 @@ describe('ReviewRepo and CardRepo', () => {
     repos.cards.restoreCardState(qid, { step: 4, next_due: '2026-04-01T00:00:00+00:00', stability: 14, difficulty: 5, fsrs_state: 2 });
     repos.cards.restoreCardState(qid, {});
     expect(repos.cards.listCardStateForDeck(d)).toEqual([
-      { prompt: 'p', question_id: qid, step: 4, next_due: '2026-04-01T00:00:00+00:00', last_review: null, stability: 14, difficulty: 5, fsrs_state: 2 },
+      { prompt: 'p', question_id: qid, step: 4, next_due: '2026-04-01T00:00:00+00:00', last_review: null, stability: 14, difficulty: 5, fsrs_state: 2, learning_steps: 0 },
     ]);
     repos.reviews.importReview(qid, '2026-03-01T00:00:00+00:00', 'right', 'x', 'notes');
     repos.reviews.importReview(qid, '2026-02-01T00:00:00+00:00', 'wrong');
     expect(repos.reviews.listReviewsForDeck(d)).toEqual([
-      { prompt: 'p', ts: '2026-02-01T00:00:00+00:00', result: 'wrong', user_answer: '', grader_notes: '' },
-      { prompt: 'p', ts: '2026-03-01T00:00:00+00:00', result: 'right', user_answer: 'x', grader_notes: 'notes' },
+      { question_id: qid, prompt: 'p', ts: '2026-02-01T00:00:00+00:00', result: 'wrong', user_answer: '', grader_notes: '' },
+      { question_id: qid, prompt: 'p', ts: '2026-03-01T00:00:00+00:00', result: 'right', user_answer: 'x', grader_notes: 'notes' },
     ]);
     expect(repos.reviews.getLastUserAnswer(qid)).toBe('');
     expect(repos.reviews.getLastUserAnswer(999)).toBeNull();
@@ -112,8 +115,33 @@ describe('ReviewRepo and CardRepo', () => {
     const { repos, storage } = cell();
     const d = repos.decks.create('d');
     const qid = repos.questions.add(d, { type: 'short', prompt: 'p', answer: 'a' });
-    expect(repos.cards.srsState(qid)).toEqual({ question_id: qid, step: 0, next_due: '2026-03-14T15:00:00+00:00', last_review: null, stability: null, difficulty: null, fsrs_state: 1 });
+    expect(repos.cards.srsState(qid)).toEqual({ question_id: qid, step: 0, next_due: '2026-03-14T15:00:00+00:00', last_review: null, stability: null, difficulty: null, fsrs_state: 1, learning_steps: 0 });
     expect(repos.cards.srsState(999)).toBeNull();
+  });
+
+  it('persists the rung and graduates a new card on the second right', () => {
+    const { repos, clock, storage } = cell();
+    const d = repos.decks.create('d');
+    const qid = repos.questions.add(d, { type: 'short', prompt: 'p', answer: 'a' });
+    const first = repos.reviews.record(qid, 'right', 'a');
+    clock.set(parseIso(first.next_due));
+    const second = repos.reviews.record(qid, 'right', 'a');
+
+    expect(first.interval_minutes).toBe(10);
+    expect(second.interval_minutes).toBeGreaterThan(24 * 60);
+    expect(storage.rows('cards')[0]).toMatchObject({ question_id: qid, fsrs_state: 2, learning_steps: 0 });
+  });
+
+  it('does not put an answered card back in the queue ten minutes on', () => {
+    const { repos, clock } = cell();
+    const d = repos.decks.create('d');
+    const qid = repos.questions.add(d, { type: 'short', prompt: 'p', answer: 'a' });
+    const first = repos.reviews.record(qid, 'right', 'a');
+    clock.set(parseIso(first.next_due));
+    repos.reviews.record(qid, 'right', 'a');
+    clock.advance(10 * M);
+    expect(repos.cards.countDue()).toBe(0);
+    expect(repos.cards.nextDueMinutes(d)).toBeGreaterThan(24 * 60);
   });
 
   it('interval_minutes floors at one', () => {

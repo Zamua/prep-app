@@ -1,5 +1,3 @@
-// The study API's branches the corpus does not reach, plus the pure piece
-// it leans on: the chat handoff. The grading poll has its own suite.
 import { describe, expect, it } from 'vitest';
 import { DurationError, FOREVER_ISO, parseUntil } from '../../app/durations.js';
 import * as study from '../../app/study/api.js';
@@ -40,6 +38,27 @@ describe('a free-text submission', () => {
     expect(result.json['selfGrade']).toBe(true);
     expect(result.json['answer']).toBe('Lima');
     expect((result.json['card'] as Record<string, unknown>)['answer']).toBe('Lima');
+  });
+
+  it('rejects a stale session before the no-agent self-grade fallback', async () => {
+    const d = deps({ agentAvailable: false });
+    const deck = d.repos.decks.create('capitals');
+    const qid = d.repos.questions.add(deck, { type: 'short', prompt: 'Capital of Peru?', answer: 'Lima' });
+    const sid = await d.repos.sessions.create(deck, 'test');
+    const session = d.repos.sessions.get(sid)!;
+    d.repos.sessions.updateDraft(sid, 'newer answer', session.version);
+
+    const result = await study.sessionSubmit(d, sid, {
+      question_id: qid,
+      version: session.version,
+      answer: 'Lima',
+      idk: false,
+    });
+
+    expect(result).toMatchObject({
+      status: 409,
+      json: { error: { code: 'stale_version', current_version: session.version + 1 } },
+    });
   });
 
   it('falls back to the same reveal when the runner refuses', async () => {

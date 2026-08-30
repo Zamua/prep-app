@@ -165,7 +165,7 @@ export class SqlOfflineRepo implements OfflineRepo {
       } else {
         status = 'applied';
         const scheduled = scheduleReview(
-          { stability: card.stability, difficulty: card.difficulty, fsrsState: (card.fsrs_state || 1) as FsrsStateValue, lastReview },
+          { stability: card.stability, difficulty: card.difficulty, fsrsState: (card.fsrs_state || 1) as FsrsStateValue, lastReview, learningSteps: card.learning_steps },
           verdict,
           reviewedAt,
           { desiredRetention: this.cards.effectiveRetention(questionId), fuzz: this.fuzz },

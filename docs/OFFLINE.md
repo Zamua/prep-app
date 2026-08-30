@@ -793,18 +793,18 @@ versioned asset routes treat the version segment as opaque and serve
 the current build for any value, which is what lets a page from the
 previous build keep resolving assets across a deploy.
 
-**The shell** (`worker/tests/api/offline.test.ts`). `/offline` renders
-with no identity, contains no identity-provider or external-CDN
-reference, and echoes only a token-shaped `?build=` value, falling back
-to the current token for anything else.
+**The shell** (`worker/tests/router.test.ts` for the worker route,
+`worker/tests/templates.test.ts` for the markup). `/offline` accepts only token-shaped
+`?build=` values, falling back to the current token for anything else.
+The standalone template ignores identity-provider context and references
+only build-keyed local assets.
 
-**The sync protocol** (`worker/tests/api/offlineSync.test.ts`). Replay
-ordering across interleaved cards and reviews, the last-writer conflict
-rule, clock clamping, and idempotency: re-POSTing the same batch
-produces identical responses and zero new rows. Feeding N reviews with
-explicit timestamps through sync equals calling the scheduler N times
-directly with those timestamps, because sync adds no scheduling logic
-of its own.
+**The sync protocol** (`worker/tests/api/offline.test.ts` at the worker
+boundary, `worker/tests/api/offlineSync.test.ts` at the direct use-case
+boundary). The worker-level retry test re-POSTs an identical card-and-review
+batch and requires the same response with no additional persistent rows. The
+direct use-case tests pin ordering across reviews, the last-writer conflict
+rule, clock clamping, batch validation, and per-item refusal.
 
 The client-side scheduler and grader are pure modules, pinned against
 the same corpora as the server-side domain so the two implementations

@@ -135,6 +135,7 @@ export interface CardRow {
   stability: number | null;
   difficulty: number | null;
   fsrs_state: number;
+  learning_steps: number;
 }
 
 export type SessionStatus = 'active' | 'completed' | 'abandoned';

@@ -77,9 +77,40 @@ describe('SessionRepo', () => {
     c.repos.sessions.gradingCompleted(sid, ids[0]!, { result: 'right' }, { step: 9 }, 'wf-1');
     expect(c.repos.sessions.get(sid)).toMatchObject({ state: 'showing-result', current_grading_workflow_id: null, last_answered_verdict: { result: 'wrong' }, version: 3 });
     expect(c.storage.rows('study_session_answers')[0]).toMatchObject({ workflow_id: 'wf-1', result: 'wrong' });
-    c.repos.sessions.setGrading(sid, ids[0]!, 'wf-2', 3);
-    c.repos.sessions.gradingAbandoned(sid, 'wf-2');
-    expect(c.repos.sessions.get(sid)).toMatchObject({ state: 'awaiting-answer', current_grading_workflow_id: null, version: 5 });
+
+    const otherDeck = c.repos.decks.create('other');
+    const otherQuestion = c.repos.questions.add(otherDeck, short('other'));
+    const otherSession = await c.repos.sessions.create(otherDeck, 'x');
+    c.repos.sessions.setGrading(otherSession, otherQuestion, 'wf-2', 1);
+    c.repos.sessions.gradingAbandoned(otherSession, 'wf-2');
+    expect(c.repos.sessions.get(otherSession)).toMatchObject({ state: 'awaiting-answer', current_grading_workflow_id: null, version: 3 });
+  });
+
+  it('ignores a late completion from the previous grading workflow', async () => {
+    const c = cell();
+    const { d, ids } = deckWithDue(c, [
+      '2026-03-14T12:00:00+00:00',
+      '2026-03-14T13:00:00+00:00',
+    ]);
+    const sid = await c.repos.sessions.create(d, 'x');
+    const first = ids[0]!;
+    const second = ids[1]!;
+
+    c.repos.sessions.setGrading(sid, first, 'wf-1', 1);
+    c.repos.sessions.gradingCompleted(sid, first, { result: 'right' }, { step: 1 }, 'wf-1');
+    c.repos.sessions.advance(sid, 3);
+    c.repos.sessions.setGrading(sid, second, 'wf-2', 4);
+
+    c.repos.sessions.gradingCompleted(sid, first, { result: 'wrong' }, { step: 0 }, 'wf-1');
+
+    expect(c.repos.sessions.get(sid)).toMatchObject({
+      state: 'grading',
+      current_question_id: second,
+      current_grading_workflow_id: 'wf-2',
+      last_answered_qid: null,
+      version: 5,
+    });
+    expect(c.storage.rows('study_session_answers')).toHaveLength(1);
   });
 
   it('lists recent sessions with deck and prompt, ages idle ones out, hides snoozed ones', async () => {
