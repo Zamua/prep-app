@@ -17,7 +17,7 @@ RUN  := $(MISE) exec --
 NPM  := $(RUN) npm --prefix worker
 
 .PHONY: help setup tools node-deps build test typecheck \
-        lint format hooks dev dev-stop llm-stub ci clean
+        lint format hooks dev dev-stop llm-stub smoke ci clean
 
 help:
 	@echo "Setup:"
@@ -32,6 +32,7 @@ help:
 	@echo "  make dev         build, deploy and start a local celld node"
 	@echo "  make dev-stop    stop the node this checkout started"
 	@echo "  make llm-stub    the canned LLM a local node calls for AI flows"
+	@echo "  make smoke       verify a deployed public surface (BASE_URL required)"
 	@echo ""
 	@echo "  make hooks       install the pre-commit hook (part of setup)"
 	@echo "  make ci          typecheck + test"
@@ -73,6 +74,10 @@ dev-stop:
 # The canned LLM a local node calls. AI flows need it running.
 llm-stub: node-deps
 	cd worker && $(RUN) node scripts/llm-stub.mjs --port 8089
+
+smoke:
+	@test -n "$(BASE_URL)" || { echo "BASE_URL is required"; exit 1; }
+	scripts/smoke.sh "$(BASE_URL)" "$(EXPECTED_BUILD_ID)"
 
 # Wire .githooks/ as this checkout's hooks dir. Idempotent. Bypass a
 # single commit with `git commit --no-verify`.
