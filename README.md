@@ -69,6 +69,7 @@ the app works as a manual SRS.
 make setup       # mise install + npm install + git hooks
 make test        # vitest
 make typecheck   # tsc over the worker and its tests
+make smoke BASE_URL=https://your-prep.example  # deployed public contract
 make ci          # typecheck + test
 ```
 

@@ -487,6 +487,7 @@ make setup       # mise install + npm install + git hooks
 make build       # templates, icons, service worker, domain twins, dist/assets
 make typecheck   # tsc over the worker and its tests
 make test        # vitest
+make smoke BASE_URL=https://host  # deployed public contract
 make ci          # typecheck + test
 make dev         # build, deploy and start a local celld node on :8791
 make dev-stop
