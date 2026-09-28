@@ -25,6 +25,8 @@ import { SCOPES, transformCard, transformDeck, type TransformCard, type Transfor
 export { SCOPES, type TransformCard, type TransformDeck, type TransformScope };
 
 export const DEFAULT_TRIVIA_INTERVAL_MINUTES = 30;
+export const DECK_ADDITIONS_CAP = 15;
+export const REORGANIZE_ADDITIONS_CAP = 25;
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -100,7 +102,7 @@ ${goJson(card)}
 **User's request:**
 ${userPrompt}
 
-If URLs or recent material are referenced, you may use your web-fetch / web-search tools to ground the change.
+You have no web access. If the request references a URL or recent material, work from the content above and say in the notes field what you could not verify.
 
 Return a JSON object describing the new state of THIS card. Shape:
 
@@ -137,7 +139,7 @@ ${goJson(cards)}
 **User's request:**
 ${userPrompt}
 
-If URLs or recent material are referenced, you may use your web-fetch / web-search tools to ground the change.
+You have no web access. If the request references a URL or recent material, work from the content above and say in the notes field what you could not verify.
 
 Return a JSON object describing the changes to apply. Only include cards that actually need to change. Shape:
 
@@ -159,7 +161,7 @@ Field guidance:
 - For srs cards, leave explanation and answer_regex empty.
 - Preserve fields the user's request didn't ask to change.
 
-Output ONLY the JSON object, no commentary or fences. If the request asks for fewer than 1 change, return empty arrays. Cap additions at 15 cards per request.`;
+Output ONLY the JSON object, no commentary or fences. If the request asks for fewer than 1 change, return empty arrays. Cap additions at ${DECK_ADDITIONS_CAP} cards per request.`;
 }
 
 export function reorganizeScopePrompt(decks: readonly TransformDeck[], userPrompt: string): string {
@@ -186,7 +188,7 @@ Do ONLY what the user's request implies. If the request is "fix typos across all
 
 For trivia cards: when you change prompt or answer, also update explanation + answer_regex so they stay in sync. answer_regex is a case-insensitive full-match pattern that should match the new answer + obvious legitimate alternative forms.
 
-If URLs or recent material are referenced, you may use your web-fetch / web-search tools to ground the change.
+You have no web access. If the request references a URL or recent material, work from the content above and say in the notes field what you could not verify.
 
 Return ONLY a JSON object, no commentary or fences. Shape:
 
@@ -213,7 +215,7 @@ Return ONLY a JSON object, no commentary or fences. Shape:
 }
 \`\`\`
 
-Cap additions at 25 per request. If the request implies fewer than one change, return empty arrays. Do not invent operations beyond what the request asks for.`;
+Cap additions at ${REORGANIZE_ADDITIONS_CAP} per request. If the request implies fewer than one change, return empty arrays. Do not invent operations beyond what the request asks for.`;
 }
 
 export function buildTransformPrompt(input: TransformJobInput): string {
@@ -244,6 +246,9 @@ export const computeStep = llmStep(async (ctx) => {
   const input = transformJobInput(ctx.input);
   const text = await ctx.agent.complete({ system: '', user: buildTransformPrompt(input) });
   const plan = parseTransformPlan(text, input.scope);
+  // The prompt's addition cap is advisory; the cap is enforced here.
+  const cap = input.scope === 'reorganize' ? REORGANIZE_ADDITIONS_CAP : DECK_ADDITIONS_CAP;
+  if (plan.additions.length > cap) plan.additions = plan.additions.slice(0, cap);
   return { value: plan, progress: transformComputed(plan) };
 });
 

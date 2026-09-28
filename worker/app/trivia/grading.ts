@@ -62,9 +62,8 @@ When proposing a regex_update:
 - Prefer extending the existing regex with an alternation rather
   than rewriting from scratch (so prior accepted forms still match).
 
-If verdict=wrong, regex_update MUST be null.
-If verdict=right but the user's form is a typo (or already accepted
-by the current regex), regex_update MUST be null.
+Set regex_update to null when the verdict is wrong, when the user's
+form is a typo, or when the current regex already accepts it.
 
 Respond with ONLY a JSON object, no prose, no fences:
 

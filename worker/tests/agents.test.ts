@@ -170,7 +170,14 @@ describe('the chat-completions body', () => {
     expect(sent[0]!.url).toBe('https://api.anthropic.com/v1/messages');
     expect(sent[0]!.headers['x-api-key']).toBe('sk-ant-api03-key');
     expect(sent[0]!.headers['anthropic-version']).toBe('2023-06-01');
-    expect(sent[0]!.body).toEqual({ model: 'claude-sonnet-4-6', max_tokens: BYOK_MAX_OUTPUT_TOKENS, messages: [{ role: 'user', content: 'hi' }] });
+    expect(sent[0]!.body).toEqual({ model: 'claude-sonnet-4-6', max_tokens: BYOK_MAX_OUTPUT_TOKENS, messages: [{ role: 'user', content: 'hi' }], output_config: { effort: 'medium' } });
+  });
+
+  it('refuses a reply the model declined or cut off, rather than returning its partial text', async () => {
+    for (const stop_reason of ['refusal', 'max_tokens']) {
+      captureFetch(() => json(200, { content: [{ type: 'text', text: '{"partial": ' }], stop_reason }));
+      await expect(byokAgent('anthropic-api', 'sk-ant-api03-key', { timeoutMs: 1000 }).complete({ system: '', user: 'hi' })).rejects.toThrow(AgentUnavailable);
+    }
   });
 
   it("refuses a key whose shape is not the provider's", () => {

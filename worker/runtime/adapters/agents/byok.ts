@@ -8,8 +8,8 @@ import { AnthropicAgent } from './anthropic.js';
 import { OpenAICompatAgent } from './openaiCompat.js';
 
 /** A response-length cap, not a spend budget: the owner's key, the owner's
- * bill. */
-export const BYOK_MAX_OUTPUT_TOKENS = 4096;
+ * bill. Sized for the deck-wide transform, whose output scales with the deck. */
+export const BYOK_MAX_OUTPUT_TOKENS = 32768;
 
 export class UnsupportedProvider extends Error {}
 

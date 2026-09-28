@@ -19,7 +19,7 @@ export const TOOLS: readonly McpTool[] = [
     "name": "prep_list_decks"
   },
   {
-    "description": "Metadata for a single deck by name. Returns 404 if the user doesn't own a deck by that name.",
+    "description": "Metadata for a single deck by name: name, type, context_prompt and card count. Returns a tool error if the user owns no deck by that name.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -64,7 +64,7 @@ export const TOOLS: readonly McpTool[] = [
     "name": "prep_export_deck_csv"
   },
   {
-    "description": "Create an empty SRS deck with the given name and optional context_prompt. Errors with 409 if a deck of that name already exists.",
+    "description": "Create an empty SRS deck with the given name and optional context_prompt. Returns a tool error if a deck of that name already exists.",
     "inputSchema": {
       "properties": {
         "context_prompt": {
@@ -104,7 +104,7 @@ export const TOOLS: readonly McpTool[] = [
     "name": "prep_import_csv"
   },
   {
-    "description": "Rename a deck. The new name must be unused (otherwise 409). All cards / reviews / sessions follow the rename via the FK chain — no data migration.",
+    "description": "Rename a deck. The new name must be unused (otherwise a tool error). All cards / reviews / sessions follow the rename via the FK chain — no data migration.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -201,6 +201,7 @@ export const TOOLS: readonly McpTool[] = [
           "type": "string"
         },
         "answer_regex": {
+          "description": "For short cards: a regex that grades the typed answer, applied case-insensitively as a full match. It should match answer. Omit it and the card reveals the answer for self-grading.",
           "type": "string"
         },
         "choices": {
@@ -214,6 +215,7 @@ export const TOOLS: readonly McpTool[] = [
           "type": "string"
         },
         "explanation": {
+          "description": "Deep-dive explanation (2-4 sentences) shown after the answer on trivia decks.",
           "type": "string"
         },
         "language": {
@@ -223,6 +225,7 @@ export const TOOLS: readonly McpTool[] = [
           "type": "string"
         },
         "rubric": {
+          "description": "What a correct answer must demonstrate; the AI grader judges free-text answers against it.",
           "type": "string"
         },
         "skeleton": {
@@ -259,6 +262,7 @@ export const TOOLS: readonly McpTool[] = [
           "type": "string"
         },
         "answer_regex": {
+          "description": "For short cards: a regex that grades the typed answer, applied case-insensitively as a full match. It should match answer. Omit it and the card reveals the answer for self-grading.",
           "type": "string"
         },
         "card_id": {
@@ -271,6 +275,7 @@ export const TOOLS: readonly McpTool[] = [
           "type": "array"
         },
         "explanation": {
+          "description": "Deep-dive explanation (2-4 sentences) shown after the answer on trivia decks.",
           "type": "string"
         },
         "language": {
@@ -280,6 +285,7 @@ export const TOOLS: readonly McpTool[] = [
           "type": "string"
         },
         "rubric": {
+          "description": "What a correct answer must demonstrate; the AI grader judges free-text answers against it.",
           "type": "string"
         },
         "skeleton": {
