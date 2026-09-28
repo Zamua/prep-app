@@ -33,6 +33,9 @@ export class AnthropicAgent implements AgentPort {
       model: c.model,
       max_tokens: request.maxTokens ?? c.maxTokens,
       messages: [{ role: 'user', content: request.user }],
+      // Sonnet 4.6 defaults to high effort; these are one-shot generation and
+      // grading calls, several under a 12s deadline.
+      output_config: { effort: 'medium' },
     };
     if (request.system) body['system'] = request.system;
 
@@ -60,6 +63,11 @@ export class AnthropicAgent implements AgentPort {
     }
     const blocks = (data as { content?: unknown }).content;
     if (blocks !== undefined && !Array.isArray(blocks)) throw new AgentUnavailable('anthropic API response shape unexpected: content is not a list');
+    // Checked before the text: a refusal or a truncated reply can still carry
+    // partial text, which would otherwise surface as a parse error downstream.
+    const stop = (data as { stop_reason?: unknown }).stop_reason;
+    if (stop === 'refusal') throw new AgentUnavailable('anthropic API declined the request (stop_reason: refusal)');
+    if (stop === 'max_tokens') throw new AgentUnavailable(`anthropic API reply hit the ${String(body['max_tokens'])}-token output cap before finishing`);
     // This adapter requests no tool use, so text blocks are all there is.
     const text = (Array.isArray(blocks) ? blocks : [])
       .filter((b): b is { type: string; text?: unknown } => b !== null && typeof b === 'object' && (b as { type?: unknown }).type === 'text')

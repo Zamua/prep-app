@@ -198,7 +198,7 @@ call:
 
 | path | cap |
 | --- | --- |
-| BYOK | 4096, a response-length cap rather than a budget |
+| BYOK | 32768, a response-length cap rather than a budget |
 | shared tier, general | 32768 |
 | shared tier, instant generation | 1024 |
 

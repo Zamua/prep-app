@@ -56,15 +56,15 @@ Constraints:
 - Question (q): default to <= 140 chars so the push-notification preview reads well. When the topic naturally calls for a snippet, table, or multi-line formatted content, the q MAY be longer and include markdown fenced code blocks — keep the FIRST line a short plain-language summary so the notification preview stays meaningful.
 - Answer (a): short enough to type on a phone in a few seconds. A few words, a number, an identifier, a brief phrase, a small expression. Not full sentences.
 - Explanation (e): 2-4 sentences, ~300 chars. Surface the WHY: context, causation, why this matters, common misconception, or a memorable hook. Treat the user as smart and curious — go beyond restating the answer.
-- Cover varied sub-areas of the topic AND vary the recall shape across cards — different facets, angles, or skill probes that the topic naturally supports. Pick shapes that fit; if the deck's topic prompt explicitly calls out shapes, follow it. Aim for 3-5 DISTINCT shapes across the batch and don't let any single shape exceed ~30% of the cards.
+- Cover varied sub-areas of the topic AND vary the recall shape across cards — different facets, angles, or skill probes that the topic naturally supports. Pick shapes that fit; if the deck's topic prompt explicitly calls out shapes, follow it. Aim for several distinct shapes across the batch and don't let any single shape dominate.
 
   Concrete examples of shape variety (illustrative — adapt to YOUR topic; a music topic doesn't need code traces, a history topic doesn't need complexity drills):
     {"q": "Predict the output:\\n\`\`\`python\\nx = [3,1,4,1,5]\\nprint(sorted(set(x)))\\n\`\`\`", "a": "[1, 3, 4, 5]", "e": "..."}
-    {"q": "Pythonic way to count occurrences in an iterable", "a": "Counter(items)", "e": "..."}
     {"q": "Worst-case time complexity of list.pop(0)", "a": "O(n)", "e": "..."}
-    {"q": "Two sorted arrays, find the median in O(log n). Pattern?", "a": "binary search on partition", "e": "..."}
-    {"q": "What's wrong?\\n\`\`\`python\\nfor i in range(len(a)):\\n    a.append(a[i])\\n\`\`\`", "a": "infinite loop — appending while iterating", "e": "..."}
-    {"q": "Goal: only one goroutine reads from a channel at a time. Primitive?", "a": "sync.Mutex", "e": "..."}
+    {"q": "Treaty that ended the Thirty Years' War", "a": "Peace of Westphalia", "e": "..."}
+    {"q": "Which came first: Magna Carta or the Black Death?", "a": "Magna Carta", "e": "..."}
+    {"q": "Interval from C up to G", "a": "perfect fifth", "e": "..."}
+    {"q": "Gas plants take in for photosynthesis", "a": "carbon dioxide", "e": "..."}
 - Don't duplicate any EXACT existing question. Drilling the same underlying concept from a DIFFERENT shape is encouraged — e.g., the same idea probed via a code trace AND a complexity drill AND an idiom card builds deeper recall than any single angle. Vary the shape, not just the wording.
 - Existing questions to avoid duplicating exactly:
 
