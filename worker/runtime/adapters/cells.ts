@@ -58,11 +58,19 @@ function lazy<T extends object>(stub: () => object, policy: RetryPolicy, direct:
     get(_target, prop) {
       const name = String(prop);
       return (...args: unknown[]) => {
-        const call = () => {
-          const target = stub() as Record<string, unknown>;
-          const method = target[name];
-          if (typeof method !== 'function') throw new NoRpcMethod(`no rpc method ${name}`);
-          return (method as (...a: unknown[]) => Promise<unknown>).apply(target, args);
+        const call = async () => {
+          const target = stub() as Record<string, (...a: unknown[]) => Promise<unknown>>;
+          if (typeof target[name] !== 'function') throw new NoRpcMethod(`no rpc method ${name}`);
+          // Called as a member: on a Workers stub every member is an RPC
+          // proxy, so `.apply` would be a remote call to a method named apply.
+          try {
+            return await target[name](...args);
+          } catch (e) {
+            // A Workers stub answers every name, so a missing method only
+            // shows when it is called.
+            if (e instanceof TypeError && /does not implement the method/.test(e.message)) throw new NoRpcMethod(e.message);
+            throw e;
+          }
         };
         return direct.has(name) ? call() : retrying(call, policy);
       };
