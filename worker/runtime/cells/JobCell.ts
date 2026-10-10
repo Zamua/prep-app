@@ -259,25 +259,43 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
       return;
     }
     const started = isoUtc(this.now());
-    let output: StepOutput;
+    let decide: (now: LedgerState, current: StepRow) => LedgerCommit;
     try {
-      output = await this.execute(state, node, row);
+      const output = await this.execute(state, node, row);
+      decide = (now, current) =>
+        this.afterStep(now, current, {
+          step_key: current.step_key,
+          status: 'done',
+          attempt: current.attempt + 1,
+          refusals: current.refusals,
+          next_attempt_at: null,
+          output,
+          error: null,
+          started_at: current.started_at ?? started,
+          finished_at: isoUtc(this.now()),
+        });
     } catch (e) {
-      this.ledger.commit(this.failureCommit(state, node, row, started, e));
-      return;
+      decide = (now, current) => this.failureCommit(now, node, current, started, e);
     }
-    const done: StepWrite = {
-      step_key: row.step_key,
-      status: 'done',
-      attempt: row.attempt + 1,
-      refusals: row.refusals,
-      next_attempt_at: null,
-      output,
-      error: null,
-      started_at: row.started_at ?? started,
-      finished_at: isoUtc(this.now()),
-    };
-    this.ledger.commit(this.afterStep(state, row, done));
+    // Read, decide and commit with no await between them, so nothing else
+    // can land in the middle.
+    const current = this.unmovedSince(state, row);
+    if (current) this.ledger.commit(decide(current.state, current.row));
+  }
+
+  /**
+   * The ledger as it stands, when a step's result still applies to it: the
+   * same run, no transition since `state` was read, and the row pending at
+   * the attempt that ran. Every terminate and gate resolution bumps the
+   * transition, so a step that outlived either is discarded rather than
+   * committed over it.
+   */
+  private unmovedSince(state: LedgerState, row: StepRow): { state: LedgerState; row: StepRow } | null {
+    const rows = this.ledger.read();
+    if (!rows || rows.job.created_at !== state.job.created_at || rows.job.transition !== state.job.transition) return null;
+    const current = rows.steps.find((r) => r.step_key === row.step_key);
+    if (!current || current.status !== 'pending' || current.attempt !== row.attempt) return null;
+    return { state: this.stateOf(rows), row: current };
   }
 
   private async execute(state: LedgerState, node: StepNode, row: StepRow): Promise<StepOutput> {
