@@ -1,7 +1,9 @@
-// RPCs that land on a JobCell while it awaits a step: the runtime runs them
-// in the gap, so what the cell commits afterwards has to answer to them.
+// RPCs that land on a JobCell while it awaits a step or its owner: the
+// runtime runs them in the gap, so what the cell commits afterwards has to
+// answer to them.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { llmStep, writeStep } from '../../app/jobs/registry.js';
+import type { JobStatusWrite } from '../../app/ports.js';
 import type { StepGraph } from '../../domain/jobs/graph.js';
 import { jobHarness, seedOwner, type JobHarness } from './harness.js';
 import { USER } from '../repos/setup.js';
@@ -93,6 +95,20 @@ async function start(h: JobHarness): Promise<void> {
 
 const statuses = (h: JobHarness): unknown[] => h.ledger(ID).outbox.map((o) => o['status']);
 
+/** Holds the owner's status write for `status` in flight, once. */
+function holdStatus(h: JobHarness, status: string): ReturnType<typeof hold> {
+  const write = hold();
+  let held = false;
+  h.interfere(({ method, args }) => {
+    if (method !== 'jobStatus' || (args[0] as JobStatusWrite).status !== status || held) return;
+    held = true;
+    return write.wait();
+  });
+  return write;
+}
+
+const unreachable = (): Error => Object.assign(new Error('The Durable Object owner is currently unreachable'), { name: 'DurableObjectRoutingError' });
+
 let h: JobHarness;
 beforeEach(() => {
   h = jobHarness({ graphs: { Demo: GRAPH } });
@@ -136,5 +152,71 @@ describe('a step in flight', () => {
     const l = h.ledger(ID);
     expect([l.job['state'], l.job['terminal_status'], l.job['error']]).toEqual(['terminal', 'failed', 'cancelled']);
     expect(statuses(h)).toEqual(['planning', 'awaiting_feedback', 'replanning', 'failed']);
+  });
+});
+
+describe('a status write in flight', () => {
+  it('does not advance a job terminated during the write', async () => {
+    const calls = register(h);
+    await start(h);
+    await h.settle();
+    await h.jobCell(ID).signal({ name: 'accept', at: at(h) });
+    const write = holdStatus(h, 'accepting');
+    const tick = h.tick(ID);
+    await write.entered;
+    await h.jobCell(ID).terminate('cancelled', at(h));
+    write.release();
+    await tick;
+    await h.settle();
+
+    const l = h.ledger(ID);
+    expect([l.job['state'], l.job['terminal_status']]).toEqual(['terminal', 'failed']);
+    expect(statuses(h)).toEqual(['planning', 'awaiting_feedback', 'accepting', 'failed']);
+    expect(calls.apply).toEqual([]);
+  });
+
+  it('keeps the terminal status a terminate wrote during the write', async () => {
+    register(h);
+    await start(h);
+    await h.settle();
+    await h.jobCell(ID).signal({ name: 'reject', at: at(h) });
+    const write = holdStatus(h, 'rejecting');
+    const tick = h.tick(ID);
+    await write.entered;
+    await h.jobCell(ID).terminate('cancelled', at(h));
+    write.release();
+    await tick;
+    await h.settle();
+
+    const l = h.ledger(ID);
+    expect([l.job['state'], l.job['terminal_status'], l.job['error']]).toEqual(['terminal', 'failed', 'cancelled']);
+    expect(statuses(h)).toEqual(['planning', 'awaiting_feedback', 'rejecting', 'failed']);
+  });
+
+  it('resolves a gate on the accept that lands during the write, not on the deadline it passed', async () => {
+    const calls = register(h);
+    await start(h);
+    const write = hold();
+    let offers = 0;
+    h.interfere(({ method, args }) => {
+      if (method !== 'jobStatus' || (args[0] as JobStatusWrite).status !== 'awaiting_feedback') return;
+      offers++;
+      if (offers === 1) throw unreachable();
+      if (offers === 2) return write.wait();
+    });
+    await h.tick(ID);
+    expect(h.ledger(ID).job['state']).toBe('gated');
+    h.clock.set(new Date(new Date(h.ledger(ID).job['deadline_at'] as string).getTime() + 1));
+    const tick = h.tick(ID);
+    await write.entered;
+    await h.jobCell(ID).signal({ name: 'accept', at: at(h) });
+    write.release();
+    await tick;
+    await h.settle();
+
+    const l = h.ledger(ID);
+    expect(l.job['terminal_status']).toBe('done');
+    expect(statuses(h)).toEqual(['planning', 'awaiting_feedback', 'accepting', 'applying', 'done']);
+    expect(calls.apply.length).toBe(1);
   });
 });

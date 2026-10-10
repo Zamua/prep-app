@@ -20,6 +20,8 @@ export interface SentPush {
   payload: string;
 }
 
+type Hook = (call: { method: string; args: unknown[] }) => void | Promise<void>;
+
 export interface JobHarness {
   env: Env;
   clock: MutableClock;
@@ -39,8 +41,10 @@ export interface JobHarness {
   statusWrites: JobStatusWrite[];
   /** Stands between the JobCell and its owner. Throwing here is how a test
    * stages the post-restart window, in which the owner is briefly out of
-   * reach and every call to it is a refusal. */
-  interfere(hook: ((call: { method: string; args: unknown[] }) => void) | null): void;
+   * reach and every call to it is a refusal. A returned promise holds the
+   * call in flight until it settles, which is how a test lands another RPC
+   * on the JobCell while it awaits its owner. */
+  interfere(hook: Hook | null): void;
   /** Drops the cell object and rebuilds it over the same storage: a node
    * restart, which is the only crash an in-process test can stage. */
   restart(id: string): Promise<void>;
@@ -102,7 +106,7 @@ export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; 
   };
 
   const statusWrites: JobStatusWrite[] = [];
-  let hook: ((call: { method: string; args: unknown[] }) => void) | null = null;
+  let hook: Hook | null = null;
   /** The owner's cell with no inline retry and a record of what it was told. */
   const direct: UserCells = {
     cell: (id: string) => {
@@ -112,8 +116,8 @@ export function jobHarness(opts: { graphs: Readonly<Record<string, StepGraph>>; 
           const name = String(prop);
           return (...args: unknown[]) => {
             if (name === 'jobStatus') statusWrites.push(structuredClone(args[0]) as JobStatusWrite);
-            hook?.({ method: name, args });
-            return target[name]!.apply(target, args);
+            const held = hook?.({ method: name, args });
+            return held ? held.then(() => target[name]!.apply(target, args)) : target[name]!.apply(target, args);
           };
         },
       });

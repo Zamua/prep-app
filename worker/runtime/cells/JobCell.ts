@@ -2,11 +2,14 @@
 // decision is taken from the rows, so an eviction, a node restart and a
 // duplicate alarm all reach the same one.
 //
-// Two rules the shape rests on. A caller-originated RPC (`start`, `signal`,
-// `terminate`) never calls back into the owner's cell: the owner is mid
-// request when it calls here, and a cell serves one request at a time.
-// Everything that touches the owner therefore happens on the alarm. And the
-// alarm is derived from the rows at the end of every RPC and in the
+// Three rules the shape rests on. The runtime runs other RPCs while the cell
+// awaits a step or its owner, so every decision is read, taken and committed
+// with no such await in between; a snapshot held across one commits over a
+// terminate, or over a gate the user already answered. A caller-originated
+// RPC (`start`, `signal`, `terminate`) never calls back into the owner's
+// cell, so it has no such await and lands whole between the alarm's;
+// everything that touches the owner happens on the alarm. And
+// the alarm is derived from the rows at the end of every RPC and in the
 // constructor, never held, so a rolled-back RPC still converges.
 import { DurableObject } from 'cloudflare:workers';
 import type { LlmStepContext, StepInfo } from '../../app/jobs/registry.js';
@@ -184,9 +187,11 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
   private async drive(): Promise<JobTransition | null> {
     let ran = 0;
     for (let i = 0; i < MAX_DRIVE_STEPS; i++) {
+      await this.flushOutbox();
+      // Read after the flush, whose await on the owner lets a terminate or a
+      // signal land first.
       const rows = this.ledger.read();
       if (!rows) return null;
-      await this.flushOutbox(rows);
       const state = this.stateOf(rows);
       const action = nextAction(state, this.now());
       if (action.kind === 'run') {
@@ -207,8 +212,7 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
       }
       break;
     }
-    const after = this.ledger.read();
-    if (after) await this.flushOutbox(after);
+    await this.flushOutbox();
     await this.ensureAlarm();
     return this.peek();
   }
@@ -217,7 +221,9 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
    * the refusal backoff and the alarm brings it back, up to
    * `MAX_DELIVERY_ATTEMPTS`; past that the row is abandoned so an owner that
    * refuses permanently cannot keep this cell awake for the deploy's life. */
-  private async flushOutbox(rows: LedgerRows): Promise<void> {
+  private async flushOutbox(): Promise<void> {
+    const rows = this.ledger.read();
+    if (!rows) return;
     const route = this.ledger.route();
     for (const row of rows.outbox) {
       if (row.delivered_at !== null || isAbandoned(row)) continue;
