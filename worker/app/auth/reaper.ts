@@ -4,6 +4,7 @@
 // re-reading the same head of the list.
 import type { Directory, UserCells } from '../ports.js';
 import { BATCH_LIMIT, cutoffFor, isIdle } from '../../domain/reaper.js';
+import { isoUtc } from '../../domain/time.js';
 import { destroyAccount, type DestroyDeps } from './mergeSaga.js';
 
 export interface ReapDeps extends DestroyDeps {
@@ -52,10 +53,6 @@ export async function reapIdleAnonymous(deps: ReapDeps, opts: ReapOptions = {}):
         cleaned++;
         continue;
       }
-      // A merge already owns this account's rows. Destroying it now would
-      // leave the saga reading an empty cell and recording a merge that
-      // moved nothing, with the cookie that could have retried deleted.
-      if (await deps.directory.marker(user.id)) continue;
       // The cell's own date, or nothing. The directory row's `created_at` is
       // not a stand-in for it: a migrated account's is years old while its
       // cell is still being written, and reaping is one-way.
@@ -69,16 +66,29 @@ export async function reapIdleAnonymous(deps: ReapDeps, opts: ReapOptions = {}):
           skipped++;
           continue;
         }
-        await destroyAccount(user.id, 'reaped', deps);
-        reaped++;
-        continue;
-      }
-      if (!isIdle(lastSeen, cutoff)) continue;
-      await destroyAccount(user.id, 'reaped', deps);
-      reaped++;
+      } else if (!isIdle(lastSeen, cutoff)) continue;
+      if (await reap(user.id, deps)) reaped++;
     } catch {
       failed++;
     }
   }
   return { scanned: page.length, reaped, cleaned, skipped, failed, cursor: page.length < limit ? null : (page[page.length - 1]?.id ?? null) };
+}
+
+/**
+ * Destroys one account unless a merge owns it: the saga would read an
+ * emptying cell and record a merge that moved nothing. The claim and the
+ * marker check are one directory transaction and `beginMerge` refuses a
+ * claimed id, so whichever reaches the directory first wins. Released however
+ * the deletion ends: an unwiped cell is still mergeable, and a wiped one
+ * refuses the merge itself.
+ */
+async function reap(id: string, deps: ReapDeps): Promise<boolean> {
+  if (!(await deps.directory.claimReap(id, isoUtc(deps.clock.now())))) return false;
+  try {
+    await destroyAccount(id, 'reaped', deps);
+  } finally {
+    await deps.directory.releaseReap(id);
+  }
+  return true;
 }

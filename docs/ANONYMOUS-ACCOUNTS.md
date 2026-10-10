@@ -678,6 +678,7 @@ collapsing them is exactly how the cookie gets dropped on a failure:
 | anon account present but not anonymous | not resolved, `reason="not_anonymous"` | kept, logged. Should be unreachable |
 | target account absent | not resolved, `reason="target_missing"` | kept, retried next request |
 | another merge holds the marker | not resolved, `reason="merge_in_progress"` | kept: those rows are going somewhere else |
+| the reaper is deleting the anonymous account | not resolved, `reason="reap_in_progress"` | kept: the next request finds it reaped, or merges it |
 | failed `MAX_ATTEMPTS` times | not resolved, `reason="merge_failed"` | **cleared** |
 
 `resolved` means the browser's pointer is safe to discard. `merged`

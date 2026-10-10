@@ -89,15 +89,32 @@ let compiled: Promise<SqlModule> | null = null;
 /** One compile per isolate; every cell on this node shares it. */
 export function sqlEngine(): Promise<SqlModule> {
   if (!compiled) {
-    compiled = initSqlJs({
-      instantiateWasm(imports: WebAssembly.Imports, ready: (instance: WebAssembly.Instance) => void) {
-        const instance = new WebAssembly.Instance(sqlWasm, imports);
-        ready(instance);
-        return instance.exports;
-      },
-    }) as Promise<SqlModule>;
+    compiled = withLocation(
+      () =>
+        initSqlJs({
+          instantiateWasm(imports: WebAssembly.Imports, ready: (instance: WebAssembly.Instance) => void) {
+            const instance = new WebAssembly.Instance(sqlWasm, imports);
+            ready(instance);
+            return instance.exports;
+          },
+        }) as Promise<SqlModule>,
+    );
   }
   return compiled;
+}
+
+/** sql.js takes any isolate defining WorkerGlobalScope for a web worker and
+ * reads `self.location.href` as it starts; a Workers isolate has the one and
+ * not the other. The WASM arrives through instantiateWasm, so the address is
+ * read and never used. */
+function withLocation<T>(start: () => T): T {
+  if ('location' in globalThis || !('WorkerGlobalScope' in globalThis)) return start();
+  Object.defineProperty(globalThis, 'location', { value: new URL('https://sql.invalid/'), configurable: true });
+  try {
+    return start();
+  } finally {
+    delete (globalThis as { location?: unknown }).location;
+  }
 }
 
 const dec = new TextDecoder('utf-8');

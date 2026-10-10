@@ -16,9 +16,9 @@ pasted key.
 
 ## What it is, technically
 
-One TypeScript Worker running on **celld**, a self-hostable
-(Apache-2.0) runtime for the Cloudflare Workers API that keeps cell
-state in object storage. There is no application server, no separate
+One TypeScript Worker that runs unchanged on Cloudflare Workers or on
+**celld**, a self-hostable (Apache-2.0) runtime for the Workers API that
+keeps cell state in object storage. There is no application server, no separate
 database, and no job queue:
 
 - Per-user state is a SQLite database inside that user's durable object.
@@ -54,7 +54,7 @@ node at it.
 sign-in works; leave them unset and the deploy runs anonymous-only,
 where every visitor gets a cookie-identified account and there is no
 sign-in page. Secrets are never read from the wrangler file: they arrive
-at runtime as `CELLD_VAR_*`.
+at runtime as Worker secrets, or as `CELLD_VAR_*` on celld.
 
 **AI is optional and always the user's own key.** A user adds an
 Anthropic, OpenAI, or OpenRouter key on `/settings/agent`. A deploy can

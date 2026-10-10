@@ -8,8 +8,9 @@ import { isoUtc, parseIso } from './time.js';
 export const IDLE_DAYS = 365;
 
 /** Accounts per walk. The walk carries a cursor, so the batch bounds one
- * tick's work rather than the sweep. */
-export const BATCH_LIMIT = 50;
+ * tick's work rather than the sweep. A reaped account costs up to five cell
+ * calls plus one per live job, and Workers Free allows 50 per invocation. */
+export const BATCH_LIMIT = 8;
 
 const DAY_MS = 86_400_000;
 
@@ -42,4 +43,19 @@ export const MIGRATION_RECHECK_MS = 3_600_000;
 export function migrationHolds(openedAt: string | null, now: Date): boolean {
   if (openedAt === null) return false;
   return now.getTime() - parseIso(openedAt).getTime() < MIGRATION_HOLD_MS;
+}
+
+/**
+ * How long a reap claim refuses merges of its account. A claim spans one
+ * account's deletion and is released when it ends; a walk that dies
+ * mid-account leaves it behind, and the next walk to reach the account
+ * re-claims it. Cloudflare stops an alarm invocation after 15 minutes of wall
+ * time, so a claim twice that old belongs to no running walk and is ignored.
+ */
+export const REAP_CLAIM_MS = 30 * 60_000;
+
+/** True while a claim taken at `claimedAt` still holds its account at `at`. */
+export function reapClaimHolds(claimedAt: string | null, at: Date): boolean {
+  if (claimedAt === null) return false;
+  return at.getTime() - parseIso(claimedAt).getTime() < REAP_CLAIM_MS;
 }

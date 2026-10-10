@@ -40,6 +40,8 @@ import { apiRoutes } from './routes/api.js';
 import { jobRoutes } from './routes/jobs.js';
 import { pageRoutes } from './routes/pages.js';
 import { createUser, isAnonymousProfile, PROFILES, type Delta } from './seed/index.js';
+import { parseCellImage, type CellImage, type ImageRestore } from '../../domain/cellImage.js';
+import { applyImage, imageOf } from './image.js';
 
 const SESSION_COUNTER_KEY = 'test_session_counter';
 /** A profile with no rows: the seed wipes and returns `{}`. */
@@ -444,6 +446,26 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   /** Step two, its own RPC: zero-fill to the former size so the next snapshot holds no row bodies. */
   async scrub(at: string): Promise<void> {
     this.repos().tombstone.scrub(at);
+  }
+
+  /** The whole cell, for a move to another runtime. */
+  async image(): Promise<CellImage> {
+    return imageOf(this.storage);
+  }
+
+  /** A move's image applied to this cell, which must be blank. The alarm is re-derived from the restored rows. */
+  async restoreImage(input: unknown): Promise<ImageRestore> {
+    const result = await applyImage(this.storage, parseCellImage(input));
+    if (result.restored) await this.ensureAlarm();
+    return result;
+  }
+
+  /** Every job this user has started, terminal ones included. */
+  async jobIds(): Promise<string[]> {
+    return this.storage.sql
+      .exec<{ workflow_id: string }>('SELECT workflow_id FROM active_workflows ORDER BY workflow_id')
+      .toArray()
+      .map((r) => String(r.workflow_id));
   }
 
   // ---- the alarm ---------------------------------------------------------------

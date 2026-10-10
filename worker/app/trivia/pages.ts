@@ -154,7 +154,7 @@ export async function triviaSessionAnswer(req: PageRequest, deps: TriviaDeps): P
   }
 
   repos.trivia.markAnswered(head, verdict.correct);
-  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(head, verdict.regex_update) : false;
+  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(head, verdict.regex_update, q.answer_regex) : false;
 
   const newDone: DoneItem[] = [...doneItems, [head, verdict.correct ? 'r' : 'w']];
   const remaining = queue.slice(1);
@@ -224,7 +224,7 @@ export async function triviaSessionRegrade(req: PageRequest, deps: TriviaDeps): 
   const answer = req.form.get('answer') ?? '';
   const verdict = await aiRegrade(deps.agent, { prompt: q.prompt, expected: q.answer, given: answer, currentRegex: q.answer_regex });
   repos.trivia.setLastCorrectness(qid, verdict.correct);
-  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(qid, verdict.regex_update) : false;
+  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(qid, verdict.regex_update, q.answer_regex) : false;
 
   const doneItems = parseDone(req.form.get('done') ?? '');
   const cardsParam = req.form.get('cards') ?? '';
@@ -259,7 +259,7 @@ export async function triviaAnswer(req: PageRequest, deps: TriviaDeps): Promise<
   const answer = req.form.get('answer') ?? '';
   const verdict = await gradeWithFallback(deps.agent, q, answer);
   repos.trivia.markAnswered(q.id, verdict.correct);
-  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(q.id, verdict.regex_update) : false;
+  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(q.id, verdict.regex_update, q.answer_regex) : false;
   return page('trivia/card.html', {
     q,
     deck_name: deckName,
@@ -275,7 +275,7 @@ export async function triviaCardRegrade(req: PageRequest, deps: TriviaDeps): Pro
   const verdict = await aiRegrade(deps.agent, { prompt: q.prompt, expected: q.answer, given: answer, currentRegex: q.answer_regex });
   // Only the verdict column moves: the card keeps its place in the queue.
   repos.trivia.setLastCorrectness(q.id, verdict.correct);
-  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(q.id, verdict.regex_update) : false;
+  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(q.id, verdict.regex_update, q.answer_regex) : false;
   return page('trivia/card.html', {
     q,
     deck_name: deckName,

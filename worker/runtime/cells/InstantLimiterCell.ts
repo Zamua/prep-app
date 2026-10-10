@@ -4,6 +4,8 @@ import type { LedgerReset, Limiter, ReserveResult, Sync } from '../../app/ports.
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
+import { parseCellImage, type CellImage, type ImageRestore } from '../../domain/cellImage.js';
+import { applyImage, imageOf } from './image.js';
 
 export class InstantLimiterCell extends DurableObject<Env> implements Limiter {
   private readonly c: Composition;
@@ -50,6 +52,17 @@ export class InstantLimiterCell extends DurableObject<Env> implements Limiter {
 
   async reassign(fromId: string, toId: string): Promise<number> {
     return this.repo.reassign(fromId, toId);
+  }
+
+  /** The whole cell, for a move to another runtime. */
+  async image(): Promise<CellImage> {
+    return imageOf(this.storage);
+  }
+
+  /** A move's image applied to this cell, which must be blank. */
+  async restoreImage(input: unknown): Promise<ImageRestore> {
+    const result = await applyImage(this.storage, parseCellImage(input));
+    return result;
   }
 
   /** Test only, from `POST /_test/seed`: the ledger is global, so a

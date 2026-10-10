@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { PageRequest, PageResult } from '../../app/pageResult.js';
+import type { AgentPort, WorkflowRunner } from '../../app/ports.js';
+import { triviaAnswer, triviaCardRegrade, triviaSessionAnswer, triviaSessionRegrade, type TriviaDeps } from '../../app/trivia/pages.js';
+import { cell, TEST_NOW } from '../repos/setup.js';
 import { seeded, type Harness } from './setup.js';
 
 const DECK = 'world-history';
@@ -200,5 +204,65 @@ describe('the per-deck trivia settings', () => {
     expect(h.state.fake.rows('trivia_sessions').every((s) => s['snoozed_until'] === null)).toBe(true);
     expect((await h.post(`/trivia/session/${DECK}/abandon`)).headers.get('location')).toBe('/');
     expect(h.state.fake.rows('trivia_sessions').every((s) => s['status'] !== 'active')).toBe(true);
+  });
+});
+
+/** Holds every grade until the test replies, so two grades of one card overlap. */
+class HeldAgent implements AgentPort {
+  readonly held: ((reply: string) => void)[] = [];
+  complete(): Promise<string> {
+    return new Promise((resolve) => this.held.push(resolve));
+  }
+}
+
+const NO_RUNNER: WorkflowRunner = {
+  start: async () => ({ workflowId: '' }),
+  signal: async () => null,
+  status: async () => null,
+  terminate: async () => {},
+};
+
+const learned = (regex: string): string => JSON.stringify({ verdict: 'right', feedback: 'ok', regex_update: regex });
+
+const pageReq = (params: Record<string, string>, form: Record<string, string>): PageRequest => ({
+  params,
+  query: new URLSearchParams(),
+  form: new URLSearchParams(form),
+  htmx: false,
+  hxHeader: null,
+  userAgent: null,
+  cookies: {},
+  now: TEST_NOW.toISOString(),
+});
+
+type Grade = (deps: TriviaDeps, qid: number, answer: string) => Promise<PageResult>;
+
+const GRADES: [string, Grade][] = [
+  ['a session answer', (d, qid, answer) => triviaSessionAnswer(pageReq({ deck_name: 'history' }, { cards: String(qid), done: '', answer }), d)],
+  ['a session regrade', (d, qid, answer) => triviaSessionRegrade(pageReq({ deck_name: 'history' }, { question_id: String(qid), cards: '', done: `${qid}w`, answer }), d)],
+  ['a card answer', (d, qid, answer) => triviaAnswer(pageReq({ question_id: String(qid) }, { answer }), d)],
+  ['a card regrade', (d, qid, answer) => triviaCardRegrade(pageReq({ question_id: String(qid) }, { answer }), d)],
+];
+
+describe('the learned answer regex', () => {
+  it.each(GRADES)('%s keeps an alternative another grade of the card learned while it waited on the model', async (_name, grade) => {
+    const c = cell();
+    const deck = c.repos.decks.createTrivia('history', { topic: 'History', intervalMinutes: 60, displayName: 'History' });
+    const qid = c.repos.questions.add(deck, { type: 'short', prompt: 'Where did William win in 1066?', answer: 'Battle of Hastings in England' });
+    c.repos.trivia.appendCard(qid, deck);
+    const agent = new HeldAgent();
+    const deps: TriviaDeps = { repos: c.repos, agent, runner: NO_RUNNER, freeTierConfigured: false };
+
+    const first = grade(deps, qid, 'Hastings');
+    const second = grade(deps, qid, 'Hastings fight');
+    expect(agent.held).toHaveLength(2);
+    agent.held[0]!(learned('battle of hastings in england|hastings'));
+    const firstResult = await first;
+    agent.held[1]!(learned('battle of hastings in england|hastings fight'));
+    const secondResult = await second;
+
+    expect(c.repos.questions.get(qid)!.answer_regex).toBe('battle of hastings in england|hastings');
+    expect(firstResult).toMatchObject({ context: { result: { regex_updated: true } } });
+    expect(secondResult).toMatchObject({ context: { result: { regex_updated: false } } });
   });
 });

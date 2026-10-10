@@ -6,6 +6,8 @@ import { llmStep, writeStep } from '../../app/jobs/registry.js';
 import type { StepGraph } from '../../domain/jobs/graph.js';
 import { DurabilityUnproven, MAX_DELIVERY_ATTEMPTS, MAX_REFUSALS } from '../../domain/jobs/refusal.js';
 import { isoUtc } from '../../domain/time.js';
+import { JobCell } from '../../runtime/cells/JobCell.js';
+import { fakeCellState } from '../fakes/sqlStorage.js';
 import { jobHarness, seedOwner, type JobHarness } from './harness.js';
 import { MutableClock, USER } from '../repos/setup.js';
 
@@ -487,5 +489,21 @@ describe('the seed reset', () => {
     expect(h.jobStorage(id).alarmAt).toBeNull();
     await startDemo(h);
     expect(h.ledger(id).outbox.map((o) => o['status'])).toEqual(['planning']);
+  });
+});
+
+describe('a job image', () => {
+  it('restores a ledger waiting at its gate, and re-arms the gate deadline', async () => {
+    register(h);
+    const id = await startDemo(h);
+    await h.settle();
+    const img = await h.jobCell(id).image();
+    expect(img.tables['steps']!.rows.length).toBeGreaterThan(0);
+    const state = fakeCellState();
+    const target = new JobCell(state, h.env);
+    await state.ready();
+    expect(await target.restoreImage(JSON.parse(JSON.stringify(img)))).toMatchObject({ restored: true });
+    expect(await target.image()).toEqual(img);
+    expect(state.fake.alarmAt).toBe(h.jobStorage(id).alarmAt);
   });
 });

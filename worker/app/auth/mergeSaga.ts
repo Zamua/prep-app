@@ -41,6 +41,10 @@ export class AnonCellVanished extends Error {}
  * somewhere else, and this cookie is not ours to resolve. */
 export const MERGE_IN_PROGRESS = 'merge_in_progress';
 
+/** The reaper is deleting this anonymous account. The cookie stays, and the
+ * next request finds the account reaped, or merges it if the reaper let go. */
+export const REAP_IN_PROGRESS = 'reap_in_progress';
+
 /** Given up on after `MAX_ATTEMPTS`. The rows stay where they are and the
  * audit row says why; the cookie goes, because retrying it costs the user a
  * pair of cell reads on every request and will never end. */
@@ -100,8 +104,11 @@ export async function mergeAnonymous(anonId: string, targetId: string, deps: Mer
   const refused = precheck(state.exists ? { is_anonymous: state.isAnonymous } : null, target ? { id: target.id } : null, false);
   if (refused) return refused;
 
-  const { auditId } = await deps.directory.beginMerge(anonId, targetId, isoUtc(deps.clock.now()));
-  return await finish(auditId, anonId, targetId, deps);
+  const begun = await deps.directory.beginMerge(anonId, targetId, isoUtc(deps.clock.now()));
+  if (begun === null) return refusal(REAP_IN_PROGRESS, false);
+  // Another target's merge began after the marker check above.
+  if (begun.marker.target_id !== targetId) return refusal(MERGE_IN_PROGRESS, false);
+  return await finish(begun.auditId, anonId, targetId, deps);
 }
 
 /** Steps three to five, from wherever the last attempt stopped. */

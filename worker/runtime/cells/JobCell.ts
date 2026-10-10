@@ -2,11 +2,14 @@
 // decision is taken from the rows, so an eviction, a node restart and a
 // duplicate alarm all reach the same one.
 //
-// Two rules the shape rests on. A caller-originated RPC (`start`, `signal`,
-// `terminate`) never calls back into the owner's cell: the owner is mid
-// request when it calls here, and a cell serves one request at a time.
-// Everything that touches the owner therefore happens on the alarm. And the
-// alarm is derived from the rows at the end of every RPC and in the
+// Three rules the shape rests on. The runtime runs other RPCs while the cell
+// awaits a step or its owner, so every decision is read, taken and committed
+// with no such await in between; a snapshot held across one commits over a
+// terminate, or over a gate the user already answered. A caller-originated
+// RPC (`start`, `signal`, `terminate`) never calls back into the owner's
+// cell, so it has no such await and lands whole between the alarm's;
+// everything that touches the owner happens on the alarm. And
+// the alarm is derived from the rows at the end of every RPC and in the
 // constructor, never held, so a rolled-back RPC still converges.
 import { DurableObject } from 'cloudflare:workers';
 import type { LlmStepContext, StepInfo } from '../../app/jobs/registry.js';
@@ -29,6 +32,8 @@ import { isoUtc } from '../../domain/time.js';
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import type { CellStorage } from '../storage.js';
+import { parseCellImage, type CellImage, type ImageRestore } from '../../domain/cellImage.js';
+import { applyImage, imageOf } from './image.js';
 
 /** A wake is never asked for the past: a due-now alarm lands just after now. */
 const ALARM_FLOOR_MS = 1;
@@ -161,6 +166,18 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
     return Response.json(await this.drive());
   }
 
+  /** The whole cell, for a move to another runtime. */
+  async image(): Promise<CellImage> {
+    return imageOf(this.storage);
+  }
+
+  /** A move's image applied to this cell, which must be blank. The alarm is re-derived from the restored rows. */
+  async restoreImage(input: unknown): Promise<ImageRestore> {
+    const result = await applyImage(this.storage, parseCellImage(input));
+    if (result.restored) await this.ensureAlarm();
+    return result;
+  }
+
   async alarm(): Promise<void> {
     await this.drive();
   }
@@ -170,9 +187,11 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
   private async drive(): Promise<JobTransition | null> {
     let ran = 0;
     for (let i = 0; i < MAX_DRIVE_STEPS; i++) {
+      await this.flushOutbox();
+      // Read after the flush, whose await on the owner lets a terminate or a
+      // signal land first.
       const rows = this.ledger.read();
       if (!rows) return null;
-      await this.flushOutbox(rows);
       const state = this.stateOf(rows);
       const action = nextAction(state, this.now());
       if (action.kind === 'run') {
@@ -193,8 +212,7 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
       }
       break;
     }
-    const after = this.ledger.read();
-    if (after) await this.flushOutbox(after);
+    await this.flushOutbox();
     await this.ensureAlarm();
     return this.peek();
   }
@@ -203,7 +221,9 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
    * the refusal backoff and the alarm brings it back, up to
    * `MAX_DELIVERY_ATTEMPTS`; past that the row is abandoned so an owner that
    * refuses permanently cannot keep this cell awake for the deploy's life. */
-  private async flushOutbox(rows: LedgerRows): Promise<void> {
+  private async flushOutbox(): Promise<void> {
+    const rows = this.ledger.read();
+    if (!rows) return;
     const route = this.ledger.route();
     for (const row of rows.outbox) {
       if (row.delivered_at !== null || isAbandoned(row)) continue;
@@ -245,25 +265,43 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
       return;
     }
     const started = isoUtc(this.now());
-    let output: StepOutput;
+    let decide: (now: LedgerState, current: StepRow) => LedgerCommit;
     try {
-      output = await this.execute(state, node, row);
+      const output = await this.execute(state, node, row);
+      decide = (now, current) =>
+        this.afterStep(now, current, {
+          step_key: current.step_key,
+          status: 'done',
+          attempt: current.attempt + 1,
+          refusals: current.refusals,
+          next_attempt_at: null,
+          output,
+          error: null,
+          started_at: current.started_at ?? started,
+          finished_at: isoUtc(this.now()),
+        });
     } catch (e) {
-      this.ledger.commit(this.failureCommit(state, node, row, started, e));
-      return;
+      decide = (now, current) => this.failureCommit(now, node, current, started, e);
     }
-    const done: StepWrite = {
-      step_key: row.step_key,
-      status: 'done',
-      attempt: row.attempt + 1,
-      refusals: row.refusals,
-      next_attempt_at: null,
-      output,
-      error: null,
-      started_at: row.started_at ?? started,
-      finished_at: isoUtc(this.now()),
-    };
-    this.ledger.commit(this.afterStep(state, row, done));
+    // Read, decide and commit with no await between them, so nothing else
+    // can land in the middle.
+    const current = this.unmovedSince(state, row);
+    if (current) this.ledger.commit(decide(current.state, current.row));
+  }
+
+  /**
+   * The ledger as it stands, when a step's result still applies to it: the
+   * same run, no transition since `state` was read, and the row pending at
+   * the attempt that ran. Every terminate and gate resolution bumps the
+   * transition, so a step that outlived either is discarded rather than
+   * committed over it.
+   */
+  private unmovedSince(state: LedgerState, row: StepRow): { state: LedgerState; row: StepRow } | null {
+    const rows = this.ledger.read();
+    if (!rows || rows.job.created_at !== state.job.created_at || rows.job.transition !== state.job.transition) return null;
+    const current = rows.steps.find((r) => r.step_key === row.step_key);
+    if (!current || current.status !== 'pending' || current.attempt !== row.attempt) return null;
+    return { state: this.stateOf(rows), row: current };
   }
 
   private async execute(state: LedgerState, node: StepNode, row: StepRow): Promise<StepOutput> {

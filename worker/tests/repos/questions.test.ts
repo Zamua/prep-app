@@ -109,9 +109,12 @@ describe('QuestionRepo', () => {
     const qid = repos.questions.add(d, { type: 'short', prompt: 'p', answer: 'a' });
     repos.questions.setSuspended(qid, true);
     expect(repos.questions.get(qid)?.suspended).toBe(true);
-    expect(repos.questions.setAnswerRegex(qid, '(?i)^a$')).toBe(true);
-    expect(repos.questions.setAnswerRegex(999, 'x')).toBe(false);
+    expect(repos.questions.setAnswerRegex(qid, '(?i)^a$', null)).toBe(true);
+    expect(repos.questions.setAnswerRegex(999, 'x', null)).toBe(false);
+    expect(repos.questions.setAnswerRegex(qid, 'a|b', null)).toBe(false);
     expect(repos.questions.get(qid)?.answer_regex).toBe('(?i)^a$');
+    expect(repos.questions.setAnswerRegex(qid, 'a|b', '(?i)^a$')).toBe(true);
+    expect(repos.questions.get(qid)?.answer_regex).toBe('a|b');
     expect(repos.questions.delete(qid)).toBe(true);
     expect(repos.questions.delete(qid)).toBe(false);
     expect(storage.rows('cards')).toEqual([]);

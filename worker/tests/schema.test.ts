@@ -84,12 +84,13 @@ describe('the user cell schema', () => {
 });
 
 describe('the global cells', () => {
-  it('directory: users, merges, markers, tombstones', () => {
+  it('directory: users, merges, markers, reap claims, tombstones', () => {
     const storage = new FakeCellStorage();
     migrate(storage.sql, DIRECTORY_MIGRATIONS);
     const db = new Db(storage.sql);
-    expect(db.tables()).toEqual(['account_merges', 'merge_markers', 'schema_version', 'tombstones', 'users']);
+    expect(db.tables()).toEqual(['account_merges', 'merge_markers', 'reap_claims', 'schema_version', 'tombstones', 'users']);
     expect([...db.columns('users')]).toEqual(['id', 'is_anonymous', 'created_at', 'idx']);
+    expect([...db.columns('reap_claims')]).toEqual(['id', 'claimed_at']);
   });
 
   it('limiter: the ledger and its three indexes', () => {

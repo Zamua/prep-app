@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentVersion, ID_BLOCK, migrate, resetSequences, seedSequences, USER_MIGRATIONS, type Migration } from '../runtime/adapters/sql/migrate.js';
+import { currentVersion, DIRECTORY_MIGRATIONS, ID_BLOCK, migrate, resetSequences, seedSequences, USER_MIGRATIONS, type Migration } from '../runtime/adapters/sql/migrate.js';
 import { AUTOINCREMENT_TABLES } from '../runtime/adapters/sql/schema.js';
 import { Db } from '../runtime/adapters/sql/storage.js';
 import { FakeCellStorage } from './fakes/sqlStorage.js';
@@ -97,5 +97,23 @@ describe('the learning rung migration', () => {
     const fresh = new FakeCellStorage();
     migrate(fresh.sql, USER_MIGRATIONS);
     expect(db.all("PRAGMA table_info('cards')")).toEqual(new Db(fresh.sql).all("PRAGMA table_info('cards')"));
+  });
+});
+
+describe('the reap claim migration', () => {
+  it('adds the table to a directory that predates it, idempotently, matching the fresh schema', () => {
+    const upgraded = new FakeCellStorage();
+    migrate(upgraded.sql, DIRECTORY_MIGRATIONS.filter((m) => m.version < 3));
+    const db = new Db(upgraded.sql);
+    db.script('DROP TABLE reap_claims');
+    db.run("INSERT INTO merge_markers (anon_id, target_id, audit_id, started_at) VALUES ('anon:a', 't', 1, '2026-03-14T15:00:00+00:00')");
+
+    expect(migrate(upgraded.sql, DIRECTORY_MIGRATIONS)).toBe(3);
+    expect(db.all('SELECT anon_id FROM merge_markers')).toEqual([{ anon_id: 'anon:a' }]);
+    DIRECTORY_MIGRATIONS.find((m) => m.version === 3)!.apply(db);
+
+    const fresh = new FakeCellStorage();
+    migrate(fresh.sql, DIRECTORY_MIGRATIONS);
+    expect(db.all("PRAGMA table_info('reap_claims')")).toEqual(new Db(fresh.sql).all("PRAGMA table_info('reap_claims')"));
   });
 });

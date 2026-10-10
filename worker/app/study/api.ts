@@ -8,6 +8,7 @@
 import { grade, GradingError, UnsupportedQuestionType } from '../../domain/grading/index.js';
 import { AnswerJsonError } from '../../domain/grading/answerJson.js';
 import { deviceLabelFromUa } from '../../domain/study/device.js';
+import { keyedGradeId } from '../../domain/jobs/ids.js';
 import { gradeCard } from '../../domain/jobs/snapshot.js';
 import { DurationError, parseUntil } from '../durations.js';
 import type { CardState, Question, StudySession } from '../entities.js';
@@ -240,11 +241,17 @@ async function submit(
   const userAnswer = idk ? '' : body.answer;
 
   if (FREE_TEXT.includes(q.type) && !idk) {
-    const selfGrade = json({ selfGrade: true, answer: userAnswer, card: revealedPayload(q), session });
-    if (!deps.agentAvailable) return selfGrade;
+    const selfGrade = (current: Record<string, unknown> | null): ApiResult => json({ selfGrade: true, answer: userAnswer, card: revealedPayload(q), session: current });
+    if (!deps.agentAvailable) return selfGrade(session);
+    const key = s !== null ? `${s.id}v${String(body.version)}` : null;
+    // Claimed before the start yields, so a write interleaved with the start
+    // meets the claim instead of moving the session under a job that will
+    // still record its review.
+    const claimed = key !== null ? keyedGradeId(q.id, key) : null;
     let wid: string;
     try {
       requireFundedWorkflow(repos, deps.freeTierConfigured);
+      if (s !== null && claimed !== null) repos.sessions.setGrading(s.id, q.id, claimed, body.version as number);
       const started = await deps.runner.start('GradeAnswer', {
         questionId: q.id,
         deckName,
@@ -252,9 +259,8 @@ async function submit(
         idk,
         sessionId: s ? s.id : '',
         card: gradeCard({ type: q.type, prompt: q.prompt, answer: q.answer, rubric: q.rubric ?? '' }),
-      }, s ? { idempotencyKey: `${s.id}v${String(body.version)}` } : undefined);
-      wid = started.workflowId;
-      if (s !== null) repos.sessions.setGrading(s.id, q.id, wid, body.version as number);
+      }, key !== null ? { idempotencyKey: key } : undefined);
+      wid = claimed ?? started.workflowId;
       repos.jobs.register({
         workflowId: wid,
         workflowType: 'grading',
@@ -266,8 +272,17 @@ async function submit(
     } catch (e) {
       if (e instanceof StaleVersionError) return stale(e);
       // No tier funds an LLM judge for this user: self-grade rather than
-      // book a worker slot the activity cannot pay.
-      if (e instanceof RunnerUnavailable || e instanceof AgentUnavailable) return selfGrade;
+      // book a worker slot the activity cannot pay. A refused start made no
+      // job, so the claim is released.
+      if (e instanceof RunnerUnavailable || e instanceof AgentUnavailable) {
+        if (s === null || claimed === null) return selfGrade(session);
+        repos.sessions.gradingAbandoned(s.id, claimed);
+        const released = repos.sessions.get(s.id);
+        return selfGrade(released ? sessionPayload(released, deckName) : session);
+      }
+      // Any other failure may follow a start that landed, so the claim
+      // stands: the poll lands that job's verdict, or releases the session
+      // when no job backs the id.
       return error(502, 'grading_start_failed', `failed to start grading workflow: ${e instanceof Error ? e.message : String(e)}`);
     }
     const sid = s !== null ? s.id : '';

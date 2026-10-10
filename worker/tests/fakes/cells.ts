@@ -4,6 +4,7 @@
 import type { DirectoryUser, MergeAudit, MergeMarker, TombstoneReason } from '../../app/entities.js';
 import type { Directory, JobCellRpc, JobCells, Limiter, ReserveResult, UserCellRpc, UserCells } from '../../app/ports.js';
 import { checkWindows, DEFAULT_LIMITS, RETENTION_DAYS, TERMINAL_OUTCOMES, type GenerationRow, type Limits } from '../../domain/instant/limiter.js';
+import { reapClaimHolds } from '../../domain/reaper.js';
 import { parseIso } from '../../domain/time.js';
 import { UserCell } from '../../runtime/cells/UserCell.js';
 import type { Env } from '../../runtime/env.js';
@@ -15,6 +16,7 @@ export class FakeDirectory implements Directory {
   markers = new Map<string, MergeMarker>();
   attempts = new Map<string, number>();
   tombstones = new Map<string, { reason: TombstoneReason; at: string }>();
+  claims = new Map<string, string>();
 
   async register(id: string, isAnonymous: boolean, at: string, opts: { idx?: number } = {}): Promise<{ idx: number }> {
     const existing = this.users.get(id);
@@ -28,9 +30,10 @@ export class FakeDirectory implements Directory {
     return this.users.get(id) ?? null;
   }
 
-  async beginMerge(anonId: string, targetId: string, at: string): Promise<{ auditId: number; marker: MergeMarker }> {
+  async beginMerge(anonId: string, targetId: string, at: string): Promise<{ auditId: number; marker: MergeMarker } | null> {
     const existing = this.markers.get(anonId);
     if (existing) return { auditId: existing.audit_id, marker: existing };
+    if (reapClaimHolds(this.claims.get(anonId) ?? null, parseIso(at))) return null;
     const id = this.merges.length + 1;
     this.merges.push({ id, anon_user_id: anonId, target_user_id: targetId, started_at: at, completed_at: null, status: 'started', counts: null, error: null });
     const marker = { anon_id: anonId, target_id: targetId, audit_id: id, started_at: at };
@@ -93,6 +96,16 @@ export class FakeDirectory implements Directory {
       .filter((u) => u.is_anonymous && u.id > (after ?? ''))
       .sort((a, b) => (a.id < b.id ? -1 : 1))
       .slice(0, limit);
+  }
+
+  async claimReap(id: string, at: string): Promise<boolean> {
+    if (this.markers.has(id)) return false;
+    this.claims.set(id, at);
+    return true;
+  }
+
+  async releaseReap(id: string): Promise<void> {
+    this.claims.delete(id);
   }
 }
 
