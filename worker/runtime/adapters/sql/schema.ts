@@ -287,6 +287,11 @@ CREATE TABLE IF NOT EXISTS tombstones (
   at     TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS reap_claims (
+  id         TEXT PRIMARY KEY,
+  claimed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { REAP_CLAIM_MS } from '../domain/reaper.js';
+import { isoUtc } from '../domain/time.js';
 import { DirectoryCell } from '../runtime/cells/DirectoryCell.js';
 import { FakeDirectory } from './fakes/cells.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
@@ -8,6 +10,7 @@ const T0 = '2026-03-14T15:00:00+00:00';
 const T1 = '2026-03-14T15:00:01+00:00';
 const ANON = 'anon:' + 'ab'.repeat(16);
 const TARGET = 'seed@example.com';
+const after = (ms: number) => isoUtc(new Date(Date.parse('2026-03-14T15:00:00Z') + ms));
 
 describe.each([
   ['DirectoryCell', () => new DirectoryCell(fakeCellState(), fakeEnv())],
@@ -30,7 +33,7 @@ describe.each([
   it('a merge is a marker plus a started audit row; completion records counts, failure clears the marker', async () => {
     await dir.register(ANON, true, T0);
     await dir.register(TARGET, false, T0);
-    const begun = await dir.beginMerge(ANON, TARGET, T0);
+    const begun = (await dir.beginMerge(ANON, TARGET, T0))!;
     expect(begun.marker).toEqual({ anon_id: ANON, target_id: TARGET, audit_id: begun.auditId, started_at: T0 });
     expect(await dir.beginMerge(ANON, TARGET, T1)).toEqual(begun);
     expect(await dir.marker(ANON)).toEqual(begun.marker);
@@ -42,11 +45,37 @@ describe.each([
     await dir.clearMarker(ANON);
     expect(await dir.marker(ANON)).toBeNull();
 
-    const second = await dir.beginMerge('anon:' + 'cd'.repeat(16), TARGET, T1);
+    const second = (await dir.beginMerge('anon:' + 'cd'.repeat(16), TARGET, T1))!;
     await dir.failMerge(second.auditId, 'boom', T1);
     expect(await dir.audit(second.auditId)).toMatchObject({ status: 'failed', error: 'boom' });
     expect(await dir.marker('anon:' + 'cd'.repeat(16))).toBeNull();
     expect(await dir.previousIds(TARGET)).toEqual([ANON]);
+  });
+
+  it('a reap claim refuses a merge until released, and a merge already begun refuses the claim', async () => {
+    await dir.register(ANON, true, T0);
+    await dir.register(TARGET, false, T0);
+    expect(await dir.claimReap(ANON, T0)).toBe(true);
+    expect(await dir.beginMerge(ANON, TARGET, T1)).toBeNull();
+    expect(await dir.marker(ANON)).toBeNull();
+    expect(await dir.audit(1)).toBeNull();
+
+    await dir.releaseReap(ANON);
+    const begun = await dir.beginMerge(ANON, TARGET, T1);
+    expect(begun?.marker).toMatchObject({ anon_id: ANON, target_id: TARGET });
+    expect(await dir.claimReap(ANON, T1)).toBe(false);
+    expect(await dir.beginMerge(ANON, TARGET, T1)).toEqual(begun);
+  });
+
+  it('a claim its walk never released stops refusing merges at the bound, and a new walk renews it', async () => {
+    await dir.register(ANON, true, T0);
+    await dir.register(TARGET, false, T0);
+    await dir.claimReap(ANON, T0);
+    expect(await dir.beginMerge(ANON, TARGET, after(REAP_CLAIM_MS - 1))).toBeNull();
+
+    await dir.claimReap(ANON, after(REAP_CLAIM_MS));
+    expect(await dir.beginMerge(ANON, TARGET, after(2 * REAP_CLAIM_MS - 1))).toBeNull();
+    expect(await dir.beginMerge(ANON, TARGET, after(2 * REAP_CLAIM_MS))).not.toBeNull();
   });
 
   it('tombstones, removes, and walks anonymous ids in pages', async () => {

@@ -58,7 +58,7 @@ door**; a fifth class is a decision, not a refactor.
 | class | keyed by | holds |
 | --- | --- | --- |
 | `UserCell` | user id (Clerk `sub`, or `anon:<hex>`) | one SQLite per user: decks, questions, cards, reviews, sessions, trivia, notifications, push subs, BYOK credentials, PAT hashes, four idempotency ledgers, prefs, job status rows |
-| `DirectoryCell` | `"global"` | enumeration only: user id, `is_anonymous`, `created_at`, the merge audit, merge markers, tombstones. Owns the anonymous-retention sweep |
+| `DirectoryCell` | `"global"` | enumeration only: user id, `is_anonymous`, `created_at`, the merge audit, merge markers, reap claims, tombstones. Owns the anonymous-retention sweep |
 | `InstantLimiterCell` | `"global"` | the instant-generation ledger and both breakers |
 | `JobCell` | job id | one durable job: its step ledger and its human gate |
 

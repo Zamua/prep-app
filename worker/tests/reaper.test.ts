@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { reapIdleAnonymous, type ReapDeps } from '../app/auth/reaper.js';
-import type { Clock, UserCellRpc } from '../app/ports.js';
+import { REAP_IN_PROGRESS, mergeAnonymous, type MergeDeps } from '../app/auth/mergeSaga.js';
+import { cookieVerdict } from '../app/auth/anonymous.js';
+import type { Clock, UserCellRpc, UserCells } from '../app/ports.js';
 import { MAX_AGE_SECONDS } from '../domain/anonCookie.js';
 import { BATCH_LIMIT, IDLE_DAYS, cutoffFor, isIdle } from '../domain/reaper.js';
 import { UserCell } from '../runtime/cells/UserCell.js';
 import type { Env } from '../runtime/env.js';
-import { FakeDirectory, FakeJobCells, FakeUserCells } from './fakes/cells.js';
+import { FakeDirectory, FakeJobCells, FakeLimiter, FakeUserCells } from './fakes/cells.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
 import { fakeEnv } from './helpers.js';
 
@@ -220,5 +222,113 @@ describe('one walk on Workers Free', () => {
     const report = await reapIdleAnonymous({ ...f.deps, cells: cells as unknown as FakeUserCells, jobs: jobs as unknown as FakeJobCells });
     expect(report.reaped).toBe(BATCH_LIMIT);
     expect(calls).toBeLessThanOrEqual(50);
+  });
+});
+
+// ---- the walk against a merge of the same account ------------------------
+
+const TARGET = 'reader@example.com';
+
+interface Gate {
+  /** Settles when the parked call arrives. */
+  arrived: Promise<void>;
+  release(): void;
+}
+
+/** `f.cells`, with `method` on `id`'s cell routed through `around`. */
+function rigged(f: Fixture, id: string, method: string, around: (call: () => unknown) => Promise<unknown>): UserCells {
+  return {
+    cell: (name: string) => {
+      const rpc = f.cells.cell(name);
+      if (name !== id) return rpc;
+      return new Proxy(rpc, {
+        get(target, prop) {
+          const value = Reflect.get(target, prop) as unknown;
+          if (typeof value !== 'function') return value;
+          const fn = value as (...a: unknown[]) => unknown;
+          if (String(prop) !== method) return (...a: unknown[]) => fn.apply(target, a);
+          return (...a: unknown[]) => around(() => fn.apply(target, a));
+        },
+      });
+    },
+  };
+}
+
+/** `f.cells`, with `method` on `id`'s cell parked until the gate opens. */
+function parked(f: Fixture, id: string, method: string): { cells: UserCells; gate: Gate } {
+  let arrive!: () => void;
+  let release!: () => void;
+  const arrived = new Promise<void>((r) => (arrive = r));
+  const opened = new Promise<void>((r) => (release = r));
+  const cells = rigged(f, id, method, async (call) => {
+    arrive();
+    await opened;
+    return call();
+  });
+  return { cells, gate: { arrived, release } };
+}
+
+async function signedIn(f: Fixture): Promise<void> {
+  const { idx } = await f.directory.register(TARGET, false, FRESH);
+  await f.cells.cell(TARGET).upsert(TARGET, { email: TARGET, displayName: 'Reader' }, FRESH, idx);
+}
+
+const mergeDeps = (f: Fixture, cells: UserCells = f.cells): MergeDeps => ({
+  ...f.deps,
+  cells,
+  limiter: new FakeLimiter(),
+  randomHex: () => 'abcdef',
+});
+
+describe('the walk and a merge of the same account', () => {
+  it('spares an account whose merge began while the walk read its date', async () => {
+    const f = fixture();
+    await mint(f, 'anon:a1', IDLE);
+    await signedIn(f);
+    const { cells, gate } = parked(f, 'anon:a1', 'lastSeenAt');
+
+    const walk = reapIdleAnonymous({ ...f.deps, cells });
+    await gate.arrived;
+    await f.directory.beginMerge('anon:a1', TARGET, FRESH);
+    gate.release();
+
+    expect(await walk).toMatchObject({ reaped: 0, failed: 0 });
+    expect(await f.cells.cell('anon:a1').precheck()).toMatchObject({ exists: true, tombstoned: null });
+    expect(await mergeAnonymous('anon:a1', TARGET, mergeDeps(f))).toMatchObject({ resolved: true, merged: true });
+    expect((await f.cells.cell(TARGET).dump()).tables['decks']).toHaveLength(1);
+  });
+
+  it('refuses a merge that starts while the walk deletes the account, and the retry finds it reaped', async () => {
+    const f = fixture();
+    await mint(f, 'anon:a1', IDLE);
+    await signedIn(f);
+    const reaper = parked(f, 'anon:a1', 'destroy');
+    // The merge's own read of the cell, held until the wipe has landed.
+    const reader = parked(f, 'anon:a1', 'dump');
+
+    const walk = reapIdleAnonymous({ ...f.deps, cells: reaper.cells });
+    await reaper.gate.arrived;
+    const merge = mergeAnonymous('anon:a1', TARGET, mergeDeps(f, reader.cells));
+    await Promise.race([merge, reader.gate.arrived]);
+    reaper.gate.release();
+    expect(await walk).toMatchObject({ reaped: 1, failed: 0 });
+    reader.gate.release();
+
+    const refused = await merge;
+    expect(refused).toEqual({ resolved: false, merged: false, counts: {}, reason: REAP_IN_PROGRESS });
+    expect(cookieVerdict(refused)).toBe('keep');
+    expect(f.directory.merges).toEqual([]);
+    expect(await mergeAnonymous('anon:a1', TARGET, mergeDeps(f))).toEqual({ resolved: true, merged: false, counts: {}, reason: 'anon_missing' });
+  });
+
+  it('gives its claim back when a deletion fails, so the merge goes through', async () => {
+    const f = fixture();
+    await mint(f, 'anon:a1', IDLE);
+    await signedIn(f);
+    const cells = rigged(f, 'anon:a1', 'destroy', async () => Promise.reject(new Error('unreachable')));
+
+    expect(await reapIdleAnonymous({ ...f.deps, cells })).toMatchObject({ reaped: 0, failed: 1 });
+    expect(f.directory.claims.size).toBe(0);
+    expect(await mergeAnonymous('anon:a1', TARGET, mergeDeps(f))).toMatchObject({ resolved: true, merged: true });
   });
 });

@@ -777,7 +777,8 @@ export interface Directory {
   /** Idempotent: an existing id keeps its idx. */
   register(id: string, isAnonymous: boolean, at: string, opts?: { idx?: number }): Promise<{ idx: number }>;
   lookup(id: string): Promise<DirectoryUser | null>;
-  beginMerge(anonId: string, targetId: string, at: string): Promise<{ auditId: number; marker: MergeMarker }>;
+  /** Null while a reap claim holds `anonId`: the reaper is deleting it. */
+  beginMerge(anonId: string, targetId: string, at: string): Promise<{ auditId: number; marker: MergeMarker } | null>;
   completeMerge(auditId: number, counts: Record<string, number>, at: string): Promise<void>;
   failMerge(auditId: number, error: string, at: string): Promise<void>;
   /** Counts this attempt against the marker and returns the count, so a merge
@@ -791,6 +792,10 @@ export interface Directory {
   tombstoneOf(id: string): Promise<{ reason: TombstoneReason; at: string } | null>;
   remove(id: string): Promise<void>;
   listAnonymous(after: string | null, limit: number): Promise<DirectoryUser[]>;
+  /** Takes `id` for deletion unless a merge marker holds it, in the same
+   * transaction as the marker check; a claim replaces any earlier one. */
+  claimReap(id: string, at: string): Promise<boolean>;
+  releaseReap(id: string): Promise<void>;
 }
 
 export interface Reservation {

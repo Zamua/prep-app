@@ -44,3 +44,18 @@ export function migrationHolds(openedAt: string | null, now: Date): boolean {
   if (openedAt === null) return false;
   return now.getTime() - parseIso(openedAt).getTime() < MIGRATION_HOLD_MS;
 }
+
+/**
+ * How long a reap claim refuses merges of its account. A claim spans one
+ * account's deletion and is released when it ends; a walk that dies
+ * mid-account leaves it behind, and the next walk to reach the account
+ * re-claims it. Cloudflare stops an alarm invocation after 15 minutes of wall
+ * time, so a claim twice that old belongs to no running walk and is ignored.
+ */
+export const REAP_CLAIM_MS = 30 * 60_000;
+
+/** True while a claim taken at `claimedAt` still holds its account at `at`. */
+export function reapClaimHolds(claimedAt: string | null, at: Date): boolean {
+  if (claimedAt === null) return false;
+  return at.getTime() - parseIso(claimedAt).getTime() < REAP_CLAIM_MS;
+}

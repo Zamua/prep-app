@@ -139,7 +139,7 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
     return this.repo.lookup(id);
   }
 
-  async beginMerge(anonId: string, targetId: string, at: string): Promise<{ auditId: number; marker: MergeMarker }> {
+  async beginMerge(anonId: string, targetId: string, at: string): Promise<{ auditId: number; marker: MergeMarker } | null> {
     return this.repo.beginMerge(anonId, targetId, at);
   }
 
@@ -185,6 +185,14 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
 
   async listAnonymous(after: string | null, limit: number): Promise<DirectoryUser[]> {
     return this.repo.listAnonymous(after, limit);
+  }
+
+  async claimReap(id: string, at: string): Promise<boolean> {
+    return this.repo.claimReap(id, at);
+  }
+
+  async releaseReap(id: string): Promise<void> {
+    this.repo.releaseReap(id);
   }
 
   async fetch(_request: Request): Promise<Response> {

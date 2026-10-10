@@ -1,8 +1,10 @@
 // The DirectoryCell's tables: enumeration data written at create, merge and
-// delete, the merge audit (the source of `previous_ids`), markers and
-// tombstones.
+// delete, the merge audit (the source of `previous_ids`), markers, reap
+// claims and tombstones.
 import type { DirectoryUser, MergeAudit, MergeMarker, TombstoneReason } from '../../../app/entities.js';
 import { ChunkRejected } from '../../../domain/migrate.js';
+import { reapClaimHolds } from '../../../domain/reaper.js';
+import { parseIso } from '../../../domain/time.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 
 const toUser = (r: Row): DirectoryUser => ({
@@ -53,13 +55,15 @@ export class SqlDirectoryRepo {
     return row ? toUser(row) : null;
   }
 
-  beginMerge(anonId: string, targetId: string, at: string): { auditId: number; marker: MergeMarker } {
+  beginMerge(anonId: string, targetId: string, at: string): { auditId: number; marker: MergeMarker } | null {
     return this.storage.transactionSync(() => {
       const existing = this.db.first('SELECT anon_id, target_id, audit_id, started_at FROM merge_markers WHERE anon_id = ?', anonId);
       if (existing) {
         const marker = toMarker(existing);
         return { auditId: marker.audit_id, marker };
       }
+      const claim = this.db.first<{ claimed_at: string }>('SELECT claimed_at FROM reap_claims WHERE id = ?', anonId);
+      if (reapClaimHolds(claim ? String(claim.claimed_at) : null, parseIso(at))) return null;
       const auditId = this.db.insert(
         `INSERT INTO account_merges (anon_user_id, target_user_id, started_at, status) VALUES (?, ?, ?, 'started')`,
         anonId,
@@ -139,6 +143,18 @@ export class SqlDirectoryRepo {
 
   remove(id: string): void {
     this.db.run('DELETE FROM users WHERE id = ?', id);
+  }
+
+  claimReap(id: string, at: string): boolean {
+    return this.storage.transactionSync(() => {
+      if (this.db.first('SELECT 1 FROM merge_markers WHERE anon_id = ?', id)) return false;
+      this.db.run('INSERT OR REPLACE INTO reap_claims (id, claimed_at) VALUES (?, ?)', id, at);
+      return true;
+    });
+  }
+
+  releaseReap(id: string): void {
+    this.db.run('DELETE FROM reap_claims WHERE id = ?', id);
   }
 
   /** Anonymous ids after `after` (exclusive), ascending, for the reaper's walk. */

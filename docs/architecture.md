@@ -59,7 +59,7 @@ refactor.
 | class | keyed by | holds |
 | --- | --- | --- |
 | `UserCell` | user id (Clerk `sub`, or `anon:<hex>`) | one SQLite per user: decks, questions, cards (FSRS state), reviews, study sessions and answers, trivia sessions and queue, the notifications log, push subscriptions, BYOK credentials, API token hashes, the four idempotency ledgers, prefs, and this user's job status rows |
-| `DirectoryCell` | `"global"` | enumeration data only, written at create / merge / delete: user id, `is_anonymous`, `created_at`, the `account_merges` audit, merge markers and tombstones. It also owns the anonymous-retention sweep |
+| `DirectoryCell` | `"global"` | enumeration data only, written at create / merge / delete: user id, `is_anonymous`, `created_at`, the `account_merges` audit, merge markers, reap claims and tombstones. It also owns the anonymous-retention sweep |
 | `InstantLimiterCell` | `"global"` | the instant-generation ledger and both breakers (per-IP buckets, global minute and day windows) |
 | `JobCell` | job id | one durable job: its step ledger and its human gate |
 

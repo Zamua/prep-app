@@ -50,12 +50,23 @@ export const JOB_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) =
 export const DIRECTORY_MIGRATIONS: readonly Migration[] = [
   { version: 1, apply: (db) => db.script(DIRECTORY_SCHEMA) },
   { version: 2, apply: addMergeAttempts },
+  { version: 3, apply: addReapClaims },
 ];
 
 /** The merge's give-up counter, on markers written before it existed. */
 function addMergeAttempts(db: Db): void {
   const has = db.first("SELECT name FROM pragma_table_info('merge_markers') WHERE name = 'attempts'");
   if (!has) db.script('ALTER TABLE merge_markers ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
+}
+
+/** The reaper's hold on the account it is deleting, which `beginMerge` honours. */
+function addReapClaims(db: Db): void {
+  db.script(
+    `CREATE TABLE IF NOT EXISTS reap_claims (
+  id         TEXT PRIMARY KEY,
+  claimed_at TEXT NOT NULL
+)`,
+  );
 }
 export const LIMITER_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(LIMITER_SCHEMA) }];
 
