@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CellImage } from '../domain/cellImage.js';
 import { DirectoryCell } from '../runtime/cells/DirectoryCell.js';
 import { InstantLimiterCell } from '../runtime/cells/InstantLimiterCell.js';
+import { JobCell } from '../runtime/cells/JobCell.js';
 import { UserCell } from '../runtime/cells/UserCell.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
 import { fakeEnv } from './helpers.js';
@@ -43,6 +44,15 @@ describe('a user cell image', () => {
     state.storage.sql.exec('INSERT INTO blob_probe (b) VALUES (?)', new Uint8Array([0, 255, 7]));
     const img = await cell.image();
     expect(img.tables['blob_probe']!.rows).toEqual([[1, { b64: 'AP8H' }]]);
+  });
+
+  it('leaves out the underscore tables a runtime keeps for itself', async () => {
+    const { cell, state } = await seededUser();
+    state.storage.sql.exec('CREATE TABLE _litestream_seq (id INTEGER PRIMARY KEY, seq INTEGER)');
+    const img = await cell.image();
+    expect(Object.keys(img.tables).filter((t) => t.startsWith('_'))).toEqual([]);
+    const target = await blank((s) => new UserCell(s, fakeEnv()));
+    expect(await target.restoreImage(overTheWire(img))).toMatchObject({ restored: true });
   });
 
   it('refuses a cell that already holds rows, and leaves it as it was', async () => {
@@ -96,5 +106,21 @@ describe('an instant limiter image', () => {
     const target = await blank((s) => new InstantLimiterCell(s, fakeEnv()));
     expect(await target.restoreImage(overTheWire(img))).toMatchObject({ restored: true });
     expect(await target.image()).toEqual(img);
+  });
+});
+
+describe('the app schema', () => {
+  it.each([
+    ['UserCell', (s: ReturnType<typeof fakeCellState>) => new UserCell(s, fakeEnv())],
+    ['DirectoryCell', (s: ReturnType<typeof fakeCellState>) => new DirectoryCell(s, fakeEnv())],
+    ['InstantLimiterCell', (s: ReturnType<typeof fakeCellState>) => new InstantLimiterCell(s, fakeEnv())],
+    ['JobCell', (s: ReturnType<typeof fakeCellState>) => new JobCell(s, fakeEnv())],
+  ])('names no %s table with a leading underscore, which an image reads as the runtime’s', async (_name, make) => {
+    const state = fakeCellState();
+    make(state);
+    await state.ready();
+    const tables = state.storage.sql.exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'").toArray();
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.map((t) => t.name).filter((n) => n.startsWith('_'))).toEqual([]);
   });
 });
