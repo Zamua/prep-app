@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DurationError, FOREVER_ISO, parseUntil } from '../../app/durations.js';
 import * as study from '../../app/study/api.js';
 import { buildMessage, DEFAULT_PROVIDER, providerUrls, quoteAll } from '../../app/study/handoff.js';
-import { RunnerUnavailable, type WorkflowRunner } from '../../app/ports.js';
+import { RunnerUnavailable, StaleVersionError, type GradeAnswerInput, type WorkflowRunner } from '../../app/ports.js';
+import { keyedGradeId } from '../../domain/jobs/ids.js';
 import { cell, TEST_NOW } from '../repos/setup.js';
 
 const IDLE = { signal: async () => null, status: async () => null, terminate: async () => {} };
@@ -85,6 +86,71 @@ describe('a free-text submission', () => {
     expect(started).toEqual(['GradeAnswer']);
     expect(result.json['pending']).toEqual({ poll: '/api/study/grading/grade-capitals-q1-abcdef', workflow_id: 'grade-capitals-q1-abcdef' });
     expect(d.repos.jobs.get('grade-capitals-q1-abcdef')).toMatchObject({ workflow_type: 'grading', status: 'grading' });
+  });
+});
+
+describe('a session grade start', () => {
+  /** A deck, a free-text card and a session parked on it, graded by `runner`. */
+  async function parked(runner: (d: study.StudyDeps, sid: string) => WorkflowRunner) {
+    let sid = '';
+    const d = deps({ agentAvailable: true, runner: { ...IDLE, start: (...args) => runner(d, sid).start(...args) } });
+    const deck = d.repos.decks.create('capitals');
+    const qid = d.repos.questions.add(deck, { type: 'short', prompt: 'Capital of Peru?', answer: 'Lima' });
+    sid = await d.repos.sessions.create(deck, 'test');
+    const version = d.repos.sessions.get(sid)!.version;
+    const submit = () => study.sessionSubmit(d, sid, { question_id: qid, version, answer: 'Lima', idk: false });
+    return { d, qid, sid, version, submit };
+  }
+
+  it('claims the session before the start yields, so a write interleaved with the start cannot orphan the job', async () => {
+    let interleaved: unknown = null;
+    const started: string[] = [];
+    const { d, sid, version, submit } = await parked((d, sid) => ({
+      ...IDLE,
+      start: async (_kind, input, opts) => {
+        try {
+          d.repos.sessions.updateDraft(sid, 'still typing', version);
+        } catch (e) {
+          interleaved = e;
+        }
+        const id = keyedGradeId((input as GradeAnswerInput).questionId, opts!.idempotencyKey!);
+        started.push(id);
+        return { workflowId: id };
+      },
+    }));
+
+    const result = await submit();
+
+    expect(result).toMatchObject({ json: { pending: { workflow_id: started[0] } } });
+    expect(d.repos.sessions.get(sid)).toMatchObject({ state: 'grading', current_grading_workflow_id: started[0] });
+    expect(interleaved).toBeInstanceOf(StaleVersionError);
+  });
+
+  it('releases a refused claim and answers the self-grade at the released version', async () => {
+    const { d, qid, sid, submit } = await parked(() => refusing);
+
+    const result = (await submit()) as { json: { selfGrade?: boolean; session: { version: number } } };
+
+    expect(result.json.selfGrade).toBe(true);
+    expect(d.repos.sessions.get(sid)).toMatchObject({ state: 'awaiting-answer', current_grading_workflow_id: null, version: result.json.session.version });
+    const recorded = await study.sessionSubmit(d, sid, { question_id: qid, version: result.json.session.version, answer: 'Lima', verdict: 'right' });
+    expect(recorded).toMatchObject({ json: { verdict: 'right' } });
+  });
+
+  it('keeps the claim when a start fails without a refusal, so a retry starts no second job', async () => {
+    const keys: string[] = [];
+    const { d, qid, sid, version, submit } = await parked(() => ({
+      ...IDLE,
+      start: async (_kind, _input, opts) => {
+        keys.push(opts!.idempotencyKey!);
+        throw new Error('rpc dropped');
+      },
+    }));
+
+    expect(await submit()).toMatchObject({ status: 502, json: { error: { code: 'grading_start_failed' } } });
+    expect(d.repos.sessions.get(sid)).toMatchObject({ state: 'grading', current_grading_workflow_id: keyedGradeId(qid, `${sid}v${version}`) });
+    expect(await submit()).toMatchObject({ status: 409 });
+    expect(keys).toHaveLength(1);
   });
 });
 

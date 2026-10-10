@@ -6,7 +6,7 @@ import { jobRoute, WORKFLOW_TYPE } from '../../app/jobs/graph.js';
 import { deliverJobStatus } from '../../app/jobs/status.js';
 import type { NotifyDeps } from '../../app/notify/routes.js';
 import type { Clock, JobCells, JobInputs, JobKind, JobStatus, JobStatusWrite, JobTransition, Random, WorkflowRunner } from '../../app/ports.js';
-import { gradeId, planId, SUFFIX_HEX_CHARS, transformId, triviaId } from '../../domain/jobs/ids.js';
+import { encodeIdempotencyKey, gradeId, keyedGradeId, planId, SUFFIX_HEX_CHARS, transformId, triviaId } from '../../domain/jobs/ids.js';
 import { isoUtc } from '../../domain/time.js';
 import { hex } from './random.js';
 
@@ -35,10 +35,8 @@ export class AlarmLedgerRunner implements WorkflowRunner {
     const suffix = key === undefined
       ? hex(this.deps.random.bytes(SUFFIX_HEX_CHARS / 2))
       : encodeIdempotencyKey(key);
-    // A session can outlive a deck rename, so its keyed ID cannot use the
-    // mutable deck name.
     const id = key !== undefined && kind === 'GradeAnswer'
-      ? gradeId('session', Number(record['questionId']), suffix)
+      ? keyedGradeId(Number(record['questionId']), key)
       : workflowId(kind, record, suffix);
     const route = jobRoute(kind, id, record);
     const status = await this.deps.jobs.cell(id).start({
@@ -105,12 +103,6 @@ export class AlarmLedgerRunner implements WorkflowRunner {
     };
     await deliverJobStatus(this.deps.notify, write);
   }
-}
-
-
-
-function encodeIdempotencyKey(key: string): string {
-  return key.replaceAll('z', 'zz').replaceAll('-', 'zx');
 }
 
 function workflowId(kind: JobKind, input: Record<string, unknown>, suffix: string): string {
