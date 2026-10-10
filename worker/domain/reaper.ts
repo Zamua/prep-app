@@ -8,8 +8,9 @@ import { isoUtc, parseIso } from './time.js';
 export const IDLE_DAYS = 365;
 
 /** Accounts per walk. The walk carries a cursor, so the batch bounds one
- * tick's work rather than the sweep. */
-export const BATCH_LIMIT = 50;
+ * tick's work rather than the sweep. A reaped account costs up to five cell
+ * calls plus one per live job, and Workers Free allows 50 per invocation. */
+export const BATCH_LIMIT = 8;
 
 const DAY_MS = 86_400_000;
 

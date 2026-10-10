@@ -202,3 +202,23 @@ describe('the reaper walk', () => {
     expect(seen).toEqual([BATCH_LIMIT]);
   });
 });
+
+describe('one walk on Workers Free', () => {
+  it('stays inside the 50-subrequest cap when the whole batch is reaped', async () => {
+    const f = fixture();
+    for (let i = 0; i < BATCH_LIMIT + 5; i++) await mint(f, `anon:cap${i}`, IDLE);
+    let calls = 0;
+    const counted = <T extends object>(o: T): T =>
+      new Proxy(o, {
+        get(t, p) {
+          const v = Reflect.get(t, p) as unknown;
+          return typeof v === 'function' ? (...a: unknown[]) => (calls++, (v as (...x: unknown[]) => unknown).call(t, ...a)) : v;
+        },
+      });
+    const cells = { cell: (id: string) => counted(f.cells.cell(id)) };
+    const jobs = { cell: (id: string) => counted(f.deps.jobs.cell(id)) };
+    const report = await reapIdleAnonymous({ ...f.deps, cells: cells as unknown as FakeUserCells, jobs: jobs as unknown as FakeJobCells });
+    expect(report.reaped).toBe(BATCH_LIMIT);
+    expect(calls).toBeLessThanOrEqual(50);
+  });
+});
