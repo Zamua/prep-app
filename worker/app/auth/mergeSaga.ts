@@ -106,6 +106,8 @@ export async function mergeAnonymous(anonId: string, targetId: string, deps: Mer
 
   const begun = await deps.directory.beginMerge(anonId, targetId, isoUtc(deps.clock.now()));
   if (begun === null) return refusal(REAP_IN_PROGRESS, false);
+  // Another target's merge began after the marker check above.
+  if (begun.marker.target_id !== targetId) return refusal(MERGE_IN_PROGRESS, false);
   return await finish(begun.auditId, anonId, targetId, deps);
 }
 

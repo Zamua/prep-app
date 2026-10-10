@@ -396,6 +396,27 @@ describe('the merge refuses', () => {
     expect(result).toEqual({ resolved: false, merged: false, counts: {}, reason: MERGE_IN_PROGRESS });
     expect(await f.directory.marker(ANON)).toMatchObject({ target_id: TARGET });
   });
+
+  it('a second target whose merge of the same id began after this one checked for a marker', async () => {
+    const f = fixture();
+    await f.directory.register('other@example.com', false, NOW);
+    const raced = new Proxy(f.directory, {
+      get(t, p) {
+        if (p === 'marker') {
+          return async (id: string) => {
+            const seen = await t.marker(id);
+            await t.beginMerge(ANON, TARGET, NOW);
+            return seen;
+          };
+        }
+        const v = Reflect.get(t, p) as unknown;
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+      },
+    });
+    const result = await mergeAnonymous(ANON, 'other@example.com', { ...f.deps, directory: raced });
+    expect(result).toEqual({ resolved: false, merged: false, counts: {}, reason: MERGE_IN_PROGRESS });
+    expect(await f.directory.marker(ANON)).toMatchObject({ target_id: TARGET });
+  });
 });
 
 // ---- the id the cookie still names -----------------------------------------
