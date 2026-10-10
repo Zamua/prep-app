@@ -13,9 +13,9 @@ A spaced-repetition flashcard app. Users describe a topic, an LLM turns
 it into a deck, and FSRS schedules the reviews. Installs as a PWA and
 studies offline. AI is opt-in and always spends the user's own API key.
 
-It is **one TypeScript Worker on celld**, a self-hostable runtime for
-the Cloudflare Workers API. There is no application server process, no
-separate database, and no job queue.
+It is **one TypeScript Worker** that runs unchanged on Cloudflare
+Workers and on celld, a self-hostable runtime for the same API. There is
+no application server process, no separate database, and no job queue.
 
 ---
 
@@ -337,12 +337,16 @@ knows all four exist; the runner imports the registry, never a handler.
 
 **One `JobCell` per job, driven by its own alarm.** Every decision comes
 from the ledger rows, so an eviction, a node restart and a duplicate
-alarm all reach the same one. Two rules the shape rests on:
+alarm all reach the same one. Three rules the shape rests on:
 
+- Every decision is read, taken and committed with no await on a fetch
+  or another cell in between. On Workers a cell runs its other requests
+  during such an await, so a snapshot held across one commits over a
+  terminate, or over a gate the user already answered.
 - A caller-originated RPC (`start`, `signal`, `terminate`) never calls
-  back into the owner's cell. The owner is mid-request when it calls,
-  and a cell serves one request at a time. Everything that touches the
-  owner happens on the alarm.
+  back into the owner's cell, so it lands whole between the alarm's
+  steps; on celld the call would also deadlock, because the owner is
+  mid-request. Everything that touches the owner happens on the alarm.
 - The alarm is derived from the rows at the end of every RPC and in the
   constructor, never held, so a rolled-back RPC still converges.
 
@@ -437,7 +441,8 @@ resumable: markers in the `DirectoryCell`, rows copied between two
 `UserCell`s, tombstone at the end.
 
 Secrets never come from a wrangler file. They arrive at runtime as
-`CELLD_VAR_*`; `runtime/env.ts` is the typed contract for all of them.
+Worker secrets (as `CELLD_VAR_*` on celld); `runtime/env.ts` is the typed
+contract for all of them.
 
 ---
 
@@ -505,9 +510,10 @@ around a red suite.
 Deploy contracts are the three wrangler files. They carry **public
 values only**: durable-object bindings, the assets directory, Clerk's
 publishable configuration, and the timeout ceilings.
-`CELLD_FETCH_TIMEOUT_S` in a wrangler file must match the node's own
-setting; the worker takes the smaller of it and `PREP_JOB_LLM_TIMEOUT_S`
-minus headroom so an LLM step gets its full budget.
+The worker takes the smaller of `CELLD_FETCH_TIMEOUT_S` and
+`PREP_JOB_LLM_TIMEOUT_S` minus headroom, so an LLM step gets its full
+budget. On celld it must match the node's own fetch ceiling; a cell's
+fetch on Workers has none.
 
 ---
 
@@ -551,9 +557,17 @@ is a blank branch, never an error.
 `DurableObject` or `nunjucks`.** The layering test greps for those
 strings, so even a comment mentioning one fails it.
 
-**A cell serves one request at a time.** Anything that would call back
-into the caller's own cell deadlocks. That constraint is why job work
-happens on alarms and why the status direction is one-way.
+**A cell interleaves requests across an await.** On Workers, while a
+cell awaits a fetch or another cell, its other requests, RPCs and alarm
+run; only storage calls hold them back. Read, decide and write with no
+such await in between, or re-read after it. On celld the same cell runs
+one request at a time, and calling back into the caller's cell
+deadlocks, which is why job work happens on alarms and the status
+direction is one-way.
+
+**Call a stub's methods as members.** On Workers every property of a
+cell stub is an RPC, so `stub[name].apply(stub, args)` calls a remote
+method named `apply`. Write `stub[name](...args)`.
 
 ---
 

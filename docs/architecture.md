@@ -12,8 +12,8 @@ If you are an AI agent picking up work on the codebase, read
 
 ## Top-level shape
 
-prep is one TypeScript Worker running on **celld**, a Cloudflare
-Workers runtime. There is no application server, no separate database
+prep is one TypeScript Worker that runs unchanged on Cloudflare
+Workers and on **celld**, a self-hostable Workers runtime. There is no application server, no separate database
 process, and no job queue. State lives in per-cell SQLite; durable work
 runs on cell alarms.
 
@@ -163,13 +163,17 @@ mode, its status string, and what happens on error.
 
 **One `JobCell` per job, driven by its own alarm.** Every decision is
 taken from the ledger rows, never from in-memory state, so an eviction,
-a node restart and a duplicate alarm all reach the same one. Two rules
+a node restart and a duplicate alarm all reach the same one. Three rules
 the shape rests on:
 
+- Every decision is read, taken and committed with no await on a fetch
+  or another cell in between. On Workers a cell runs its other requests
+  during such an await, so a snapshot held across one commits over a
+  terminate, or over a gate the user already answered.
 - A caller-originated RPC (`start`, `signal`, `terminate`) never calls
-  back into the owner's cell. The owner is mid-request when it calls,
-  and a cell serves one request at a time. Everything that touches the
-  owner happens on the alarm instead.
+  back into the owner's cell, so it lands whole between the alarm's
+  steps; on celld the call would also deadlock. Everything that touches
+  the owner happens on the alarm instead.
 - The alarm is derived from the rows at the end of every RPC and in the
   constructor, never held, so a rolled-back RPC still converges.
 
@@ -356,8 +360,8 @@ Deploy contracts are the three wrangler files
 (`wrangler.dev.jsonc`, `wrangler.staging.jsonc`, `wrangler.prod.jsonc`).
 They carry **public values only**: the durable-object bindings, the
 asset directory, the Clerk publishable configuration, and the
-timeout ceilings. Every secret arrives at runtime as a `CELLD_VAR_*`
-and never enters a committed file.
+timeout ceilings. Every secret arrives at runtime as a Worker secret
+(a `CELLD_VAR_*` on celld) and never enters a committed file.
 
 ---
 

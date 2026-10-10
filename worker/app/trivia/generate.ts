@@ -1,7 +1,7 @@
 // Batch generation for a trivia deck: the manual start and the polling page
 // the deck-creation flow already redirects to. Both drive one
 // `TriviaGenerate` job; the cell never holds an LLM call open, because a
-// cell serves one request at a time and a batch takes minutes.
+// batch takes minutes and the job's own cell is where that wait belongs.
 import { AppError, badRequest, notFound } from '../errors.js';
 import { json } from '../http.js';
 import { flatten } from '../jobs/view.js';
