@@ -16,7 +16,7 @@ describe('parseCellImage', () => {
   });
 
   it.each([
-    ['another format', { format: 'kcal.diary' }],
+    ['another format', { format: 'other.format' }],
     ['another version', { version: 2 }],
     ['a table name SQL would have to quote', { tables: { 'decks; drop': { columns: ['rowid'], rows: [] } } }],
     ['a column name SQL would have to quote', { tables: { decks: { columns: ['rowid', 'a"b'], rows: [] } } }],
