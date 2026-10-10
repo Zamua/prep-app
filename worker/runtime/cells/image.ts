@@ -7,10 +7,12 @@ import type { CellStorage, SqlValue } from '../storage.js';
 /** Bookkeeping a cell writes as it activates, so a blank cell holds it too. */
 const ACTIVATION_TABLES = new Set(['schema_version']);
 
+/** A runtime's own tables (`_cf_*`, celld's `_litestream_*`) start with an
+ * underscore and refuse a read; the app's never do. */
 function appTables(storage: CellStorage): string[] {
   return storage.sql
     .exec<{ name: string }>(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND substr(name, 1, 7) <> 'sqlite_' AND substr(name, 1, 4) <> '_cf_' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND substr(name, 1, 7) <> 'sqlite_' AND substr(name, 1, 1) <> '_' ORDER BY name",
     )
     .toArray()
     .map((r) => String(r.name));
