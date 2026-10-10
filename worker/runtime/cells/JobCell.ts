@@ -29,6 +29,8 @@ import { isoUtc } from '../../domain/time.js';
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import type { CellStorage } from '../storage.js';
+import { parseCellImage, type CellImage, type ImageRestore } from '../../domain/cellImage.js';
+import { applyImage, imageOf } from './image.js';
 
 /** A wake is never asked for the past: a due-now alarm lands just after now. */
 const ALARM_FLOOR_MS = 1;
@@ -159,6 +161,18 @@ export class JobCell extends DurableObject<Env> implements JobCellRpc {
   /** The internal drive kick. The public router never reaches a JobCell. */
   override async fetch(_request: Request): Promise<Response> {
     return Response.json(await this.drive());
+  }
+
+  /** The whole cell, for a move to another runtime. */
+  async image(): Promise<CellImage> {
+    return imageOf(this.storage);
+  }
+
+  /** A move's image applied to this cell, which must be blank. The alarm is re-derived from the restored rows. */
+  async restoreImage(input: unknown): Promise<ImageRestore> {
+    const result = await applyImage(this.storage, parseCellImage(input));
+    if (result.restored) await this.ensureAlarm();
+    return result;
   }
 
   async alarm(): Promise<void> {

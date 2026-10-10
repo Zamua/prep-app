@@ -14,6 +14,8 @@ import { MIGRATION_RECHECK_MS, migrationHolds } from '../../domain/reaper.js';
 import { compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
+import { parseCellImage, type CellImage, type ImageRestore } from '../../domain/cellImage.js';
+import { applyImage, imageOf } from './image.js';
 
 /** What a test-only dump of the directory carries. */
 const DUMP_TABLES = ['users', 'account_merges', 'merge_markers', 'tombstones'] as const;
@@ -187,6 +189,26 @@ export class DirectoryCell extends DurableObject<Env> implements Directory {
 
   async fetch(_request: Request): Promise<Response> {
     return new Response('rpc only', { status: 501 });
+  }
+
+  /** The whole cell, for a move to another runtime. */
+  async image(): Promise<CellImage> {
+    return imageOf(this.storage);
+  }
+
+  /** A move's image applied to this cell, which must be blank. The alarm is re-derived from the restored rows. */
+  async restoreImage(input: unknown): Promise<ImageRestore> {
+    const result = await applyImage(this.storage, parseCellImage(input));
+    if (result.restored) await this.ensureAlarm();
+    return result;
+  }
+
+  /** Every user a cell may exist for: the registered and the tombstoned. */
+  async cellNames(): Promise<string[]> {
+    return this.storage.sql
+      .exec<{ id: string }>('SELECT id FROM users UNION SELECT id FROM tombstones ORDER BY 1')
+      .toArray()
+      .map((r) => String(r.id));
   }
 
   // ---- the daily sweep ----------------------------------------------------------

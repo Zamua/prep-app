@@ -23,6 +23,8 @@ export interface CellStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
   delete(key: string): Promise<boolean>;
+  /** Every key-value entry, in key order. */
+  list<T = unknown>(): Promise<Map<string, T>>;
   /** The one durable timer: it fires on an evicted cell and survives a node
    * restart. Every schedule in the app is derived from rows and re-armed
    * through these, never held in an isolate. */
@@ -110,6 +112,7 @@ export function joinedTransactions(storage: CellStorage): CellStorage {
     get: <T>(key: string) => storage.get<T>(key),
     put: <T>(key: string, value: T) => storage.put<T>(key, value),
     delete: (key: string) => storage.delete(key),
+    list: <T>() => storage.list<T>(),
     getAlarm: () => storage.getAlarm(),
     setAlarm: (at: number | Date) => storage.setAlarm(at),
     deleteAlarm: () => storage.deleteAlarm(),

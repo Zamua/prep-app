@@ -94,6 +94,10 @@ export class FakeCellStorage implements CellStorage {
     this.kv.set(key, structuredClone(value));
   }
 
+  async list<T = unknown>(): Promise<Map<string, T>> {
+    return new Map([...this.kv.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => [k, structuredClone(v) as T]));
+  }
+
   async delete(key: string): Promise<boolean> {
     return this.kv.delete(key);
   }
