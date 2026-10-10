@@ -162,8 +162,8 @@ export class SqlQuestionRepo implements QuestionRepo {
     if (n === 0) throw new QuestionNotFound(`question ${qid} not found for user`);
   }
 
-  setAnswerRegex(qid: number, regex: string | null): boolean {
-    return this.db.run('UPDATE questions SET answer_regex = ? WHERE id = ?', regex, qid) > 0;
+  setAnswerRegex(qid: number, regex: string, expected: string | null): boolean {
+    return this.db.run('UPDATE questions SET answer_regex = ? WHERE id = ? AND answer_regex IS ?', regex, qid, expected) > 0;
   }
 
   get(qid: number): Question | null {

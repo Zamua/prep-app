@@ -169,7 +169,10 @@ export interface QuestionRepo {
   /** `update` plus the explanation: a transform returns the card's whole new
    * shape, so the field the form cannot reach moves with the rest. */
   replace(qid: number, q: NewQuestion): void;
-  setAnswerRegex(qid: number, regex: string | null): boolean;
+  /** Writes only while the stored regex is still `expected`, the value the
+   * grade was asked against, so an alternative another grade learned
+   * meanwhile is kept. False when no row changed. */
+  setAnswerRegex(qid: number, regex: string, expected: string | null): boolean;
   get(qid: number): Question | null;
   moveToDeck(questionIds: readonly number[], destDeckId: number): number;
   listInDeck(deckId: number): DeckCard[];
