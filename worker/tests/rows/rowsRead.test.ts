@@ -16,12 +16,12 @@ import { locateWorkerd, Workerd, type Tally } from './workerd.js';
 
 /** The requests a study session and card authoring send, and their ceilings. */
 const CEILINGS: Record<string, number> = {
-  'session begin': 200,
-  'review submit': 100,
-  'session advance': 250,
-  'mcp add card': 80,
-  'in-app add card': 80,
-  'mcp edit card': 80,
+  'session begin': 32,
+  'review submit': 30,
+  'session advance': 45,
+  'mcp add card': 36,
+  'in-app add card': 35,
+  'mcp edit card': 30,
 };
 
 interface RecordedDay {

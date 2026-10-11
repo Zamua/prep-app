@@ -176,7 +176,7 @@ export class SqlTriviaRepo implements TriviaRepo {
     };
   }
 
-  queueCounts(deckId: number, cap: number): { queued: number; unanswered: number } {
+  queueCounts(deckId: number, cap: { queued: number; unanswered: number }): { queued: number; unanswered: number } {
     // Unanswered rows are walked through their own partial index: a deck the
     // refill is waiting on holds few of them among many answered ones.
     const row = this.db.first<{ queued: number; unanswered: number }>(
@@ -187,9 +187,9 @@ export class SqlTriviaRepo implements TriviaRepo {
                                  CROSS JOIN questions q ON q.id = tq.question_id
                                  WHERE tq.last_answered_at IS NULL AND q.deck_id = ? LIMIT ?)) AS unanswered`,
       deckId,
-      cap,
+      cap.queued,
       deckId,
-      cap,
+      cap.unanswered,
     );
     return { queued: Number(row?.queued ?? 0), unanswered: Number(row?.unanswered ?? 0) };
   }

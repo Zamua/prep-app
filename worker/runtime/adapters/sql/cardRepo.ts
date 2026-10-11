@@ -11,6 +11,38 @@ import { isoNow, isoUtc } from './time.js';
 // and RANDOM() shuffles them.
 export const DUE_BUCKET = 'substr(cards.next_due, 1, 13)';
 
+// A negative LIMIT is no limit. The cards loop leads so the due index bounds
+// the walk, which a cap then stops early.
+export const COUNT_DUE = `SELECT COUNT(*) AS n FROM (
+         SELECT 1
+           FROM cards
+           CROSS JOIN questions ON questions.id = cards.question_id
+           JOIN decks ON decks.id = questions.deck_id
+          WHERE COALESCE(questions.suspended, 0) = 0
+            AND COALESCE(decks.notifications_enabled, 1) = 1
+            AND COALESCE(decks.deck_type, 'srs') = 'srs'
+            AND cards.next_due <= ?
+          LIMIT ?)`;
+
+export const NEXT_DUE = `SELECT cards.next_due AS nd FROM cards CROSS JOIN questions q ON q.id = cards.question_id JOIN decks d ON d.id = q.deck_id
+        WHERE COALESCE(q.suspended, 0) = 0 AND COALESCE(d.deck_type, 'srs') = 'srs' AND cards.next_due > ?`;
+
+/** A review's write: `next_due` is the second binding. */
+export const WRITE_SCHEDULED = `UPDATE cards SET step = ?, next_due = ?, last_review = ?, stability = ?, difficulty = ?, fsrs_state = ?, learning_steps = ? WHERE question_id = ?`;
+
+/** Whole minutes from `now` to a stored due stamp, at least one; null for none. */
+export function minutesUntil(raw: unknown, now: Date): number | null {
+  if (!raw) return null;
+  let due: Date;
+  try {
+    due = parseIso(raw as string);
+  } catch {
+    return null;
+  }
+  const seconds = (due.getTime() - now.getTime()) / 1000;
+  return Math.max(1, Math.ceil(seconds / 60));
+}
+
 export function rowToCard(r: Row): CardRow {
   return {
     question_id: Number(r['question_id']),
@@ -53,7 +85,7 @@ export class SqlCardRepo implements CardRepo {
 
   writeScheduled(qid: number, scheduled: ScheduledReview, reviewedAt: string): void {
     this.db.run(
-      `UPDATE cards SET step = ?, next_due = ?, last_review = ?, stability = ?, difficulty = ?, fsrs_state = ?, learning_steps = ? WHERE question_id = ?`,
+      WRITE_SCHEDULED,
       scheduled.stepBucket,
       isoUtc(scheduled.nextDue),
       reviewedAt,
@@ -84,48 +116,30 @@ export class SqlCardRepo implements CardRepo {
   }
 
   countDue(cap?: number): number {
-    // A negative LIMIT is no limit. The cards loop leads so the due index
-    // bounds the walk, which a cap then stops early.
-    const row = this.db.first<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM (
-         SELECT 1
-           FROM cards
-           CROSS JOIN questions ON questions.id = cards.question_id
-           JOIN decks ON decks.id = questions.deck_id
-          WHERE COALESCE(questions.suspended, 0) = 0
-            AND COALESCE(decks.notifications_enabled, 1) = 1
-            AND COALESCE(decks.deck_type, 'srs') = 'srs'
-            AND cards.next_due <= ?
-          LIMIT ?)`,
-      isoNow(this.clock),
-      cap ?? -1,
-    );
+    return this.countDueAt(isoNow(this.clock), cap);
+  }
+
+  countDueAt(at: string, cap?: number): number {
+    const row = this.db.first<{ n: number }>(COUNT_DUE, at, cap ?? -1);
     return row ? Number(row.n) : 0;
   }
 
   nextDueMinutes(deckId: number | null = null): number | null {
     const now = this.clock.now();
+    return minutesUntil(this.nextDueAfter(isoUtc(now), deckId), now);
+  }
+
+  /** The earliest `next_due` after `at` among unsuspended SRS cards, as stored. */
+  nextDueAfter(at: string, deckId: number | null): unknown {
     // The earliest in due-index order rather than MIN: the walk stops at the
     // first eligible card whatever the planner makes of the join.
-    let sql =
-      `SELECT cards.next_due AS nd FROM cards CROSS JOIN questions q ON q.id = cards.question_id JOIN decks d ON d.id = q.deck_id
-        WHERE COALESCE(q.suspended, 0) = 0 AND COALESCE(d.deck_type, 'srs') = 'srs' AND cards.next_due > ?`;
-    const params: unknown[] = [isoUtc(now)];
+    let sql = NEXT_DUE;
+    const params: unknown[] = [at];
     if (deckId !== null) {
       sql += ' AND q.deck_id = ?';
       params.push(deckId);
     }
-    const row = this.db.first<{ nd: string | null }>(`${sql} ORDER BY cards.next_due LIMIT 1`, ...params);
-    const raw = row?.nd;
-    if (!raw) return null;
-    let due: Date;
-    try {
-      due = parseIso(raw);
-    } catch {
-      return null;
-    }
-    const seconds = (due.getTime() - now.getTime()) / 1000;
-    return Math.max(1, Math.ceil(seconds / 60));
+    return this.db.first(`${sql} ORDER BY cards.next_due LIMIT 1`, ...params)?.['nd'] ?? null;
   }
 
   dueQuestions(deckId: number, limit = 3): Question[] {

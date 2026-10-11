@@ -2,7 +2,7 @@
 // statements returned. Each old statement is kept here verbatim and run
 // against the same randomized cell as its replacement.
 import { describe, expect, it } from 'vitest';
-import type { ActiveWorkflow } from '../../app/entities.js';
+import { DEFAULT_EDITOR_INPUT_MODE, DEFAULT_NOTIFICATION_PREFS, EDITOR_INPUT_MODES, type ActiveWorkflow } from '../../app/entities.js';
 import { WORKFLOW_TYPE } from '../../app/jobs/graph.js';
 import { questionsForExport } from '../../app/api/deckIo.js';
 import { Db } from '../../runtime/adapters/sql/storage.js';
@@ -148,9 +148,10 @@ describe('the reads that stopped scanning', () => {
       const c = randomCell(seed);
       const stats = c.repos.trivia.deckStats(c.trivia);
       for (const cap of [1, 3, 50]) {
-        expect(c.repos.trivia.queueCounts(c.trivia, cap)).toEqual({ queued: Math.min(stats.total, cap), unanswered: Math.min(stats.unanswered, cap) });
+        expect(c.repos.trivia.queueCounts(c.trivia, { queued: cap, unanswered: cap })).toEqual({ queued: Math.min(stats.total, cap), unanswered: Math.min(stats.unanswered, cap) });
+        expect(c.repos.trivia.queueCounts(c.trivia, { queued: 1, unanswered: cap })).toEqual({ queued: Math.min(stats.total, 1), unanswered: Math.min(stats.unanswered, cap) });
       }
-      expect(c.repos.trivia.queueCounts(c.srs[0]!, 3)).toEqual({ queued: 0, unanswered: 0 });
+      expect(c.repos.trivia.queueCounts(c.srs[0]!, { queued: 1, unanswered: 3 })).toEqual({ queued: 0, unanswered: 0 });
     }
   });
 
@@ -227,5 +228,86 @@ describe('the reads that stopped scanning', () => {
     expect(new Set(seen.slice(0, 2))).toEqual(new Set([a, b]));
     expect(seen.slice(2)).toEqual([later]);
     expect(s.status).toBe('completed');
+  });
+});
+
+describe('the reads that share one statement with a read the request already made', () => {
+  it("reads each profile setting the single-column statements read", () => {
+    for (const seed of SEEDS) {
+      const c = randomCell(seed);
+      const r = lcg(seed);
+      if (r() < 0.7) c.repos.prefs.setNotificationPrefs({ ...c.repos.prefs.getNotificationPrefs(), mode: 'digest', threshold: Math.floor(r() * 9) });
+      if (r() < 0.5) c.repos.prefs.setEditorInputMode(r() < 0.5 ? 'vim' : 'emacs');
+      if (r() < 0.5) c.repos.prefs.setActiveByokProvider(r() < 0.5 ? 'openai-api' : '');
+      if (r() < 0.5) c.repos.prefs.setDesiredRetention(r() < 0.5 ? 0.85 : null);
+      if (r() < 0.5) c.repos.prefs.setIdBase(Math.floor(r() * 9));
+      const db = new Db(c.storage.sql);
+      const old = (column: string) => db.first(`SELECT ${column} FROM profile LIMIT 1`)?.[column];
+      const prefs = old('notification_prefs');
+      expect(c.repos.prefs.getNotificationPrefs()).toEqual({ ...DEFAULT_NOTIFICATION_PREFS, ...(prefs ? JSON.parse(String(prefs)) : {}) });
+      const mode = old('editor_input_mode');
+      expect(c.repos.prefs.getEditorInputMode()).toBe(mode && (EDITOR_INPUT_MODES as readonly unknown[]).includes(mode) ? mode : DEFAULT_EDITOR_INPUT_MODE);
+      expect(c.repos.prefs.getActiveByokProvider()).toBe(old('active_byok_provider') || null);
+      const retention = old('desired_retention');
+      expect(c.repos.prefs.getDesiredRetention()).toBe(retention != null ? Number(retention) : null);
+      expect(c.repos.prefs.getIdBase()).toBe(Number(old('id_base') ?? 0));
+    }
+  });
+
+  it("reads a session's version guard fields as the narrow statement did", async () => {
+    for (const seed of SEEDS) {
+      const c = randomCell(seed);
+      for (const deck of c.srs) {
+        const sid = await c.repos.sessions.create(deck, 'x');
+        const old = new Db(c.storage.sql).first('SELECT version, deck_id, status, state, current_question_id FROM study_sessions WHERE id = ?', sid)!;
+        const s = c.repos.sessions.get(sid)!;
+        expect({ version: s.version, deck_id: s.deck_id, status: s.status, state: s.state, current_question_id: s.current_question_id }).toEqual({
+          version: Number(old['version']),
+          deck_id: Number(old['deck_id']),
+          status: old['status'],
+          state: old['state'],
+          current_question_id: old['current_question_id'],
+        });
+      }
+    }
+  });
+
+  it("draws from the hour's eligible cards from the earliest one on, which are all of them", async () => {
+    for (const seed of SEEDS) {
+      const c = randomCell(seed);
+      const db = new Db(c.storage.sql);
+      for (const deck of c.srs) {
+        const sid = await c.repos.sessions.create(deck, 'x');
+        const r = lcg(seed + deck);
+        for (const q of c.repos.questions.listInDeck(deck)) {
+          if (r() < 0.3) db.run("INSERT OR IGNORE INTO study_session_answers (session_id, question_id, answered_at, result) VALUES (?, ?, 'x', 'right')", sid, q.id);
+        }
+        const eligible = `q.deck_id = ? AND COALESCE(q.suspended, 0) = 0
+          AND NOT EXISTS (SELECT 1 FROM study_session_answers a WHERE a.session_id = ? AND a.question_id = q.id)`;
+        const first = db.first<{ bucket: string; nd: string }>(
+          `SELECT ${DUE_BUCKET} AS bucket, cards.next_due AS nd FROM cards CROSS JOIN questions q ON q.id = cards.question_id
+            WHERE cards.next_due <= ? AND ${eligible} ORDER BY cards.next_due LIMIT 1`,
+          NOW_ISO,
+          deck,
+          sid,
+        );
+        if (first === null) continue;
+        const from = (lower: string) =>
+          db
+            .all<{ id: number }>(
+              `SELECT q.id FROM cards CROSS JOIN questions q ON q.id = cards.question_id
+                WHERE cards.next_due >= ? AND cards.next_due < ? || char(1114111) AND cards.next_due <= ?
+                  AND ${DUE_BUCKET} = ? AND ${eligible} ORDER BY q.id`,
+              lower,
+              first.bucket,
+              NOW_ISO,
+              first.bucket,
+              deck,
+              sid,
+            )
+            .map((x) => Number(x.id));
+        expect(from(first.nd)).toEqual(from(first.bucket));
+      }
+    }
   });
 });

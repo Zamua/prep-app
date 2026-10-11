@@ -5,6 +5,8 @@ import type { Fuzz } from '../../../domain/fsrs/index.js';
 import { SqlByokRepo } from './byokRepo.js';
 import { SqlCardRepo } from './cardRepo.js';
 import { SqlDeckRepo } from './deckRepo.js';
+import { HeldPickFloors } from './dueFloor.js';
+import { DueWindowCards } from './dueWindow.js';
 import { SqlExportRepo, SqlTombstoneRepo } from './exportRepo.js';
 import { SqlIdempotencyRepo } from './idempotencyRepo.js';
 import { SqlInstantRepo } from './instantRepo.js';
@@ -15,6 +17,7 @@ import { SqlOfflineRepo } from './offlineRepo.js';
 import { SqlTestPins } from './testPins.js';
 import { SqlPrefsRepo } from './prefsRepo.js';
 import { SqlQuestionRepo } from './questionRepo.js';
+import { readCacheOf } from './readCache.js';
 import { SqlReviewRepo } from './reviewRepo.js';
 import { SqlSessionRepo } from './sessionRepo.js';
 import { joinedTransactions, type CellStorage } from '../../storage.js';
@@ -35,13 +38,15 @@ export function userRepos(raw: CellStorage, deps: RepoDeps): UserRepos {
   // refuses a second BEGIN, and most of these methods already open one.
   const storage = joinedTransactions(raw);
   const decks = new SqlDeckRepo(storage, clock);
-  const cards = new SqlCardRepo(storage, clock);
+  const cache = readCacheOf(raw);
+  const sqlCards = new SqlCardRepo(storage, clock);
+  const cards = cache ? new DueWindowCards(sqlCards, cache, clock) : sqlCards;
   return {
     decks,
     questions: new SqlQuestionRepo(storage, clock),
     cards,
     reviews: new SqlReviewRepo(storage, clock, cards, deps.fuzz),
-    sessions: new SqlSessionRepo(storage, clock, deps.sessionIds),
+    sessions: new SqlSessionRepo(storage, clock, deps.sessionIds, cache ? new HeldPickFloors(cache) : undefined),
     trivia: new SqlTriviaRepo(storage, clock, deps.sessionIds, deps.random),
     notify: new SqlNotifyRepo(storage, clock),
     pushSubs: new SqlPushSubRepo(storage, clock),
@@ -62,6 +67,7 @@ export function userRepos(raw: CellStorage, deps: RepoDeps): UserRepos {
 
 export { countRows, importGlobalRows as importGlobalCellRows, migrate, seedSequences, resetSequences, USER_MIGRATIONS, DIRECTORY_MIGRATIONS, JOB_MIGRATIONS, LIMITER_MIGRATIONS } from './migrate.js';
 export { SqlDirectoryRepo } from './directoryRepo.js';
+export { ReadCachingStorage } from './readCache.js';
 export { SqlJobLedger } from './jobLedgerRepo.js';
 export { SqlLimiterRepo } from './limiterRepo.js';
 export type { CellStorage } from './storage.js';

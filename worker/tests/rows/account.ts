@@ -70,6 +70,10 @@ export async function buildAccount(state: WorkerEnv, shape: AccountShape = REALI
   const { env } = state;
   await seed(env, 'empty', SEED_USER);
   const storage = state.userStorage(SEED_USER);
+  // SQLite's own RANDOM() is unseeded: every run would study a different month
+  // and draw different cards, and the rows read with them.
+  const draw = lcg(20260313);
+  storage.db.function('random', () => Math.floor((draw() - 0.5) * 2 ** 53));
   const now = Date.parse(NOW);
   const clock = new MovingClock(now - shape.days * DAY - DAY);
   const repos: UserRepos = compose(env).userRepos(storage, clock);

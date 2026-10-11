@@ -33,6 +33,13 @@ export interface CellStorage {
   deleteAlarm(): Promise<void>;
 }
 
+/** A user cell's storage, which keeps the results of its reads until a write
+ * could have changed them. */
+export interface ReadCachedStorage extends CellStorage {
+  /** Drops every kept result, so the next reads go to the rows. */
+  forgetReads(): void;
+}
+
 /** One bounded page of a table, and where the next one resumes. */
 export interface DumpPage {
   rows: Row[];

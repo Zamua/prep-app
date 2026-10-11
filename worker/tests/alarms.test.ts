@@ -133,7 +133,7 @@ describe('the counts the cell caps before planning', () => {
       for (const unanswered of [0, 1, 2, 3, 4, 9]) {
         for (const queued of [0, 1, 4, 30]) {
           const full = DECK({ sessionSize, unanswered: Math.min(unanswered, queued), queued });
-          const capped = { ...full, unanswered: Math.min(full.unanswered, sessionSize), queued: Math.min(queued, sessionSize) };
+          const capped = { ...full, unanswered: Math.min(full.unanswered, sessionSize), queued: Math.min(queued, 1) };
           expect(planWake(INPUTS({ decks: [capped] }), NOW)).toEqual(planWake(INPUTS({ decks: [full] }), NOW));
         }
       }
@@ -627,7 +627,7 @@ describe('what the cell reads for its plan', () => {
     seedUser(h);
     const deck = seedTrivia(h, { cards: 2 });
     const repos = h.repos();
-    expect(readWakeInputs(repos, h.clock, true).decks[0]).toMatchObject({ id: deck, queued: 2, unanswered: 2, topic: 'World history.', lastRefillAt: null });
+    expect(readWakeInputs(repos, h.clock, true).decks[0]).toMatchObject({ id: deck, queued: 1, unanswered: 2, topic: 'World history.', lastRefillAt: null });
 
     repos.jobs.register({ workflowId: 'trivia-world-history-1', workflowType: 'trivia_gen', deckId: deck, deckName: 'world-history', urlPath: '/trivia/gen/1' });
     expect(readWakeInputs(repos, h.clock, true).decks[0]).toMatchObject({ lastRefillAt: isoUtc(NOW) });
