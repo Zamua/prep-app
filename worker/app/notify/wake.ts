@@ -45,7 +45,7 @@ export function readWakeInputs(repos: UserRepos, clock: Clock, canGenerate: bool
   const lastRefill = repos.jobs.lastStartedByDeck(WORKFLOW_TYPE.TriviaGenerate);
   const decks: TriviaDeckState[] = repos.decks.listTriviaDecks().map((d) => {
     const sessionSize = d.trivia_session_size || DEFAULT_SESSION_SIZE;
-    const counts = repos.trivia.queueCounts(d.id, Math.max(1, sessionSize));
+    const counts = repos.trivia.queueCounts(d.id, { queued: 1, unanswered: Math.max(1, sessionSize) });
     const session = repos.trivia.getActiveSessionForDeck(d.id);
     return {
       id: d.id,

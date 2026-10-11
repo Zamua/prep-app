@@ -70,10 +70,11 @@ import {
   SqlDirectoryRepo,
   SqlJobLedger,
   SqlLimiterRepo,
+  ReadCachingStorage,
   USER_MIGRATIONS,
   userRepos,
 } from './adapters/sql/index.js';
-import type { CellStorage } from './storage.js';
+import type { CellStorage, ReadCachedStorage } from './storage.js';
 import { resolveBuildToken } from './buildToken.js';
 import type { Env, InstantLimitEnv, PublicServiceVars } from './env.js';
 
@@ -162,6 +163,8 @@ export interface Composition {
    * the JobCell backs off through its ledger and its alarm instead. */
   userCellsDirect: UserCells;
   userRepos(storage: CellStorage, clock: Clock): UserRepos;
+  /** A user cell's own storage, its reads kept for as long as the cell lives. */
+  userCellStorage(raw: CellStorage): ReadCachedStorage;
   sessionIds(storage: CellStorage): SessionIds;
   directoryRepo(storage: CellStorage): Sync<Directory>;
   limiterRepo(storage: CellStorage): Sync<Limiter> & LedgerReset;
@@ -395,6 +398,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     userCellsDirect: namespaceUserCells(env.USER, NO_RETRY),
     userRepos: (storage, requestClock) =>
       userRepos(storage, { clock: requestClock, sessionIds: composition.sessionIds(storage), random: composition.randoms.instant, fuzz: composition.fuzz }),
+    userCellStorage: (raw) => new ReadCachingStorage(raw),
     sessionIds: (storage) =>
       testMode
         ? new SeededSessionIds({

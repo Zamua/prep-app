@@ -5,7 +5,7 @@ import type { Clock, SessionIds, SessionRepo } from '../../../app/ports.js';
 import { SessionNotFound, StaleVersionError } from '../../../app/ports.js';
 import type { RecentSession, SessionState, SessionStatus, StudySession } from '../../../app/entities.js';
 import { DUE_BUCKET } from './cardRepo.js';
-import { Db, type CellStorage, type Row } from './storage.js';
+import { Db, type CellStorage, type Row, type SqlValue } from './storage.js';
 import { DAY_MS, isoNow, isoUtc, shifted } from './time.js';
 
 function decodeJson(v: unknown): Record<string, unknown> | null {
@@ -56,6 +56,41 @@ function rowToRecent(r: Row): RecentSession {
   };
 }
 
+const ELIGIBLE = `q.deck_id = ? AND COALESCE(q.suspended, 0) = 0
+          AND NOT EXISTS (SELECT 1 FROM study_session_answers a WHERE a.session_id = ? AND a.question_id = q.id)`;
+
+const firstDue = (from: boolean): string =>
+  `SELECT ${DUE_BUCKET} AS bucket, cards.next_due AS nd FROM cards CROSS JOIN questions q ON q.id = cards.question_id
+        WHERE ${from ? 'cards.next_due >= ? AND ' : ''}cards.next_due <= ? AND ${ELIGIBLE}
+        ORDER BY cards.next_due
+        LIMIT 1`;
+const FIRST_DUE = firstDue(false);
+const FIRST_DUE_FROM = firstDue(true);
+
+const DRAW = `SELECT q.id, q.skeleton FROM cards CROSS JOIN questions q ON q.id = cards.question_id
+        WHERE cards.next_due >= ? AND cards.next_due < ? || char(1114111) AND cards.next_due <= ?
+          AND ${DUE_BUCKET} = ? AND ${ELIGIBLE}
+        ORDER BY RANDOM()
+        LIMIT 1`;
+
+/** What the pick reads, for a floor to know which writes concern it. */
+export const PICK_STATEMENTS: readonly string[] = [FIRST_DUE, DRAW];
+
+export const RECORD_ANSWER = `INSERT OR REPLACE INTO study_session_answers (session_id, question_id, answered_at, result, workflow_id) VALUES (?, ?, ?, ?, NULL)`;
+export const RECORD_GRADED_ANSWER = `INSERT OR REPLACE INTO study_session_answers (session_id, question_id, answered_at, result, workflow_id) VALUES (?, ?, ?, ?, ?)`;
+
+/** Where a session's next pick may start its walk of the due index. */
+export interface PickFloors {
+  /** A due stamp no card the session could still be shown precedes, when one is known. */
+  floor(sid: string, deckId: number): string | null;
+  /** The pick's earliest eligible card, due at `nextDue`. */
+  found(sid: string, deckId: number, nextDue: SqlValue): void;
+}
+
+// One statement for every read of a session row, so a request that reads it
+// for the view and again for the version guard reads it once.
+const SESSION_ROW = 'SELECT * FROM study_sessions WHERE id = ?';
+
 const RECENT_SELECT = `SELECT s.*, d.name AS deck_name, d.display_name AS deck_display_name,
        q.prompt AS current_prompt, q.type AS current_type
   FROM study_sessions s
@@ -69,6 +104,7 @@ export class SqlSessionRepo implements SessionRepo {
     private readonly storage: CellStorage,
     private readonly clock: Clock,
     private readonly ids: SessionIds,
+    private readonly floors?: PickFloors,
   ) {
     this.db = new Db(storage.sql);
   }
@@ -93,7 +129,7 @@ export class SqlSessionRepo implements SessionRepo {
   }
 
   get(sid: string): StudySession | null {
-    const row = this.db.first('SELECT * FROM study_sessions WHERE id = ?', sid);
+    const row = this.db.first(SESSION_ROW, sid);
     return row ? rowToSession(row) : null;
   }
 
@@ -134,7 +170,7 @@ export class SqlSessionRepo implements SessionRepo {
   }
 
   private checkedVersion(sid: string, expected: number): { deck_id: number } {
-    const row = this.db.first<{ version: number; deck_id: number }>('SELECT version, deck_id FROM study_sessions WHERE id = ?', sid);
+    const row = this.db.first<{ version: number; deck_id: number }>(SESSION_ROW, sid);
     if (!row) throw new SessionNotFound(`session ${sid} not found for user`);
     if (Number(row.version) !== expected) throw new StaleVersionError(Number(row.version));
     return { deck_id: Number(row.deck_id) };
@@ -147,10 +183,7 @@ export class SqlSessionRepo implements SessionRepo {
       status: string;
       state: string;
       current_question_id: number | null;
-    }>(
-      'SELECT version, deck_id, status, state, current_question_id FROM study_sessions WHERE id = ?',
-      sid,
-    );
+    }>(SESSION_ROW, sid);
     if (!row) throw new SessionNotFound(`session ${sid} not found for user`);
     const currentVersion = Number(row.version);
     if (
@@ -191,7 +224,7 @@ export class SqlSessionRepo implements SessionRepo {
       this.checkedAnswerable(sid, questionId, expectedVersion);
       const v = expectedVersion + 1;
       this.db.run(
-        `INSERT OR REPLACE INTO study_session_answers (session_id, question_id, answered_at, result, workflow_id) VALUES (?, ?, ?, ?, NULL)`,
+        RECORD_ANSWER,
         sid,
         questionId,
         ts,
@@ -246,7 +279,7 @@ export class SqlSessionRepo implements SessionRepo {
         row.current_grading_workflow_id !== workflowId
       ) return;
       this.db.run(
-        `INSERT OR REPLACE INTO study_session_answers (session_id, question_id, answered_at, result, workflow_id) VALUES (?, ?, ?, ?, ?)`,
+        RECORD_GRADED_ANSWER,
         sid,
         questionId,
         ts,
@@ -326,34 +359,18 @@ export class SqlSessionRepo implements SessionRepo {
   /** A due card the session has not answered: most overdue first, ties within the hour at random. */
   private pickNextQuestion(deckId: number, sid: string): { id: number; skeleton: string | null } | null {
     // Both reads walk the due index, never the whole deck: the oldest
-    // eligible card names the hour, then the draw covers that hour alone. The
-    // range only narrows the walk; the bucket compare decides membership.
+    // eligible card names the hour, then the draw covers that hour from that
+    // card on, since no eligible card is due before it. The range only
+    // narrows the walk; the bucket compare decides membership.
     const now = isoNow(this.clock);
-    const eligible = `q.deck_id = ? AND COALESCE(q.suspended, 0) = 0
-          AND NOT EXISTS (SELECT 1 FROM study_session_answers a WHERE a.session_id = ? AND a.question_id = q.id)`;
-    const first = this.db.first<{ bucket: string }>(
-      `SELECT ${DUE_BUCKET} AS bucket FROM cards CROSS JOIN questions q ON q.id = cards.question_id
-        WHERE cards.next_due <= ? AND ${eligible}
-        ORDER BY cards.next_due
-        LIMIT 1`,
-      now,
-      deckId,
-      sid,
-    );
+    const floor = this.floors?.floor(sid, deckId) ?? null;
+    const first =
+      floor === null
+        ? this.db.first<{ bucket: string; nd: SqlValue }>(FIRST_DUE, now, deckId, sid)
+        : this.db.first<{ bucket: string; nd: SqlValue }>(FIRST_DUE_FROM, floor, now, deckId, sid);
     if (first === null) return null;
-    const row = this.db.first<{ id: number; skeleton: string | null }>(
-      `SELECT q.id, q.skeleton FROM cards CROSS JOIN questions q ON q.id = cards.question_id
-        WHERE cards.next_due >= ? AND cards.next_due < ? || char(1114111) AND cards.next_due <= ?
-          AND ${DUE_BUCKET} = ? AND ${eligible}
-        ORDER BY RANDOM()
-        LIMIT 1`,
-      first.bucket,
-      first.bucket,
-      now,
-      first.bucket,
-      deckId,
-      sid,
-    );
+    this.floors?.found(sid, deckId, first.nd);
+    const row = this.db.first<{ id: number; skeleton: string | null }>(DRAW, first.nd, first.bucket, now, first.bucket, deckId, sid);
     return row ? { id: Number(row.id), skeleton: row.skeleton } : null;
   }
 }

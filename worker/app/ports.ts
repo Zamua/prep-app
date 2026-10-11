@@ -253,8 +253,8 @@ export interface TriviaRepo {
   setLastCorrectness(questionId: number, correct: boolean): void;
   countUnanswered(deckId: number): number;
   deckStats(deckId: number): TriviaDeckStats;
-  /** Queued and never-answered rows of a deck, each counted no further than `cap`. */
-  queueCounts(deckId: number, cap: number): { queued: number; unanswered: number };
+  /** Queued and never-answered rows of a deck, each counted no further than its cap. */
+  queueCounts(deckId: number, cap: { queued: number; unanswered: number }): { queued: number; unanswered: number };
   hasAnswerSince(deckId: number, ts: string | null): boolean;
   countPendingReview(deckId: number): number;
   pickSessionForDeck(deckId: number, opts?: { targetSize?: number; freshTarget?: number }): NextCard[];

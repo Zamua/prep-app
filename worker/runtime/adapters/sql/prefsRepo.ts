@@ -41,8 +41,13 @@ export class SqlPrefsRepo implements PrefsRepo {
     this.db = new Db(storage.sql);
   }
 
+  /** Every read of the row is this one statement, so a request reads it once. */
+  private row(): Row | null {
+    return this.db.first('SELECT * FROM profile LIMIT 1');
+  }
+
   get(): Profile | null {
-    const row = this.db.first('SELECT * FROM profile LIMIT 1');
+    const row = this.row();
     return row ? rowToProfile(row) : null;
   }
 
@@ -90,8 +95,7 @@ export class SqlPrefsRepo implements PrefsRepo {
   }
 
   getEditorInputMode(): string {
-    const row = this.db.first<{ editor_input_mode: string | null }>('SELECT editor_input_mode FROM profile LIMIT 1');
-    const v = row?.editor_input_mode;
+    const v = this.row()?.['editor_input_mode'] as string | null | undefined;
     return v && (EDITOR_INPUT_MODES as readonly string[]).includes(v) ? v : DEFAULT_EDITOR_INPUT_MODE;
   }
 
@@ -101,8 +105,7 @@ export class SqlPrefsRepo implements PrefsRepo {
   }
 
   getNotificationPrefs(): NotificationPrefs {
-    const row = this.db.first<{ notification_prefs: string | null }>('SELECT notification_prefs FROM profile LIMIT 1');
-    const raw = row?.notification_prefs;
+    const raw = this.row()?.['notification_prefs'] as string | null | undefined;
     const saved = raw ? (JSON.parse(raw) as Partial<NotificationPrefs>) : {};
     return { ...DEFAULT_NOTIFICATION_PREFS, ...saved };
   }
@@ -112,8 +115,7 @@ export class SqlPrefsRepo implements PrefsRepo {
   }
 
   getActiveByokProvider(): string | null {
-    const row = this.db.first<{ active_byok_provider: string | null }>('SELECT active_byok_provider FROM profile LIMIT 1');
-    return row?.active_byok_provider || null;
+    return (this.row()?.['active_byok_provider'] as string | null | undefined) || null;
   }
 
   setActiveByokProvider(provider: string | null): void {
@@ -121,8 +123,8 @@ export class SqlPrefsRepo implements PrefsRepo {
   }
 
   getDesiredRetention(): number | null {
-    const row = this.db.first<{ desired_retention: number | null }>('SELECT desired_retention FROM profile LIMIT 1');
-    return row && row.desired_retention != null ? Number(row.desired_retention) : null;
+    const row = this.row();
+    return row && row['desired_retention'] != null ? Number(row['desired_retention']) : null;
   }
 
   setDesiredRetention(retention: number | null): void {
@@ -130,8 +132,7 @@ export class SqlPrefsRepo implements PrefsRepo {
   }
 
   getIdBase(): number {
-    const row = this.db.first<{ id_base: number }>('SELECT id_base FROM profile LIMIT 1');
-    return Number(row?.id_base ?? 0);
+    return Number(this.row()?.['id_base'] ?? 0);
   }
 
   setIdBase(base: number): void {

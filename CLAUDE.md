@@ -474,6 +474,32 @@ rows-read ceilings measured by replaying a recorded day in workerd
 still read every card they list, and the deck page every review of those
 cards.
 
+**A user cell keeps what it read.** `runtime/adapters/sql/readCache.ts`
+wraps the cell's storage (the composition root hands `UserCell` the wrapped
+one), so a read repeated with nothing written to the tables it names costs
+no rows: the tombstone, the profile, the session row, the plan's trivia and
+job reads. Every write passes through it; the code that writes does nothing
+for it. What it rests on, each pinned by a test:
+
+- A result stands until a write lands on a table its statement names. A
+  DELETE or a REPLACE also reaches the ON DELETE children (`CASCADES`).
+- Never kept: a read naming a nondeterministic function (`RANDOM()`, the
+  clock, `changes()`), the catalogue or a pragma; a blob; a long list.
+- Dropped whole: a statement it cannot attribute to a table, a rolled-back
+  transaction, `deleteAll`, and a `total_changes()` that moved without a
+  write through it (a row changed behind its back).
+- Two reads bound to the clock are held by what they mean instead:
+  the plan's due count and next due stamp (`dueWindow.ts`, good until the
+  next card comes due), and a session's pick floor (`dueFloor.ts`, where the
+  next pick's walk may start while only reviews and answers have written).
+
+The alarm's run drops the cache first, so what a fire does rests on the
+rows; only the arming reads through it. `tests/repos/readCache.model.test.ts`
+holds every cached read and the armed wake to a direct read after each step
+of randomized writes, clock moves, rollbacks and writes behind its back.
+Give a row one statement that every caller reading it shares, so they share
+one cached result (`SESSION_ROW`, the profile's `row()`).
+
 ---
 
 ## Observability

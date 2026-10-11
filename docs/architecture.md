@@ -326,6 +326,19 @@ one. The alarm's plan reads its counts only as far as the plan compares
 them. `worker/tests/rows/` holds the study and authoring requests to this,
 with ceilings measured in workerd itself when a workerd binary is at hand.
 
+A user cell also keeps what it read. Its storage is wrapped by a read cache
+that answers a repeated read from memory while nothing has written the
+tables the statement names, so a request does not pay again for the
+profile, the session or the parts of the alarm's plan the request left
+alone. The cache sees every write the cell makes, and drops everything for
+what it cannot attribute: a statement it does not parse, a rolled-back
+transaction, a wipe, or a change count that moved without a write through
+it. The due count and the next due stamp in the plan move with the clock, so
+they are held until the next card comes due; a study session's next pick
+starts its walk at the card the last pick found, for as long as only
+reviews and answers have written since. The alarm drops the cache before it
+runs, so what a fire does is decided on the rows themselves.
+
 ---
 
 ## SRS

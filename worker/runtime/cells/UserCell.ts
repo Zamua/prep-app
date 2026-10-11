@@ -17,7 +17,7 @@ import { appBase } from '../appBase.js';
 import { ANON_COOKIE_HEADER, clockFor, compose, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { errorPage } from '../errors.js';
-import { pageByRowid, type CellStorage, type DumpPage } from '../storage.js';
+import { pageByRowid, type CellStorage, type DumpPage, type ReadCachedStorage } from '../storage.js';
 import { isoUtc } from '../../domain/time.js';
 import { pageContext } from '../../app/pageContext.js';
 import {
@@ -76,12 +76,12 @@ const TICK_MS = 300_000;
 
 export class UserCell extends DurableObject<Env> implements UserCellRpc {
   private readonly c: Composition;
-  private readonly storage: CellStorage;
+  private readonly storage: ReadCachedStorage;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.c = compose(env);
-    this.storage = ctx.storage as unknown as CellStorage;
+    this.storage = this.c.userCellStorage(ctx.storage as unknown as CellStorage);
     void ctx.blockConcurrencyWhile(async () => {
       this.c.migrateUserCell(this.storage);
       await this.ensureAlarm();
@@ -477,6 +477,8 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
    * guard is a stamp it writes, so a duplicate fire costs a read.
    */
   async alarm(): Promise<void> {
+    // What a fire does rests on the rows, never on a kept read; only arming does.
+    this.storage.forgetReads();
     const repos = this.repos();
     if (repos.tombstone.get()) {
       await this.storage.deleteAlarm();
