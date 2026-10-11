@@ -11,8 +11,7 @@ import type { UserRepos } from '../ports.js';
  * null because an outbox is a client-side store, so the server has
  * nothing to answer with.
  */
-export function overviewPayload(repos: UserRepos, user: Profile | null): Record<string, unknown> {
-  const summaries = repos.decks.listSummaries();
+export function overviewPayload(repos: UserRepos, user: Profile | null, summaries: DeckSummary[] = repos.decks.listSummaries()): Record<string, unknown> {
   const decks = summaries.map((d) => ({
     id: d.id,
     slug: d.name,

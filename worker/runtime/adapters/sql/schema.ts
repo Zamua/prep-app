@@ -30,6 +30,17 @@ export const DATA_TABLES = [
 ] as const;
 export type DataTable = (typeof DATA_TABLES)[number];
 
+/**
+ * Indexes the per-request reads seek through, so their cost follows what
+ * they return rather than how much history the cell holds. Also the step
+ * that brings an older cell up to them.
+ */
+export const READ_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_notifications_log_unseen ON notifications_log(id) WHERE seen_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_trivia_queue_unanswered ON trivia_queue(question_id) WHERE last_answered_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_active_workflows_type_deck ON active_workflows(workflow_type, deck_id, started_at);
+`;
+
 export const USER_SCHEMA = `
 CREATE TABLE IF NOT EXISTS profile (
   id                   TEXT PRIMARY KEY,
@@ -239,6 +250,7 @@ CREATE TABLE IF NOT EXISTS job_progress (
   updated_at  TEXT NOT NULL
 );
 
+${READ_INDEXES}
 CREATE TABLE IF NOT EXISTS tombstone (
   reason       TEXT NOT NULL,
   at           TEXT NOT NULL,

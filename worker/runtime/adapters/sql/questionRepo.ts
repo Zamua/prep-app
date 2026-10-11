@@ -185,15 +185,27 @@ export class SqlQuestionRepo implements QuestionRepo {
         `SELECT q.id, q.type, q.topic, q.prompt, q.suspended,
                 q.answer, q.choices, q.rubric, q.skeleton, q.language, q.answer_regex,
                 cards.step, cards.next_due, cards.last_review,
-                (SELECT COUNT(*) FROM reviews r WHERE r.question_id=q.id) AS attempts,
-                (SELECT COUNT(*) FROM reviews r WHERE r.question_id=q.id AND r.result='right') AS rights
+                COUNT(r.id) AS attempts,
+                SUM(CASE WHEN r.result = 'right' THEN 1 ELSE 0 END) AS rights
            FROM questions q
            LEFT JOIN cards ON cards.question_id = q.id
+           LEFT JOIN reviews r ON r.question_id = q.id
           WHERE q.deck_id = ?
+          GROUP BY q.id
           ORDER BY cards.next_due ASC, q.id ASC`,
         deckId,
       )
       .map(rowToDeckCard);
+  }
+
+  listFullInDeck(deckId: number): Question[] {
+    return this.db
+      .all('SELECT q.*, cards.step, cards.next_due FROM questions q LEFT JOIN cards ON cards.question_id = q.id WHERE q.deck_id = ? ORDER BY q.id', deckId)
+      .map(rowToQuestion);
+  }
+
+  countInDeck(deckId: number): number {
+    return Number(this.db.first<{ n: number }>('SELECT COUNT(*) AS n FROM questions WHERE deck_id = ?', deckId)?.n ?? 0);
   }
 
   cardForTransform(qid: number): TransformCard | null {

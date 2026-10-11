@@ -8,11 +8,10 @@
 // when it fires cannot drift apart.
 import { formatDone, type DoneItem } from '../../domain/trivia.js';
 import { isoUtc } from '../../domain/time.js';
-import { MAX_BACKOFF_DOUBLINGS, planWake, type TriviaDeckState, type WakeInputs, type WakePlan, type WakeTask } from '../../domain/notify/wake.js';
+import { dueTotalCap, MAX_BACKOFF_DOUBLINGS, planWake, type TriviaDeckState, type WakeInputs, type WakePlan, type WakeTask } from '../../domain/notify/wake.js';
 import { fundingTier, requireFundedWorkflow } from '../agent/funding.js';
 import { WORKFLOW_TYPE } from '../jobs/graph.js';
 import { triviaStartInput } from '../jobs/startInput.js';
-import type { ActiveWorkflow } from '../entities.js';
 import { AgentUnavailable, RunnerUnavailable, type Clock, type UserRepos, type WorkflowRunner } from '../ports.js';
 import { sendToUser, type NotifyDeps } from './routes.js';
 
@@ -36,21 +35,17 @@ export const WHEN_READY_TITLE = 'Prep — cards ready';
 export const DEFAULT_SESSION_SIZE = 3;
 /** The body a push service will accept; the rest is trimmed. */
 const BODY_LIMIT = 240;
-/** Long enough that `listForUser` returns every terminal row there is. */
-const PRUNE_SCAN_SECONDS = 100 * 365 * 24 * 3600;
-
-/** Everything the plan rests on, read in one pass. */
+/**
+ * Everything the plan rests on, read in one pass. It runs after every write
+ * request, so each read stops where the plan stops looking: the counts are
+ * capped at the comparison `planWake` makes with them.
+ */
 export function readWakeInputs(repos: UserRepos, clock: Clock, canGenerate: boolean): WakeInputs {
   const nextDueMinutes = repos.cards.nextDueMinutes(null);
-  const jobs = repos.jobs.listForUser({ recentTerminalWindowSeconds: PRUNE_SCAN_SECONDS });
-  const lastRefill = new Map<number, string>();
-  for (const w of jobs) {
-    if (w.workflow_type !== WORKFLOW_TYPE.TriviaGenerate || w.deck_id === null) continue;
-    const seen = lastRefill.get(w.deck_id);
-    if (seen === undefined || w.started_at > seen) lastRefill.set(w.deck_id, w.started_at);
-  }
+  const lastRefill = repos.jobs.lastStartedByDeck(WORKFLOW_TYPE.TriviaGenerate);
   const decks: TriviaDeckState[] = repos.decks.listTriviaDecks().map((d) => {
-    const stats = repos.trivia.deckStats(d.id);
+    const sessionSize = d.trivia_session_size || DEFAULT_SESSION_SIZE;
+    const counts = repos.trivia.queueCounts(d.id, Math.max(1, sessionSize));
     const session = repos.trivia.getActiveSessionForDeck(d.id);
     return {
       id: d.id,
@@ -59,22 +54,25 @@ export function readWakeInputs(repos: UserRepos, clock: Clock, canGenerate: bool
       intervalMinutes: d.notification_interval_minutes,
       ignoredStreak: d.notification_ignored_streak,
       lastNotifiedAt: d.last_notified_at,
-      sessionSize: d.trivia_session_size || DEFAULT_SESSION_SIZE,
-      unanswered: stats.unanswered,
-      queued: stats.total,
+      sessionSize,
+      unanswered: counts.unanswered,
+      queued: counts.queued,
       topic: (d.context_prompt || d.name || '').trim(),
       lastRefillAt: lastRefill.get(d.id) ?? null,
       activeSince: session && session.queue.length ? session.last_active : null,
     };
   });
+  const prefs = repos.prefs.getNotificationPrefs();
+  const hasPushDevice = repos.pushSubs.count() > 0;
+  const cap = dueTotalCap(prefs, hasPushDevice);
   return {
-    prefs: repos.prefs.getNotificationPrefs(),
+    prefs,
     canGenerate,
-    hasPushDevice: repos.pushSubs.count() > 0,
-    dueTotal: repos.cards.countDue(),
+    hasPushDevice,
+    dueTotal: cap === 0 ? 0 : repos.cards.countDue(cap ?? undefined),
     nextDueAt: nextDueMinutes === null ? null : isoUtc(new Date(clock.now().getTime() + nextDueMinutes * 60_000)),
     decks,
-    earliestTerminalAt: earliestTerminal(jobs),
+    earliestTerminalAt: repos.jobs.earliestTerminalAt(),
   };
 }
 
@@ -228,17 +226,6 @@ async function pickBody(deps: WakeDeps, deckId: number, deckName: string, sessio
 function prune(repos: UserRepos): void {
   repos.jobs.pruneTerminalOlderThan();
   repos.jobProgress.pruneOrphans();
-}
-
-// ---- reads ---------------------------------------------------------------------
-
-function earliestTerminal(jobs: readonly ActiveWorkflow[]): string | null {
-  let oldest: string | null = null;
-  for (const w of jobs) {
-    if (w.terminal_at === null) continue;
-    if (oldest === null || w.terminal_at < oldest) oldest = w.terminal_at;
-  }
-  return oldest;
 }
 
 /** Whether a refill is a task that could ever finish: a tier that funds the

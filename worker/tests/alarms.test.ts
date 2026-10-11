@@ -12,6 +12,7 @@ import {
   inQuietHours,
   nextLocalHour,
   partsIn,
+  dueTotalCap,
   planWake,
   type TriviaDeckState,
   type WakeInputs,
@@ -105,6 +106,38 @@ describe('quiet hours', () => {
 describe('the trivia backoff', () => {
   it('doubles per ignored fire and caps at five doublings', () => {
     expect([0, 1, 2, 5, 9].map((s) => effectiveIntervalMinutes(30, s))).toEqual([30, 60, 120, 960, 960]);
+  });
+});
+
+describe('the counts the cell caps before planning', () => {
+  it('plan the same as the full counts, for every mode, threshold and deck state', () => {
+    const thresholds = [-1, 0, 1, 2.5, 3, 10];
+    // 08:00, 09:00 (the digest hour) and 09:30 in the default zone.
+    const hours = [NOW, new Date(NOW.getTime() + H), new Date(NOW.getTime() + H + 30 * M)];
+    for (const mode of ['off', 'digest', 'when-ready']) {
+      for (const threshold of thresholds) {
+        for (const hasPushDevice of [true, false]) {
+          for (const due of [0, 1, 2, 3, 4, 11]) {
+            const prefs = PREFS({ mode, threshold });
+            const cap = dueTotalCap(prefs, hasPushDevice);
+            const capped = cap === 0 ? 0 : cap === null ? due : Math.min(due, cap);
+            for (const now of hours) {
+              const full = INPUTS({ prefs, hasPushDevice, dueTotal: due, nextDueAt: isoUtc(new Date(now.getTime() + 30 * M)) });
+              expect(planWake({ ...full, dueTotal: capped }, now)).toEqual(planWake(full, now));
+            }
+          }
+        }
+      }
+    }
+    for (const sessionSize of [1, 3, 5]) {
+      for (const unanswered of [0, 1, 2, 3, 4, 9]) {
+        for (const queued of [0, 1, 4, 30]) {
+          const full = DECK({ sessionSize, unanswered: Math.min(unanswered, queued), queued });
+          const capped = { ...full, unanswered: Math.min(full.unanswered, sessionSize), queued: Math.min(queued, sessionSize) };
+          expect(planWake(INPUTS({ decks: [capped] }), NOW)).toEqual(planWake(INPUTS({ decks: [full] }), NOW));
+        }
+      }
+    }
   });
 });
 

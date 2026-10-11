@@ -83,32 +83,39 @@ export class SqlCardRepo implements CardRepo {
     this.db.run(`UPDATE cards SET ${sets} WHERE question_id = ?`, ...entries.map(([, v]) => v), qid);
   }
 
-  countDue(): number {
+  countDue(cap?: number): number {
+    // A negative LIMIT is no limit. The cards loop leads so the due index
+    // bounds the walk, which a cap then stops early.
     const row = this.db.first<{ n: number }>(
-      `SELECT COUNT(*) AS n
-         FROM cards
-         JOIN questions ON questions.id = cards.question_id
-         JOIN decks ON decks.id = questions.deck_id
-        WHERE COALESCE(questions.suspended, 0) = 0
-          AND COALESCE(decks.notifications_enabled, 1) = 1
-          AND COALESCE(decks.deck_type, 'srs') = 'srs'
-          AND cards.next_due <= ?`,
+      `SELECT COUNT(*) AS n FROM (
+         SELECT 1
+           FROM cards
+           CROSS JOIN questions ON questions.id = cards.question_id
+           JOIN decks ON decks.id = questions.deck_id
+          WHERE COALESCE(questions.suspended, 0) = 0
+            AND COALESCE(decks.notifications_enabled, 1) = 1
+            AND COALESCE(decks.deck_type, 'srs') = 'srs'
+            AND cards.next_due <= ?
+          LIMIT ?)`,
       isoNow(this.clock),
+      cap ?? -1,
     );
     return row ? Number(row.n) : 0;
   }
 
   nextDueMinutes(deckId: number | null = null): number | null {
     const now = this.clock.now();
+    // The earliest in due-index order rather than MIN: the walk stops at the
+    // first eligible card whatever the planner makes of the join.
     let sql =
-      `SELECT MIN(cards.next_due) AS nd FROM cards JOIN questions q ON q.id = cards.question_id JOIN decks d ON d.id = q.deck_id
+      `SELECT cards.next_due AS nd FROM cards CROSS JOIN questions q ON q.id = cards.question_id JOIN decks d ON d.id = q.deck_id
         WHERE COALESCE(q.suspended, 0) = 0 AND COALESCE(d.deck_type, 'srs') = 'srs' AND cards.next_due > ?`;
     const params: unknown[] = [isoUtc(now)];
     if (deckId !== null) {
       sql += ' AND q.deck_id = ?';
       params.push(deckId);
     }
-    const row = this.db.first<{ nd: string | null }>(sql, ...params);
+    const row = this.db.first<{ nd: string | null }>(`${sql} ORDER BY cards.next_due LIMIT 1`, ...params);
     const raw = row?.nd;
     if (!raw) return null;
     let due: Date;

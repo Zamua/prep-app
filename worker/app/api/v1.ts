@@ -77,7 +77,7 @@ export function deckMeta(repos: V1Repos, name: string): ApiResult {
     name,
     type: repos.decks.getType(deckId) || 'srs',
     context_prompt: meta.context_prompt,
-    card_count: repos.questions.listInDeck(deckId).length,
+    card_count: repos.questions.countInDeck(deckId),
   });
 }
 

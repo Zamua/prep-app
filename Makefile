@@ -16,7 +16,7 @@ MISE ?= mise
 RUN  := $(MISE) exec --
 NPM  := $(RUN) npm --prefix worker
 
-.PHONY: help setup tools node-deps build test typecheck \
+.PHONY: help setup tools node-deps build test typecheck rows \
         lint format hooks dev dev-stop llm-stub smoke ci clean
 
 help:
@@ -27,6 +27,7 @@ help:
 	@echo "  make build       templates, icons, service worker, dist/assets"
 	@echo "  make test        vitest"
 	@echo "  make typecheck   tsc over the worker and its tests"
+	@echo "  make rows        rows read per request, measured in workerd (WORKERD=path)"
 	@echo "  make lint        typecheck, read-only"
 	@echo "  make format      no-op; formatting is the editor's job"
 	@echo "  make dev         build, deploy and start a local celld node"
@@ -56,6 +57,12 @@ typecheck: node-deps
 
 test: node-deps
 	cd worker && $(RUN) npx vitest run
+
+# The rows-read pins in tests/rows, with the workerd half run and its
+# figures printed. Needs a workerd binary: WORKERD=/path/to/workerd, or the
+# workerd npm package installed in worker/.
+rows: node-deps
+	cd worker && PREP_WORKERD=$(WORKERD) PREP_ROWS_REPORT=1 $(RUN) npx vitest run tests/rows
 
 lint: typecheck
 
