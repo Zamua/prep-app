@@ -241,7 +241,7 @@ const download = (bytes: Uint8Array, contentType: string, filename: string): Pag
 export function deckExportPrepdeck(repos: UserRepos, req: PageRequest, deps: { zip: ZipCodec }): PageResult {
   const name = req.params['name']!;
   const id = deckId(repos, name);
-  if (repos.questions.listInDeck(id).length > MAX_EXPORT_QUESTIONS) return exportRefusal(repos, name, id);
+  if (repos.questions.countInDeck(id) > MAX_EXPORT_QUESTIONS) return exportRefusal(repos, name, id);
   const bytes = deckToPrepdeck(repos, id, deps.zip, req.now.replace('+00:00', 'Z'));
   return download(bytes, 'application/zip', `${name}.prepdeck`);
 }

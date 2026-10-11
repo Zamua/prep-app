@@ -317,6 +317,15 @@ job_progress            what a JobCell writes back
 Migrations run in `runtime/adapters/sql/migrate.ts` on cell activation
 under `blockConcurrencyWhile`, guarded and idempotent.
 
+What a cell costs to run is mostly rows read: every row a cursor lands on,
+including each row a `COUNT(*)` counts. The reads every request makes (the
+tombstone, the profile, the alarm's plan after a write, `pageContext` on a
+rendered page) seek, or walk a range bounded by current work such as the
+cards due now, so a review costs the same on a year-old account as on a new
+one. The alarm's plan reads its counts only as far as the plan compares
+them. `worker/tests/rows/` holds the study and authoring requests to this,
+with ceilings measured in workerd itself when a workerd binary is at hand.
+
 ---
 
 ## SRS

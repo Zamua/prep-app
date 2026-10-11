@@ -1,7 +1,7 @@
 // Versioned, idempotent migrations for each cell class. Every step is
 // re-runnable (IF NOT EXISTS, column checks) and the version is written
 // last, so a step that fails mid-way replays on the next activation.
-import { AUTOINCREMENT_TABLES, DIRECTORY_SCHEMA, JOB_SCHEMA, LIMITER_SCHEMA, USER_SCHEMA } from './schema.js';
+import { AUTOINCREMENT_TABLES, DIRECTORY_SCHEMA, JOB_SCHEMA, LIMITER_SCHEMA, READ_INDEXES, USER_SCHEMA } from './schema.js';
 import { Db, writeStatement, type Sql, type SqlValue } from './storage.js';
 
 export interface Migration {
@@ -14,6 +14,7 @@ export const USER_MIGRATIONS: readonly Migration[] = [
   { version: 2, apply: addJobProgress },
   { version: 3, apply: addStepResults },
   { version: 4, apply: addLearningSteps },
+  { version: 5, apply: (db) => db.script(READ_INDEXES) },
 ];
 
 /** The read model `WorkflowRunner.status` answers from, on cells created
@@ -70,11 +71,16 @@ function addReapClaims(db: Db): void {
 }
 export const LIMITER_MIGRATIONS: readonly Migration[] = [{ version: 1, apply: (db) => db.script(LIMITER_SCHEMA) }];
 
-/** 0 when the version table does not exist yet (a fresh or wiped cell). */
+/** 0 when the version table does not exist yet (a fresh or wiped cell).
+ * Read on every activation, so it asks the table, not the schema. */
 export function currentVersion(db: Db): number {
-  const table = db.first("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'");
-  if (!table) return 0;
-  const row = db.first<{ version: number }>('SELECT version FROM schema_version LIMIT 1');
+  let row: { version: number } | null;
+  try {
+    row = db.first<{ version: number }>('SELECT version FROM schema_version LIMIT 1');
+  } catch (e) {
+    if (e instanceof Error && /no such table: schema_version/.test(e.message)) return 0;
+    throw e;
+  }
   return row ? Number(row.version) : 0;
 }
 

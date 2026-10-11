@@ -38,7 +38,7 @@ export function dashboard(repos: UserRepos): Record<string, unknown> {
     return x < y ? -1 : x > y ? 1 : 0;
   });
   return {
-    dashboard_overview: overviewPayload(repos, repos.prefs.get()),
+    dashboard_overview: overviewPayload(repos, repos.prefs.get(), summaries),
     ...menuContext(summaries),
     recent_sessions: repos.sessions.listRecent(5),
     active_trivia_sessions: activeTrivia,

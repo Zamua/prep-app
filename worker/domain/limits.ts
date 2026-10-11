@@ -14,11 +14,16 @@ export interface AccountRows {
   questions: number;
 }
 
+/** Whether the caps bind at all; an account they do not bind is never counted. */
+export function isRowCapped(isAnonymous: boolean | null): boolean {
+  return Boolean(isAnonymous);
+}
+
 export function assertUnderRowCap(
   account: AccountRows,
   add: { newDecks?: number; newQuestions?: number } = {},
 ): void {
-  if (!account.isAnonymous) return;
+  if (!isRowCapped(account.isAnonymous)) return;
   const { newDecks = 0, newQuestions = 0 } = add;
   if (account.decks + newDecks > ANON_MAX_DECKS || account.questions + newQuestions > ANON_MAX_QUESTIONS) {
     throw new RowCapReached(

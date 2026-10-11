@@ -462,6 +462,18 @@ is the scheduler's position within the learning or relearning ladder. They
 are independent state and must survive reviews, offline sync and archives
 independently.
 
+**Rows read is what the platform bills, and a cursor landing on a row is a
+row read** (a `COUNT(*)` reads every row it counts). Every request reads
+the tombstone and the profile, every write re-plans the alarm, and every
+rendered page builds `pageContext`, so those reads must seek or walk a
+range bounded by current work (cards due now, one session's answers, a
+`LIMIT`), never a table that grows with history. `tests/rows/` pins the
+study and authoring requests: a plan check that always runs, and
+rows-read ceilings measured by replaying a recorded day in workerd
+(`make rows WORKERD=/path/to/workerd`). The dashboard and the deck page
+still read every card they list, and the deck page every review of those
+cards.
+
 ---
 
 ## Observability

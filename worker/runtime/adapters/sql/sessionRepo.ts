@@ -325,14 +325,33 @@ export class SqlSessionRepo implements SessionRepo {
 
   /** A due card the session has not answered: most overdue first, ties within the hour at random. */
   private pickNextQuestion(deckId: number, sid: string): { id: number; skeleton: string | null } | null {
-    const row = this.db.first<{ id: number; skeleton: string | null }>(
-      `SELECT q.id, q.skeleton FROM questions q JOIN cards ON cards.question_id = q.id
-        WHERE q.deck_id = ? AND COALESCE(q.suspended, 0) = 0 AND cards.next_due <= ?
-          AND q.id NOT IN (SELECT question_id FROM study_session_answers WHERE session_id = ?)
-        ORDER BY ${DUE_BUCKET} ASC, RANDOM()
+    // Both reads walk the due index, never the whole deck: the oldest
+    // eligible card names the hour, then the draw covers that hour alone. The
+    // range only narrows the walk; the bucket compare decides membership.
+    const now = isoNow(this.clock);
+    const eligible = `q.deck_id = ? AND COALESCE(q.suspended, 0) = 0
+          AND NOT EXISTS (SELECT 1 FROM study_session_answers a WHERE a.session_id = ? AND a.question_id = q.id)`;
+    const first = this.db.first<{ bucket: string }>(
+      `SELECT ${DUE_BUCKET} AS bucket FROM cards CROSS JOIN questions q ON q.id = cards.question_id
+        WHERE cards.next_due <= ? AND ${eligible}
+        ORDER BY cards.next_due
         LIMIT 1`,
+      now,
       deckId,
-      isoNow(this.clock),
+      sid,
+    );
+    if (first === null) return null;
+    const row = this.db.first<{ id: number; skeleton: string | null }>(
+      `SELECT q.id, q.skeleton FROM cards CROSS JOIN questions q ON q.id = cards.question_id
+        WHERE cards.next_due >= ? AND cards.next_due < ? || char(1114111) AND cards.next_due <= ?
+          AND ${DUE_BUCKET} = ? AND ${eligible}
+        ORDER BY RANDOM()
+        LIMIT 1`,
+      first.bucket,
+      first.bucket,
+      now,
+      first.bucket,
+      deckId,
       sid,
     );
     return row ? { id: Number(row.id), skeleton: row.skeleton } : null;

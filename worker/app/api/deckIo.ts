@@ -26,16 +26,7 @@ export interface DeckIoRepos {
 
 /** Full questions in id order: the CSV and the JSON card list agree on the field set. */
 export function questionsForExport(repos: DeckIoRepos, deckId: number): Question[] {
-  const ids = repos.questions
-    .listInDeck(deckId)
-    .map((c) => c.id)
-    .sort((a, b) => a - b);
-  const out: Question[] = [];
-  for (const id of ids) {
-    const q = repos.questions.get(id);
-    if (q) out.push(q);
-  }
-  return out;
+  return repos.questions.listFullInDeck(deckId);
 }
 
 export function questionToRow(q: Question): string[] {

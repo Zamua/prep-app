@@ -151,28 +151,48 @@ export class SqlDeckRepo implements DeckRepo {
   }
 
   listSummaries(): DeckSummary[] {
-    const rows = this.db.all(
-      `SELECT d.id, d.name, d.display_name, d.deck_type, d.pinned_at,
-              COUNT(q.id) AS total,
-              SUM(CASE WHEN cards.next_due <= ? AND COALESCE(q.suspended,0)=0
-                        AND COALESCE(d.deck_type,'srs') = 'srs'
-                       THEN 1 ELSE 0 END) AS due
-         FROM decks d
-         LEFT JOIN questions q ON q.deck_id = d.id
-         LEFT JOIN cards ON cards.question_id = q.id
-        GROUP BY d.id
-        ORDER BY (d.pinned_at IS NULL), d.pinned_at DESC, COALESCE(d.display_name, d.name)`,
-      isoNow(this.clock),
+    // Three reads rather than one join over every card: totals off the deck
+    // index alone, and dues off the due index, which holds only due cards.
+    const totals = new Map(
+      this.db.all<{ deck_id: number; n: number }>('SELECT deck_id, COUNT(*) AS n FROM questions GROUP BY deck_id').map((r) => [Number(r.deck_id), Number(r.n)]),
     );
-    return rows.map((r) => ({
-      id: Number(r['id']),
-      name: String(r['name']),
-      display_name: (r['display_name'] as string | null) ?? null,
-      total: Number(r['total'] ?? 0),
-      due: Number(r['due'] ?? 0),
-      deck_type: ((r['deck_type'] as string | null) || 'srs') as DeckType,
-      pinned: r['pinned_at'] != null,
-    }));
+    const dues = new Map(
+      this.db
+        .all<{ deck_id: number; n: number }>(
+          `SELECT q.deck_id, COUNT(*) AS n
+             FROM cards CROSS JOIN questions q ON q.id = cards.question_id
+            WHERE cards.next_due <= ? AND COALESCE(q.suspended, 0) = 0
+            GROUP BY q.deck_id`,
+          isoNow(this.clock),
+        )
+        .map((r) => [Number(r.deck_id), Number(r.n)]),
+    );
+    const rows = this.db.all(
+      `SELECT id, name, display_name, deck_type, pinned_at FROM decks
+        ORDER BY (pinned_at IS NULL), pinned_at DESC, COALESCE(display_name, name)`,
+    );
+    return rows.map((r) => {
+      const id = Number(r['id']);
+      const srs = ((r['deck_type'] as string | null) || 'srs') === 'srs';
+      return {
+        id,
+        name: String(r['name']),
+        display_name: (r['display_name'] as string | null) ?? null,
+        total: totals.get(id) ?? 0,
+        due: srs ? (dues.get(id) ?? 0) : 0,
+        deck_type: ((r['deck_type'] as string | null) || 'srs') as DeckType,
+        pinned: r['pinned_at'] != null,
+      };
+    });
+  }
+
+  listNames(): { name: string; display_name: string | null }[] {
+    return this.db
+      .all<{ name: string; display_name: string | null }>(
+        `SELECT name, display_name FROM decks
+          ORDER BY (pinned_at IS NULL), pinned_at DESC, COALESCE(display_name, name)`,
+      )
+      .map((r) => ({ name: String(r.name), display_name: r.display_name ?? null }));
   }
 
   dueBreakdown(): [string, number][] {

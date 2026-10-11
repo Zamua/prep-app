@@ -4,7 +4,7 @@ import type { ExportRepo, TombstoneRepo } from '../../../app/ports.js';
 import type { CellSnapshot, Tombstone, TombstoneReason } from '../../../app/entities.js';
 import { rowToProfile } from './prefsRepo.js';
 import { DATA_TABLES, PROFILE_TABLE } from './schema.js';
-import { Db, writeStatement, type CellStorage, type ConflictMode, type SqlValue } from './storage.js';
+import { Db, writeStatement, type CellStorage, type ConflictMode, type Row, type SqlValue } from './storage.js';
 
 const SCRUB_CHUNK = 1 << 20;
 
@@ -102,10 +102,16 @@ export class SqlTombstoneRepo implements TombstoneRepo {
     this.db = new Db(storage.sql);
   }
 
+  /** Asked on every request, so it reads the table rather than scanning the
+   * schema for it; `deleteAll` is what leaves a cell without one. */
   get(): Tombstone | null {
-    const exists = this.db.first("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tombstone'");
-    if (!exists) return null;
-    const row = this.db.first('SELECT reason, at, scrubbed_at, former_bytes FROM tombstone LIMIT 1');
+    let row: Row | null;
+    try {
+      row = this.db.first('SELECT reason, at, scrubbed_at, former_bytes FROM tombstone LIMIT 1');
+    } catch (e) {
+      if (e instanceof Error && /no such table: tombstone/.test(e.message)) return null;
+      throw e;
+    }
     if (!row) return null;
     return {
       reason: String(row['reason']) as TombstoneReason,

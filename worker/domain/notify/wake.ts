@@ -43,9 +43,11 @@ export interface TriviaDeckState {
   ignoredStreak: number;
   lastNotifiedAt: string | null;
   sessionSize: number;
-  /** Queue rows never answered: the refill gate. */
+  /** Queue rows never answered: the refill gate. Only its comparison with
+   * `sessionSize` is read, so a count capped there plans the same. */
   unanswered: number;
-  /** Queue rows at all; with none there is nothing to pick and nothing to say. */
+  /** Queue rows at all; with none there is nothing to pick and nothing to say.
+   * Only zero is read. */
   queued: number;
   /** `context_prompt` or the slug, stripped; an empty one cannot be refilled. */
   topic: string;
@@ -64,6 +66,7 @@ export interface WakeInputs {
   canGenerate: boolean;
   /** No device means nothing to push to, so nothing is planned. */
   hasPushDevice: boolean;
+  /** Due SRS cards, read only as far as `dueTotalCap` says the plan looks. */
   dueTotal: number;
   /** When the next SRS card comes due; null when none is scheduled. */
   nextDueAt: string | null;
@@ -83,6 +86,18 @@ export interface WakePlan {
   tasks: WakeTask[];
   /** Null when nothing is outstanding: the cell sleeps until a request. */
   wakeAt: string | null;
+}
+
+/**
+ * How far `dueTotal` has to be counted for `planWake` to decide the same as
+ * with the full count: 0 when no SRS mode reads it, null when no cap is safe.
+ */
+export function dueTotalCap(prefs: WakePrefs, hasPushDevice: boolean): number | null {
+  if (!hasPushDevice) return 0;
+  if (prefs.mode === 'digest') return 1;
+  if (prefs.mode !== 'when-ready') return 0;
+  const cap = Math.max(0, Math.ceil(Number(prefs.threshold)));
+  return Number.isFinite(cap) ? cap : null;
 }
 
 /**

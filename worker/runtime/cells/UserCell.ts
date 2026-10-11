@@ -159,14 +159,15 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       if (e instanceof SignInRequired || e instanceof TokenRequired) return gateRefusal(e, request);
       throw e;
     }
-    const base = pageContext(repos, {
+    const pageEnv = {
       buildToken: c.buildToken,
       appBase: appBase(request),
       authProvider: c.authProvider,
       freeTierConfigured: c.freeTierConfigured,
       urls: c.authUrls,
-    });
-    return toResponse(handled, (template, context) => c.renderer.render(template, derive(template, { ...base, ...context })));
+    };
+    // Read only for a rendered page: a JSON, redirect or empty response never uses it.
+    return toResponse(handled, (template, context) => c.renderer.render(template, derive(template, { ...pageContext(repos, pageEnv), ...context })));
   }
 
   /**

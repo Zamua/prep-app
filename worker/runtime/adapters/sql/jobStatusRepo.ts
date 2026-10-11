@@ -95,4 +95,18 @@ export class SqlJobStatusRepo implements JobStatusRepo {
   pruneTerminalOlderThan(opts: { windowSeconds?: number } = {}): number {
     return this.cleanupStaleTerminal({ windowSeconds: opts.windowSeconds ?? RECONCILER_PRUNE_WINDOW_SECONDS });
   }
+
+  lastStartedByDeck(workflowType: string): Map<number, string> {
+    const rows = this.db.all<{ deck_id: number; started_at: string }>(
+      `SELECT deck_id, MAX(started_at) AS started_at FROM active_workflows
+        WHERE workflow_type = ? AND deck_id IS NOT NULL GROUP BY deck_id`,
+      workflowType,
+    );
+    return new Map(rows.map((r) => [Number(r.deck_id), String(r.started_at)]));
+  }
+
+  earliestTerminalAt(): string | null {
+    const row = this.db.first<{ at: string | null }>('SELECT terminal_at AS at FROM active_workflows WHERE terminal_at IS NOT NULL ORDER BY terminal_at LIMIT 1');
+    return row?.at ?? null;
+  }
 }

@@ -88,7 +88,7 @@ describe('the learning rung migration', () => {
     db.run("INSERT INTO cards (question_id, step, next_due, last_review, stability, difficulty, fsrs_state) VALUES (1, 1, '2026-03-14T15:10:00+00:00', '2026-03-14T15:00:00+00:00', 2.3065, 2.11810397, 1)");
     const before = db.first('SELECT * FROM cards');
 
-    expect(migrate(upgraded.sql, USER_MIGRATIONS)).toBe(4);
+    expect(migrate(upgraded.sql, USER_MIGRATIONS)).toBe(5);
     expect(db.first('SELECT * FROM cards')).toEqual({ ...before, learning_steps: 0 });
     const once = db.all('SELECT * FROM cards');
     USER_MIGRATIONS.find((m) => m.version === 4)!.apply(db);
@@ -97,6 +97,25 @@ describe('the learning rung migration', () => {
     const fresh = new FakeCellStorage();
     migrate(fresh.sql, USER_MIGRATIONS);
     expect(db.all("PRAGMA table_info('cards')")).toEqual(new Db(fresh.sql).all("PRAGMA table_info('cards')"));
+  });
+});
+
+describe('the read index migration', () => {
+  it('adds the indexes to a cell that predates them, idempotently, matching the fresh schema', () => {
+    const indexes = (db: Db) => db.all("SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY name");
+    const upgraded = new FakeCellStorage();
+    migrate(upgraded.sql, USER_MIGRATIONS.filter((m) => m.version < 5));
+    const db = new Db(upgraded.sql);
+    for (const name of ['idx_notifications_log_unseen', 'idx_trivia_queue_unanswered', 'idx_active_workflows_type_deck']) db.script(`DROP INDEX ${name}`);
+
+    expect(migrate(upgraded.sql, USER_MIGRATIONS)).toBe(5);
+    const once = indexes(db);
+    USER_MIGRATIONS.find((m) => m.version === 5)!.apply(db);
+    expect(indexes(db)).toEqual(once);
+
+    const fresh = new FakeCellStorage();
+    migrate(fresh.sql, USER_MIGRATIONS);
+    expect(once).toEqual(indexes(new Db(fresh.sql)));
   });
 });
 

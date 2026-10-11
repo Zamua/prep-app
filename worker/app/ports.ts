@@ -141,6 +141,8 @@ export interface DeckRepo {
   /** Rows removed (0 or 1); the subtree cascades. */
   delete(name: string): number;
   listSummaries(): DeckSummary[];
+  /** Every deck's slug and display name, in `listSummaries` order, without its cards. */
+  listNames(): { name: string; display_name: string | null }[];
   /** Every deck for the reorganize prompt, by name, cards excluded. */
   listForTransform(): Omit<TransformDeck, 'cards'>[];
   dueBreakdown(): [name: string, due: number][];
@@ -176,6 +178,9 @@ export interface QuestionRepo {
   get(qid: number): Question | null;
   moveToDeck(questionIds: readonly number[], destDeckId: number): number;
   listInDeck(deckId: number): DeckCard[];
+  /** Every card of the deck as `get` reads it, by id. */
+  listFullInDeck(deckId: number): Question[];
+  countInDeck(deckId: number): number;
   /** One card as the transform prompt shows it; the Go loader took no
    * suspended filter here, since the user named this card. */
   cardForTransform(qid: number): TransformCard | null;
@@ -198,7 +203,8 @@ export interface CardRepo {
   writeScheduled(qid: number, scheduled: ScheduledReview, reviewedAt: string): void;
   listCardStateForDeck(deckId: number): (CardRow & { prompt: string })[];
   restoreCardState(qid: number, fields: Partial<Omit<CardRow, 'question_id'>>): void;
-  countDue(): number;
+  /** Due SRS cards on notifying decks, counted no further than `cap` when given. */
+  countDue(cap?: number): number;
   nextDueMinutes(deckId?: number | null): number | null;
   dueQuestions(deckId: number, limit?: number): Question[];
 }
@@ -247,6 +253,8 @@ export interface TriviaRepo {
   setLastCorrectness(questionId: number, correct: boolean): void;
   countUnanswered(deckId: number): number;
   deckStats(deckId: number): TriviaDeckStats;
+  /** Queued and never-answered rows of a deck, each counted no further than `cap`. */
+  queueCounts(deckId: number, cap: number): { queued: number; unanswered: number };
   hasAnswerSince(deckId: number, ts: string | null): boolean;
   countPendingReview(deckId: number): number;
   pickSessionForDeck(deckId: number, opts?: { targetSize?: number; freshTarget?: number }): NextCard[];
@@ -349,6 +357,10 @@ export interface JobStatusRepo {
   cleanupStaleTerminal(opts?: { windowSeconds?: number }): number;
   listNonTerminal(): ActiveWorkflow[];
   pruneTerminalOlderThan(opts?: { windowSeconds?: number }): number;
+  /** Per deck, when its most recent job of this type started, terminal or not. */
+  lastStartedByDeck(workflowType: string): Map<number, string>;
+  /** The oldest `terminal_at` there is, or null when no row is terminal. */
+  earliestTerminalAt(): string | null;
 }
 
 export interface OfflineRepo {

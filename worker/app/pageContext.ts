@@ -38,7 +38,7 @@ export function agentAvailable(repos: UserRepos, freeTierConfigured: boolean): b
 export function pageContext(repos: UserRepos, env: PageEnv): Record<string, unknown> {
   const urls = env.urls ?? NO_AUTH_URLS;
   const deckDisplay: Record<string, string> = {};
-  for (const d of repos.decks.listSummaries()) deckDisplay[d.name] = d.display_name ?? d.name;
+  for (const d of repos.decks.listNames()) deckDisplay[d.name] = d.display_name ?? d.name;
   return {
     app_base: env.appBase,
     user: repos.prefs.get(),

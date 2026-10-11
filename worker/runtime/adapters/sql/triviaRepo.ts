@@ -176,6 +176,24 @@ export class SqlTriviaRepo implements TriviaRepo {
     };
   }
 
+  queueCounts(deckId: number, cap: number): { queued: number; unanswered: number } {
+    // Unanswered rows are walked through their own partial index: a deck the
+    // refill is waiting on holds few of them among many answered ones.
+    const row = this.db.first<{ queued: number; unanswered: number }>(
+      `SELECT
+         (SELECT COUNT(*) FROM (SELECT 1 FROM questions q JOIN trivia_queue tq ON tq.question_id = q.id
+                                 WHERE q.deck_id = ? LIMIT ?)) AS queued,
+         (SELECT COUNT(*) FROM (SELECT 1 FROM trivia_queue tq INDEXED BY idx_trivia_queue_unanswered
+                                 CROSS JOIN questions q ON q.id = tq.question_id
+                                 WHERE tq.last_answered_at IS NULL AND q.deck_id = ? LIMIT ?)) AS unanswered`,
+      deckId,
+      cap,
+      deckId,
+      cap,
+    );
+    return { queued: Number(row?.queued ?? 0), unanswered: Number(row?.unanswered ?? 0) };
+  }
+
   hasAnswerSince(deckId: number, ts: string | null): boolean {
     if (ts === null) return false;
     const row = this.db.first(
