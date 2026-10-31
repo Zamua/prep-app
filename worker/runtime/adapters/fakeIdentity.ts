@@ -1,23 +1,17 @@
 import type { Identity, IdentityProvider, SignInUrls } from '../../app/ports.js';
+import { tagsEqual } from '../../domain/tagsEqual.js';
+import { INTERNAL_TOKEN_HEADER } from '../internalToken.js';
 
 // The headers a Tailscale Serve front door injects, which a test-mode
 // node trusts in place of a real identity provider.
 export const LOGIN_HEADER = 'tailscale-user-login';
 export const NAME_HEADER = 'tailscale-user-name';
 export const PIC_HEADER = 'tailscale-user-profile-pic';
-export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
 export const DEFAULT_DISPLAY_NAME = 'Seed';
 
 /** Auth is implicit on the tailnet shape, so there is no in-app flow to
  * point at and the templates hide the sign-in chrome. */
 const NO_URLS: SignInUrls = { sign_in: null, sign_up: null, sign_out: null, account: null };
-
-function tagsEqual(a: string, b: string): boolean {
-  let diff = a.length ^ b.length;
-  const n = Math.max(a.length, b.length);
-  for (let i = 0; i < n; i++) diff |= (i < a.length ? a.charCodeAt(i) : 0) ^ (i < b.length ? b.charCodeAt(i) : 0);
-  return diff === 0;
-}
 
 /**
  * Identity from the tailscale headers, which nothing verifies, so the same

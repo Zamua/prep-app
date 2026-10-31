@@ -5,10 +5,8 @@
 // misconfigured node still reports. It is never itself observed, or the
 // histogram would mostly be a record of the scraper.
 import { METRICS_CONTENT_TYPE, observeHttpRequest, renderMetrics } from '../../app/metrics.js';
-import { apiRoutes } from '../cells/routes/api.js';
-import { jobRoutes } from '../cells/routes/jobs.js';
-import { pageRoutes } from '../cells/routes/pages.js';
-import { matchRoute, type Route } from '../cells/router.js';
+import { CELL_ROUTES } from '../cells/routes/all.js';
+import { matchRoute } from '../cells/router.js';
 
 /** No route matched, so the raw path is not worth a series of its own. */
 export const UNMATCHED = '<unmatched>';
@@ -53,7 +51,6 @@ export const ENTRY_ROUTES: readonly (readonly [string, string])[] = [
  * from `ENTRY_ROUTES` so the product inventory stays readable. */
 const LOCAL_ROUTES: readonly (readonly [string, string])[] = [['GET', '/readyz']];
 
-const CELL_ROUTES: readonly Route[] = [...pageRoutes, ...jobRoutes, ...apiRoutes];
 
 export function serveMetrics(request: Request, url: URL): Response | null {
   if (url.pathname !== '/metrics') return null;

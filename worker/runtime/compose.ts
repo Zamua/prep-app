@@ -78,6 +78,7 @@ import {
 import type { CellStorage, ReadCachedStorage } from './storage.js';
 import { resolveBuildToken } from './buildToken.js';
 import type { Env, InstantLimitEnv, PublicServiceVars } from './env.js';
+import { NOW_HEADER } from './cells/router.js';
 
 /** celld's default outbound fetch timeout, in seconds. */
 const DEFAULT_FETCH_TIMEOUT_S = 120;
@@ -89,7 +90,6 @@ const FETCH_HEADROOM_S = 5;
 export const TEST_SEED = 20260314;
 /** The IANA `sub` claim a push service contacts about operational issues. */
 export const DEFAULT_VAPID_SUB = 'mailto:noreply@example.com';
-export const NOW_HEADER = 'x-prep-now';
 export const TEST_NOW_HEADER = 'x-prep-test-now';
 const SESSION_COUNTER_KEY = 'test_session_counter';
 

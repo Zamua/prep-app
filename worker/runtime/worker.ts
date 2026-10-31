@@ -3,25 +3,25 @@
 // is forwarded to its UserCell with the identity asserted in headers.
 import { isRefusal } from '../domain/jobs/refusal.js';
 import { appBase } from './appBase.js';
-import { ANON_COOKIE_HEADER, clockFor, compose, cookieHooks, noCacheHtml, NOW_HEADER, TEST_NOW_HEADER, type Composition } from './compose.js';
+import { ANON_COOKIE_HEADER, clockFor, compose, cookieHooks, noCacheHtml, TEST_NOW_HEADER, type Composition } from './compose.js';
 import type { Env } from './env.js';
 import { anonymousContext, errorPage, htmlResponse } from './errors.js';
 import { serveStatic } from './assets.js';
 import { offlineBuild, servePwa } from './sw.js';
-import { NOT_AUTHENTICATED, UnknownProfile } from './cells/UserCell.js';
+import { NOT_AUTHENTICATED, TOMBSTONED_HEADER, UnknownProfile } from './cells/UserCell.js';
 import {
   DISPLAY_NAME_HEADER,
   EMAIL_HEADER,
   IDENTITY_HEADERS,
   KIND_HEADER,
   matchRoute,
+  NOW_HEADER,
   PAT_HASH_HEADER,
   PICTURE_HEADER,
   SUBJECT_HEADER,
   wantsJson,
 } from './cells/router.js';
-import { pageRoutes } from './cells/routes/pages.js';
-import { apiRoutes } from './cells/routes/api.js';
+import { CELL_ROUTES } from './cells/routes/all.js';
 import { ACCOUNT_DELETE_PATH } from '../app/settings/account.js';
 import { resolveIdentity, type CookieVerdict, type Resolution } from '../app/auth/resolve.js';
 import { hexFrom, mergeAnonymous } from '../app/auth/mergeSaga.js';
@@ -39,6 +39,7 @@ import { servePublic } from './routes/openapi.js';
 import { serveMigrate } from './routes/migrate.js';
 import { serveMigrateDump } from './routes/migrateDump.js';
 import { serveTestJobs } from './routes/testJobs.js';
+import { refuseWithoutInternalToken } from './internalToken.js';
 
 export { UserCell } from './cells/UserCell.js';
 export { DirectoryCell } from './cells/DirectoryCell.js';
@@ -48,7 +49,6 @@ export { JobCell } from './cells/JobCell.js';
 /** The identity a cell receives; the display name is URI-encoded because a
  * header value is a byte string. */
 export { SUBJECT_HEADER, DISPLAY_NAME_HEADER };
-export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
 /** The shell's escape hatch: it sets this and reloads when recovery fails,
  * so the landing page is reachable and the reauth loop cannot close. */
 export const REAUTH_FALLBACK_COOKIE = 'prep_reauth_fallback';
@@ -339,7 +339,7 @@ function visitorResponse(request: Request, url: URL, c: Composition, resolution:
   }
   // A route that exists but needs an identity is 401; anything else never
   // existed, and saying so is not a signal worth withholding.
-  if (!matchRoute([...pageRoutes, ...apiRoutes], request.method, url.pathname)) {
+  if (!matchRoute(CELL_ROUTES, request.method, url.pathname)) {
     return { response: errorPage(c.renderer, c.buildToken, 404, request, 'Not Found'), cookie };
   }
   if (wantsJson(request)) return { response: Response.json({ detail: NOT_AUTHENTICATED }, { status: 401 }), cookie };
@@ -350,7 +350,7 @@ function visitorResponse(request: Request, url: URL, c: Composition, resolution:
 
 /** A tombstoned cell answers 410; the browser is told what that means. */
 async function onTombstone(response: Response, request: Request, c: Composition, identity: Identity): Promise<Response> {
-  if (response.status !== 410 || !response.headers.has('x-prep-tombstoned')) return response;
+  if (response.status !== 410 || !response.headers.has(TOMBSTONED_HEADER)) return response;
   if (identity.kind !== 'anon') return errorPage(c.renderer, c.buildToken, 404, request, 'Not Found');
   const out = wantsJson(request)
     ? Response.json({ detail: NOT_AUTHENTICATED }, { status: 401 })
@@ -408,7 +408,7 @@ async function routeByToken(request: Request, headers: Headers, env: Env, c: Com
   headers.set(PAT_HASH_HEADER, await c.hasher.sha256Hex(value.token.trim()));
   const stub = env.USER.get(env.USER.idFromName(parsed.subject));
   const response = await stub.fetch(new Request(request, { headers }));
-  if (response.status === 410 && response.headers.has('x-prep-tombstoned')) {
+  if (response.status === 410 && response.headers.has(TOMBSTONED_HEADER)) {
     return Response.json({ detail: BAD_TOKEN }, { status: 401 });
   }
   return response;
@@ -440,10 +440,8 @@ async function clearAnonymous(c: Composition): Promise<void> {
  * Read-only and test-only, behind the same token the seed takes.
  */
 async function dumpCell(request: Request, url: URL, env: Env, c: Composition): Promise<Response> {
-  if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
-  if (request.headers.get(INTERNAL_TOKEN_HEADER) !== c.internalToken) {
-    return Response.json({ detail: 'invalid X-Internal-Token' }, { status: 401 });
-  }
+  const refused = refuseWithoutInternalToken(request, c.internalToken);
+  if (refused) return refused;
   if (url.searchParams.get('cell') === 'directory') {
     return Response.json({ tables: await (c.directory as unknown as DirectorySeedApi).dumpTables() });
   }
@@ -478,10 +476,8 @@ const ANONYMOUS_PAGE = 100;
 const ANONYMOUS_PAGES = 20;
 
 async function seed(request: Request, env: Env, c: Composition): Promise<Response> {
-  if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
-  if (request.headers.get(INTERNAL_TOKEN_HEADER) !== c.internalToken) {
-    return Response.json({ detail: 'invalid X-Internal-Token' }, { status: 401 });
-  }
+  const refused = refuseWithoutInternalToken(request, c.internalToken);
+  if (refused) return refused;
   let body: { user?: unknown; profile?: unknown };
   try {
     body = (await request.json()) as typeof body;

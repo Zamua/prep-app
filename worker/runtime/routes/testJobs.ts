@@ -10,6 +10,7 @@
 import type { JobCellRpc } from '../../app/ports.js';
 import type { Composition } from '../compose.js';
 import type { Env } from '../env.js';
+import { refuseWithoutInternalToken } from '../internalToken.js';
 
 export const TEST_JOB_PREFIX = '/_test/job';
 
@@ -43,8 +44,8 @@ interface OwnerReset {
 /** Null when the path is not one of ours, so the caller falls through. */
 export async function serveTestJobs(request: Request, url: URL, env: Env, c: Composition, at: string): Promise<Response | null> {
   if (!c.testMode || !url.pathname.startsWith(TEST_JOB_PREFIX)) return null;
-  if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
-  if (request.headers.get('x-internal-token') !== c.internalToken) return Response.json({ detail: 'invalid X-Internal-Token' }, { status: 401 });
+  const refused = refuseWithoutInternalToken(request, c.internalToken);
+  if (refused) return refused;
 
   const cell = (id: string): JobCellRpc => env.JOB.get(env.JOB.idFromName(id)) as unknown as JobCellRpc;
   const rest = url.pathname.slice(TEST_JOB_PREFIX.length);

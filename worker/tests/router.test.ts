@@ -415,6 +415,18 @@ describe('the provider flows', () => {
     expect(visitor.headers.get('set-cookie')).toBeNull();
   });
 
+  it('sends a visitor on a job page to sign-in rather than a 404', async () => {
+    const { env: e } = await clerkish();
+    for (const path of ['/plan/w1', '/transform/w1/status', '/trivia/gen/w1']) {
+      const page = await worker.fetch(req(path), e);
+      expect(page.status, path).toBe(303);
+      expect(page.headers.get('location'), path).toBe('https://accounts.test/sign-in');
+    }
+    const poll = await worker.fetch(req('/plan/w1/fragment', { headers: { accept: 'application/json' } }), e);
+    expect(poll.status).toBe(401);
+    expect((await worker.fetch(req('/plan'), e)).status).toBe(404);
+  });
+
   it('forget-device redirects home and drops the cookie', async () => {
     const res = await call('/forget-device', { method: 'POST' });
     expect(res.status).toBe(303);

@@ -5,7 +5,7 @@ import { composeWith, type Composition } from '../runtime/compose.js';
 import { JobCell } from '../runtime/cells/JobCell.js';
 import { KIND_HEADER, NOW_HEADER, PAT_HASH_HEADER, SUBJECT_HEADER, type Route } from '../runtime/cells/router.js';
 import { TOMBSTONED_HEADER, UnknownProfile, UserCell } from '../runtime/cells/UserCell.js';
-import * as pages from '../runtime/cells/routes/pages.js';
+import { CELL_ROUTES } from '../runtime/cells/routes/all.js';
 import type { Env } from '../runtime/env.js';
 import { fakeCellState, FakeCellStorage } from './fakes/sqlStorage.js';
 import { expectedPage, fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
@@ -50,7 +50,7 @@ async function anonymousCell(): Promise<{ cell: UserCell; state: ReturnType<type
  * decides a match, so a test route is prepended and wins over the real
  * table's entry for the same pattern. */
 function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
-  const table = pages.pageRoutes as Route[];
+  const table = CELL_ROUTES as Route[];
   table.unshift(...routes);
   return run().finally(() => table.splice(0, routes.length));
 }
