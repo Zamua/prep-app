@@ -8,7 +8,7 @@ const BINARY_SEARCH_ANSWER =
  * session whose first due card is free text. Jobs themselves are started by
  * the flow, so no workflow rows are seeded. */
 export async function profileWorkflows(ctx: SeedContext): Promise<Record<string, unknown>> {
-  const { repos, at } = ctx;
+  const { repos, pins, at } = ctx;
 
   const a = repos.decks.create('algorithms', { contextPrompt: 'Sorting, searching and complexity analysis.', displayName: 'Algorithms' });
   const aCards: SeedCard[] = [
@@ -63,7 +63,7 @@ export async function profileWorkflows(ctx: SeedContext): Promise<Record<string,
   const t = repos.decks.createTrivia('systems-trivia', { topic: 'Operating systems and computer architecture.', intervalMinutes: 1440, displayName: 'Systems Trivia' });
 
   const sid = await repos.sessions.create(a, DEVICE_LABEL);
-  repos.pins.session(sid, at({ minutes: -2 }), at({ minutes: -6 }));
+  pins.session(sid, at({ minutes: -2 }), at({ minutes: -6 }));
 
   return {
     decks: {

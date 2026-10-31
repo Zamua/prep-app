@@ -414,16 +414,6 @@ export interface Transactions {
   sync<T>(fn: () => T): T;
 }
 
-/** The column pins the seed profiles write past the repositories. */
-export interface TestPins {
-  session(sid: string, lastActive: string, createdAt?: string | null): void;
-  answerInSession(sid: string, qid: number, answeredAt: string, result: string): void;
-  pinnedAt(deckId: number, pinnedAt: string): void;
-  notificationSentAt(noteId: number, sentAt: string): void;
-  workflowStartedAt(workflowId: string, startedAt: string): void;
-  tokenCreatedAt(tokenId: number, createdAt: string): void;
-}
-
 export interface Hasher {
   sha256Hex(text: string): Promise<string>;
 }
@@ -459,7 +449,6 @@ export interface UserRepos {
   instant: InstantRepo;
   tombstone: TombstoneRepo;
   tx: Transactions;
-  pins: TestPins;
 }
 
 // ---- deck interchange codecs ----------------------------------------------

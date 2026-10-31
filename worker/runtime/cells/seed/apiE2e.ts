@@ -18,9 +18,9 @@ export function apiE2eToken(user: string): string {
  * `reader`, whose legacy-format token pins a masked prefix in a rendered
  * page and cannot authenticate. */
 export async function profileApiE2e(ctx: SeedContext): Promise<Record<string, unknown>> {
-  const { repos, user, hasher, at } = ctx;
+  const { repos, pins, user, hasher, at } = ctx;
   const plaintext = apiE2eToken(user);
   const token = repos.tokens.insert(await hasher.sha256Hex(plaintext), maskToken(plaintext), 'e2e');
-  repos.pins.tokenCreatedAt(token.id, at({ days: -1 }));
+  pins.tokenCreatedAt(token.id, at({ days: -1 }));
   return { api_tokens: [token.id] };
 }

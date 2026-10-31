@@ -38,28 +38,25 @@ import {
   type Route,
 } from './router.js';
 import { CELL_ROUTES } from './routes/all.js';
-import { createUser, isAnonymousProfile, PROFILES, type Delta } from './seed/index.js';
+import * as seedCell from './seed/cell.js';
 import { parseCellImage, type CellImage, type ImageRestore } from '../../domain/cellImage.js';
 import { applyImage, imageOf } from './image.js';
 
-const SESSION_COUNTER_KEY = 'test_session_counter';
 /** A profile with no rows: the seed wipes and returns `{}`. */
-const ANONYMOUS_PROFILE = 'anonymous';
 /** What the partials render for a job whose record no longer answers. */
-const GONE_STATUS = 'gone';
 
-export class UnknownProfile extends Error {}
 
 /** A job step reaching a cell the deletion already emptied. Not a refusal:
  * the write will never succeed, so the step spends its attempts and the job
  * fails rather than retrying against a tombstone forever. */
 export class AccountDestroyed extends Error {}
 
+export { UnknownProfile } from './seed/cell.js';
+
 export const TOMBSTONED_HEADER = 'x-prep-tombstoned';
 /** The `detail` an unauthenticated request answers with. */
 export const NOT_AUTHENTICATED = 'not authenticated';
 
-const MS: Record<keyof Delta, number> = { days: 86_400_000, hours: 3_600_000, minutes: 60_000 };
 
 /** A wake is never asked for the past: a due-now alarm lands just after now. */
 const ALARM_FLOOR_MS = 1;
@@ -73,7 +70,7 @@ const ALARM_FLOOR_MS = 1;
  */
 const TICK_MS = 300_000;
 
-export class UserCell extends DurableObject<Env> implements UserCellRpc {
+export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCell.SeedRpc {
   private readonly c: Composition;
   private readonly storage: ReadCachedStorage;
 
@@ -217,57 +214,28 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     repos.prefs.setIdBase(idx);
   }
 
-  // ---- the seed --------------------------------------------------------
+  // ---- the seed: test-only, the work is in seed/cell.ts --------------------
 
-  /**
-   * Step one of a re-seed, alone in its RPC: `deleteAll` and a profile's rows
-   * in one call cannot both be proven durable, and the write is rejected.
-   * Validates first, so an unknown profile costs the cell nothing.
-   */
   async wipe(profile: string): Promise<void> {
-    if (!PROFILES[profile] && profile !== ANONYMOUS_PROFILE) throw new UnknownProfile(`unknown profile ${JSON.stringify(profile)}`);
-    await this.storage.deleteAll();
+    return seedCell.wipe(this.seedHost(), profile);
   }
 
-  /** Step two: the schema and the profile's rows on the cell `wipe` emptied,
-   * returned as the delta the caller asserts against. */
   async seed(profile: string, user: string, at: string | null = null): Promise<Record<string, unknown>> {
-    const build = PROFILES[profile];
-    if (!build && profile !== ANONYMOUS_PROFILE) throw new UnknownProfile(`unknown profile ${JSON.stringify(profile)}`);
-    this.c.migrateUserCell(this.storage);
-    this.c.resetIdBlock(this.storage);
-    await this.storage.put(SESSION_COUNTER_KEY, 0);
-    this.c.resetRandom();
-    if (!build) return {};
-
-    const clock = at ? clockFor(this.c, new Request('https://cell.internal/', { headers: { [NOW_HEADER]: at } })) : this.c.clock;
-    const now = clock.now();
-    const repos = this.repos(clock);
-    createUser(repos, user, profile);
-    repos.prefs.setIdBase(0);
-    const atDelta = (delta: Delta = {}): string => {
-      let ms = 0;
-      for (const [k, v] of Object.entries(delta)) ms += (v ?? 0) * MS[k as keyof Delta];
-      return isoUtc(new Date(now.getTime() + ms));
-    };
-    const ids = await build({ repos, user, hasher: this.c.hasher, at: atDelta });
-    await this.c.directory.register(user, isAnonymousProfile(profile), isoUtc(now), { idx: 0 });
-    await this.ensureAlarm();
-    return { user, profile, now: isoUtc(now), ...ids };
+    return seedCell.seed(this.seedHost(), profile, user, at);
   }
 
-  /**
-   * A job whose record is gone: the badge row closed on the terminal status
-   * and the progress row a poll answers from dropped out from under it. The
-   * only way a test reaches the partial's `gone` branch.
-   */
   async forgetJob(jobId: string, at: string): Promise<void> {
-    const repos = this.repos(fixedClock(at));
-    repos.tx.sync(() => {
-      repos.jobs.updateStatus(jobId, GONE_STATUS);
-      repos.jobs.setTerminalAt(jobId);
-      repos.jobProgress.remove(jobId);
-    });
+    seedCell.forgetJob(this.seedHost(), jobId, at);
+  }
+
+  private seedHost(): seedCell.SeedHost {
+    return {
+      c: this.c,
+      storage: this.storage,
+      repos: (clock) => this.repos(clock),
+      reposAt: (at) => this.repos(fixedClock(at)),
+      ensureAlarm: () => this.ensureAlarm(),
+    };
   }
 
   // ---- RPC -------------------------------------------------------------------

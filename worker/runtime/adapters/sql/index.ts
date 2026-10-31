@@ -14,7 +14,6 @@ import { SqlJobProgressRepo } from './jobProgressRepo.js';
 import { SqlJobStatusRepo } from './jobStatusRepo.js';
 import { SqlNotifyRepo, SqlPushSubRepo } from './notifyRepo.js';
 import { SqlOfflineRepo } from './offlineRepo.js';
-import { SqlTestPins } from './testPins.js';
 import { SqlPrefsRepo } from './prefsRepo.js';
 import { SqlQuestionRepo } from './questionRepo.js';
 import { readCacheOf } from './readCache.js';
@@ -61,7 +60,6 @@ export function userRepos(raw: CellStorage, deps: RepoDeps): UserRepos {
     instant: new SqlInstantRepo(storage, clock, deps.random),
     tombstone: new SqlTombstoneRepo(storage),
     tx: { sync: <T>(fn: () => T) => storage.transactionSync(fn) },
-    pins: new SqlTestPins(storage),
   };
 }
 
@@ -71,3 +69,5 @@ export { ReadCachingStorage } from './readCache.js';
 export { SqlJobLedger } from './jobLedgerRepo.js';
 export { SqlLimiterRepo } from './limiterRepo.js';
 export type { CellStorage } from './storage.js';
+
+export { SqlTestPins } from './testPins.js';

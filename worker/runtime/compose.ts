@@ -58,6 +58,7 @@ import { SqlJsApkg } from './adapters/apkg.js';
 import { FflateZip } from './adapters/zip.js';
 import { createRenderer } from './adapters/nunjucks/index.js';
 import { SeededSessionIds, RandomSessionIds, SeededRandom, WebCryptoRandom } from './adapters/random.js';
+import type { TestPins } from './cells/seed/pins.js';
 import { DATA_TABLES } from './adapters/sql/schema.js';
 import {
   countRows,
@@ -71,6 +72,7 @@ import {
   SqlDirectoryRepo,
   SqlJobLedger,
   SqlLimiterRepo,
+  SqlTestPins,
   ReadCachingStorage,
   USER_MIGRATIONS,
   userRepos,
@@ -91,7 +93,8 @@ export const TEST_SEED = 20260314;
 /** The IANA `sub` claim a push service contacts about operational issues. */
 export const DEFAULT_VAPID_SUB = 'mailto:noreply@example.com';
 export const TEST_NOW_HEADER = 'x-prep-test-now';
-const SESSION_COUNTER_KEY = 'test_session_counter';
+/** Where a test-mode cell keeps its seeded session-id counter. */
+export const SESSION_COUNTER_KEY = 'test_session_counter';
 
 /** Three generators, seeded apart so one draw cannot shift another's. */
 export interface Randoms {
@@ -189,6 +192,8 @@ export interface Composition {
   importGlobalRows(storage: CellStorage, table: string, rows: readonly Record<string, unknown>[]): number;
   countRows(storage: CellStorage, table: string): number;
   resetIdBlock(storage: CellStorage): void;
+  /** The seed's column pins over a cell's storage; test seeding only. */
+  seedPins(storage: CellStorage): TestPins;
 }
 
 const compositions = new WeakMap<Env, Composition>();
@@ -437,6 +442,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     countRows: (storage, table) => countRows(storage.sql, table),
     seedIdBlock: (storage, idx) => seedSequences(storage.sql, idx),
     resetIdBlock: (storage) => resetSequences(storage.sql),
+    seedPins: (storage) => new SqlTestPins(storage),
   };
   compositions.set(env, composition);
   return composition;

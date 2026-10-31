@@ -117,7 +117,7 @@ describe('SessionRepo', () => {
     const c = cell();
     const { d, ids } = deckWithDue(c, ['2026-03-14T12:00:00+00:00']);
     const old = await c.repos.sessions.create(d, 'old');
-    c.repos.pins.session(old, '2026-03-01T00:00:00+00:00');
+    c.pins.session(old, '2026-03-01T00:00:00+00:00');
     const fresh = await c.repos.sessions.create(d, 'fresh');
     const snoozed = await c.repos.sessions.create(d, 'snoozed');
     c.repos.sessions.snooze(snoozed, '2026-03-14T18:00:00+00:00');
