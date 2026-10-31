@@ -1,6 +1,6 @@
 // /settings/account: the delete-account flow. Only a provider with
-// first-class accounts has one; a proxy-supplied identity would just come
-// back on the next request, so the route 404s there.
+// first-class accounts has a deleter; a proxy-supplied identity would just
+// come back on the next request, so without one the route 404s.
 import { notFound } from '../errors.js';
 import { page, type PageRequest, type PageResult } from '../pageResult.js';
 import type { UserRepos } from '../ports.js';
@@ -18,12 +18,11 @@ export interface AccountDeleter {
 }
 
 export interface AccountDeps {
-  authProvider: string;
   deleter: AccountDeleter | null;
 }
 
 function deleterFor(deps: AccountDeps): AccountDeleter {
-  if (deps.authProvider !== 'clerk' || !deps.deleter) throw notFound(NO_FLOW);
+  if (!deps.deleter) throw notFound(NO_FLOW);
   return deps.deleter;
 }
 

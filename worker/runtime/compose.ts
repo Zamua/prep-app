@@ -32,6 +32,7 @@ import { registerWorkflowSteps } from '../app/jobs/index.js';
 import { StepRegistry } from '../app/jobs/registry.js';
 import type { StepGraph } from '../domain/jobs/graph.js';
 import type { AuthUrls } from '../app/pageContext.js';
+import type { AccountDeleter } from '../app/settings/account.js';
 import type { OpenRouterAuth } from '../app/settings/openrouter.js';
 import type { Fuzz } from '../domain/fsrs/index.js';
 import { DEFAULT_LIMITS, type Limits } from '../domain/instant/limiter.js';
@@ -43,7 +44,7 @@ import { NO_FUNDING } from '../app/agent/funding.js';
 import { StubWorkflowRunner } from './adapters/runnerStub.js';
 import { namespaceDirectory, namespaceJobs, namespaceLimiter, namespaceUserCells, NO_RETRY } from './adapters/cells.js';
 import { PROBE_GRAPHS, registerProbe } from './adapters/jobProbe.js';
-import { ClerkConfigError, ClerkProvider, ClerkVerifier, clerkConfig, frontendApiHost, type ClerkConfig } from './adapters/clerk.js';
+import { ClerkAccountDeleter, ClerkConfigError, ClerkProvider, ClerkVerifier, clerkConfig, frontendApiHost, type ClerkConfig } from './adapters/clerk.js';
 import { clockFromEnv, FixedClock, parseFakeNow, SystemClock } from './adapters/clock.js';
 import { FakeIdentityProvider, NoIdentityProvider } from './adapters/fakeIdentity.js';
 import { FreeTierAgent, freeTierConfig, INSTANT_MAX_OUTPUT_TOKENS } from './adapters/agents/freeTier.js';
@@ -145,6 +146,9 @@ export interface Composition {
   vapidPublicKey: string;
   /** What a page embeds for the sign-in chrome and the ClerkJS bootstrap. */
   authUrls: AuthUrls;
+  /** Null unless real Clerk sign-in is live: the fake provider has no
+   * upstream account to delete. */
+  accountDeleter: AccountDeleter | null;
   renderer: Renderer;
   buildToken: string;
   testMode: boolean;
@@ -382,6 +386,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     freeTierConfigured: freeTier !== null,
     vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
     authUrls: authUrlsOf(clerk?.provider ?? null, identity),
+    accountDeleter: clerk && !testMode ? new ClerkAccountDeleter(clerk.config, clerk.provider.urls().sign_out ?? '') : null,
     renderer: createRenderer({ clock, root: '' }),
     buildToken: resolveBuildToken(env.PREP_BUILD_ID),
     testMode,

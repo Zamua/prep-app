@@ -2,6 +2,7 @@
 // JWKS, the two token sources, the dormant-session read and the hosted URLs.
 // No SDK: the session JWT is the whole credential.
 import type { Clock, Identity, IdentityProvider, SignInUrls } from '../../app/ports.js';
+import type { AccountDeleter } from '../../app/settings/account.js';
 import { b64Decode, b64uDecodeText } from '../../domain/base64.js';
 import { parseCookieHeader } from '../../domain/cookies.js';
 
@@ -268,10 +269,32 @@ export function bearerOrSessionCookie(request: Request): string | null {
   return parseCookieHeader(request.headers.get('cookie'))[SESSION_COOKIE] ?? null;
 }
 
-/** `DELETE /v1/users/<id>` with the secret key: the webhook does the wipe. */
-export async function deleteClerkUser(config: ClerkConfig, userId: string, fetchImpl: typeof fetch = fetch): Promise<Response> {
-  return fetchImpl(`https://api.clerk.com/v1/users/${encodeURIComponent(userId)}`, {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${config.secretKey}` },
-  });
+export const DELETE_FAILED = "Your account couldn't be deleted right now, and nothing was removed. Try again in a minute.";
+
+/** `DELETE /v1/users/<id>` with the secret key. The `user.deleted` webhook
+ * wipes the cell, so this only touches Clerk. */
+export class ClerkAccountDeleter implements AccountDeleter {
+  constructor(
+    private readonly config: ClerkConfig,
+    private readonly signOut: string,
+    private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+  ) {}
+
+  async deleteUpstream(subject: string): Promise<void> {
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${this.config.secretKey}` },
+      });
+    } catch {
+      throw new Error(DELETE_FAILED);
+    }
+    // 404: already gone upstream, as on a retry after an earlier delete landed.
+    if (!res.ok && res.status !== 404) throw new Error(DELETE_FAILED);
+  }
+
+  signOutUrl(): string {
+    return this.signOut;
+  }
 }

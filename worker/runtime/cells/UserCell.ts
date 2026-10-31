@@ -111,6 +111,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
       apkg: c.apkg,
       authProvider: c.authProvider,
       authUrls: c.authUrls,
+      accountDeleter: c.accountDeleter,
       freeTierConfigured: c.freeTierConfigured,
       vapidPublicKey: c.vapidPublicKey,
       appBase: appBase(request),

@@ -21,7 +21,7 @@ import type { CellPorts, Route } from '../router.js';
 const deckDeps = (ports: CellPorts) => ({ freeTierConfigured: ports.freeTierConfigured, random: ports.random, runner: ports.runner });
 const triviaDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, agent: ports.agent, runner: ports.runner, freeTierConfigured: ports.freeTierConfigured });
 const shellDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, signInUrl: ports.authUrls.signIn });
-const accountDeps = (ports: CellPorts) => ({ authProvider: ports.authProvider, deleter: null });
+const accountDeps = (ports: CellPorts) => ({ deleter: ports.accountDeleter });
 const notifyDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, webPush: ports.webPush, vapidPublicKey: ports.vapidPublicKey });
 const openRouterDeps = (ports: CellPorts) => ({
   freeTierConfigured: ports.freeTierConfigured,

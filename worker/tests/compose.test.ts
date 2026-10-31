@@ -26,6 +26,20 @@ describe('compose', () => {
     expect(both.join(' ')).not.toContain('PREP_VAPID');
   });
 
+  it('can delete accounts only where real Clerk sign-in is live', () => {
+    const CLERK = {
+      CLERK_ISSUER: 'https://clerk.example.test',
+      CLERK_JWKS_URL: 'https://clerk.example.test/.well-known/jwks.json',
+      CLERK_AUTHORIZED_PARTIES: 'https://app.example.test',
+      CLERK_ACCOUNTS_URL: 'https://accounts.example.test',
+      CLERK_PUBLISHABLE_KEY: 'pk_test_' + Buffer.from('clerk.example.test$').toString('base64'),
+      CLERK_SECRET_KEY: 'sk_test_secret',
+    };
+    expect(compose(fakeEnv({ ...PROD, ...CLERK })).accountDeleter?.signOutUrl()).toMatch(/^https:\/\/accounts\.example\.test\/sign-out/);
+    expect(compose(fakeEnv(PROD)).accountDeleter).toBeNull();
+    expect(compose(fakeEnv({ PREP_ENV: 'staging', PREP_TEST_MODE: '1', ...CLERK })).accountDeleter).toBeNull();
+  });
+
   it('composes prod without pins, on the system clock', () => {
     const c = compose(fakeEnv(PROD));
     expect(c.testMode).toBe(false);

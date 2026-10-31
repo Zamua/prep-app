@@ -4,10 +4,12 @@ import { b64uEncode } from '../domain/base64';
 import {
   bearerOrSessionCookie,
   CLOCK_SKEW_MS,
+  ClerkAccountDeleter,
   ClerkConfigError,
   ClerkProvider,
   ClerkVerifier,
   clerkConfig,
+  DELETE_FAILED,
   frontendApiHost,
   identityFromClaims,
   formUrlEncode,
@@ -262,5 +264,38 @@ describe('the provider', () => {
     expect(frontendApiHost('')).toBeNull();
     expect(frontendApiHost('no-underscore')).toBeNull();
     expect(frontendApiHost('pk_test_!!!not-base64!!!')).toBeNull();
+  });
+});
+
+describe('the account deleter', () => {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  const answering = (status: number) => async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(null, { status });
+  };
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  it('deletes the user at Clerk with the secret key', async () => {
+    await new ClerkAccountDeleter(CONFIG, '/out', answering(200)).deleteUpstream('user_2abc/x');
+    expect(calls).toEqual([{ url: 'https://api.clerk.com/v1/users/user_2abc%2Fx', init: { method: 'DELETE', headers: { authorization: 'Bearer sk_test_secret' } } }]);
+  });
+
+  it('treats a user already gone as deleted, so a retry succeeds', async () => {
+    await expect(new ClerkAccountDeleter(CONFIG, '/out', answering(404)).deleteUpstream('user_2abc')).resolves.toBeUndefined();
+  });
+
+  it('rejects with a message the page can show when Clerk refuses or is unreachable', async () => {
+    await expect(new ClerkAccountDeleter(CONFIG, '/out', answering(500)).deleteUpstream('user_2abc')).rejects.toThrow(DELETE_FAILED);
+    await expect(new ClerkAccountDeleter(CONFIG, '/out', answering(401)).deleteUpstream('user_2abc')).rejects.toThrow(DELETE_FAILED);
+    const down = async () => {
+      throw new TypeError('network down');
+    };
+    await expect(new ClerkAccountDeleter(CONFIG, '/out', down).deleteUpstream('user_2abc')).rejects.toThrow(DELETE_FAILED);
+  });
+
+  it('signs out where the provider says', () => {
+    expect(new ClerkAccountDeleter(CONFIG, 'https://accounts.example.test/sign-out').signOutUrl()).toBe('https://accounts.example.test/sign-out');
   });
 });
