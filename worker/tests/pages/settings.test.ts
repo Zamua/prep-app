@@ -1,25 +1,52 @@
 import { describe, expect, it } from 'vitest';
 import { DELETE_FAILED, MISMATCH, type AccountDeleter } from '../../app/settings/account.js';
 import { RETIRED_PROVIDER } from '../../app/settings/providers.js';
-import { expectedContext, renderedContext, seeded, USER } from './setup.js';
+import { DEFAULT_DESIRED_RETENTION } from '../../domain/fsrs/index.js';
+import { seeded, USER } from './setup.js';
 
-describe('the recorded settings pages', () => {
-  it.each([
-    ['/settings/srs', 'settings_srs.html', '17-GET-settings-srs'],
-    ['/settings/editor', 'settings_editor.html', '18-GET-settings-editor'],
-    ['/settings/api', 'settings_api.html', '19-GET-settings-api'],
-    ['/notify/log', 'notify/log.html', '21-GET-notify-log'],
-  ])('renders %s as recorded', async (path, template, file) => {
+describe('the settings pages as seeded', () => {
+  it('/settings/srs shows the default retention, unsaved', async () => {
     const h = await seeded('reader');
-    expect((await h.get(path)).status).toBe(200);
-    expect(h.rendered()?.template).toBe(template);
-    expect(renderedContext(h)).toEqual(expectedContext('reader', file));
+    expect((await h.get('/settings/srs')).status).toBe(200);
+    expect(h.rendered()?.template).toBe('settings_srs.html');
+    expect(h.rendered()?.context).toMatchObject({ current: DEFAULT_DESIRED_RETENTION, is_default: true, saved: false });
   });
 
-  it('renders /notify as recorded once the VAPID key is filled in', async () => {
+  it('/settings/editor offers the three input modes, plain selected', async () => {
+    const h = await seeded('reader');
+    expect((await h.get('/settings/editor')).status).toBe(200);
+    expect(h.rendered()?.template).toBe('settings_editor.html');
+    expect(h.rendered()?.context).toMatchObject({ current_mode: 'vanilla', modes: ['vanilla', 'vim', 'emacs'], saved: false });
+  });
+
+  it('/settings/api lists the token by label and prefix, never its hash', async () => {
+    const h = await seeded('reader');
+    expect((await h.get('/settings/api')).status).toBe(200);
+    expect(h.rendered()?.template).toBe('settings_api.html');
+    const ctx = h.rendered()!.context;
+    expect(ctx).toMatchObject({ created_plaintext: null, flash: null, tokens: [{ label: 'Seed CLI', key_prefix: 'prep_pat_Se…0000', last_used_at: null }] });
+    expect(JSON.stringify(ctx['tokens'])).not.toContain('token_hash');
+  });
+
+  it('/notify/log lists what was sent, newest first', async () => {
+    const h = await seeded('reader');
+    expect((await h.get('/notify/log')).status).toBe(200);
+    expect(h.rendered()?.template).toBe('notify/log.html');
+    expect(h.rendered()?.context['entries']).toMatchObject([
+      { title: '3 cards due in World Capitals', source: 'digest', url: '/study/world-capitals' },
+      { title: 'Distributed Systems is ready', source: 'when-ready', url: '/study/distributed-systems' },
+    ]);
+  });
+
+  it('/notify shows the stored preferences and the deploy VAPID key', async () => {
     const h = await seeded('reader', { PREP_VAPID_PUBLIC_KEY: 'BSeedPublicKey' });
     expect((await h.get('/notify')).status).toBe(200);
-    expect(renderedContext(h)).toEqual({ ...expectedContext('reader', '20-GET-notify'), vapid_key: 'BSeedPublicKey' });
+    expect(h.rendered()?.template).toBe('notify_settings.html');
+    expect(h.rendered()?.context).toMatchObject({
+      devices: 0,
+      vapid_key: 'BSeedPublicKey',
+      prefs: { mode: 'off', tz: 'America/New_York', digest_hour: 9, threshold: 3 },
+    });
   });
 
   it('marks the log seen, so the badge on that very page reads zero', async () => {

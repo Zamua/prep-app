@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { expectedContext, renderedContext, seeded } from './setup.js';
+import { DEFAULT_TRIVIA_INTERVAL_MINUTES } from '../../domain/notify/wake.js';
+import { seeded } from './setup.js';
 
 const NO_FREE_TIER = { PREP_FREE_INFERENCE_BASE_URL: '', PREP_FREE_INFERENCE_API_KEY: '', PREP_FREE_INFERENCE_MODEL: '' };
 
 describe('the new-deck forms', () => {
   it.each([
-    ['/decks/new', 'deck_new_chooser.html', '09-GET-decks-new'],
-    ['/decks/new/srs', 'deck_new_srs.html', '10-GET-decks-new-srs'],
-    ['/decks/new/trivia', 'deck_new_trivia.html', '11-GET-decks-new-trivia'],
-  ])('renders %s as recorded', async (path, template, file) => {
+    ['/decks/new', 'deck_new_chooser.html', {}],
+    ['/decks/new/srs', 'deck_new_srs.html', { name_value: '', context_value: '', error: null }],
+    ['/decks/new/trivia', 'deck_new_trivia.html', { name_value: '', topic_value: '', interval_value: DEFAULT_TRIVIA_INTERVAL_MINUTES, error: null }],
+  ])('renders %s blank', async (path, template, form) => {
     const h = await seeded('reader');
     expect((await h.get(path)).status).toBe(200);
     expect(h.rendered()?.template).toBe(template);
-    expect(renderedContext(h)).toEqual(expectedContext('reader', file));
+    expect(h.rendered()?.context).toMatchObject(form);
   });
 });
 

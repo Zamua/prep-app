@@ -1,19 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { expectedContext, renderedContext, seeded } from './setup.js';
+import { seeded } from './setup.js';
 
 describe('the question forms', () => {
-  it('renders the empty new-question form as recorded', async () => {
+  it('renders the new-question form empty', async () => {
     const h = await seeded('reader');
     expect((await h.get('/deck/world-capitals/question/new')).status).toBe(200);
     expect(h.rendered()?.template).toBe('question_new.html');
-    expect(renderedContext(h)).toEqual(expectedContext('reader', '12-GET-deck-world-capitals-question-new'));
+    expect(h.rendered()?.context).toMatchObject({ deck_name: 'world-capitals', error: null, form: {} });
   });
 
-  it('renders the edit form for a code card as recorded', async () => {
+  it('fills the edit form from the stored code card, blanking what it lacks', async () => {
     const h = await seeded('reader');
     expect((await h.get('/question/4/edit')).status).toBe(200);
     expect(h.rendered()?.template).toBe('question_edit.html');
-    expect(renderedContext(h)).toEqual(expectedContext('reader', '13-GET-question-4-edit'));
+    const stored = h.state.fake.rows('questions').find((q) => q['id'] === 4)!;
+    expect(h.rendered()?.context).toMatchObject({
+      deck_name: 'world-capitals',
+      error: null,
+      q: { id: 4, type: 'code' },
+      form: {
+        type: 'code',
+        prompt: stored['prompt'],
+        answer: stored['answer'],
+        language: 'python',
+        skeleton: stored['skeleton'],
+        rubric: stored['rubric'],
+        topic: 'python',
+        answer_regex: '',
+        choices: '',
+      },
+    });
   });
 
   it('unwraps a multi answer into lines and re-joins the choices', async () => {

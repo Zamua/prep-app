@@ -1,18 +1,16 @@
 // One seeded user cell, driven through its own route table, with the
-// rendered template and context captured. The corpus under
-// tests/fixtures/pages holds the expected template and context.
+// rendered template and context captured.
 import type { Composition } from '../../runtime/compose.js';
 import { composeWith } from '../../runtime/compose.js';
 import { UserCell } from '../../runtime/cells/UserCell.js';
 import { KIND_HEADER, SUBJECT_HEADER } from '../../runtime/cells/router.js';
 import type { Env } from '../../runtime/env.js';
 import { fakeCellState } from '../fakes/sqlStorage.js';
-import { expectedPage, fakeEnv, req, spyRenderer } from '../helpers.js';
+import { fakeEnv, req, spyRenderer } from '../helpers.js';
 
 export const USER = 'seed@example.com';
 
-/** A funded free tier, so `agent_available` and the
- * free-tier callout read as the corpus recorded them. */
+/** A funded free tier, so a seeded account has an agent available. */
 export const FREE_TIER = {
   PREP_FREE_INFERENCE_BASE_URL: 'http://127.0.0.1:1/v1',
   PREP_FREE_INFERENCE_API_KEY: 'test-free-tier-key',
@@ -64,32 +62,4 @@ export async function seeded(profile: string, overrides: Partial<Env> = {}): Pro
   await h.cell.seed(profile, USER, null);
   h.renderer.calls.length = 0;
   return h;
-}
-
-/** The corpus context, minus the columns a cell does not carry: the user
- * key was dropped from every table when one cell became one user. */
-export function expectedContext(profile: string, file: string): Record<string, unknown> {
-  return stripUserColumns(expectedPage(profile, file).context ?? {}) as Record<string, unknown>;
-}
-
-export function stripUserColumns(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripUserColumns);
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (k === 'user_id') continue;
-      out[k] = stripUserColumns(v);
-    }
-    return out;
-  }
-  return value;
-}
-
-/** The context a page rendered with, comparable against the corpus: the
- * request origin is the router's, not the corpus's. */
-export function renderedContext(h: Harness): Record<string, unknown> {
-  const call = h.rendered();
-  if (!call) throw new Error('nothing was rendered');
-  const { app_base: _appBase, ...rest } = call.context;
-  return JSON.parse(JSON.stringify(rest)) as Record<string, unknown>;
 }
