@@ -269,32 +269,25 @@ export function bearerOrSessionCookie(request: Request): string | null {
   return parseCookieHeader(request.headers.get('cookie'))[SESSION_COOKIE] ?? null;
 }
 
-export const DELETE_FAILED = "Your account couldn't be deleted right now, and nothing was removed. Try again in a minute.";
+/** Bounds a hung Clerk API, which would otherwise hold the request open. */
+const DELETE_TIMEOUT_MS = 10_000;
 
 /** `DELETE /v1/users/<id>` with the secret key. The `user.deleted` webhook
- * wipes the cell, so this only touches Clerk. */
+ * wipes the cell, so this only touches Clerk. Any answer but a 2xx is a
+ * failure, a 404 included: it is what a key from another Clerk instance
+ * gets for every user. */
 export class ClerkAccountDeleter implements AccountDeleter {
   constructor(
     private readonly config: ClerkConfig,
-    private readonly signOut: string,
     private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   async deleteUpstream(subject: string): Promise<void> {
-    let res: Response;
-    try {
-      res = await this.fetchImpl(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
-        method: 'DELETE',
-        headers: { authorization: `Bearer ${this.config.secretKey}` },
-      });
-    } catch {
-      throw new Error(DELETE_FAILED);
-    }
-    // 404: already gone upstream, as on a retry after an earlier delete landed.
-    if (!res.ok && res.status !== 404) throw new Error(DELETE_FAILED);
-  }
-
-  signOutUrl(): string {
-    return this.signOut;
+    const res = await this.fetchImpl(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${this.config.secretKey}` },
+      signal: AbortSignal.timeout(DELETE_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`clerk refused the delete: HTTP ${res.status}`);
   }
 }

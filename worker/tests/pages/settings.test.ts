@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MISMATCH, type AccountDeleter } from '../../app/settings/account.js';
+import { DELETE_FAILED, MISMATCH, type AccountDeleter } from '../../app/settings/account.js';
 import { RETIRED_PROVIDER } from '../../app/settings/providers.js';
 import { expectedContext, renderedContext, seeded, USER } from './setup.js';
 
@@ -187,7 +187,6 @@ describe('/settings/account', () => {
         if (fail) throw new Error(fail);
         deleted.push(subject);
       },
-      signOutUrl: () => 'https://accounts.example.test/sign-out',
     };
     h.c.accountDeleter = deleter;
     return { h, deleted };
@@ -199,11 +198,11 @@ describe('/settings/account', () => {
     expect(h.rendered()).toMatchObject({ template: 'settings_account.html', context: { error: null } });
   });
 
-  it('deletes the account upstream and signs out once the ID is typed exactly', async () => {
+  it("deletes the account upstream and lands on the app's own sign-out once the ID is typed exactly", async () => {
     const { h, deleted } = await withDeleter();
     const res = await h.post('/settings/account/delete', { confirm: ` ${USER} ` });
     expect(res.status).toBe(303);
-    expect(res.headers.get('location')).toBe('https://accounts.example.test/sign-out');
+    expect(res.headers.get('location')).toBe('/sign-out');
     expect(deleted).toEqual([USER]);
   });
 
@@ -214,9 +213,15 @@ describe('/settings/account', () => {
     expect(deleted).toEqual([]);
   });
 
-  it('shows the upstream failure and stays on the page', async () => {
-    const { h } = await withDeleter('upstream said no');
+  it('says nothing was removed when the upstream delete fails, whatever it threw', async () => {
+    const { h } = await withDeleter('clerk refused the delete: HTTP 500');
     expect((await h.post('/settings/account/delete', { confirm: USER })).status).toBe(502);
-    expect(h.rendered()?.context['error']).toBe('upstream said no');
+    expect(h.rendered()?.context['error']).toBe(DELETE_FAILED);
+  });
+
+  it('refuses an empty confirmation even before a profile exists', async () => {
+    const { h, deleted } = await withDeleter();
+    expect((await h.post('/settings/account/delete', { confirm: '' })).status).toBe(400);
+    expect(deleted).toEqual([]);
   });
 });

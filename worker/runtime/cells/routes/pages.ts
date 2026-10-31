@@ -109,7 +109,7 @@ export const pageRoutes: readonly Route[] = [
   ),
   route('POST', '/settings/api/tokens/{token_id}/delete', 'signedIn', (p, { repos }) => apiSettings.apiTokenDelete(repos, p)),
   route('GET', '/settings/account', 'signedIn', (_p, { ports }) => account.accountSettings(accountDeps(ports))),
-  route('POST', '/settings/account/delete', 'signedIn', (p, { repos, ports }) => account.accountDelete(repos, p, accountDeps(ports))),
+  route('POST', account.ACCOUNT_DELETE_PATH, 'signedIn', (p, { repos, ports }) => account.accountDelete(repos, p, accountDeps(ports))),
 
   // Notifications: the two pages; the prefs and subscribe endpoints are the
   // JSON surface.

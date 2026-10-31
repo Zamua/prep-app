@@ -22,6 +22,7 @@ import {
 } from './cells/router.js';
 import { pageRoutes } from './cells/routes/pages.js';
 import { apiRoutes } from './cells/routes/api.js';
+import { ACCOUNT_DELETE_PATH } from '../app/settings/account.js';
 import { resolveIdentity, type CookieVerdict, type Resolution } from '../app/auth/resolve.js';
 import { hexFrom, mergeAnonymous } from '../app/auth/mergeSaga.js';
 import type { CellSnapshot } from '../app/entities.js';
@@ -217,6 +218,11 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
   if (path === '/api/instant/generate') {
     if (request.method !== 'POST') return plain(methodNotAllowed());
     return { response: await instantGenerate(request, env, c, resolution), cookie: resolution.cookie };
+  }
+
+  // Irreversible, so a form posted from another site never reaches the cell.
+  if (request.method === 'POST' && path === ACCOUNT_DELETE_PATH && !sameOrigin(request)) {
+    return plain(errorPage(c.renderer, c.buildToken, 403, request, 'cross-site request'));
   }
 
   if (!resolution.identity) return visitorResponse(request, url, c, resolution, cookies, page);

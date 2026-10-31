@@ -5,16 +5,19 @@ import { notFound } from '../errors.js';
 import { page, type PageRequest, type PageResult } from '../pageResult.js';
 import type { UserRepos } from '../ports.js';
 
+export const ACCOUNT_DELETE_PATH = '/settings/account/delete';
 export const NO_FLOW = 'this deploy has no in-app account-delete flow';
 export const MISMATCH = "That doesn't match your account ID. Type it exactly as shown to confirm.";
+export const DELETE_FAILED = "Your account couldn't be deleted right now, and nothing was removed. Try again in a minute.";
+/** The app's sign-out page: it signs the browser out of the provider and
+ * drops the anonymous cookie, which the provider's own URL does not. */
+const SIGN_OUT_PATH = '/sign-out';
 
 /** The upstream delete. The local rows go when the provider's webhook
  * arrives, so the page never wipes the cell itself. */
 export interface AccountDeleter {
-  /** Resolves on success; rejects with a message the page renders. */
+  /** Resolves once the provider has deleted the account. */
   deleteUpstream(subject: string): Promise<void>;
-  /** Where the browser lands once the account is gone. */
-  signOutUrl(): string;
 }
 
 export interface AccountDeps {
@@ -34,11 +37,11 @@ export function accountSettings(deps: AccountDeps): PageResult {
 export async function accountDelete(repos: UserRepos, req: PageRequest, deps: AccountDeps): Promise<PageResult> {
   const deleter = deleterFor(deps);
   const expected = (repos.prefs.get()?.login ?? '').trim();
-  if ((req.form.get('confirm') ?? '').trim() !== expected) return page('settings_account.html', { error: MISMATCH }, 400);
+  if (!expected || (req.form.get('confirm') ?? '').trim() !== expected) return page('settings_account.html', { error: MISMATCH }, 400);
   try {
     await deleter.deleteUpstream(expected);
-  } catch (e) {
-    return page('settings_account.html', { error: e instanceof Error ? e.message : String(e) }, 502);
+  } catch {
+    return page('settings_account.html', { error: DELETE_FAILED }, 502);
   }
-  return { redirect: deleter.signOutUrl() || '/', status: 303 };
+  return { redirect: SIGN_OUT_PATH, status: 303 };
 }

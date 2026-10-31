@@ -73,11 +73,11 @@ if (landingDecks && !document.documentElement.hasAttribute("data-local-decks")) 
 }
 
 // ---- Forget this device (hook-gated) ---------------------------------
-// The account and its decks survive on the server; the browser the
-// user asked to forget must not keep a copy it can still render. The
-// snapshot is client-side, so the wipe happens here, before the POST
-// that drops the cookie -- which is also the last moment the flush
-// inside it can still reach the server. A cancelled confirm has
+// Forgetting the device and deleting the account both leave this
+// browser with no account to reach, so it must not keep a copy of the
+// cards it can still render. The snapshot is client-side, so the wipe
+// happens here, before the POST -- which is also the last moment the
+// flush inside it can still reach the server. A cancelled confirm has
 // already prevented the event, and the resubmit skips this listener's
 // own guard.
 const forgetForm = document.querySelector("[data-forget-device]");

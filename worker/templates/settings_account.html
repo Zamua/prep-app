@@ -34,9 +34,13 @@
     <p class="form-error" style="margin-top: 0.8rem;">{{ error }}</p>
   {% endif %}
 
+  {# data-forget-device: the hook wipes this browser's offline snapshot
+     before the POST, so a deleted account's cards are not left readable
+     here (app.js). #}
   <form method="post"
         action="{{ root }}/settings/account/delete"
         class="deck-new-form" autocomplete="off"
+        data-forget-device
         data-submit-pending
         style="margin-top: 1rem;">
     <label class="form-field">

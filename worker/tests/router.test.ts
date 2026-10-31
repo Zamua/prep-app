@@ -430,6 +430,14 @@ describe('the provider flows', () => {
     expect(byOrigin.status).toBe(403);
   });
 
+  it('refuses an account delete posted from another site, before it reaches the cell', async () => {
+    const res = await call('/settings/account/delete', { method: 'POST', headers: { ...IDENTIFIED, 'sec-fetch-site': 'cross-site' } });
+    expect(res.status).toBe(403);
+    expect(forwarded).toEqual([]);
+    await call('/settings/account/delete', { method: 'POST', headers: { ...IDENTIFIED, 'sec-fetch-site': 'same-origin' } });
+    expect(forwarded).toHaveLength(1);
+  });
+
   it('answers 405 on the wrong method', async () => {
     expect((await call('/forget-device')).status).toBe(405);
     expect((await call('/sign-in', { method: 'POST' })).status).toBe(405);

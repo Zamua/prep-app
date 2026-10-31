@@ -251,6 +251,16 @@ function authUrlsOf(clerk: ClerkProvider | null, identity: IdentityProvider): Au
 
 /** Clerk only outside testMode, and only when its five vars are all set: a
  * half-configured provider must not silently become "nobody is signed in". */
+/** Deleting at Clerk needs the secret key, and the cell is only wiped when
+ * the `user.deleted` webhook can be verified; without both, the page 404s. */
+function accountDeleterOf(config: ClerkConfig | null, webhooksVerified: boolean, warn: (message: string) => void): AccountDeleter | null {
+  if (!config) return null;
+  const missing = [config.secretKey ? null : 'CLERK_SECRET_KEY', webhooksVerified ? null : 'CLERK_WEBHOOK_SECRET'].filter((k) => k !== null);
+  if (missing.length === 0) return new ClerkAccountDeleter(config);
+  warn(`account delete is off: ${missing.join(' and ')} not set.`);
+  return null;
+}
+
 function clerkOrNull(env: Env, clock: Clock): { provider: ClerkProvider; config: ClerkConfig } | null {
   if (env.PREP_TEST_MODE === '1') return null;
   if (!(env.CLERK_ISSUER ?? '').trim()) return null;
@@ -342,6 +352,8 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
   const identity: IdentityProvider = testMode
     ? new FakeIdentityProvider(env.PREP_INTERNAL_TOKEN ?? '', env.PREP_TEST_SIGN_OUT_URL ?? '')
     : (clerk?.provider ?? new NoIdentityProvider());
+  const webhookSecret = (env.CLERK_WEBHOOK_SECRET ?? '').trim();
+  const webhooks = webhookSecret ? new SvixVerifier(webhookSecret) : null;
   let signerOnce: Promise<Signer | null> | null = null;
   const composition: Composition = {
     clock,
@@ -354,7 +366,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     cipher: selectDeps.cipher,
     clerk: clerk?.provider ?? null,
     clerkConfig: clerk?.config ?? null,
-    webhooks: (env.CLERK_WEBHOOK_SECRET ?? '').trim() ? new SvixVerifier((env.CLERK_WEBHOOK_SECRET ?? '').trim()) : null,
+    webhooks,
     pat: new PatIssuer(
       { bytes: (n) => composition.randoms.tokens.bytes(n), choice: (seq) => composition.randoms.tokens.choice(seq) },
       new WebCryptoHasher(),
@@ -386,7 +398,7 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     freeTierConfigured: freeTier !== null,
     vapidPublicKey: (env.PREP_VAPID_PUBLIC_KEY ?? '').trim(),
     authUrls: authUrlsOf(clerk?.provider ?? null, identity),
-    accountDeleter: clerk && !testMode ? new ClerkAccountDeleter(clerk.config, clerk.provider.urls().sign_out ?? '') : null,
+    accountDeleter: testMode ? null : accountDeleterOf(clerk?.config ?? null, webhooks !== null, warn),
     renderer: createRenderer({ clock, root: '' }),
     buildToken: resolveBuildToken(env.PREP_BUILD_ID),
     testMode,

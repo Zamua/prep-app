@@ -9,7 +9,6 @@ import {
   ClerkProvider,
   ClerkVerifier,
   clerkConfig,
-  DELETE_FAILED,
   frontendApiHost,
   identityFromClaims,
   formUrlEncode,
@@ -277,25 +276,24 @@ describe('the account deleter', () => {
     calls.length = 0;
   });
 
-  it('deletes the user at Clerk with the secret key', async () => {
-    await new ClerkAccountDeleter(CONFIG, '/out', answering(200)).deleteUpstream('user_2abc/x');
-    expect(calls).toEqual([{ url: 'https://api.clerk.com/v1/users/user_2abc%2Fx', init: { method: 'DELETE', headers: { authorization: 'Bearer sk_test_secret' } } }]);
+  it('deletes the user at Clerk with the secret key, under a timeout', async () => {
+    await new ClerkAccountDeleter(CONFIG, answering(200)).deleteUpstream('user_2abc/x');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('https://api.clerk.com/v1/users/user_2abc%2Fx');
+    expect(calls[0]?.init).toMatchObject({ method: 'DELETE', headers: { authorization: 'Bearer sk_test_secret' } });
+    expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('treats a user already gone as deleted, so a retry succeeds', async () => {
-    await expect(new ClerkAccountDeleter(CONFIG, '/out', answering(404)).deleteUpstream('user_2abc')).resolves.toBeUndefined();
+  // A 404 is what a secret key from another Clerk instance gets for every
+  // user, so it must not read as a delete that landed.
+  it.each([404, 401, 500])('rejects on HTTP %i', async (status) => {
+    await expect(new ClerkAccountDeleter(CONFIG, answering(status)).deleteUpstream('user_2abc')).rejects.toThrow(`HTTP ${status}`);
   });
 
-  it('rejects with a message the page can show when Clerk refuses or is unreachable', async () => {
-    await expect(new ClerkAccountDeleter(CONFIG, '/out', answering(500)).deleteUpstream('user_2abc')).rejects.toThrow(DELETE_FAILED);
-    await expect(new ClerkAccountDeleter(CONFIG, '/out', answering(401)).deleteUpstream('user_2abc')).rejects.toThrow(DELETE_FAILED);
+  it('rejects when Clerk is unreachable', async () => {
     const down = async () => {
       throw new TypeError('network down');
     };
-    await expect(new ClerkAccountDeleter(CONFIG, '/out', down).deleteUpstream('user_2abc')).rejects.toThrow(DELETE_FAILED);
-  });
-
-  it('signs out where the provider says', () => {
-    expect(new ClerkAccountDeleter(CONFIG, 'https://accounts.example.test/sign-out').signOutUrl()).toBe('https://accounts.example.test/sign-out');
+    await expect(new ClerkAccountDeleter(CONFIG, down).deleteUpstream('user_2abc')).rejects.toThrow('network down');
   });
 });

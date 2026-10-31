@@ -26,7 +26,7 @@ describe('compose', () => {
     expect(both.join(' ')).not.toContain('PREP_VAPID');
   });
 
-  it('can delete accounts only where real Clerk sign-in is live', () => {
+  describe('the account deleter', () => {
     const CLERK = {
       CLERK_ISSUER: 'https://clerk.example.test',
       CLERK_JWKS_URL: 'https://clerk.example.test/.well-known/jwks.json',
@@ -34,10 +34,25 @@ describe('compose', () => {
       CLERK_ACCOUNTS_URL: 'https://accounts.example.test',
       CLERK_PUBLISHABLE_KEY: 'pk_test_' + Buffer.from('clerk.example.test$').toString('base64'),
       CLERK_SECRET_KEY: 'sk_test_secret',
+      CLERK_WEBHOOK_SECRET: 'whsec_' + Buffer.from('signing').toString('base64'),
     };
-    expect(compose(fakeEnv({ ...PROD, ...CLERK })).accountDeleter?.signOutUrl()).toMatch(/^https:\/\/accounts\.example\.test\/sign-out/);
-    expect(compose(fakeEnv(PROD)).accountDeleter).toBeNull();
-    expect(compose(fakeEnv({ PREP_ENV: 'staging', PREP_TEST_MODE: '1', ...CLERK })).accountDeleter).toBeNull();
+
+    it('exists where real Clerk sign-in can both delete and hear the webhook', () => {
+      expect(compose(fakeEnv({ ...PROD, ...CLERK })).accountDeleter).not.toBeNull();
+    });
+
+    it.each([
+      ['no Clerk at all', PROD, null],
+      ['test mode', { PREP_ENV: 'staging', PREP_TEST_MODE: '1', ...CLERK }, null],
+      ['no secret key', { ...PROD, ...CLERK, CLERK_SECRET_KEY: undefined }, 'CLERK_SECRET_KEY'],
+      ['no webhook secret, so the cell would never be wiped', { ...PROD, ...CLERK, CLERK_WEBHOOK_SECRET: undefined }, 'CLERK_WEBHOOK_SECRET'],
+    ])('is off with %s, and says which secret is missing', (_name, env, missing) => {
+      const said: string[] = [];
+      expect(compose(fakeEnv(env), (m) => said.push(m)).accountDeleter).toBeNull();
+      const warning = said.find((m) => m.startsWith('account delete is off'));
+      if (missing) expect(warning).toContain(missing);
+      else expect(warning).toBeUndefined();
+    });
   });
 
   it('composes prod without pins, on the system clock', () => {
