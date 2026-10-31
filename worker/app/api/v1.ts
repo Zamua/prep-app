@@ -1,6 +1,6 @@
 // The public REST surface at /api/v1. Bearer-only; the router applies the
 // gate.
-import type { Question } from '../entities.js';
+import { CARD_FIELDS, type Question } from '../entities.js';
 import { detail, json, type ApiResult } from '../http.js';
 import type { DeckRepo, QuestionRepo, TriviaRepo } from '../ports.js';
 import { RequestValidationError, missing, stringTooLong, stringTooShort, stringType } from '../validation.js';
@@ -17,18 +17,7 @@ export interface V1Repos extends DeckIoRepos {
 
 /** The card fields the JSON view and the CSV exporter agree on. */
 export function cardJson(q: Question): Record<string, unknown> {
-  return {
-    type: q.type,
-    topic: q.topic,
-    prompt: q.prompt,
-    answer: q.answer,
-    choices: q.choices,
-    rubric: q.rubric,
-    skeleton: q.skeleton,
-    language: q.language,
-    answer_regex: q.answer_regex,
-    explanation: q.explanation,
-  };
+  return Object.fromEntries(CARD_FIELDS.map((f) => [f, q[f]]));
 }
 
 export function listDecks(repos: V1Repos): ApiResult {

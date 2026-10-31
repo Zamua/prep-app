@@ -5,6 +5,7 @@ import { zipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dispatch, MCP_PROTOCOL_VERSION, parseArgs } from '../../app/api/mcp.js';
 import { TOOLS } from '../../app/api/tools.js';
+import { QUESTION_TYPES } from '../../app/entities.js';
 import type { V1Repos } from '../../app/api/v1.js';
 import { ARCHIVE_TOO_LARGE, EXPORT_TOO_LARGE, MAX_APKG_UPLOAD_BYTES, MAX_EXPORT_QUESTIONS, uploadTooLarge } from '../../app/decks/importLimits.js';
 import { SqlJsApkg } from '../../runtime/adapters/apkg.js';
@@ -170,6 +171,15 @@ describe('the JSON-RPC envelope', () => {
 describe('the tool arguments', () => {
   const ADD = TOOLS.find((t) => t.name === 'prep_add_card')!;
 
+  it('advertises exactly the question types the app has', () => {
+    const enums = TOOLS.flatMap((t) => {
+      const type = ((t.inputSchema['properties'] ?? {}) as Record<string, { enum?: string[] }>)['type'];
+      return type?.enum ? [[...type.enum].sort()] : [];
+    });
+    expect(enums.length).toBeGreaterThan(0);
+    for (const e of enums) expect(e).toEqual([...QUESTION_TYPES].sort());
+  });
+
   it('declares only the property types the parser knows', () => {
     const types = TOOLS.flatMap((t) => Object.values((t.inputSchema['properties'] ?? {}) as Record<string, { type: string }>).map((p) => p.type));
     expect([...new Set(types)].sort()).toEqual(['array', 'boolean', 'integer', 'string']);
@@ -215,7 +225,7 @@ describe('the tool refusals', () => {
     ['prep_get_card', { card_id: 999999 }, 'card not found: 999999'],
     ['prep_add_card', {}, 'missing required arg: deck'],
     ['prep_add_card', { deck: 'nope', type: 'short', prompt: 'p', answer: 'a' }, "deck not found: 'nope'"],
-    ['prep_add_card', { deck: 'scratch', type: 'essay', prompt: 'p', answer: 'a' }, "unknown type 'essay'; expected short|mcq|multi|code"],
+    ['prep_add_card', { deck: 'scratch', type: 'essay', prompt: 'p', answer: 'a' }, "unknown type 'essay'; expected code|mcq|multi|short"],
     ['prep_add_card', { deck: 'scratch', type: 'short', answer: 'a' }, 'missing required arg: prompt'],
     ['prep_add_card', { deck: 'scratch', type: 'short', prompt: 'p' }, 'missing required arg: answer'],
     ['prep_add_card', { deck: 'scratch', type: 'mcq', prompt: 'p', answer: 'a', choices: 'x' }, 'choices must be an array of strings'],

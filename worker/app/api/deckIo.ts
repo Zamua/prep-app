@@ -1,14 +1,14 @@
 // CSV import/export for decks. One CSV per deck; trivia decks carry a
 // `# key: value` preamble above the header so the importer can rebuild the
 // deck shape.
-import type { NewQuestion, Question, QuestionType } from '../entities.js';
+import { asQuestionType, CARD_FIELDS, type NewQuestion, type Question } from '../entities.js';
 import type { DeckRepo, QuestionRepo, TriviaRepo } from '../ports.js';
 import { rowCapMessage } from '../decks/importLimits.js';
 import { parseCsvRecords, writeRow } from './csv.js';
 
-export const CSV_COLUMNS = ['type', 'topic', 'prompt', 'answer', 'choices', 'rubric', 'skeleton', 'language', 'answer_regex', 'explanation'] as const;
+/** The CSV header is the card's own fields, in order. */
+export const CSV_COLUMNS = CARD_FIELDS;
 
-const QUESTION_TYPES: readonly string[] = ['code', 'mcq', 'multi', 'short'];
 
 export interface ImportOutcome {
   deck_id: number;
@@ -30,19 +30,10 @@ export function questionsForExport(repos: DeckIoRepos, deckId: number): Question
 }
 
 export function questionToRow(q: Question): string[] {
-  const cell: Record<string, string> = {
-    type: q.type,
-    topic: q.topic || '',
-    prompt: q.prompt,
-    answer: q.answer,
-    choices: q.choices && q.choices.length ? q.choices.join('\n') : '',
-    rubric: q.rubric || '',
-    skeleton: q.skeleton || '',
-    language: q.language || '',
-    answer_regex: q.answer_regex || '',
-    explanation: q.explanation || '',
-  };
-  return CSV_COLUMNS.map((c) => cell[c] ?? '');
+  return CSV_COLUMNS.map((c) => {
+    if (c === 'choices') return q.choices && q.choices.length ? q.choices.join('\n') : '';
+    return q[c] || '';
+  });
 }
 
 /** Only trivia decks carry deck-level state worth preserving in the file. */
@@ -174,7 +165,8 @@ export function csvToDeck(
       continue;
     }
     const typeRaw = cell(row, 'type').toLowerCase() || 'short';
-    if (!QUESTION_TYPES.includes(typeRaw)) {
+    const type = asQuestionType(typeRaw);
+    if (type === null) {
       errors.push(`row ${i}: unknown type '${typeRaw}'`);
       continue;
     }
@@ -188,7 +180,7 @@ export function csvToDeck(
       .map((ln) => ln.trim())
       .filter(Boolean);
     const question: NewQuestion = {
-      type: typeRaw as QuestionType,
+      type,
       topic: cell(row, 'topic') || null,
       prompt,
       answer,

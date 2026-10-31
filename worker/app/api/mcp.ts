@@ -14,7 +14,7 @@ import {
   MAX_ZIP_TOTAL_BYTES,
   uploadTooLarge,
 } from '../decks/importLimits.js';
-import type { NewQuestion, Question, QuestionType } from '../entities.js';
+import { asQuestionType, QUESTION_TYPES, type NewQuestion, type Question } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
 import { NotAnApkg, ZipEntryTooLarge, type ApkgReader, type ApkgWriter } from '../ports.js';
 import { csvToDeck, deckToCsv, questionsForExport } from './deckIo.js';
@@ -25,7 +25,6 @@ export const MCP_PROTOCOL_VERSION = '2025-06-18';
 export const SERVER_NAME = 'prep';
 export const SERVER_VERSION = '1.0.0';
 
-const QUESTION_TYPES: readonly string[] = ['short', 'mcq', 'multi', 'code'];
 
 export interface ToolResult {
   content: { type: 'text'; text: string }[];
@@ -97,34 +96,21 @@ export function parseArgs(tool: McpTool, raw: unknown): { args: Record<string, u
 type Handler = (repos: V1Repos, args: Record<string, unknown>) => ToolResult;
 
 function cardToDict(q: Question): Record<string, unknown> {
-  return {
-    id: q.id,
-    deck_id: q.deck_id,
-    type: q.type,
-    topic: q.topic,
-    prompt: q.prompt,
-    answer: q.answer,
-    choices: q.choices,
-    rubric: q.rubric,
-    skeleton: q.skeleton,
-    language: q.language,
-    answer_regex: q.answer_regex,
-    explanation: q.explanation,
-    suspended: q.suspended,
-  };
+  return { id: q.id, deck_id: q.deck_id, ...cardJson(q), suspended: q.suspended };
 }
 
 /** Shared by add and update: a NewQuestion, or the tool error to answer with. */
 function buildNewQuestion(args: Record<string, unknown>): NewQuestion | ToolResult {
   const typeRaw = arg(args, 'type').toLowerCase();
-  if (!QUESTION_TYPES.includes(typeRaw)) return toolError(`unknown type '${typeRaw}'; expected short|mcq|multi|code`);
+  const type = asQuestionType(typeRaw);
+  if (type === null) return toolError(`unknown type '${typeRaw}'; expected ${QUESTION_TYPES.join('|')}`);
   const prompt = arg(args, 'prompt');
   const answer = arg(args, 'answer');
   if (!prompt) return toolError('missing required arg: prompt');
   if (!answer) return toolError('missing required arg: answer');
   const choices = args['choices'] as string[] | undefined;
   return {
-    type: typeRaw as QuestionType,
+    type,
     topic: arg(args, 'topic') || null,
     prompt,
     answer,
