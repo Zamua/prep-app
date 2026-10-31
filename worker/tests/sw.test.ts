@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, normalize } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { BUILD, STATIC, bakeBuildInfo, bakeServiceWorker } from "../scripts/build.mjs";
 
 const TOKEN = "ce11d0000000";
-const FIXTURE = new URL("./fixtures/precache-ce11d0000000.json", import.meta.url).pathname;
 
 type Sw = typeof import("../runtime/sw");
 type Tree = { css: string[]; js: string[] };
@@ -18,10 +18,51 @@ beforeAll(async () => {
   sw = await import("../runtime/sw");
 });
 
+/** Every module `entry` reaches through a relative or `@/` import, static or
+ * dynamic, as paths under static/js. */
+function moduleClosure(entry: string): Set<string> {
+  const js = join(STATIC, "js");
+  const seen = new Set<string>();
+  const queue = [entry];
+  const specifier = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']((?:\.{1,2}\/|@\/)[^"']+)["']/g;
+  while (queue.length) {
+    const rel = queue.shift()!;
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    for (const [, spec] of readFileSync(join(js, rel), "utf8").matchAll(specifier)) {
+      queue.push(spec!.startsWith("@/") ? spec!.slice(2) : normalize(join(dirname(rel), spec!)));
+    }
+  }
+  return seen;
+}
+
 describe("precacheUrls", () => {
-  it("matches the recorded manifest for this tree", () => {
-    const expected = JSON.parse(readFileSync(FIXTURE, "utf8")) as string[];
-    expect(sw.precacheUrls(tree, TOKEN)).toEqual(expected);
+  it("opens with the offline shell and holds its stylesheet, its module and both icons", () => {
+    const urls = sw.precacheUrls(tree, TOKEN);
+    expect(urls[0]).toBe(`/offline?build=${TOKEN}`);
+    expect(urls).toEqual(
+      expect.arrayContaining([
+        `/static/css/v${TOKEN}/index.css`,
+        `/static/js/v${TOKEN}/offline/offline-app.js`,
+        ...sw.MANIFEST_ICONS.map((icon) => `/static/pwa/${icon}`),
+      ]),
+    );
+  });
+
+  it("names only files the static tree holds", () => {
+    for (const url of sw.precacheUrls(tree, TOKEN).slice(1)) {
+      const rel = url.replace(/^\/static\//, "").replace(`/v${TOKEN}/`, "/");
+      expect(existsSync(join(STATIC, rel)), url).toBe(true);
+    }
+  });
+
+  // A module the offline app imports but the worker never precached fails
+  // the cold offline launch while every online path stays green.
+  it("holds every module the offline app reaches", () => {
+    const listed = new Set(sw.precacheUrls(tree, TOKEN));
+    const reached = moduleClosure("offline/offline-app.js");
+    expect(reached.size).toBeGreaterThan(1);
+    for (const rel of reached) expect(listed.has(`/static/js/v${TOKEN}/${rel}`), rel).toBe(true);
   });
 
   it("prefixes every URL with the root", () => {

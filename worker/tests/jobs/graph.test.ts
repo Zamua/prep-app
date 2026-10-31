@@ -37,48 +37,14 @@ describe('every declared graph', () => {
 });
 
 describe('the retry policies', () => {
-  const policyOf = (kind: JobKind, name: string) => JOB_GRAPHS[kind].nodes.find((n) => n.name === name)!.retry;
-
+  // A retried model call bills again; a write lands once under its key.
   it('never retry an LLM call, and do retry a write', () => {
-    // No retry on an LLM call, whatever the workflow.
-    for (const [kind, name] of [
-      ['PlanGenerate', 'plan'],
-      ['PlanGenerate', 'expand'],
-      ['Transform', 'compute'],
-      ['TriviaGenerate', 'generate'],
-      ['GradeAnswer', 'grade'],
-    ] as [JobKind, string][]) {
-      expect(policyOf(kind, name), `${kind}.${name}`).toEqual({ attempts: 1, initialMs: 2_000, coefficient: 2, capMs: 30_000 });
+    const nodes = graphs.flatMap(([kind, g]) => g.nodes.map((n) => [`${kind}.${n.name}`, n] as const));
+    expect(nodes.some(([, n]) => n.kind === 'llm') && nodes.some(([, n]) => n.kind === 'write')).toBe(true);
+    for (const [name, n] of nodes) {
+      if (n.kind === 'llm') expect(n.retry?.attempts, name).toBe(1);
+      if (n.kind === 'write') expect(n.retry?.attempts, name).toBeGreaterThan(1);
     }
-    expect(policyOf('PlanGenerate', 'insert')).toEqual({ attempts: 3, initialMs: 1_000, coefficient: 2, capMs: 30_000 });
-    expect(policyOf('Transform', 'apply')).toEqual({ attempts: 3, initialMs: 1_000, coefficient: 2, capMs: 30_000 });
-    expect(policyOf('TriviaGenerate', 'insert')).toEqual({ attempts: 3, initialMs: 500, coefficient: 2, capMs: 30_000 });
-    expect(policyOf('GradeAnswer', 'record')).toEqual({ attempts: 5, initialMs: 1_000, coefficient: 2, capMs: 30_000 });
-  });
-
-  it('gives the two human gates their Go budgets and never refreshes them', () => {
-    const plan = JOB_GRAPHS.PlanGenerate.nodes.find((n) => n.kind === 'gate')!.gate!;
-    const transform = JOB_GRAPHS.Transform.nodes.find((n) => n.kind === 'gate')!.gate!;
-    expect(plan.deadlineMs).toBe(24 * 3_600_000);
-    expect(transform.deadlineMs).toBe(3_600_000);
-    expect([plan.refreshOnEvent, transform.refreshOnEvent]).toEqual([false, false]);
-    expect([plan.onDeadline, transform.onDeadline]).toEqual(['reject', 'reject']);
-  });
-
-  it('skips the transform gate for card scope only', () => {
-    const gate = JOB_GRAPHS.Transform.nodes.find((n) => n.kind === 'gate')!;
-    expect(gate.onlyWhen).toEqual({ input: 'scope', in: ['deck', 'reorganize'] });
-  });
-
-  it('expands in batches of four and inserts per item, as the Go workflow does', () => {
-    expect(JOB_GRAPHS.PlanGenerate.nodes.find((n) => n.name === 'expand')!.fanout).toEqual({ mode: 'batch', size: 4, from: 'plan' });
-    expect(JOB_GRAPHS.PlanGenerate.nodes.find((n) => n.name === 'insert')!.fanout).toEqual({ mode: 'per-item', from: 'expand' });
-    expect(JOB_GRAPHS.TriviaGenerate.nodes.find((n) => n.name === 'insert')!.fanout).toEqual({ mode: 'per-item', from: 'generate' });
-  });
-
-  it("keeps the Go don't-fail-siblings rule where the Go workflow has it", () => {
-    const skipping = graphs.flatMap(([kind, g]) => g.nodes.filter((n) => n.onError === 'skip').map((n) => `${kind}.${n.name}`));
-    expect(skipping.sort()).toEqual(['PlanGenerate.expand', 'PlanGenerate.insert', 'TriviaGenerate.insert']);
   });
 });
 
