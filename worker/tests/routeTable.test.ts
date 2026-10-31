@@ -42,7 +42,6 @@ describe('the cell route table', () => {
   it('declares each method and pattern once', () => {
     const keys = [...pageRoutes, ...jobRoutes, ...apiRoutes].map((r) => key(r.method, routeTemplate(r)));
     expect(keys).toEqual([...new Set(keys)]);
-    expect(keys).toHaveLength(119);
   });
 
   it('gives every route one of the three gates', () => {

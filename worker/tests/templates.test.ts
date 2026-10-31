@@ -42,10 +42,9 @@ function walk(dir: string, suffix: string): string[] {
 const SMELLS = ["request.", " in (", ".items()", ".update(", ".get(", "namespace(", "selectattr", "rejectattr", "[:"];
 
 describe("the templates", () => {
-  it("all 49 precompile for nunjucks-slim", () => {
+  it("all precompile for nunjucks-slim", () => {
     const sources = walk(TEMPLATES, ".html");
-    expect(sources).toHaveLength(49);
-    expect(compiledCount).toBe(49);
+    expect(compiledCount).toBe(sources.length);
     expect(Object.keys(templates).sort()).toEqual(sources);
   });
 

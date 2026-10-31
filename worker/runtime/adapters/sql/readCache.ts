@@ -66,7 +66,7 @@ function isScript(sql: string): boolean {
   return sql.replace(/--[^\n]*/g, '').trim().replace(/;\s*$/, '').includes(';');
 }
 
-export function classify(sql: string): Statement {
+function classify(sql: string): Statement {
   if (isScript(sql)) return { kind: 'opaque' };
   const head = sql.replace(LEADING, '');
   if (/^select\b/i.test(head)) return { kind: 'read', tables: VOLATILE.test(sql) ? null : wordsOf(sql) };

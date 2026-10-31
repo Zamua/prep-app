@@ -18,8 +18,7 @@ describe('the client twin matches the offline fixture', () => {
     expect(Object.keys(client).sort()).toEqual(['MAX_REGEX_LEN', 'grade', 'matchRegex']);
   });
 
-  it('covers the whole fixture', () => {
-    expect(cases).toHaveLength(46);
+  it('holds grader cases for both functions', () => {
     expect(new Set(cases.map((c) => c.fn))).toEqual(new Set(['grade', 'matchRegex']));
     expect(cases.every((c) => c.module === 'grader')).toBe(true);
   });

@@ -6,7 +6,7 @@ import { keepsFloor } from '../../runtime/adapters/sql/dueFloor.js';
 import { windowHolds } from '../../runtime/adapters/sql/dueWindow.js';
 import { migrate, USER_MIGRATIONS } from '../../runtime/adapters/sql/index.js';
 import { WRITE_SCHEDULED } from '../../runtime/adapters/sql/cardRepo.js';
-import { CASCADES, classify, ReadCachingStorage, VOLATILE_FUNCTIONS } from '../../runtime/adapters/sql/readCache.js';
+import { CASCADES, ReadCachingStorage, VOLATILE_FUNCTIONS } from '../../runtime/adapters/sql/readCache.js';
 import { RECORD_ANSWER } from '../../runtime/adapters/sql/sessionRepo.js';
 import { FakeCellStorage } from '../fakes/sqlStorage.js';
 
@@ -29,45 +29,65 @@ const DECK = "INSERT INTO decks (name, created_at) VALUES ('d', '2026-03-14T15:0
 const PUSH = "INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at, last_seen_at) VALUES ('e', 'p', 'a', 'x', 'x')";
 
 describe('which statements the cache can keep', () => {
-  it('keeps a plain read, keyed by every word it names', () => {
-    expect(classify('SELECT * FROM profile LIMIT 1')).toEqual({ kind: 'read', tables: ['select', 'from', 'profile', 'limit'] });
-  });
-
   it('never keeps a read whose answer can move with no write', () => {
+    const c = cached();
+    c.storage.sql.exec(DECK);
+    for (const [sql, ...bindings] of [
+      ['SELECT q.id FROM questions q ORDER BY RANDOM() LIMIT 1'],
+      ['SELECT changes() AS n'],
+      ['SELECT last_insert_rowid() AS id'],
+      ["SELECT datetime('now')"],
+      ['SELECT name FROM sqlite_master'],
+      ['SELECT name FROM pragma_table_info(?)', 'decks'],
+      ['SELECT seq FROM sqlite_sequence'],
+    ] as [string, ...unknown[]][]) {
+      c.storage.sql.exec(sql, ...bindings).toArray();
+      c.reset();
+      c.storage.sql.exec(sql, ...bindings).toArray();
+      expect(c.reads(), sql).toEqual([sql]);
+    }
+  });
+
+  // Each read names the table the write lands on, or a child its REPLACE
+  // deletes through a cascade the write itself never names.
+  it.each([
+    ['a quoted table name', 'SELECT step FROM cards', ['UPDATE "cards" SET step = 5']],
+    ['an upsert', 'SELECT display_name FROM profile', ["INSERT INTO profile (id, display_name, created_at, last_seen_at) VALUES ('u', 'b', 'x', 'x') ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name"]],
+    ['the answer a session records', 'SELECT result FROM study_session_answers', [RECORD_ANSWER, 's', 1, 'x', 'right']],
+    ['an insert that replaces a parent', 'SELECT question_id FROM cards', ["INSERT OR REPLACE INTO questions (id, deck_id, type, prompt, answer, created_at) VALUES (1, 1, 'short', 'q', 'a', 'x')"]],
+    ['an update that replaces a parent', 'SELECT session_id FROM study_session_answers', ["UPDATE OR REPLACE study_sessions SET id = 's' WHERE id = 't'"]],
+  ] as [string, string, [string, ...unknown[]]][])('reads again after %s', (_name, read, [write, ...bindings]) => {
+    const c = cached();
     for (const sql of [
-      'SELECT q.id FROM questions q ORDER BY RANDOM() LIMIT 1',
-      'SELECT changes() AS n',
-      'SELECT last_insert_rowid() AS id',
-      "SELECT datetime('now')",
-      'SELECT name FROM sqlite_master',
-      'SELECT name FROM pragma_table_info(?)',
-      'SELECT seq FROM sqlite_sequence',
+      DECK,
+      "INSERT INTO questions (deck_id, type, prompt, answer, created_at) VALUES (1, 'short', 'p', 'a', 'x')",
+      "INSERT INTO cards (question_id, next_due) VALUES (1, 'x')",
+      "INSERT INTO study_sessions (id, deck_id, created_at, last_active) VALUES ('s', 1, 'x', 'x'), ('t', 1, 'x', 'x')",
+      "INSERT INTO study_session_answers (session_id, question_id, answered_at, result) VALUES ('s', 1, 'x', 'wrong')",
+      "INSERT INTO profile (id, display_name, created_at, last_seen_at) VALUES ('u', 'a', 'x', 'x')",
     ]) {
-      expect(classify(sql)).toEqual({ kind: 'read', tables: null });
+      c.storage.sql.exec(sql);
     }
+    const before = c.storage.sql.exec(read).toArray();
+    c.storage.sql.exec(write, ...bindings);
+    const after = c.storage.sql.exec(read).toArray();
+    expect(after).not.toEqual(before);
+    expect(after).toEqual(c.raw.sql.exec(read).toArray());
   });
 
-  it('names the table a write lands on, and the children a delete reaches', () => {
-    expect(classify('UPDATE study_sessions SET state = ? WHERE id = ?')).toEqual({ kind: 'write', tables: ['study_sessions'] });
-    expect(classify('INSERT INTO profile (id) VALUES (?) ON CONFLICT(id) DO UPDATE SET id = excluded.id')).toEqual({ kind: 'write', tables: ['profile'] });
-    expect(classify('INSERT INTO "cards" (question_id) VALUES (?)')).toEqual({ kind: 'write', tables: ['cards'] });
-    expect(classify(RECORD_ANSWER)).toEqual({ kind: 'write', tables: ['study_session_answers'] });
-    const written = (sql: string) => {
-      const s = classify(sql);
-      return new Set(s.kind === 'write' ? s.tables : []);
-    };
-    expect(written('DELETE FROM decks WHERE name = ?')).toEqual(
-      new Set(['decks', 'questions', 'study_sessions', 'trivia_sessions', 'cards', 'reviews', 'study_session_answers', 'trivia_queue']),
-    );
-    expect(written('INSERT OR REPLACE INTO questions (id) VALUES (?)')).toContain('cards');
-    expect(written('UPDATE OR REPLACE study_sessions SET id = ?')).toContain('study_session_answers');
-  });
-
-  it('cannot attribute a script, a schema change, a pragma or a transaction statement', () => {
-    for (const sql of ['CREATE TABLE t (a)', 'ALTER TABLE profile ADD COLUMN x TEXT', 'PRAGMA foreign_keys = ON', 'BEGIN', 'ROLLBACK', 'DELETE FROM a; DELETE FROM b', 'WITH x AS (SELECT 1) DELETE FROM cards']) {
-      expect(classify(sql)).toEqual({ kind: 'opaque' });
-    }
-  });
+  it.each(['CREATE TABLE t (a)', 'ALTER TABLE profile ADD COLUMN x TEXT', 'PRAGMA foreign_keys = ON', 'BEGIN', 'DELETE FROM reviews; DELETE FROM reviews', 'WITH x AS (SELECT 1) DELETE FROM cards'])(
+    'drops everything it holds for %s, which it cannot attribute',
+    (sql) => {
+      const c = cached();
+      c.storage.sql.exec(DECK);
+      const read = () => c.storage.sql.exec('SELECT name FROM decks WHERE id = 1').toArray();
+      read();
+      c.storage.sql.exec(sql);
+      c.reset();
+      read();
+      expect(c.reads()).toHaveLength(1);
+    },
+  );
 });
 
 describe('what the cache rests on', () => {
