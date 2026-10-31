@@ -4,6 +4,7 @@
 // v1 entry may match, so a rotated secret verifies during the overlap.
 import type { WebhookFailure, WebhookVerifier } from '../../app/ports.js';
 import { b64Decode, b64Encode } from '../../domain/base64.js';
+import { tagsEqual } from '../../domain/tagsEqual.js';
 
 export const TOLERANCE_SECONDS = 300;
 const SECRET_PREFIX = 'whsec_';
@@ -27,13 +28,6 @@ export function svixHeaders(request: Request): SvixHeaders {
 function keyBytes(secret: string): Uint8Array | null {
   const raw = secret.startsWith(SECRET_PREFIX) ? secret.slice(SECRET_PREFIX.length) : secret;
   return b64Decode(raw);
-}
-
-function tagsEqual(a: string, b: string): boolean {
-  let diff = a.length ^ b.length;
-  const n = Math.max(a.length, b.length);
-  for (let i = 0; i < n; i++) diff |= (i < a.length ? a.charCodeAt(i) : 0) ^ (i < b.length ? b.charCodeAt(i) : 0);
-  return diff === 0;
 }
 
 /** null on success, else what failed. */

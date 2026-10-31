@@ -8,9 +8,9 @@ import { importUserChunk } from '../../app/migrate/import.js';
 import { ChunkRejected, isChunkRefusal, parseChunk, CHUNK_TOO_LARGE, GLOBAL_TABLES, MAX_CHUNK_BYTES, MIGRATION_SEALED } from '../../domain/migrate.js';
 import { readCapped } from '../cells/routes/adapt.js';
 import type { Composition } from '../compose.js';
+import { refuseWithoutInternalToken } from '../internalToken.js';
 
 export const MIGRATE_PREFIX = '/_migrate';
-const INTERNAL_TOKEN_HEADER = 'x-internal-token';
 
 /** The migration-only surface of a global cell. No port declares any of it
  * because nothing in the app reads it: the seal is the entry worker's gate,
@@ -38,8 +38,8 @@ interface MigrationSeal extends GlobalMigration {
  * answers 503, 401 and 410 the same way.
  */
 export async function migrationGate(request: Request, c: Composition): Promise<Response | null> {
-  if (!c.internalToken) return Response.json({ detail: 'PREP_INTERNAL_TOKEN not configured' }, { status: 503 });
-  if (request.headers.get(INTERNAL_TOKEN_HEADER) !== c.internalToken) return Response.json({ detail: 'invalid X-Internal-Token' }, { status: 401 });
+  const refused = refuseWithoutInternalToken(request, c.internalToken);
+  if (refused) return refused;
   // After the token, so an unauthenticated caller learns nothing about the
   // fleet's state. A second seal answers 410 too, which is the answer a
   // retried seal wants anyway.

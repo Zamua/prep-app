@@ -26,6 +26,7 @@ import {
   gateRefusal,
   identityFrom,
   matchRoute,
+  NOW_HEADER,
   PAT_HASH_HEADER,
   SignInRequired,
   TokenRequired,
@@ -36,9 +37,7 @@ import {
   type Handled,
   type Route,
 } from './router.js';
-import { apiRoutes } from './routes/api.js';
-import { jobRoutes } from './routes/jobs.js';
-import { pageRoutes } from './routes/pages.js';
+import { CELL_ROUTES } from './routes/all.js';
 import { createUser, isAnonymousProfile, PROFILES, type Delta } from './seed/index.js';
 import { parseCellImage, type CellImage, type ImageRestore } from '../../domain/cellImage.js';
 import { applyImage, imageOf } from './image.js';
@@ -93,7 +92,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
   }
 
   private routes(): readonly Route[] {
-    return [...pageRoutes, ...jobRoutes, ...apiRoutes];
+    return CELL_ROUTES;
   }
 
   /** Everything a handler needs beyond its repositories, from the one root. */
@@ -241,7 +240,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc {
     this.c.resetRandom();
     if (!build) return {};
 
-    const clock = at ? clockFor(this.c, new Request('https://cell.internal/', { headers: { 'x-prep-now': at } })) : this.c.clock;
+    const clock = at ? clockFor(this.c, new Request('https://cell.internal/', { headers: { [NOW_HEADER]: at } })) : this.c.clock;
     const now = clock.now();
     const repos = this.repos(clock);
     createUser(repos, user, profile);

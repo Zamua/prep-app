@@ -2,6 +2,7 @@
 // bytes. Value: `v1.<id>.<iat>.<sig>`: 16 id bytes as unpadded base64url,
 // unix seconds, and the first 16 bytes of HMAC-SHA256 over `v1.<id>.<iat>`.
 // The MAC itself comes from the caller's signer; nothing here holds a key.
+import { tagsEqual } from './tagsEqual.js';
 
 export const COOKIE_NAME = 'prep_anon';
 export const COOKIE_VERSION = 'v1';
@@ -114,13 +115,6 @@ export function parseCookie(raw: string | null | undefined): ParsedCookie | null
   if (!DECIMAL_INT.test(iatPart)) return null;
   const issuedAt = Number(iatPart.replace(/[ \t\n\r\v\f_]/g, '')) + 0;
   return { payload: `${version}.${idPart}.${iatPart}`, idBytes: id, issuedAt, sig };
-}
-
-function tagsEqual(a: string, b: string): boolean {
-  let diff = a.length ^ b.length;
-  const n = Math.max(a.length, b.length);
-  for (let i = 0; i < n; i++) diff |= (i < a.length ? a.charCodeAt(i) : 0) ^ (i < b.length ? b.charCodeAt(i) : 0);
-  return diff === 0;
 }
 
 /** `mac` is HMAC-SHA256 over `parsed.payload`; `now` is unix seconds. */
