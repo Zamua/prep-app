@@ -10,7 +10,8 @@ import { triviaStartInput } from '../jobs/startInput.js';
 import { agentAvailable } from '../pageContext.js';
 import { page, redirect, type PageRequest, type PageResult } from '../pageResult.js';
 import type { UserRepos, WorkflowRunner } from '../ports.js';
-import { NO_FUNDING, parseIntLiteral } from '../decks/pages.js';
+import { NO_FUNDING } from '../decks/pages.js';
+import { asInt } from '../validation.js';
 
 export const TRIVIA_GEN_PARTIAL = 'partials/trivia_generating_progress.html';
 
@@ -70,7 +71,7 @@ export async function triviaGenFragment(repos: UserRepos, req: PageRequest, deps
  * scoped to this cell, so a wrong deck id is the same 404 as no such deck.
  */
 export async function triviaGenerate(repos: UserRepos, req: PageRequest, deps: TriviaGenerateDeps): Promise<PageResult> {
-  const deckId = parseIntLiteral(req.params['deck_id'] ?? '');
+  const deckId = asInt(req.params['deck_id']);
   const deckName = deckId === null ? null : repos.decks.findName(deckId);
   if (deckId === null || deckName === null) throw notFound(DECK_NOT_FOUND);
   if (!agentAvailable(repos, deps.freeTierConfigured)) throw new AppError(403, NO_FUNDING);

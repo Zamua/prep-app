@@ -48,3 +48,15 @@ export function flipDoneVerdict(items: readonly DoneItem[], qid: number, correct
   const verdict: DoneVerdict = correct ? 'r' : 'w';
   return formatDone(items.map(([q, v]) => [q, q === qid ? verdict : v]));
 }
+
+export interface Bounds {
+  readonly min: number;
+  readonly max: number;
+}
+
+/** How often a trivia deck may notify, in minutes. */
+export const TRIVIA_INTERVAL_MINUTES: Bounds = { min: 1, max: 720 };
+/** Cards in the mini-session a notification opens. */
+export const TRIVIA_SESSION_SIZE: Bounds = { min: 1, max: 20 };
+
+export const inBounds = (n: number, b: Bounds): boolean => n >= b.min && n <= b.max;

@@ -53,10 +53,10 @@
   <label class="form-field">
     <span class="form-label">Notification interval (minutes)</span>
     <input type="number" name="notification_interval_minutes"
-           min="1" max="720" value="{{ interval_value }}" required>
+           min="{{ limits.trivia_interval.min }}" max="{{ limits.trivia_interval.max }}" value="{{ interval_value }}" required>
     <span class="form-hint">
-      How often you want a question pushed to you. Default 30 min.
-      Range 1–720 (12 hours).
+      How often you want a question pushed to you. Default {{ limits.trivia_interval_default }} min.
+      Range {{ limits.trivia_interval.min }}–{{ limits.trivia_interval.max }} minutes.
     </span>
     <span class="form-hint">
       Trivia notifications respect your <a href="{{ root }}/notify">quiet hours</a>

@@ -1,14 +1,14 @@
 // The trivia surfaces: the single card a push deep-links to, the
 // mini-session whose queue rides in the URL, and the per-deck settings the
 // notif-edit popover posts to.
-import { formatDone, flipDoneVerdict, parseCardIds, parseDone, type DoneItem } from '../../domain/trivia.js';
+import { formatDone, flipDoneVerdict, inBounds, parseCardIds, parseDone, TRIVIA_INTERVAL_MINUTES, TRIVIA_SESSION_SIZE, type DoneItem } from '../../domain/trivia.js';
 import { DurationError, parseUntil } from '../durations.js';
 import type { Question } from '../entities.js';
 import { badRequest, notFound } from '../errors.js';
 import { CHAT_PROVIDERS, DEFAULT_PROVIDER, buildMessage, providerUrls, quoteAll } from '../study/handoff.js';
 import { page, redirect, redirectBack, type PageRequest, type PageResult } from '../pageResult.js';
 import type { UserRepos, WorkflowRunner } from '../ports.js';
-import { parseIntLiteral } from '../decks/pages.js';
+import { asInt } from '../validation.js';
 import { triviaStartInput } from '../jobs/startInput.js';
 import { aiRegrade, gradeWithFallback, type Judge, type Verdict } from './grading.js';
 
@@ -193,11 +193,11 @@ export function triviaSessionOverride(req: PageRequest, deps: TriviaDeps): PageR
   const { repos } = deps;
   const deckName = req.params['deck_name']!;
   const id = deckIdOf(repos, deckName);
-  const qid = Number(req.form.get('question_id'));
-  const q = repos.questions.get(qid);
+  const qid = asInt(req.form.get('question_id'));
+  const q = qid === null ? null : repos.questions.get(qid);
   if (q === null || q.deck_id !== id) throw notFound(NOT_IN_DECK);
 
-  repos.trivia.setLastCorrectness(qid, true);
+  repos.trivia.setLastCorrectness(q.id, true);
   const doneItems = parseDone(req.form.get('done') ?? '');
   const cardsParam = req.form.get('cards') ?? '';
   const answer = req.form.get('answer') ?? '';
@@ -208,7 +208,7 @@ export function triviaSessionOverride(req: PageRequest, deps: TriviaDeps): PageR
     session_position: Math.max(1, doneItems.length),
     session_total: doneItems.length + parseCardIds(cardsParam).length,
     session_remaining: cardsParam,
-    session_done: flipDoneVerdict(doneItems, qid, true),
+    session_done: flipDoneVerdict(doneItems, q.id, true),
     ...exploreContext({ deckName, q, userAnswer: answer, correct: true }),
   });
 }
@@ -217,14 +217,14 @@ export async function triviaSessionRegrade(req: PageRequest, deps: TriviaDeps): 
   const { repos } = deps;
   const deckName = req.params['deck_name']!;
   const id = deckIdOf(repos, deckName);
-  const qid = Number(req.form.get('question_id'));
-  const q = repos.questions.get(qid);
+  const qid = asInt(req.form.get('question_id'));
+  const q = qid === null ? null : repos.questions.get(qid);
   if (q === null || q.deck_id !== id) throw notFound(NOT_IN_DECK);
 
   const answer = req.form.get('answer') ?? '';
   const verdict = await aiRegrade(deps.judge, { prompt: q.prompt, expected: q.answer, given: answer, currentRegex: q.answer_regex });
-  repos.trivia.setLastCorrectness(qid, verdict.correct);
-  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(qid, verdict.regex_update, q.answer_regex) : false;
+  repos.trivia.setLastCorrectness(q.id, verdict.correct);
+  const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(q.id, verdict.regex_update, q.answer_regex) : false;
 
   const doneItems = parseDone(req.form.get('done') ?? '');
   const cardsParam = req.form.get('cards') ?? '';
@@ -235,7 +235,7 @@ export async function triviaSessionRegrade(req: PageRequest, deps: TriviaDeps): 
     session_position: Math.max(1, doneItems.length),
     session_total: doneItems.length + parseCardIds(cardsParam).length,
     session_remaining: cardsParam,
-    session_done: flipDoneVerdict(doneItems, qid, verdict.correct),
+    session_done: flipDoneVerdict(doneItems, q.id, verdict.correct),
     ...exploreContext({ deckName, q, userAnswer: answer, correct: verdict.correct }),
   });
 }
@@ -336,18 +336,20 @@ export function triviaDeckNotifications(req: PageRequest, deps: TriviaDeps, setE
 }
 
 export function triviaDeckInterval(req: PageRequest, deps: TriviaDeps): PageResult {
-  const minutes = parseIntLiteral(req.form.get('minutes') ?? '');
+  const minutes = asInt(req.form.get('minutes'));
   if (minutes === null) throw badRequest('interval must be an integer (minutes)');
-  if (minutes < 1 || minutes > 720) throw badRequest('interval must be between 1 and 720 minutes');
+  const { min, max } = TRIVIA_INTERVAL_MINUTES;
+  if (!inBounds(minutes, TRIVIA_INTERVAL_MINUTES)) throw badRequest(`interval must be between ${min} and ${max} minutes`);
   const id = Number(req.params['deck_id']);
   if (!deps.repos.decks.setNotificationInterval(id, minutes)) throw notFound(TRIVIA_DECK_NOT_FOUND);
   return notifEdit(req, deps.repos, id);
 }
 
 export function triviaDeckSessionSize(req: PageRequest, deps: TriviaDeps): PageResult {
-  const size = parseIntLiteral(req.form.get('size') ?? '');
+  const size = asInt(req.form.get('size'));
   if (size === null) throw badRequest('session size must be an integer');
-  if (size < 1 || size > 20) throw badRequest('session size must be between 1 and 20 cards');
+  const { min, max } = TRIVIA_SESSION_SIZE;
+  if (!inBounds(size, TRIVIA_SESSION_SIZE)) throw badRequest(`session size must be between ${min} and ${max} cards`);
   const id = Number(req.params['deck_id']);
   if (!deps.repos.decks.setTriviaSessionSize(id, size)) throw notFound(TRIVIA_DECK_NOT_FOUND);
   return notifEdit(req, deps.repos, id);

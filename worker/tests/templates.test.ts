@@ -86,6 +86,13 @@ describe("the renderer", () => {
     expect(html).not.toContain("undefined");
   });
 
+  it("takes the trivia interval bounds and default from the limits global", () => {
+    const html = makeRenderer().render("deck_new_trivia.html", baseContext({ name_value: "", topic_value: "", interval_value: 30, error: null }));
+    expect(html).toContain('min="1" max="720" value="30"');
+    expect(html).toContain("Default 30 min.");
+    expect(html).toContain("Range 1–720 minutes.");
+  });
+
   it("merges root into the context and prefixes every app URL with it", () => {
     const html = makeRenderer("/prep").render("privacy.html", baseContext({ user: null }));
     expect(html).toContain('href="/prep/static/css/vce11d0000000/index.css"');

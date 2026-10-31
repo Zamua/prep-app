@@ -3,7 +3,7 @@
 // worker so the bearer gate is real.
 import { zipSync } from 'fflate';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { dispatch, MCP_PROTOCOL_VERSION } from '../../app/api/mcp.js';
+import { dispatch, MCP_PROTOCOL_VERSION, parseArgs } from '../../app/api/mcp.js';
 import { TOOLS } from '../../app/api/tools.js';
 import type { V1Repos } from '../../app/api/v1.js';
 import { ARCHIVE_TOO_LARGE, EXPORT_TOO_LARGE, MAX_APKG_UPLOAD_BYTES, MAX_EXPORT_QUESTIONS, uploadTooLarge } from '../../app/decks/importLimits.js';
@@ -164,6 +164,35 @@ describe('the JSON-RPC envelope', () => {
       env,
     );
     expect(res.status).toBe(401);
+  });
+});
+
+describe('the tool arguments', () => {
+  const ADD = TOOLS.find((t) => t.name === 'prep_add_card')!;
+
+  it('declares only the property types the parser knows', () => {
+    const types = TOOLS.flatMap((t) => Object.values((t.inputSchema['properties'] ?? {}) as Record<string, { type: string }>).map((p) => p.type));
+    expect([...new Set(types)].sort()).toEqual(['array', 'boolean', 'integer', 'string']);
+  });
+
+  it('keeps declared properties of their declared type and drops the rest', () => {
+    expect(parseArgs(ADD, { deck: 'history', answer: 1215, choices: ['a', 2], extra: { x: 1 }, topic: null })).toEqual({
+      args: { deck: 'history', answer: '1215', choices: ['a', '2'] },
+    });
+    expect(parseArgs(ADD, undefined)).toEqual({ args: {} });
+  });
+
+  it('refuses a value it would otherwise have stringified', () => {
+    expect(parseArgs(ADD, { deck: { name: 'history' } })).toEqual({ error: 'deck must be a string' });
+    expect(parseArgs(ADD, { prompt: true })).toEqual({ error: 'prompt must be a string' });
+    expect(parseArgs(ADD, { choices: 'a,b' })).toEqual({ error: 'choices must be an array of strings' });
+    expect(parseArgs(ADD, { choices: [['a']] })).toEqual({ error: 'choices must be an array of strings' });
+    expect(parseArgs(ADD, ['history'])).toEqual({ error: 'arguments must be an object' });
+  });
+
+  it('answers a refused argument as a tool error before the handler runs', async () => {
+    expect(await tool('prep_get_deck', { name: ['history'] })).toEqual({ text: 'name must be a string', isError: true });
+    expect(await tool('prep_get_card', { card_id: '5' })).toEqual({ text: 'card_id must be an integer', isError: true });
   });
 });
 

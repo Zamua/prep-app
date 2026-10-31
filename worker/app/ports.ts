@@ -150,10 +150,10 @@ export interface DeckRepo {
   listTriviaDecks(): Deck[];
   recordNotificationFire(deckId: number, ts: string, ignoredStreak: number): void;
   resetIgnoredStreakForDeck(deckId: number): void;
-  /** Throws `RangeError` outside 1..720. */
+  /** Throws `RangeError` outside `TRIVIA_INTERVAL_MINUTES`. */
   setNotificationInterval(deckId: number, minutes: number): boolean;
   getTriviaSessionSize(deckId: number): number;
-  /** Throws `RangeError` outside 1..20. */
+  /** Throws `RangeError` outside `TRIVIA_SESSION_SIZE`. */
   setTriviaSessionSize(deckId: number, size: number): boolean;
   setNotificationsEnabled(deckId: number, enabled: boolean): boolean;
   muteNotificationsUntil(deckId: number, untilIso: string | null): boolean;
