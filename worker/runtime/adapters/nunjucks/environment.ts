@@ -5,6 +5,8 @@ import nunjucks, { type Environment } from "nunjucks/browser/nunjucks-slim.js";
 import type { Clock, Renderer } from "../../../app/ports";
 import { makeIconGlobal } from "./icons";
 import { registerFilters } from "./filters";
+import { DEFAULT_TRIVIA_INTERVAL_MINUTES } from "../../../domain/notify/wake.js";
+import { TRIVIA_INTERVAL_MINUTES, TRIVIA_SESSION_SIZE } from "../../../domain/trivia.js";
 
 export interface EnvironmentOptions {
   clock: Clock;
@@ -17,6 +19,11 @@ export function buildEnvironment({ clock, root, templates, icons }: EnvironmentO
   const env = new nunjucks.Environment(new nunjucks.PrecompiledLoader(templates), { autoescape: true });
   registerFilters(env, { clock, root });
   env.addGlobal("icon", makeIconGlobal(icons));
+  env.addGlobal("limits", {
+    trivia_interval: TRIVIA_INTERVAL_MINUTES,
+    trivia_interval_default: DEFAULT_TRIVIA_INTERVAL_MINUTES,
+    trivia_session_size: TRIVIA_SESSION_SIZE,
+  });
   return env;
 }
 

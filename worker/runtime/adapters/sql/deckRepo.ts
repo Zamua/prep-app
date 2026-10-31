@@ -3,6 +3,7 @@ import type { Clock, DeckRepo } from '../../../app/ports.js';
 import { DeckNameTaken } from '../../../app/ports.js';
 import type { Deck, DeckMeta, DeckSummary, DeckType, TriviaSourceMeta } from '../../../app/entities.js';
 import { transformDeck, type TransformDeck } from '../../../domain/jobs/snapshot.js';
+import { inBounds, TRIVIA_INTERVAL_MINUTES, TRIVIA_SESSION_SIZE } from '../../../domain/trivia.js';
 import { refuseOverRowCap } from './caps.js';
 import { Db, type CellStorage, type Row } from './storage.js';
 import { isoNow } from './time.js';
@@ -244,7 +245,7 @@ export class SqlDeckRepo implements DeckRepo {
   }
 
   setNotificationInterval(deckId: number, minutes: number): boolean {
-    if (minutes < 1 || minutes > 720) throw new RangeError(`interval out of range: ${minutes}`);
+    if (!inBounds(minutes, TRIVIA_INTERVAL_MINUTES)) throw new RangeError(`interval out of range: ${minutes}`);
     return (
       this.db.run(
         `UPDATE decks SET notification_interval_minutes = ?, notification_ignored_streak = 0 WHERE id = ? AND deck_type = 'trivia'`,
@@ -260,7 +261,7 @@ export class SqlDeckRepo implements DeckRepo {
   }
 
   setTriviaSessionSize(deckId: number, size: number): boolean {
-    if (size < 1 || size > 20) throw new RangeError(`session size out of range: ${size}`);
+    if (!inBounds(size, TRIVIA_SESSION_SIZE)) throw new RangeError(`session size out of range: ${size}`);
     return this.db.run(`UPDATE decks SET trivia_session_size = ? WHERE id = ? AND deck_type = 'trivia'`, size, deckId) > 0;
   }
 

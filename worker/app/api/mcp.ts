@@ -18,7 +18,7 @@ import type { NewQuestion, Question, QuestionType } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
 import { NotAnApkg, ZipEntryTooLarge, type ApkgReader, type ApkgWriter } from '../ports.js';
 import { csvToDeck, deckToCsv, questionsForExport } from './deckIo.js';
-import { TOOLS } from './tools.js';
+import { TOOLS, type McpTool } from './tools.js';
 import { cardJson, type V1Repos } from './v1.js';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -38,10 +38,59 @@ const toolText = (text: string): ToolResult => ({ content: [{ type: 'text', text
 /** Tool output: indented two spaces, non-ASCII left as itself. */
 const dumps = (value: unknown): string => JSON.stringify(value, null, 2);
 
+/** A string argument, trimmed; '' when absent. `parseArgs` has already
+ * refused anything that is not a string. */
 const arg = (args: Record<string, unknown>, name: string): string => {
   const raw = args[name];
-  return typeof raw === 'string' ? raw.trim() : raw ? String(raw).trim() : '';
+  return typeof raw === 'string' ? raw.trim() : '';
 };
+
+type PropType = 'string' | 'integer' | 'boolean' | 'array';
+
+const ARTICLE: Record<PropType, string> = { string: 'a string', integer: 'an integer', boolean: 'a boolean', array: 'an array of strings' };
+
+/** A string field takes a number too, written out: a model sends a year
+ * or a count bare. Nothing else is coerced. */
+function asStringArg(v: unknown): string | null {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return null;
+}
+
+function coerce(type: PropType, v: unknown): unknown {
+  switch (type) {
+    case 'string':
+      return asStringArg(v);
+    case 'integer':
+      return typeof v === 'number' && Number.isSafeInteger(v) ? v : null;
+    case 'boolean':
+      return typeof v === 'boolean' ? v : null;
+    case 'array': {
+      if (!Array.isArray(v)) return null;
+      const items = v.map(asStringArg);
+      return items.every((x) => x !== null) ? items : null;
+    }
+  }
+}
+
+/** The tool's arguments, checked against its declared input schema: only
+ * declared properties survive, each of its declared type. An absent or null
+ * property stays absent; whether it is required is the handler's to say. */
+export function parseArgs(tool: McpTool, raw: unknown): { args: Record<string, unknown> } | { error: string } {
+  if (raw === undefined || raw === null) raw = {};
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { error: 'arguments must be an object' };
+  const given = raw as Record<string, unknown>;
+  const props = (tool.inputSchema['properties'] ?? {}) as Record<string, { type: PropType }>;
+  const args: Record<string, unknown> = {};
+  for (const [name, spec] of Object.entries(props)) {
+    const v = given[name];
+    if (v === undefined || v === null) continue;
+    const parsed = coerce(spec.type, v);
+    if (parsed === null) return { error: `${name} must be ${ARTICLE[spec.type]}` };
+    args[name] = parsed;
+  }
+  return { args };
+}
 
 // ---- tools ----------------------------------------------------------------
 
@@ -73,14 +122,13 @@ function buildNewQuestion(args: Record<string, unknown>): NewQuestion | ToolResu
   const answer = arg(args, 'answer');
   if (!prompt) return toolError('missing required arg: prompt');
   if (!answer) return toolError('missing required arg: answer');
-  const choices = args['choices'];
-  if (choices !== undefined && choices !== null && !Array.isArray(choices)) return toolError('choices must be an array of strings');
+  const choices = args['choices'] as string[] | undefined;
   return {
     type: typeRaw as QuestionType,
     topic: arg(args, 'topic') || null,
     prompt,
     answer,
-    choices: Array.isArray(choices) && choices.length ? choices.map((c) => String(c)) : null,
+    choices: choices && choices.length ? choices : null,
     rubric: arg(args, 'rubric') || null,
     skeleton: arg(args, 'skeleton') || null,
     language: arg(args, 'language') || null,
@@ -348,10 +396,13 @@ export async function dispatch(repos: V1Repos, body: unknown, deps: McpDeps): Pr
   if (method === 'tools/list') return json(rpcResult(id, { tools: TOOLS }));
   if (method === 'tools/call') {
     const name = params['name'];
-    const args = (params['arguments'] ?? {}) as Record<string, unknown>;
     const handler = typeof name === 'string' ? HANDLERS[name] : undefined;
     const asyncHandler = typeof name === 'string' ? ASYNC_HANDLERS[name] : undefined;
-    if (!handler && !asyncHandler) return json(rpcError(id, -32602, `unknown tool: ${literal(name)}`));
+    const tool = TOOLS.find((t) => t.name === name);
+    if ((!handler && !asyncHandler) || !tool) return json(rpcError(id, -32602, `unknown tool: ${literal(name)}`));
+    const parsed = parseArgs(tool, params['arguments']);
+    if ('error' in parsed) return json(rpcResult(id, toolError(parsed.error)));
+    const args = parsed.args;
     try {
       return json(rpcResult(id, handler ? handler(repos, args) : await asyncHandler!(repos, args, deps)));
     } catch (e) {

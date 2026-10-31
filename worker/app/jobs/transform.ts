@@ -21,10 +21,10 @@ import {
 import { llmStep, type StepOutput, type WriteStepContext } from './registry.js';
 import { parseJsonObject, toNewQuestion } from './plan.js';
 import { SCOPES, transformCard, transformDeck, type TransformCard, type TransformDeck, type TransformScope } from '../../domain/jobs/snapshot.js';
+import { DEFAULT_TRIVIA_INTERVAL_MINUTES } from '../../domain/notify/wake.js';
 
 export { SCOPES, type TransformCard, type TransformDeck, type TransformScope };
 
-export const DEFAULT_TRIVIA_INTERVAL_MINUTES = 30;
 export const DECK_ADDITIONS_CAP = 15;
 export const REORGANIZE_ADDITIONS_CAP = 25;
 

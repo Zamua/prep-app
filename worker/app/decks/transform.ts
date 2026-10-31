@@ -10,7 +10,8 @@ import { page, redirect, type PageRequest, type PageResult } from '../pageResult
 import type { Question } from '../entities.js';
 import type { UserRepos, WorkflowRunner } from '../ports.js';
 import { flatten, gone } from '../jobs/view.js';
-import { NO_FUNDING, parseIntLiteral } from './pages.js';
+import { NO_FUNDING } from './pages.js';
+import { asInt } from '../validation.js';
 import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
 
 
@@ -33,7 +34,7 @@ export function parseTransformWid(wid: string): { scope: string; targetId: numbe
   if (parts.length < 3) return null;
   const scope = parts[0]!;
   if (!SCOPES.includes(scope)) return null;
-  const targetId = parseIntLiteral(parts[1]!);
+  const targetId = asInt(parts[1]);
   if (targetId === null) return null;
   return { scope, targetId };
 }

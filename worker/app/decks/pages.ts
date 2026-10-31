@@ -29,6 +29,9 @@ import { RETENTION_PRESETS, parseFloatLiteral } from '../settings/srs.js';
 import { addQuestion, setNotificationsEnabled, splitDeck, SplitRejected } from './service.js';
 import { deckContextFor, transformSnapshot } from '../jobs/transform.js';
 import { MAX_CONTEXT_PROMPT_CHARS, MAX_TOPIC_PROMPT_CHARS, uniqueSlug, validateDeckName, validateDisplayName } from './validation.js';
+import { DEFAULT_TRIVIA_INTERVAL_MINUTES } from '../../domain/notify/wake.js';
+import { inBounds, TRIVIA_INTERVAL_MINUTES } from '../../domain/trivia.js';
+import { asInt } from '../validation.js';
 
 export const DECK_NOT_FOUND = 'deck not found';
 export const QUESTION_NOT_FOUND = 'question not found';
@@ -106,10 +109,10 @@ export async function deckNewSrsCreate(repos: UserRepos, req: PageRequest, deps:
 export async function deckNewTriviaCreate(repos: UserRepos, req: PageRequest, deps: DeckDeps): Promise<PageResult> {
   const name = (req.form.get('name') ?? '').trim();
   const topic = (req.form.get('topic') ?? '').trim();
-  const rawInterval = (req.form.get('notification_interval_minutes') ?? '').trim() || '30';
+  const rawInterval = (req.form.get('notification_interval_minutes') ?? '').trim() || String(DEFAULT_TRIVIA_INTERVAL_MINUTES);
   const rerender = (error: string, status = 400): PageResult => {
-    const parsed = parseIntLiteral(rawInterval);
-    return page('deck_new_trivia.html', { name_value: name, topic_value: topic, interval_value: parsed ?? 30, error }, status);
+    const parsed = asInt(rawInterval);
+    return page('deck_new_trivia.html', { name_value: name, topic_value: topic, interval_value: parsed ?? DEFAULT_TRIVIA_INTERVAL_MINUTES, error }, status);
   };
 
   let display: string;
@@ -125,9 +128,10 @@ export async function deckNewTriviaCreate(repos: UserRepos, req: PageRequest, de
   if (!topic) {
     return rerender('Topic is required — it describes what the deck is about, and the AI uses it later if you configure one.');
   }
-  const interval = parseIntLiteral(rawInterval);
+  const interval = asInt(rawInterval);
   if (interval === null) return rerender('Notification interval must be an integer.');
-  if (interval < 1 || interval > 720) return rerender('Notification interval must be 1–720 minutes.');
+  const { min, max } = TRIVIA_INTERVAL_MINUTES;
+  if (!inBounds(interval, TRIVIA_INTERVAL_MINUTES)) return rerender(`Notification interval must be ${min}–${max} minutes.`);
 
   const created = repos.decks.createTrivia(slug, { topic, intervalMinutes: interval, displayName: display });
 
@@ -371,7 +375,7 @@ export async function deckSplitSubmit(repos: UserRepos, req: PageRequest): Promi
   const newTopic = (req.form.get('new_topic') ?? '').trim();
   const selected = req.form
     .getAll('question_ids')
-    .map((v) => parseIntLiteral(v))
+    .map((v) => asInt(v))
     .filter((n): n is number => n !== null);
   try {
     await splitDeck(repos, { sourceDeckId: id, newDeckName: newName, questionIds: selected, newTopicPrompt: newTopic || null });
@@ -501,12 +505,6 @@ export async function questionImprove(repos: UserRepos, req: PageRequest, deps: 
 }
 
 // ---- shared ----------------------------------------------------------------
-
-/** A whole-number literal; null when the text is not one. */
-export function parseIntLiteral(raw: string): number | null {
-  const s = raw.trim();
-  return /^[+-]?\d+$/.test(s) ? Number(s) : null;
-}
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 
