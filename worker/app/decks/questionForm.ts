@@ -1,9 +1,8 @@
 // The new-question and edit-question forms take the same fields in the
 // same shape, so one parse serves both: the entity when it validates, the
 // raw fields the template re-renders so typed input survives an error.
-import type { NewQuestion, Question, QuestionType } from '../entities.js';
+import { asQuestionType, QUESTION_TYPES, type NewQuestion, type Question } from '../entities.js';
 
-const VALID_TYPES: readonly string[] = ['code', 'mcq', 'multi', 'short'];
 
 /** Split on every Unicode line boundary, not just `\n`. */
 export function splitLines(s: string): string[] {
@@ -46,14 +45,15 @@ export function parseQuestionForm(form: URLSearchParams): ParsedQuestionForm {
   };
 
   let error: string | null = null;
-  if (!VALID_TYPES.includes(qtype)) error = `Type must be one of: ${VALID_TYPES.join(', ')}.`;
+  const type = asQuestionType(qtype);
+  if (type === null) error = `Type must be one of: ${QUESTION_TYPES.join(', ')}.`;
   else if (!prompt) error = 'Prompt is required.';
   else if (!answerRaw) error = 'Answer is required.';
   else if ((qtype === 'mcq' || qtype === 'multi') && !choices) {
     error = `${qtype.toUpperCase()} questions need at least one choice (one per line).`;
   } else if (qtype === 'code' && !language) error = 'Code questions need a language.';
 
-  if (error) return { question: null, raw, error };
+  if (error || type === null) return { question: null, raw, error };
 
   // `multi` answers store a JSON array; accept either a JSON literal or a
   // newline-separated list.
@@ -71,7 +71,7 @@ export function parseQuestionForm(form: URLSearchParams): ParsedQuestionForm {
 
   return {
     question: {
-      type: qtype as QuestionType,
+      type,
       prompt,
       answer,
       topic,

@@ -2,7 +2,12 @@
 // are the column names; a cell holds one user, so no row carries a user
 // column.
 
-export type QuestionType = 'code' | 'mcq' | 'multi' | 'short';
+export const QUESTION_TYPES = ['code', 'mcq', 'multi', 'short'] as const;
+export type QuestionType = (typeof QUESTION_TYPES)[number];
+
+/** The type a string names, or null. */
+export const asQuestionType = (raw: string): QuestionType | null =>
+  (QUESTION_TYPES as readonly string[]).includes(raw) ? (raw as QuestionType) : null;
 export type DeckType = 'srs' | 'trivia';
 export type ReviewResult = 'right' | 'wrong';
 
@@ -101,6 +106,10 @@ export interface Question {
   explanation: string | null;
   answer_regex: string | null;
 }
+
+/** A card's own content, in the order every export writes it: the JSON
+ * view, the MCP tools and the CSV header. */
+export const CARD_FIELDS = ['type', 'topic', 'prompt', 'answer', 'choices', 'rubric', 'skeleton', 'language', 'answer_regex', 'explanation'] as const satisfies readonly (keyof Question)[];
 
 export interface DeckCard {
   id: number;

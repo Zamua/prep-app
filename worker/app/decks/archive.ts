@@ -7,7 +7,7 @@ import { literal, literalList } from '../../domain/grading/literal.js';
 import { IsoFormatError, isoUtc, parseIso } from '../../domain/time.js';
 import { parseCsvRecords, writeRow } from '../api/csv.js';
 import { CSV_COLUMNS, questionToRow, questionsForExport, type DeckIoRepos } from '../api/deckIo.js';
-import type { NewQuestion, QuestionType, ReviewResult } from '../entities.js';
+import { asQuestionType, type NewQuestion, type ReviewResult } from '../entities.js';
 import { NotAZip, type CardRepo, type ReviewRepo, type UserRepos, type ZipCodec, type ZipEntry } from '../ports.js';
 import { rowCapMessage } from './importLimits.js';
 
@@ -27,7 +27,6 @@ const REVIEW_COLUMNS = [ARCHIVE_ID_COLUMN, 'prompt', 'ts', 'result', 'user_answe
 const VALID_NAME = /^[a-z0-9][a-z0-9-]{1,29}$/;
 const VALID_NAME_SOURCE = '^[a-z0-9][a-z0-9-]{1,29}$';
 
-const QUESTION_TYPES: readonly string[] = ['code', 'mcq', 'multi', 'short'];
 
 const REQUIRED_ENTRIES = ['cards.csv', 'meta.json', 'reviews.csv'] as const;
 
@@ -354,7 +353,8 @@ function importCards(
     // The fallback reads the raw cell, so a whitespace-only one stays truthy
     // and strips to a type no `QuestionType` names.
     const typeRaw = ((row['type'] ?? '') || 'short').trim().toLowerCase();
-    if (!QUESTION_TYPES.includes(typeRaw)) {
+    const type = asQuestionType(typeRaw);
+    if (type === null) {
       errors.push(`cards.csv row ${i}: unknown type ${literal(row['type'] ?? null)}`);
       continue;
     }
@@ -366,7 +366,7 @@ function importCards(
     const choices = archiveChoices(version, row, errors, i);
     const optional = (name: string): string | null => archiveContent(version, row, name) || null;
     const question: NewQuestion = {
-      type: typeRaw as QuestionType,
+      type,
       topic: optional('topic'),
       prompt,
       answer,
