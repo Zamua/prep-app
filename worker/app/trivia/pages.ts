@@ -7,10 +7,10 @@ import type { Question } from '../entities.js';
 import { badRequest, notFound } from '../errors.js';
 import { CHAT_PROVIDERS, DEFAULT_PROVIDER, buildMessage, providerUrls, quoteAll } from '../study/handoff.js';
 import { page, redirect, redirectBack, type PageRequest, type PageResult } from '../pageResult.js';
-import type { AgentPort, UserRepos, WorkflowRunner } from '../ports.js';
+import type { UserRepos, WorkflowRunner } from '../ports.js';
 import { parseIntLiteral } from '../decks/pages.js';
 import { triviaStartInput } from '../jobs/startInput.js';
-import { aiRegrade, gradeWithFallback, type Verdict } from './grading.js';
+import { aiRegrade, gradeWithFallback, type Judge, type Verdict } from './grading.js';
 
 export const DECK_NOT_FOUND = 'deck not found';
 export const QUESTION_NOT_FOUND = 'question not found';
@@ -19,7 +19,7 @@ export const TRIVIA_DECK_NOT_FOUND = 'trivia deck not found';
 
 export interface TriviaDeps {
   repos: UserRepos;
-  agent: AgentPort;
+  judge: Judge;
   runner: WorkflowRunner;
   freeTierConfigured: boolean;
 }
@@ -149,7 +149,7 @@ export async function triviaSessionAnswer(req: PageRequest, deps: TriviaDeps): P
     verdict = { correct: false, feedback: null, regex_update: null };
     given = '';
   } else {
-    verdict = await gradeWithFallback(deps.agent, q, answer);
+    verdict = await gradeWithFallback(deps.judge, q, answer);
     given = answer;
   }
 
@@ -222,7 +222,7 @@ export async function triviaSessionRegrade(req: PageRequest, deps: TriviaDeps): 
   if (q === null || q.deck_id !== id) throw notFound(NOT_IN_DECK);
 
   const answer = req.form.get('answer') ?? '';
-  const verdict = await aiRegrade(deps.agent, { prompt: q.prompt, expected: q.answer, given: answer, currentRegex: q.answer_regex });
+  const verdict = await aiRegrade(deps.judge, { prompt: q.prompt, expected: q.answer, given: answer, currentRegex: q.answer_regex });
   repos.trivia.setLastCorrectness(qid, verdict.correct);
   const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(qid, verdict.regex_update, q.answer_regex) : false;
 
@@ -257,7 +257,7 @@ export async function triviaAnswer(req: PageRequest, deps: TriviaDeps): Promise<
   const { repos } = deps;
   const { q, deckName } = cardAndDeck(repos, req);
   const answer = req.form.get('answer') ?? '';
-  const verdict = await gradeWithFallback(deps.agent, q, answer);
+  const verdict = await gradeWithFallback(deps.judge, q, answer);
   repos.trivia.markAnswered(q.id, verdict.correct);
   const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(q.id, verdict.regex_update, q.answer_regex) : false;
   return page('trivia/card.html', {
@@ -272,7 +272,7 @@ export async function triviaCardRegrade(req: PageRequest, deps: TriviaDeps): Pro
   const { repos } = deps;
   const { q, deckName } = cardAndDeck(repos, req);
   const answer = req.form.get('answer') ?? '';
-  const verdict = await aiRegrade(deps.agent, { prompt: q.prompt, expected: q.answer, given: answer, currentRegex: q.answer_regex });
+  const verdict = await aiRegrade(deps.judge, { prompt: q.prompt, expected: q.answer, given: answer, currentRegex: q.answer_regex });
   // Only the verdict column moves: the card keeps its place in the queue.
   repos.trivia.setLastCorrectness(q.id, verdict.correct);
   const regexUpdated = verdict.regex_update ? repos.questions.setAnswerRegex(q.id, verdict.regex_update, q.answer_regex) : false;

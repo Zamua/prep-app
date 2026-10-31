@@ -124,16 +124,10 @@ export function observeHttpRequest(method: string, route: string, status: number
   DEFAULT.httpRequest.observe([method, route, String(status)], seconds);
 }
 
-/** Declared and exposed, with no caller yet: the grading verdict is known
- * inside `aiGrade`, and reporting it from there would weave the metric into
- * the use case. It wants a port the composition root wraps the agent with. */
 export function observeAiGrade(verdict: string, seconds: number): void {
   DEFAULT.aiGrade.observe([verdict], seconds);
 }
 
-/** Declared and exposed, with no caller yet: the outcome label is finer than
- * the refusal the use case returns, so `generateInstantDeck` would have to
- * carry a metric label in its result type. */
 export function observeInstantGenerate(outcome: string, seconds: number): void {
   DEFAULT.instantGenerate.observe([outcome], seconds);
 }

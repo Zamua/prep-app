@@ -82,55 +82,81 @@ export function parseGradeJson(out: string): Record<string, unknown> {
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-export async function aiGrade(
-  agent: AgentPort,
-  input: { prompt: string; expected: string; given: string; currentRegex: string | null },
-): Promise<Verdict> {
-  if (!input.given.trim()) return { correct: false, feedback: 'No answer given.', regex_update: null };
-  const fill = (t: string, key: string, value: string) => t.replace(key, () => value);
-  let text = fill(AI_GRADE_PROMPT, '%(prompt)s', input.prompt.trim());
-  text = fill(text, '%(expected)s', input.expected.trim());
-  text = fill(text, '%(current_regex)s', input.currentRegex || 'null');
-  text = fill(text, '%(given)s', input.given.trim());
+export interface GradeInput {
+  prompt: string;
+  expected: string;
+  given: string;
+  currentRegex: string | null;
+}
 
-  let out: string;
-  try {
-    out = await agent.complete({ system: '', user: text, signal: AbortSignal.timeout(GRADE_TIMEOUT_MS) });
-  } catch (e) {
-    if (!(e instanceof AgentUnavailable)) throw e;
-    const feedback =
-      e instanceof AgentBusy
-        ? '(graded by string similarity - free AI was busy)'
-        : '(graded by string similarity - the AI grader was unreachable)';
-    return { correct: gradeAnswer(input.expected, input.given), feedback, regex_update: null };
-  }
+/** The model's reading of one answer, or why there is none. */
+export type Judgement =
+  | { kind: 'verdict'; correct: boolean; feedback: string; regexUpdate: unknown }
+  | { kind: 'busy' }
+  | { kind: 'unreachable' }
+  | { kind: 'malformed' };
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = parseGradeJson(out);
-  } catch {
+/** One grading call to the model. Every failure the fallback covers comes
+ * back as a value; anything else throws. */
+export type Judge = (input: GradeInput) => Promise<Judgement>;
+
+export function modelJudge(agent: AgentPort): Judge {
+  return async (input) => {
+    const fill = (t: string, key: string, value: string) => t.replace(key, () => value);
+    let text = fill(AI_GRADE_PROMPT, '%(prompt)s', input.prompt.trim());
+    text = fill(text, '%(expected)s', input.expected.trim());
+    text = fill(text, '%(current_regex)s', input.currentRegex || 'null');
+    text = fill(text, '%(given)s', input.given.trim());
+
+    let out: string;
+    try {
+      out = await agent.complete({ system: '', user: text, signal: AbortSignal.timeout(GRADE_TIMEOUT_MS) });
+    } catch (e) {
+      if (!(e instanceof AgentUnavailable)) throw e;
+      return { kind: e instanceof AgentBusy ? 'busy' : 'unreachable' };
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = parseGradeJson(out);
+    } catch {
+      return { kind: 'malformed' };
+    }
     return {
-      correct: gradeAnswer(input.expected, input.given),
-      feedback: '(graded by string similarity - the AI grader returned malformed output)',
-      regex_update: null,
+      kind: 'verdict',
+      correct: asString(parsed['verdict']).trim().toLowerCase() === 'right',
+      feedback: asString(parsed['feedback']).trim(),
+      regexUpdate: parsed['regex_update'],
     };
+  };
+}
+
+const FALLBACK_FEEDBACK: Record<Exclude<Judgement['kind'], 'verdict'>, string> = {
+  busy: '(graded by string similarity - free AI was busy)',
+  unreachable: '(graded by string similarity - the AI grader was unreachable)',
+  malformed: '(graded by string similarity - the AI grader returned malformed output)',
+};
+
+export async function aiGrade(judge: Judge, input: GradeInput): Promise<Verdict> {
+  if (!input.given.trim()) return { correct: false, feedback: 'No answer given.', regex_update: null };
+  const judgement = await judge(input);
+  if (judgement.kind !== 'verdict') {
+    return { correct: gradeAnswer(input.expected, input.given), feedback: FALLBACK_FEEDBACK[judgement.kind], regex_update: null };
   }
-  const correct = asString(parsed['verdict']).trim().toLowerCase() === 'right';
   let regexUpdate: string | null = null;
-  if (correct && asString(parsed['regex_update']).trim()) {
-    regexUpdate = validateRegexUpdate(parsed['regex_update'], input.expected, input.given);
+  if (judgement.correct && asString(judgement.regexUpdate).trim()) {
+    regexUpdate = validateRegexUpdate(judgement.regexUpdate, input.expected, input.given);
   }
-  return { correct, feedback: asString(parsed['feedback']).trim(), regex_update: regexUpdate };
+  return { correct: judgement.correct, feedback: judgement.feedback, regex_update: regexUpdate };
 }
 
 /** The regrade path is the same call; the name keeps the dispute explicit. */
 export const aiRegrade = aiGrade;
 
-export async function gradeWithFallback(agent: AgentPort, q: Question, userAnswer: string): Promise<Verdict> {
+export async function gradeWithFallback(judge: Judge, q: Question, userAnswer: string): Promise<Verdict> {
   const regexVerdict = matchRegex(q.answer_regex, userAnswer);
   if (regexVerdict === true) return { correct: true, feedback: null, regex_update: null };
 
-  const ask = () => aiGrade(agent, { prompt: q.prompt, expected: q.answer, given: userAnswer, currentRegex: q.answer_regex });
+  const ask = () => aiGrade(judge, { prompt: q.prompt, expected: q.answer, given: userAnswer, currentRegex: q.answer_regex });
   if (classifyGrading(q.answer) === 'ai') return ask();
 
   if (gradeAnswer(q.answer, userAnswer)) return { correct: true, feedback: null, regex_update: null };

@@ -4,6 +4,7 @@
 import { generateInstantDeck, type InstantDeps } from '../../app/instant/generate.js';
 import { limiterBucket, SENTINEL_BUCKET } from '../../domain/instant/index.js';
 import { ANON_COOKIE_HEADER } from '../compose.js';
+import { observedInstant } from '../instrument.js';
 
 const DEFAULT_CLIENT_IP_HEADER = 'x-real-ip';
 const XFF_LAST_MODE = 'x-forwarded-for-last';
@@ -11,6 +12,8 @@ const XFF_LAST_MODE = 'x-forwarded-for-last';
 /** Far above any legitimate topic payload, and enforced before the parse:
  * the endpoint is anonymous and the limiter only runs after it. */
 export const MAX_BODY_BYTES = 16 * 1024;
+
+const generate = observedInstant(generateInstantDeck);
 
 export interface ClientIpEnv {
   PREP_CLIENT_IP_HEADER?: string;
@@ -63,7 +66,7 @@ export async function serveInstant(
     // Malformed, oversized and aborted bodies refuse alike.
     body = null;
   }
-  const outcome = await generateInstantDeck(deps, { ip, body, userId: who.userId, userIsAnonymous: who.userIsAnonymous });
+  const outcome = await generate(deps, { ip, body, userId: who.userId, userIsAnonymous: who.userIsAnonymous });
   if (!outcome.ok) {
     const headers: Record<string, string> = {};
     if (outcome.retryAfterS !== null) headers['retry-after'] = String(outcome.retryAfterS);

@@ -13,13 +13,15 @@ import * as openrouter from '../../../app/settings/openrouter.js';
 import * as srs from '../../../app/settings/srs.js';
 import * as shell from '../../../app/study/shell.js';
 import * as trivia from '../../../app/trivia/pages.js';
+import { modelJudge } from '../../../app/trivia/grading.js';
 import { MAX_APKG_UPLOAD_BYTES, MAX_CSV_UPLOAD_BYTES, MAX_PREPDECK_UPLOAD_BYTES, uploadTooLarge } from '../../../app/decks/importLimits.js';
 import type { UserRepos } from '../../../app/ports.js';
+import { observedJudge } from '../../instrument.js';
 import { route, uploadRoute } from './adapt.js';
 import type { CellPorts, Route } from '../router.js';
 
 const deckDeps = (ports: CellPorts) => ({ freeTierConfigured: ports.freeTierConfigured, random: ports.random, runner: ports.runner });
-const triviaDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, agent: ports.agent, runner: ports.runner, freeTierConfigured: ports.freeTierConfigured });
+const triviaDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, judge: observedJudge(modelJudge(ports.agent)), runner: ports.runner, freeTierConfigured: ports.freeTierConfigured });
 const shellDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, signInUrl: ports.authUrls.signIn });
 const accountDeps = (ports: CellPorts) => ({ deleter: ports.accountDeleter });
 const notifyDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, webPush: ports.webPush, vapidPublicKey: ports.vapidPublicKey });
