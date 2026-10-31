@@ -249,8 +249,6 @@ function authUrlsOf(clerk: ClerkProvider | null, identity: IdentityProvider): Au
   };
 }
 
-/** Clerk only outside testMode, and only when its five vars are all set: a
- * half-configured provider must not silently become "nobody is signed in". */
 /** Deleting at Clerk needs the secret key, and the cell is only wiped when
  * the `user.deleted` webhook can be verified; without both, the page 404s. */
 function accountDeleterOf(config: ClerkConfig | null, webhooksVerified: boolean, warn: (message: string) => void): AccountDeleter | null {
@@ -261,6 +259,8 @@ function accountDeleterOf(config: ClerkConfig | null, webhooksVerified: boolean,
   return null;
 }
 
+/** Clerk only outside testMode, and only when its five vars are all set: a
+ * half-configured provider must not silently become "nobody is signed in". */
 function clerkOrNull(env: Env, clock: Clock): { provider: ClerkProvider; config: ClerkConfig } | null {
   if (env.PREP_TEST_MODE === '1') return null;
   if (!(env.CLERK_ISSUER ?? '').trim()) return null;
