@@ -266,7 +266,12 @@ export function bearerOrSessionCookie(request: Request): string | null {
     const value = authorization.slice(space + 1).trim();
     if (value) return value;
   }
-  return parseCookieHeader(request.headers.get('cookie'))[SESSION_COOKIE] ?? null;
+  // `__client_uat=0` is ClerkJS saying the client has no session. It can
+  // leave a still-unexpired `__session` behind (a deleted user's), and
+  // Clerk's own backend reads that pair as signed out.
+  const cookies = parseCookieHeader(request.headers.get('cookie'));
+  if (cookies[CLIENT_UAT_COOKIE]?.trim() === '0') return null;
+  return cookies[SESSION_COOKIE] ?? null;
 }
 
 /** Bounds a hung Clerk API, which would otherwise hold the request open. */

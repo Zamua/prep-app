@@ -232,6 +232,14 @@ describe('the provider', () => {
     expect(await provider().identify(req('/'))).toBeNull();
   });
 
+  it('refuses a __session cookie that Clerk has marked signed out', async () => {
+    const token = jwt({ ...BASE });
+    expect(bearerOrSessionCookie(req('/', { headers: { cookie: `__session=${token}; __client_uat=0` } }))).toBeNull();
+    expect(await provider().identify(req('/', { headers: { cookie: `__session=${token}; __client_uat=0` } }))).toBeNull();
+    expect((await provider().identify(req('/', { headers: { cookie: `__session=${token}; __client_uat=1771000000` } })))?.subject).toBe('user_2abc');
+    expect(bearerOrSessionCookie(req('/', { headers: { authorization: `Bearer ${token}`, cookie: '__client_uat=0' } }))).toBe(token);
+  });
+
   it('reads __client_uat as the dormant-session flag', () => {
     const p = provider();
     expect(p.hasDormantSession(req('/', { headers: { cookie: '__client_uat=1771000000' } }))).toBe(true);
