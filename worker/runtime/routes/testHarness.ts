@@ -2,20 +2,17 @@
 // user cell and everything global a run touches, a read-only cell dump, the
 // job probes, and pages a test cannot otherwise reach. The composition root
 // refuses test mode on prod, so none of this is reachable there.
-import type { CellSnapshot } from '../../app/entities.js';
+import type { UserCellRpc } from '../../app/ports.js';
 import { isoUtc } from '../../domain/time.js';
-import { UnknownProfile } from '../cells/UserCell.js';
+import { ANONYMOUS_PROFILE, UnknownProfile, type SeedRpc } from '../cells/seed/cell.js';
 import { clockFor, TEST_NOW_HEADER, type Composition } from '../compose.js';
 import type { Env } from '../env.js';
 import { errorPage, type PageFn } from '../errors.js';
 import { refuseWithoutInternalToken } from '../internalToken.js';
 import { serveTestJobs } from './testJobs.js';
 
-interface SeedApi {
-  wipe(profile: string): Promise<void>;
-  seed(profile: string, user: string, at: string | null): Promise<Record<string, unknown>>;
-  dump(): Promise<CellSnapshot>;
-}
+/** A user cell as the seed drives it: its test RPCs plus the snapshot. */
+type SeedApi = SeedRpc & Pick<UserCellRpc, 'dump'>;
 
 /** The global ledger's own reset, which the seed drives. */
 interface LimiterSeedApi {
@@ -104,7 +101,6 @@ async function clearJobs(stub: SeedApi, c: Composition): Promise<void> {
 }
 
 const JOB_TABLES = ['active_workflows', 'job_progress'] as const;
-const ANONYMOUS_PROFILE = 'anonymous';
 const ANONYMOUS_PAGE = 100;
 const ANONYMOUS_PAGES = 20;
 

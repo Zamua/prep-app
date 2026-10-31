@@ -2,6 +2,7 @@
 // come out of the same code paths a real write does. A cell has no database
 // file to open, so a fixture is a profile rather than a dump.
 import type { Hasher, UserRepos } from '../../../app/ports.js';
+import type { TestPins } from './pins.js';
 import { profileApiE2e } from './apiE2e.js';
 import { profileDeviceWipe } from './deviceWipe.js';
 import { profileEmpty } from './empty.js';
@@ -24,6 +25,7 @@ export interface Delta {
 
 export interface SeedContext {
   repos: UserRepos;
+  pins: TestPins;
   user: string;
   hasher: Hasher;
   /** The clock shifted by the delta, in the column format. */

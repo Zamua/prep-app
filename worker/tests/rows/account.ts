@@ -6,6 +6,7 @@
 // months out, the reviews behind them, answered trivia, older notifications
 // and finished jobs. None of it is due, so two accounts that differ only in
 // `history` owe the same study work and differ only in how much they hold.
+import type { TestPins } from '../../runtime/cells/seed/pins.js';
 import type { Clock, UserRepos } from '../../app/ports.js';
 import { compose } from '../../runtime/compose.js';
 import type { Env } from '../../runtime/env.js';
@@ -143,7 +144,7 @@ export async function buildAccount(state: WorkerEnv, shape: AccountShape = REALI
     repos.jobs.setTerminalAt(wid);
   }
 
-  if (shape.history > 0) settledHistory(repos, clock, shape, byName, triviaId);
+  if (shape.history > 0) settledHistory(repos, compose(env).seedPins(storage), clock, shape, byName, triviaId);
 
   const token = await mintToken(storage, SEED_USER, 'mcp');
   return { env, storage, token, answers, deckIds: byName };
@@ -151,7 +152,7 @@ export async function buildAccount(state: WorkerEnv, shape: AccountShape = REALI
 
 /** Learned cards, their reviews, answered trivia and old notifications: rows an
  * older account holds that owe nothing today. */
-function settledHistory(repos: UserRepos, clock: MovingClock, shape: AccountShape, byName: Map<string, number>, triviaId: number): void {
+function settledHistory(repos: UserRepos, pins: TestPins, clock: MovingClock, shape: AccountShape, byName: Map<string, number>, triviaId: number): void {
   const now = Date.parse(NOW);
   clock.at = now - 400 * DAY;
   shape.srsDecks.forEach((count, d) => {
@@ -169,7 +170,7 @@ function settledHistory(repos: UserRepos, clock: MovingClock, shape: AccountShap
   }
   for (let i = 0; i < shape.notifications * shape.history; i++) {
     const id = repos.notify.append({ title: 'cards ready', body: `old ${i}`, url: '/', source: 'srs-when-ready' });
-    repos.pins.notificationSentAt(id, iso(now - (10 + i) * DAY).replace('+00:00', 'Z'));
+    pins.notificationSentAt(id, iso(now - (10 + i) * DAY).replace('+00:00', 'Z'));
   }
   repos.notify.markAllSeen();
   repos.notify.append({ title: 'cards ready', body: 'unseen', url: '/', source: 'srs-when-ready' });

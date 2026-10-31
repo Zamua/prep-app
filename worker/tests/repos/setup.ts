@@ -2,7 +2,8 @@
 import type { Clock, Random, UserRepos } from '../../app/ports.js';
 import { FixedClock } from '../../runtime/adapters/clock.js';
 import { SeededRandom, SeededSessionIds } from '../../runtime/adapters/random.js';
-import { migrate, USER_MIGRATIONS, userRepos } from '../../runtime/adapters/sql/index.js';
+import { migrate, SqlTestPins, USER_MIGRATIONS, userRepos } from '../../runtime/adapters/sql/index.js';
+import type { TestPins } from '../../runtime/cells/seed/pins.js';
 import { FakeCellStorage } from '../fakes/sqlStorage.js';
 
 export const TEST_NOW = new Date('2026-03-14T15:00:00Z');
@@ -11,6 +12,8 @@ export const USER = 'seed@example.com';
 export interface Cell {
   storage: FakeCellStorage;
   repos: UserRepos;
+  /** The seed's column pins over the same storage. */
+  pins: TestPins;
   clock: MutableClock;
   random: Random;
 }
@@ -44,7 +47,7 @@ export function cell(opts: { anonymous?: boolean; profile?: boolean; at?: Date }
     if (opts.anonymous) repos.prefs.createAnonymous('anon:' + 'ab'.repeat(16), 'Guest');
     else repos.prefs.upsert(USER, { email: USER, displayName: 'Seed' });
   }
-  return { storage, repos, clock, random };
+  return { storage, repos, pins: new SqlTestPins(storage), clock, random };
 }
 
 export const at = (base: Date, ms: number) => new Date(base.getTime() + ms);

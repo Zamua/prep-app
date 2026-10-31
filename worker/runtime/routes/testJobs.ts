@@ -7,6 +7,7 @@
 // workflows are written: the probe job's steps do exactly what theirs do to
 // the ledger, and this endpoint starts one, signals it, and reads back the
 // rows an assertion needs.
+import type { SeedRpc } from '../cells/seed/cell.js';
 import type { JobCellRpc } from '../../app/ports.js';
 import type { Composition } from '../compose.js';
 import type { Env } from '../env.js';
@@ -36,9 +37,6 @@ interface AbandonBody {
  * itself, and an owner drops what a deleted execution left behind. */
 interface JobReset {
   wipe(): Promise<void>;
-}
-interface OwnerReset {
-  forgetJob(jobId: string, at: string): Promise<void>;
 }
 
 /** Null when the path is not one of ours, so the caller falls through. */
@@ -84,7 +82,7 @@ export async function serveTestJobs(request: Request, url: URL, env: Env, c: Com
     const body = (await request.json()) as AbandonBody;
     if (typeof body.id !== 'string' || typeof body.owner !== 'string') return Response.json({ detail: 'id and owner are required' }, { status: 422 });
     await (cell(body.id) as unknown as JobReset).wipe();
-    await (c.userCells.cell(body.owner) as unknown as OwnerReset).forgetJob(body.id, at);
+    await (c.userCells.cell(body.owner) as unknown as SeedRpc).forgetJob(body.id, at);
     return Response.json({ abandoned: body.id });
   }
 

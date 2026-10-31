@@ -31,7 +31,7 @@ function randomCell(seed: number): Cell & { srs: number[]; trivia: number } {
   const hours = [-30 * H, -5 * H, -5 * H + 20 * M, -2 * H, -2 * H + 59 * M, -1, 0, 1, 3 * D];
   const srs = ['alpha', 'beta', 'gamma', 'empty'].map((name) => c.repos.decks.create(name, { displayName: r() < 0.5 ? null : name.toUpperCase() }));
   c.repos.decks.setNotificationsEnabled(srs[1]!, false);
-  c.repos.pins.pinnedAt(srs[2]!, NOW_ISO);
+  c.pins.pinnedAt(srs[2]!, NOW_ISO);
   const trivia = c.repos.decks.createTrivia('quiz', { topic: 'facts', intervalMinutes: 30 });
   for (const deck of srs.slice(0, 3)) {
     const n = 5 + Math.floor(r() * 30);

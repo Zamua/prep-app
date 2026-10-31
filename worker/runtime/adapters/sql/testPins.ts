@@ -1,6 +1,6 @@
 // Column pins the seed writes past the repositories: timestamps the
 // profiles fix relative to the clock, which no repository method exposes.
-import type { TestPins } from '../../../app/ports.js';
+import type { TestPins } from '../../cells/seed/pins.js';
 import { Db, type CellStorage } from './storage.js';
 
 export class SqlTestPins implements TestPins {

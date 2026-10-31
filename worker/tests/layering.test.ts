@@ -94,4 +94,21 @@ describe('the dependency rule holds', () => {
     expect(checked).toBeGreaterThanOrEqual(3);
     for (const layer of ['domain', 'app', 'runtime']) expect(tsFiles(join(ROOT, layer)).length).toBeGreaterThan(0);
   });
+
+  it('keeps the seed and its column pins out of the app and the request path', () => {
+    const SEED_SEAMS = /\b(TestPins|SqlTestPins|seed\/cell\.js|seed\/pins\.js)\b/;
+    const allowed = new Set([
+      'runtime/adapters/sql/testPins.ts',
+      'runtime/adapters/sql/index.ts',
+      'runtime/compose.ts',
+      'runtime/cells/UserCell.ts',
+      'runtime/routes/testHarness.ts',
+      'runtime/routes/testJobs.ts',
+    ]);
+    const offenders = [...tsFiles(join(ROOT, 'app')), ...tsFiles(join(ROOT, 'runtime'))]
+      .map(rel)
+      .filter((f) => !f.startsWith('runtime/cells/seed/') && !allowed.has(f))
+      .filter((f) => SEED_SEAMS.test(readFileSync(join(ROOT, f), 'utf8')));
+    expect(offenders).toEqual([]);
+  });
 });
