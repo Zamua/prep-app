@@ -2,7 +2,7 @@
 // the stored ones, so validation runs on the merge, not on the request: a
 // partial update cannot be rejected for the fields it left alone.
 import { DEFAULT_NOTIFICATION_PREFS, type NotificationPrefs } from '../entities.js';
-import { enumError, intRange, type ValidationDetail } from '../validation.js';
+import { enumError, intRange, intType, type ValidationDetail } from '../validation.js';
 
 export const NOTIFY_MODES = ['off', 'digest', 'when-ready'] as const;
 export const TZ_MAX_LENGTH = 64;
@@ -25,13 +25,6 @@ const INT_FIELDS: IntField[] = [
   { name: 'quiet_start_hour', ge: 0, le: 23 },
   { name: 'quiet_end_hour', ge: 0, le: 23 },
 ];
-
-const intType = (name: string, input: unknown): ValidationDetail => ({
-  type: 'int_type',
-  loc: [name],
-  msg: 'Input should be a valid integer',
-  input,
-});
 
 const boolType = (name: string, input: unknown): ValidationDetail => ({
   type: 'bool_type',
@@ -57,7 +50,7 @@ export function validatePrefs(merged: Record<string, unknown>): NotificationPref
   for (const f of INT_FIELDS) {
     const raw = merged[f.name] ?? DEFAULT_NOTIFICATION_PREFS[f.name];
     if (typeof raw !== 'number' || !Number.isInteger(raw)) {
-      errors.push(intType(f.name, raw));
+      errors.push(intType([f.name], raw));
       continue;
     }
     if (raw < f.ge) errors.push(intRange([f.name], raw, 'ge', f.ge));

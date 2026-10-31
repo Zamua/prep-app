@@ -3,6 +3,7 @@
 // reach takes the whole instant-start product offline, and no page test
 // covers it because the page suites run as a signed-in user.
 import { describe, expect, it } from 'vitest';
+import { routeTemplate } from '../runtime/cells/router.js';
 import { apiRoutes } from '../runtime/cells/routes/api.js';
 import { pageRoutes } from '../runtime/cells/routes/pages.js';
 import { servePublic } from '../runtime/routes/openapi.js';
@@ -35,11 +36,11 @@ const OAUTH: readonly Key[] = ['GET /settings/agent/openrouter/start', 'GET /set
 
 const DEBUG_ROUTE = /^[A-Z]+ \/_?debug\//;
 
-const cell = new Map<Key, string>([...pageRoutes, ...jobRoutes, ...apiRoutes].map((r) => [key(r.method, r.pattern), r.gate]));
+const cell = new Map<Key, string>([...pageRoutes, ...jobRoutes, ...apiRoutes].map((r) => [key(r.method, routeTemplate(r)), r.gate]));
 
 describe('the cell route table', () => {
   it('declares each method and pattern once', () => {
-    const keys = [...pageRoutes, ...jobRoutes, ...apiRoutes].map((r) => key(r.method, r.pattern));
+    const keys = [...pageRoutes, ...jobRoutes, ...apiRoutes].map((r) => key(r.method, routeTemplate(r)));
     expect(keys).toEqual([...new Set(keys)]);
     expect(keys).toHaveLength(119);
   });

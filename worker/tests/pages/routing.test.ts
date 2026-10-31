@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PKCE_COOKIE } from '../../app/settings/openrouter.js';
 import { pageRoutes } from '../../runtime/cells/routes/pages.js';
-import { matchRoute } from '../../runtime/cells/router.js';
+import { matchRoute, routeTemplate } from '../../runtime/cells/router.js';
 import { seeded, USER } from './setup.js';
 
 /** The verifier as the start route writes it: the account is part of it. */
@@ -9,7 +9,10 @@ const BOUND = `v.${encodeURIComponent(USER)}`;
 
 describe('the page route table', () => {
   it('matches every sub-resource before the deck and trivia catch-alls', () => {
-    const of = (method: string, path: string) => matchRoute(pageRoutes, method, path)?.route.pattern;
+    const of = (method: string, path: string) => {
+      const matched = matchRoute(pageRoutes, method, path);
+      return matched ? routeTemplate(matched.route) : undefined;
+    };
     expect(of('GET', '/deck/world-capitals/export')).toBe('/deck/{name}/export');
     expect(of('GET', '/deck/world-capitals/question/new')).toBe('/deck/{name}/question/new');
     expect(of('GET', '/deck/world-capitals')).toBe('/deck/{name}');
@@ -34,6 +37,16 @@ describe('the page route table', () => {
     const signedIn = pageRoutes.filter((r) => r.gate === 'signedIn').map((r) => r.pattern);
     expect(signedIn.every((p) => p.startsWith('/settings/') || p.startsWith('/notify') || p.startsWith('/decks/import-'))).toBe(true);
     expect(pageRoutes.filter((r) => r.gate === 'user').length).toBeGreaterThan(signedIn.length);
+  });
+
+  it('matches an id parameter only on digits, so anything else is a 404 at the edge', async () => {
+    expect(matchRoute(pageRoutes, 'GET', '/trivia/10')?.params).toEqual({ question_id: '10' });
+    for (const path of ['/trivia/abc', '/trivia/1e3', '/trivia/-1', '/trivia/1234567890123456', '/question/x/edit']) {
+      expect(matchRoute(pageRoutes, 'GET', path), path).toBeNull();
+    }
+    const h = await seeded('reader');
+    expect((await h.get('/trivia/abc')).status).toBe(404);
+    expect((await h.post('/question/x/suspend')).status).toBe(404);
   });
 
   it('refuses an unmatched method rather than answering the GET', async () => {
