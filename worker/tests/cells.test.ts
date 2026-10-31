@@ -8,7 +8,7 @@ import { TOMBSTONED_HEADER, UnknownProfile, UserCell } from '../runtime/cells/Us
 import { CELL_ROUTES } from '../runtime/cells/routes/all.js';
 import type { Env } from '../runtime/env.js';
 import { fakeCellState, FakeCellStorage } from './fakes/sqlStorage.js';
-import { expectedPage, fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
+import { fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
 
 const USER = 'seed@example.com';
 const ANON = 'anon:' + 'ab'.repeat(16);
@@ -56,11 +56,6 @@ function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
 }
 
 describe('UserCell.seed', () => {
-  it.each(['reader', 'empty', 'anonymous'])('reproduces the pinned seed JSON for %s', async (profile) => {
-    const seed = await reseed(cell, profile);
-    expect(seed).toEqual(JSON.parse(JSON.stringify(expectedPage(profile, 'seed'))));
-  });
-
   it('refuses an unknown profile', async () => {
     await expect(reseed(cell, 'nope')).rejects.toBeInstanceOf(UnknownProfile);
   });

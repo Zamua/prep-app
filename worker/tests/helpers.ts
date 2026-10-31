@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { Renderer } from '../app/ports.js';
 import { DirectoryCell } from '../runtime/cells/DirectoryCell.js';
 import { InstantLimiterCell } from '../runtime/cells/InstantLimiterCell.js';
@@ -7,17 +5,6 @@ import type { Env } from '../runtime/env.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
 
 export const ROOT = new URL('..', import.meta.url).pathname;
-/** The context every seeded page is expected to render with, per profile. */
-export const PAGES = join(ROOT, 'tests', 'fixtures', 'pages');
-
-export function expectedPage(profile: string, file: string): {
-  status: number;
-  template?: string;
-  context?: Record<string, unknown>;
-  headers: Record<string, string>;
-} {
-  return JSON.parse(readFileSync(join(PAGES, profile, `${file}.json`), 'utf8'));
-}
 
 export interface Rendered {
   template: string;

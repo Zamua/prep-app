@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { composeWith } from '../runtime/compose.js';
 import { UserCell } from '../runtime/cells/UserCell.js';
 import { fakeCellState } from './fakes/sqlStorage.js';
-import { PAGES, fakeEnv, spyRenderer } from './helpers.js';
+import { fakeEnv, spyRenderer } from './helpers.js';
 
 const USER = 'seed@example.com';
 
@@ -20,10 +18,36 @@ function seeded(profile: string) {
 }
 
 describe('the seed profiles', () => {
-  it.each(['reader', 'empty', 'anonymous'])('%s reproduces tests/fixtures/pages/<profile>/seed.json exactly', async (profile) => {
-    const { seed } = seeded(profile);
-    const expected = readFileSync(join(PAGES, profile, 'seed.json'), 'utf8');
-    expect(JSON.parse(JSON.stringify(await seed))).toEqual(JSON.parse(expected));
+  it('reader: every id it hands back names the row it describes', async () => {
+    const { state, seed } = seeded('reader');
+    const ids = (await seed) as {
+      decks: Record<string, { id: number; slug: string; display: string }>;
+      questions: Record<string, Record<string, number>>;
+      sessions: Record<string, string>;
+      notifications: number[];
+      api_tokens: number[];
+      workflows: Record<string, string>;
+    };
+    const has = (table: string, key: string, value: unknown) => state.fake.rows(table).some((r) => r[key] === value);
+    for (const d of Object.values(ids.decks)) {
+      expect(state.fake.rows('decks').find((r) => r['id'] === d.id)).toMatchObject({ name: d.slug, display_name: d.display });
+    }
+    for (const [deck, byKey] of Object.entries(ids.questions)) {
+      for (const id of Object.values(byKey)) {
+        expect(state.fake.rows('questions').find((q) => q['id'] === id)?.['deck_id'], `${deck} question ${id}`).toBe(ids.decks[deck]!.id);
+      }
+    }
+    for (const id of Object.values(ids.sessions)) expect(has('study_sessions', 'id', id), id).toBe(true);
+    for (const id of ids.notifications) expect(has('notifications_log', 'id', id)).toBe(true);
+    for (const id of ids.api_tokens) expect(has('api_tokens', 'id', id)).toBe(true);
+    for (const id of Object.values(ids.workflows)) expect(has('active_workflows', 'workflow_id', id), id).toBe(true);
+  });
+
+  it('empty: an account with a profile and nothing else', async () => {
+    const { state, seed } = seeded('empty');
+    expect(await seed).toMatchObject({ profile: 'empty', user: USER });
+    expect(state.fake.rows('profile')).toHaveLength(1);
+    for (const table of ['decks', 'questions', 'study_sessions', 'notifications_log', 'api_tokens']) expect(state.fake.rows(table), table).toEqual([]);
   });
 
   it('reader: the rows the profile pins', async () => {

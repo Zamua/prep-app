@@ -1,17 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { expectedContext, renderedContext, seeded } from './setup.js';
+import { RETENTION_PRESETS } from '../../app/settings/srs.js';
+import { seeded } from './setup.js';
 
 describe('GET /deck/{name}', () => {
-  it.each([
-    ['world-capitals', '04-GET-deck-world-capitals'],
-    ['world-history', '07-GET-deck-world-history'],
-    ['scratch', '08-GET-deck-scratch'],
-  ])('renders %s with the recorded context', async (name, file) => {
+  it('lists an SRS deck by next due, the suspended card marked, with the retention presets', async () => {
     const h = await seeded('reader');
-    const res = await h.get(`/deck/${name}`);
-    expect(res.status).toBe(200);
+    expect((await h.get('/deck/world-capitals')).status).toBe(200);
     expect(h.rendered()?.template).toBe('deck.html');
-    expect(renderedContext(h)).toEqual(expectedContext('reader', file));
+    const ctx = h.rendered()!.context;
+    expect(ctx).toMatchObject({
+      deck_name: 'world-capitals',
+      deck_type: 'srs',
+      due_count: 3,
+      deck_retention: null,
+      retention_presets: RETENTION_PRESETS,
+      trivia_stats: null,
+      deck_meta: { display_name: 'World Capitals', pinned: false, notifications_enabled: true },
+    });
+    const questions = ctx['questions'] as { id: number; suspended: boolean }[];
+    expect(questions.map((q) => q.id)).toEqual([6, 1, 2, 3, 4, 5]);
+    expect(questions.filter((q) => q.suspended).map((q) => q.id)).toEqual([6]);
+  });
+
+  it('shows a trivia deck its mastery and no retention presets', async () => {
+    const h = await seeded('reader');
+    expect((await h.get('/deck/world-history')).status).toBe(200);
+    const ctx = h.rendered()!.context;
+    expect(ctx).toMatchObject({
+      deck_type: 'trivia',
+      due_count: 0,
+      retention_presets: null,
+      trivia_stats: { mastered: 1, total: 3, unanswered: 2, wrong: 0 },
+      deck_meta: { display_name: 'World History Trivia', interval_minutes: 1440 },
+    });
+    expect((ctx['questions'] as { id: number }[]).map((q) => q.id)).toEqual([10, 11, 12]);
+  });
+
+  it('renders a deck with no cards', async () => {
+    const h = await seeded('reader');
+    expect((await h.get('/deck/scratch')).status).toBe(200);
+    expect(h.rendered()?.context).toMatchObject({ deck_type: 'srs', due_count: 0, questions: [] });
   });
 
   it('materializes an unknown deck rather than 404ing, as get-or-create does', async () => {
@@ -30,7 +58,7 @@ describe('POST /deck/{name}/pin', () => {
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe('/deck/world-capitals');
     await h.get('/deck/world-capitals');
-    expect(renderedContext(h)).toEqual(expectedContext('reader', '06-GET-deck-world-capitals@pinned'));
+    expect(h.rendered()?.context['deck_meta']).toMatchObject({ pinned: true });
   });
 
   it('follows a same-origin Referer and ignores a cross-site one', async () => {

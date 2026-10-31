@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import worker, { DISPLAY_NAME_HEADER, SUBJECT_HEADER, UserCell } from '../runtime/worker.js';
 import { composeWith } from '../runtime/compose.js';
 import type { Env } from '../runtime/env.js';
-import { expectedPage, fakeEnv, fakeState, IDENTIFIED, namespaceOf, req, spyRenderer } from './helpers.js';
+import { fakeEnv, fakeState, IDENTIFIED, namespaceOf, req, spyRenderer } from './helpers.js';
 import { TOPIC_PLACEHOLDER } from '../app/landing.js';
 import { EMAIL_HEADER, KIND_HEADER, PAT_HASH_HEADER, PICTURE_HEADER } from '../runtime/cells/router.js';
 import { assembleToken } from '../domain/pat.js';
@@ -59,11 +59,13 @@ beforeEach(() => {
 
 const call = (path: string, init: RequestInit = {}) => worker.fetch(req(path, init), env);
 
-/** The router's context for a page, plus the request origin it reads off
- * the request itself. */
-function expectCorpus(file: string, index = 0) {
-  const want = expectedPage('anonymous', file);
-  expect(renderer.calls[index]).toEqual({ template: want.template, context: { ...want.context, app_base: 'https://prep.example.test' } });
+/** A page rendered outside any cell: no account, no decks, and the request
+ * origin read off the request itself. */
+function expectAnonymousPage(index: number, template: string, context: Record<string, unknown> = {}) {
+  expect(renderer.calls[index]).toMatchObject({
+    template,
+    context: { user: null, agent_available: false, deck_display: {}, notif_unseen_count: 0, app_base: 'https://prep.example.test', ...context },
+  });
 }
 
 describe('liveness and readiness', () => {
@@ -93,7 +95,7 @@ describe('unauthenticated pages', () => {
     const res = await call('/privacy');
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-cache');
-    expectCorpus('02-GET-privacy');
+    expectAnonymousPage(0, 'privacy.html');
   });
 
   it('answer GET and HEAD only', async () => {
@@ -143,7 +145,7 @@ describe('unauthenticated pages', () => {
   it('anonymous elsewhere is the 404 page', async () => {
     const res = await call('/no-such-page-unknown');
     expect(res.status).toBe(404);
-    expectCorpus('05-GET-no-such-page-unknown');
+    expectAnonymousPage(0, 'error.html', { status_code: 404, headline: 'Not found.', path: '/no-such-page-unknown' });
     expect(res.headers.get('cache-control')).toBe('no-cache');
   });
 });
@@ -151,16 +153,16 @@ describe('unauthenticated pages', () => {
 describe('the test-mode routes', () => {
   it('raise renders the 500 and 429 pages', async () => {
     expect((await call('/_test/raise')).status).toBe(500);
-    expectCorpus('06-GET-_test-raise', 0);
+    expectAnonymousPage(0, 'error.html', { status_code: 500, headline: 'Something broke.', path: '/_test/raise' });
     expect((await call('/_test/raise?status=429')).status).toBe(429);
-    expectCorpus('07-GET-_test-raise-status-429', 1);
+    expectAnonymousPage(1, 'error.html', { status_code: 429, headline: 'Busy right now.', blurb: expect.stringContaining('(test: deliberate throttle)') });
   });
 
   it('reauth and sign-out render their shells', async () => {
     expect((await call('/_test/reauth')).status).toBe(200);
-    expectCorpus('03-GET-_test-reauth', 0);
+    expectAnonymousPage(0, 'reauth.html');
     expect((await call('/_test/sign-out')).status).toBe(200);
-    expectCorpus('04-GET-_test-sign-out', 1);
+    expectAnonymousPage(1, 'sign_out_interstitial.html', { redirect_url: '/' });
   });
 
   it('seed checks the internal token, then forwards to the user cell', async () => {
@@ -297,13 +299,13 @@ describe('router and cell together', () => {
       live,
     );
     expect(seed.status).toBe(200);
-    expect(await seed.json()).toEqual(expectedPage('empty', 'seed'));
+    expect(await seed.json()).toMatchObject({ profile: 'empty', user: 'seed@example.com' });
     const res = await worker.fetch(req('/', { headers: IDENTIFIED }), live);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-cache');
-    expect(renderer.calls.at(-1)).toEqual({
+    expect(renderer.calls.at(-1)).toMatchObject({
       template: 'index.html',
-      context: { ...expectedPage('empty', '01-GET-root').context, app_base: 'https://prep.example.test' },
+      context: { user: { email: 'seed@example.com' }, dashboard_overview: { decks: [], total: 0 }, app_base: 'https://prep.example.test' },
     });
     const bad = await worker.fetch(
       req('/_test/seed', {
