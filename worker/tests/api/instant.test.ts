@@ -7,6 +7,7 @@ import { clientIp, MAX_BODY_BYTES } from '../../runtime/routes/instant.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
 import { ORIGIN, SEED_USER, workerEnv, seed } from './harness.js';
+import { metricCount } from '../metricCount.js';
 
 const DECK = JSON.stringify([
   { q: 'Q1?', a: 'a1', r: 'a1' },
@@ -61,6 +62,17 @@ describe('the limiter bucket', () => {
 
 describe('POST /api/instant/generate', () => {
   beforeEach(() => stubAgent());
+
+  it('times every generation under the outcome the scrape reads', async () => {
+    const { env } = workerEnv();
+    const count = (outcome: string) => metricCount('prep_instant_generate_duration_seconds', `outcome="${outcome}"`);
+    const [ok, invalid, spent] = [count('ok'), count('invalid'), count('failed_spent')];
+    expect((await generate(env, { topic: 'the French Revolution' })).status).toBe(200);
+    expect((await generate(env, { topic: '' })).status).toBe(422);
+    stubAgent('not a deck');
+    expect((await generate(env, { topic: 'the Roman Empire' }, { 'x-real-ip': '198.51.100.9' })).status).toBe(502);
+    expect([count('ok'), count('invalid'), count('failed_spent')]).toEqual([ok + 1, invalid + 1, spent + 1]);
+  });
 
   it('refuses an unusable topic before it reaches the limiter', async () => {
     const { env } = workerEnv();

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { PageRequest, PageResult } from '../../app/pageResult.js';
 import type { AgentPort, WorkflowRunner } from '../../app/ports.js';
 import { triviaAnswer, triviaCardRegrade, triviaSessionAnswer, triviaSessionRegrade, type TriviaDeps } from '../../app/trivia/pages.js';
+import { modelJudge } from '../../app/trivia/grading.js';
 import { cell, TEST_NOW } from '../repos/setup.js';
 import { seeded, type Harness } from './setup.js';
+import { metricCount } from '../metricCount.js';
 
 const DECK = 'world-history';
 
@@ -129,6 +131,13 @@ describe('the session verdict disputes', () => {
     // No model is reachable in this phase, so the fallback line is the verdict.
     expect(String((h.rendered()?.context['result'] as { feedback: string }).feedback)).toContain('graded by string similarity');
   });
+
+  it('times the model call a regrade makes, labelled as the fallback it fell to', async () => {
+    const h = await seeded('reader');
+    const before = metricCount('prep_ai_grade_duration_seconds', 'verdict="fallback"');
+    await h.post(`/trivia/session/${DECK}/regrade`, { question_id: '10', cards: '11', done: '10w', answer: 'Rome' });
+    expect(metricCount('prep_ai_grade_duration_seconds', 'verdict="fallback"')).toBe(before + 1);
+  });
 });
 
 describe('the standalone card', () => {
@@ -251,7 +260,7 @@ describe('the learned answer regex', () => {
     const qid = c.repos.questions.add(deck, { type: 'short', prompt: 'Where did William win in 1066?', answer: 'Battle of Hastings in England' });
     c.repos.trivia.appendCard(qid, deck);
     const agent = new HeldAgent();
-    const deps: TriviaDeps = { repos: c.repos, agent, runner: NO_RUNNER, freeTierConfigured: false };
+    const deps: TriviaDeps = { repos: c.repos, judge: modelJudge(agent), runner: NO_RUNNER, freeTierConfigured: false };
 
     const first = grade(deps, qid, 'Hastings');
     const second = grade(deps, qid, 'Hastings fight');

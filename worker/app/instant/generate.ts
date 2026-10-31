@@ -50,18 +50,22 @@ export interface InstantRequest {
   userIsAnonymous: boolean | null;
 }
 
+/** What a failed generation cost the limiter: the upstream spent, refused
+ * without spending, or was never reached. */
+export type Charge = 'failed_spent' | 'failed_free' | null;
+
 export type InstantOutcome =
   | { ok: true; slug: string; mintedId: string | null }
-  | { ok: false; status: number; payload: Record<string, unknown>; retryAfterS: number | null };
+  | { ok: false; status: number; payload: Record<string, unknown>; retryAfterS: number | null; charged: Charge };
 
-function refusal(status: number, kind: string): InstantOutcome {
-  return { ok: false, status, payload: { kind, message: ERROR_COPY[kind]! }, retryAfterS: null };
+function refusal(status: number, kind: string, charged: Charge = null): InstantOutcome {
+  return { ok: false, status, payload: { kind, message: ERROR_COPY[kind]! }, retryAfterS: null, charged };
 }
 
 function rateLimited(scope: 'minute' | 'day', retryAfterS: number | null): InstantOutcome {
   const payload: Record<string, unknown> = { kind: 'rate_limited', scope, message: RATE_LIMITED_COPY[scope]! };
   if (retryAfterS !== null) payload['retry_after_s'] = retryAfterS;
-  return { ok: false, status: 429, payload, retryAfterS };
+  return { ok: false, status: 429, payload, retryAfterS, charged: null };
 }
 
 export async function generateInstantDeck(deps: InstantDeps, req: InstantRequest): Promise<InstantOutcome> {
@@ -93,12 +97,12 @@ export async function generateInstantDeck(deps: InstantDeps, req: InstantRequest
     // A timeout is busy too, but the request went out: it spends.
     if (e instanceof AgentBusy && !(e instanceof AgentTimeout)) {
       await resolve(deps, reservationId, 'failed_free', null, null);
-      return refusal(429, 'busy');
+      return refusal(429, 'busy', 'failed_free');
     }
     // The call went out: a parse failure, a degenerate deck, an adapter
     // failure or an unknown one all count as spend and read the same way.
     await resolve(deps, reservationId, 'failed_spent', null, null);
-    return refusal(502, 'generation_failed');
+    return refusal(502, 'generation_failed', 'failed_spent');
   }
 
   const mintedId = req.userId === null ? externalIdFromBytes(deps.random.bytes(ID_BYTES)) : null;
@@ -117,8 +121,8 @@ export async function generateInstantDeck(deps: InstantDeps, req: InstantRequest
     slug = stored.slug;
   } catch (e) {
     await resolve(deps, reservationId, 'failed_spent', null, req.userId);
-    if (e instanceof RowCapReached) return refusal(429, 'deck_limit');
-    return refusal(502, 'generation_failed');
+    if (e instanceof RowCapReached) return refusal(429, 'deck_limit', 'failed_spent');
+    return refusal(502, 'generation_failed', 'failed_spent');
   }
 
   await resolve(deps, reservationId, 'ok', cards.length, ownerId);
