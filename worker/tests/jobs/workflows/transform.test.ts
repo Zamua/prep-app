@@ -274,7 +274,8 @@ describe('the transform prompts', () => {
     expect(prompt).not.toContain('**Deck overall context**');
   });
 
-  it('escapes the runes Go escapes, so a card holding markup is the same bytes', () => {
+  // The canned-reply stub keys on the prompt bytes, so the escaping is part of the message.
+  it('escapes <, > and & in the card JSON the model is shown', () => {
     expect(goJson({ prompt: 'a < b && c > d' })).toBe('{\n  "prompt": "a \\u003c b \\u0026\\u0026 c \\u003e d"\n}');
   });
 
