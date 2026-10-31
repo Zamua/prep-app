@@ -21,7 +21,7 @@ import type { CellPorts, Route } from '../router.js';
 const deckDeps = (ports: CellPorts) => ({ freeTierConfigured: ports.freeTierConfigured, random: ports.random, runner: ports.runner });
 const triviaDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, agent: ports.agent, runner: ports.runner, freeTierConfigured: ports.freeTierConfigured });
 const shellDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, signInUrl: ports.authUrls.signIn });
-const accountDeps = (ports: CellPorts) => ({ authProvider: ports.authProvider, deleter: null });
+const accountDeps = (ports: CellPorts) => ({ deleter: ports.accountDeleter });
 const notifyDeps = (repos: UserRepos, ports: CellPorts) => ({ repos, webPush: ports.webPush, vapidPublicKey: ports.vapidPublicKey });
 const openRouterDeps = (ports: CellPorts) => ({
   freeTierConfigured: ports.freeTierConfigured,
@@ -109,7 +109,7 @@ export const pageRoutes: readonly Route[] = [
   ),
   route('POST', '/settings/api/tokens/{token_id}/delete', 'signedIn', (p, { repos }) => apiSettings.apiTokenDelete(repos, p)),
   route('GET', '/settings/account', 'signedIn', (_p, { ports }) => account.accountSettings(accountDeps(ports))),
-  route('POST', '/settings/account/delete', 'signedIn', (p, { repos, ports }) => account.accountDelete(repos, p, accountDeps(ports))),
+  route('POST', account.ACCOUNT_DELETE_PATH, 'signedIn', (p, { repos, ports }) => account.accountDelete(repos, p, accountDeps(ports))),
 
   // Notifications: the two pages; the prefs and subscribe endpoints are the
   // JSON surface.

@@ -4,6 +4,7 @@
 // entry worker sets after stripping any inbound copy.
 import type { AgentPort, ApkgReader, ApkgWriter, Cipher, Clock, Hasher, IdentityKind, Random, UserRepos, WebPush, WorkflowRunner, ZipCodec } from '../../app/ports.js';
 import type { AuthUrls } from '../../app/pageContext.js';
+import type { AccountDeleter } from '../../app/settings/account.js';
 import type { OpenRouterAuth } from '../../app/settings/openrouter.js';
 import { RowCapReached } from '../../domain/limits.js';
 
@@ -75,6 +76,8 @@ export interface CellPorts {
   apkg: ApkgReader & ApkgWriter;
   authProvider: string;
   authUrls: AuthUrls;
+  /** Null when the identity has no upstream account to delete. */
+  accountDeleter: AccountDeleter | null;
   /** The deploy serves a shared tier, so AI works without a stored key. */
   freeTierConfigured: boolean;
   vapidPublicKey: string;

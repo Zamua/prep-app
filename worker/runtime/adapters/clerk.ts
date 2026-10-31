@@ -2,6 +2,7 @@
 // JWKS, the two token sources, the dormant-session read and the hosted URLs.
 // No SDK: the session JWT is the whole credential.
 import type { Clock, Identity, IdentityProvider, SignInUrls } from '../../app/ports.js';
+import type { AccountDeleter } from '../../app/settings/account.js';
 import { b64Decode, b64uDecodeText } from '../../domain/base64.js';
 import { parseCookieHeader } from '../../domain/cookies.js';
 
@@ -268,10 +269,25 @@ export function bearerOrSessionCookie(request: Request): string | null {
   return parseCookieHeader(request.headers.get('cookie'))[SESSION_COOKIE] ?? null;
 }
 
-/** `DELETE /v1/users/<id>` with the secret key: the webhook does the wipe. */
-export async function deleteClerkUser(config: ClerkConfig, userId: string, fetchImpl: typeof fetch = fetch): Promise<Response> {
-  return fetchImpl(`https://api.clerk.com/v1/users/${encodeURIComponent(userId)}`, {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${config.secretKey}` },
-  });
+/** Bounds a hung Clerk API, which would otherwise hold the request open. */
+const DELETE_TIMEOUT_MS = 10_000;
+
+/** `DELETE /v1/users/<id>` with the secret key. The `user.deleted` webhook
+ * wipes the cell, so this only touches Clerk. Any answer but a 2xx is a
+ * failure, a 404 included: it is what a key from another Clerk instance
+ * gets for every user. */
+export class ClerkAccountDeleter implements AccountDeleter {
+  constructor(
+    private readonly config: ClerkConfig,
+    private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+  ) {}
+
+  async deleteUpstream(subject: string): Promise<void> {
+    const res = await this.fetchImpl(`https://api.clerk.com/v1/users/${encodeURIComponent(subject)}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${this.config.secretKey}` },
+      signal: AbortSignal.timeout(DELETE_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`clerk refused the delete: HTTP ${res.status}`);
+  }
 }

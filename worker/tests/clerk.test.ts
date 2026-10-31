@@ -4,6 +4,7 @@ import { b64uEncode } from '../domain/base64';
 import {
   bearerOrSessionCookie,
   CLOCK_SKEW_MS,
+  ClerkAccountDeleter,
   ClerkConfigError,
   ClerkProvider,
   ClerkVerifier,
@@ -262,5 +263,37 @@ describe('the provider', () => {
     expect(frontendApiHost('')).toBeNull();
     expect(frontendApiHost('no-underscore')).toBeNull();
     expect(frontendApiHost('pk_test_!!!not-base64!!!')).toBeNull();
+  });
+});
+
+describe('the account deleter', () => {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  const answering = (status: number) => async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(null, { status });
+  };
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  it('deletes the user at Clerk with the secret key, under a timeout', async () => {
+    await new ClerkAccountDeleter(CONFIG, answering(200)).deleteUpstream('user_2abc/x');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('https://api.clerk.com/v1/users/user_2abc%2Fx');
+    expect(calls[0]?.init).toMatchObject({ method: 'DELETE', headers: { authorization: 'Bearer sk_test_secret' } });
+    expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  // A 404 is what a secret key from another Clerk instance gets for every
+  // user, so it must not read as a delete that landed.
+  it.each([404, 401, 500])('rejects on HTTP %i', async (status) => {
+    await expect(new ClerkAccountDeleter(CONFIG, answering(status)).deleteUpstream('user_2abc')).rejects.toThrow(`HTTP ${status}`);
+  });
+
+  it('rejects when Clerk is unreachable', async () => {
+    const down = async () => {
+      throw new TypeError('network down');
+    };
+    await expect(new ClerkAccountDeleter(CONFIG, down).deleteUpstream('user_2abc')).rejects.toThrow('network down');
   });
 });
