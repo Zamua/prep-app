@@ -3,6 +3,7 @@ import { DurationError, FOREVER_ISO, parseUntil } from '../../app/durations.js';
 import * as study from '../../app/study/api.js';
 import { buildMessage, DEFAULT_PROVIDER, providerUrls, quoteAll } from '../../app/study/handoff.js';
 import { RunnerUnavailable, StaleVersionError, type GradeAnswerInput, type WorkflowRunner } from '../../app/ports.js';
+import { RequestValidationError } from '../../app/validation.js';
 import { keyedGradeId } from '../../domain/jobs/ids.js';
 import { cell, TEST_NOW } from '../repos/setup.js';
 
@@ -29,6 +30,48 @@ function deps(opts: { agentAvailable?: boolean; runner?: WorkflowRunner } = {}):
 }
 
 const body = (json: unknown) => json;
+
+describe('a submission body', () => {
+  const refusal = async (run: () => unknown): Promise<unknown> => {
+    try {
+      await run();
+    } catch (e) {
+      if (e instanceof RequestValidationError) return e.errors.map((x) => [x.type, x.loc]);
+      throw e;
+    }
+    return null;
+  };
+
+  it('takes ids and versions as integers, a numeric string included', async () => {
+    const d = deps();
+    const deck = d.repos.decks.create('capitals');
+    const qid = d.repos.questions.add(deck, { type: 'short', prompt: 'Capital of Peru?', answer: 'Lima' });
+    const sid = await d.repos.sessions.create(deck, 'test');
+    const version = d.repos.sessions.get(sid)!.version;
+    expect(await refusal(() => study.deckSubmit(d, 'capitals', { question_id: 'abc', answer: 'Lima' }))).toEqual([['int_type', ['body', 'question_id']]]);
+    expect(await refusal(() => study.deckSubmit(d, 'capitals', { question_id: 1.5, answer: 'Lima' }))).toEqual([['int_type', ['body', 'question_id']]]);
+    expect(await refusal(() => study.deckSubmit(d, 'capitals', { answer: 'Lima' }))).toEqual([['missing', ['body', 'question_id']]]);
+    expect(await refusal(() => study.sessionSubmit(d, sid, { question_id: qid, version: 'x', answer: 'Lima' }))).toEqual([['int_type', ['body', 'version']]]);
+    expect(await refusal(() => study.sessionDraft(d, sid, { version: 'x', draft: 'L' }))).toEqual([['int_type', ['body', 'version']]]);
+    expect(await refusal(() => study.sessionAdvance(d, sid, { version: [] }))).toEqual([['int_type', ['body', 'version']]]);
+    expect(study.sessionDraft(d, sid, { version: String(version), draft: 'L' })).toMatchObject({ status: 200 });
+  });
+
+  it('refuses a self-grade that is neither right nor wrong before any lookup', async () => {
+    const d = deps();
+    const result = await study.sessionSubmit(d, 'no-such-session', { question_id: 1, version: 0, verdict: 'maybe' });
+    expect(result).toMatchObject({ status: 422, json: { error: { code: 'invalid_verdict' } } });
+  });
+
+  it('asks a session submission for its version after the session and card are found', async () => {
+    const d = deps();
+    const deck = d.repos.decks.create('capitals');
+    const qid = d.repos.questions.add(deck, { type: 'short', prompt: 'Capital of Peru?', answer: 'Lima' });
+    const sid = await d.repos.sessions.create(deck, 'test');
+    expect(await study.sessionSubmit(d, sid, { question_id: qid, answer: 'Lima' })).toMatchObject({ status: 422, json: { error: { code: 'version_required' } } });
+    expect(await study.sessionSubmit(d, 'no-such-session', { question_id: qid, answer: 'Lima' })).toMatchObject({ status: 404 });
+  });
+});
 
 describe('a free-text submission', () => {
   it('reveals for self-grading when no tier funds a judge', async () => {

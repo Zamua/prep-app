@@ -15,7 +15,7 @@ import type { CardState, Question, StudySession } from '../entities.js';
 import { json, type ApiResult } from '../http.js';
 import { AgentUnavailable, RunnerUnavailable, SessionNotFound, StaleVersionError, type Clock, type UserRepos, type WorkflowRunner } from '../ports.js';
 import { requireFundedWorkflow } from '../agent/funding.js';
-import { missing, RequestValidationError } from '../validation.js';
+import { asInt, intType, missing, RequestValidationError } from '../validation.js';
 import { buildMessage, DEFAULT_PROVIDER, providerLabels, providerUrls } from './handoff.js';
 
 // Free-text types have no deterministic grader: they go to the judge
@@ -153,25 +153,48 @@ export interface SubmitBody {
   version: number | null;
   answer: string;
   idk: boolean;
-  verdict: string | null;
+  /** A self-grade after the reveal. */
+  verdict: 'right' | 'wrong' | null;
 }
 
-function parseSubmit(body: unknown): SubmitBody {
+/** An integer field, or null when absent; anything else is a 422. */
+function optionalInt(o: Record<string, unknown>, key: string): number | null {
+  const raw = o[key];
+  if (raw === undefined || raw === null) return null;
+  const n = asInt(raw);
+  if (n === null) throw new RequestValidationError([intType(['body', key], raw)]);
+  return n;
+}
+
+function requiredInt(o: Record<string, unknown>, key: string, body: unknown): number {
+  const n = optionalInt(o, key);
+  if (n === null) throw new RequestValidationError([missing(['body', key], body)]);
+  return n;
+}
+
+function parseSubmit(body: unknown): { value: SubmitBody } | { refused: ApiResult } {
   const o = asObject(body);
-  if (o['question_id'] === undefined || o['question_id'] === null) throw new RequestValidationError([missing(['body', 'question_id'], body)]);
+  const questionId = requiredInt(o, 'question_id', body);
+  const version = optionalInt(o, 'version');
+  const verdict = typeof o['verdict'] === 'string' ? o['verdict'] : null;
+  if (verdict !== null && verdict !== 'right' && verdict !== 'wrong') return { refused: error(422, 'invalid_verdict', "verdict must be 'right' or 'wrong'") };
   return {
-    question_id: Number(o['question_id']),
-    version: o['version'] === undefined || o['version'] === null ? null : Number(o['version']),
-    answer: typeof o['answer'] === 'string' ? (o['answer'] as string) : '',
-    idk: Boolean(o['idk']),
-    verdict: typeof o['verdict'] === 'string' ? (o['verdict'] as string) : null,
+    value: {
+      question_id: questionId,
+      version,
+      answer: typeof o['answer'] === 'string' ? o['answer'] : '',
+      idk: Boolean(o['idk']),
+      verdict,
+    },
   };
 }
 
-function parseVersion(body: unknown): number {
-  const o = asObject(body);
-  if (o['version'] === undefined || o['version'] === null) throw new RequestValidationError([missing(['body', 'version'], body)]);
-  return Number(o['version']);
+const parseVersion = (body: unknown): number => requiredInt(asObject(body), 'version', body);
+
+/** A session submission and the version it was made against. */
+interface Answering {
+  s: StudySession;
+  version: number;
 }
 
 // ---- session view ----------------------------------------------------------
@@ -215,16 +238,16 @@ function sessionView(deps: StudyDeps, s: StudySession): ApiResult {
 async function submit(
   deps: StudyDeps,
   body: SubmitBody,
-  opts: { q: Question; deckName: string; s: StudySession | null },
+  opts: { q: Question; deckName: string; at: Answering | null },
 ): Promise<ApiResult> {
   const { repos } = deps;
-  const { q, deckName, s } = opts;
+  const { q, deckName, at } = opts;
+  const s = at?.s ?? null;
   const idk = Boolean(body.idk);
   const session = s !== null ? sessionPayload(s, deckName) : null;
-  if (s !== null && body.version === null) return error(422, 'version_required', 'session submissions must carry the version');
-  if (s !== null) {
+  if (at !== null) {
     try {
-      repos.sessions.assertAnswerable(s.id, q.id, body.version as number);
+      repos.sessions.assertAnswerable(at.s.id, q.id, at.version);
     } catch (e) {
       if (e instanceof StaleVersionError) return stale(e);
       throw e;
@@ -234,8 +257,7 @@ async function submit(
   // A self-grade decision arrives after the reveal, so it is already a
   // verdict: record it like any deterministic one.
   if (body.verdict !== null) {
-    if (body.verdict !== 'right' && body.verdict !== 'wrong') return error(422, 'invalid_verdict', "verdict must be 'right' or 'wrong'");
-    return record(deps, body, { q, verdict: { result: body.verdict, feedback: '(self-graded)' }, userAnswer: body.answer, idk: false, s });
+    return record(deps, { q, verdict: { result: body.verdict, feedback: '(self-graded)' }, userAnswer: body.answer, idk: false, at });
   }
 
   const userAnswer = idk ? '' : body.answer;
@@ -243,7 +265,7 @@ async function submit(
   if (FREE_TEXT.includes(q.type) && !idk) {
     const selfGrade = (current: Record<string, unknown> | null): ApiResult => json({ selfGrade: true, answer: userAnswer, card: revealedPayload(q), session: current });
     if (!deps.agentAvailable) return selfGrade(session);
-    const key = s !== null ? `${s.id}v${String(body.version)}` : null;
+    const key = at !== null ? `${at.s.id}v${at.version}` : null;
     // Claimed before the start yields, so a write interleaved with the start
     // meets the claim instead of moving the session under a job that will
     // still record its review.
@@ -251,7 +273,7 @@ async function submit(
     let wid: string;
     try {
       requireFundedWorkflow(repos, deps.freeTierConfigured);
-      if (s !== null && claimed !== null) repos.sessions.setGrading(s.id, q.id, claimed, body.version as number);
+      if (at !== null && claimed !== null) repos.sessions.setGrading(at.s.id, q.id, claimed, at.version);
       const started = await deps.runner.start('GradeAnswer', {
         questionId: q.id,
         deckName,
@@ -299,18 +321,17 @@ async function submit(
     if (e instanceof UnsupportedQuestionType || e instanceof GradingError || e instanceof AnswerJsonError) return error(422, 'not_gradable', e.message);
     throw e;
   }
-  return record(deps, body, { q, verdict, userAnswer, idk, s });
+  return record(deps, { q, verdict, userAnswer, idk, at });
 }
 
 /** Write a settled verdict, then reply with the recorded outcome. */
 function record(
   deps: StudyDeps,
-  body: SubmitBody,
-  opts: { q: Question; verdict: Record<string, unknown>; userAnswer: string; idk: boolean; s: StudySession | null },
+  opts: { q: Question; verdict: Record<string, unknown>; userAnswer: string; idk: boolean; at: Answering | null },
 ): ApiResult {
   const { repos } = deps;
-  const { q, verdict, userAnswer, idk, s } = opts;
-  if (s === null) {
+  const { q, verdict, userAnswer, idk, at } = opts;
+  if (at === null) {
     const state = repos.reviews.record(q.id, verdict['result'] as 'right' | 'wrong', userAnswer, String(verdict['feedback'] || ''));
     return json(verdictOutcome(q, verdict, state as unknown as Record<string, unknown>, userAnswer, idk, null));
   }
@@ -318,15 +339,15 @@ function record(
   try {
     state = repos.tx.sync(() => {
       const recorded = repos.reviews.record(q.id, verdict['result'] as 'right' | 'wrong', userAnswer, String(verdict['feedback'] || ''));
-      repos.sessions.recordAnswerSync(s.id, q.id, body.version as number, userAnswer, verdict, recorded as unknown as Record<string, unknown>);
+      repos.sessions.recordAnswerSync(at.s.id, q.id, at.version, userAnswer, verdict, recorded as unknown as Record<string, unknown>);
       return recorded;
     });
   } catch (e) {
     if (e instanceof StaleVersionError) return stale(e);
     throw e;
   }
-  const moved = repos.sessions.get(s.id);
-  const deckName = repos.decks.findName(s.deck_id) || '';
+  const moved = repos.sessions.get(at.s.id);
+  const deckName = repos.decks.findName(at.s.deck_id) || '';
   return json(verdictOutcome(q, verdict, state as unknown as Record<string, unknown>, userAnswer, idk, moved ? sessionPayload(moved, deckName) : null));
 }
 
@@ -375,21 +396,24 @@ export function sessionAdvance(deps: StudyDeps, sid: string, body: unknown): Api
 
 export async function sessionSubmit(deps: StudyDeps, sid: string, body: unknown): Promise<ApiResult> {
   const parsed = parseSubmit(body);
+  if ('refused' in parsed) return parsed.refused;
   const { repos } = deps;
   const s = repos.sessions.get(sid);
   if (s === null) return notFound('session');
-  const q = repos.questions.get(parsed.question_id);
+  const q = repos.questions.get(parsed.value.question_id);
   if (q === null) return notFound('question');
-  return submit(deps, parsed, { q, deckName: repos.decks.findName(s.deck_id) || '', s });
+  const version = parsed.value.version;
+  if (version === null) return error(422, 'version_required', 'session submissions must carry the version');
+  return submit(deps, parsed.value, { q, deckName: repos.decks.findName(s.deck_id) || '', at: { s, version } });
 }
 
 /** Autosave the in-progress answer. Version-checked like every other mutation. */
 export function sessionDraft(deps: StudyDeps, sid: string, body: unknown): ApiResult {
   const o = asObject(body);
-  if (o['version'] === undefined || o['version'] === null) throw new RequestValidationError([missing(['body', 'version'], body)]);
-  const draft = typeof o['draft'] === 'string' ? (o['draft'] as string) : '';
+  const version = parseVersion(body);
+  const draft = typeof o['draft'] === 'string' ? o['draft'] : '';
   try {
-    return json({ version: deps.repos.sessions.updateDraft(sid, draft, Number(o['version'])) });
+    return json({ version: deps.repos.sessions.updateDraft(sid, draft, version) });
   } catch (e) {
     if (e instanceof StaleVersionError) return stale(e);
     if (e instanceof SessionNotFound) return notFound('session');
@@ -444,11 +468,12 @@ export function deckNext(deps: StudyDeps, name: string): ApiResult {
 
 export async function deckSubmit(deps: StudyDeps, name: string, body: unknown): Promise<ApiResult> {
   const parsed = parseSubmit(body);
+  if ('refused' in parsed) return parsed.refused;
   const { repos } = deps;
   if (repos.decks.findId(name) === null) return notFound('deck');
-  const q = repos.questions.get(parsed.question_id);
+  const q = repos.questions.get(parsed.value.question_id);
   if (q === null) return notFound('question');
-  return submit(deps, parsed, { q, deckName: name, s: null });
+  return submit(deps, parsed.value, { q, deckName: name, at: null });
 }
 
 // ---- authoring ---------------------------------------------------------------

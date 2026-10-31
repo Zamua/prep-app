@@ -178,6 +178,8 @@ describe('the route label', () => {
   it('names the template a cell route serves', () => {
     expect(routeLabel('GET', '/deck/algebra')).toBe('/deck/{name}');
     expect(routeLabel('POST', '/deck/algebra/split')).toBe('/deck/{name}/split');
+    // A typed parameter labels as the documented path.
+    expect(routeLabel('GET', '/trivia/10')).toBe('/trivia/{question_id}');
   });
 
   it('names the entry worker’s own routes', () => {

@@ -33,6 +33,20 @@ export const stringType = (loc: (string | number)[], input: unknown): Validation
   input,
 });
 
+export const intType = (loc: (string | number)[], input: unknown): ValidationDetail => ({
+  type: 'int_type',
+  loc,
+  msg: 'Input should be a valid integer',
+  input,
+});
+
+/** A JSON integer, or a string holding one; null for anything else. */
+export function asInt(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : null;
+  if (typeof value === 'string' && /^\s*[+-]?\d{1,15}\s*$/.test(value)) return Number(value);
+  return null;
+}
+
 export const stringTooShort = (loc: (string | number)[], input: unknown, min: number): ValidationDetail => ({
   type: 'string_too_short',
   loc,

@@ -29,7 +29,7 @@ export const jobRoutes: readonly Route[] = [
   route('GET', '/transform/{wid}', 'user', (p, { repos, ports }) => transform.transformView(repos, p, ports)),
 
   // Trivia batch generation.
-  route('POST', '/trivia/decks/{deck_id}/generate', 'user', (p, { repos, ports }) => trivia.triviaGenerate(repos, p, ports)),
+  route('POST', '/trivia/decks/{deck_id:int}/generate', 'user', (p, { repos, ports }) => trivia.triviaGenerate(repos, p, ports)),
   route('GET', '/trivia/gen/{wid}/status', 'user', (p, { repos, ports }) => trivia.triviaGenStatus(repos, p, ports)),
   route('GET', '/trivia/gen/{wid}/fragment', 'user', (p, { repos, ports }) => trivia.triviaGenFragment(repos, p, ports)),
   route('GET', '/trivia/gen/{wid}', 'user', (p, { repos, ports }) => trivia.triviaGenView(repos, p, ports)),

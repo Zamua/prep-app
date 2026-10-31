@@ -107,19 +107,25 @@ export class SignInRequired extends Error {}
 /** A non-token identity on a bearer-only route. */
 export class TokenRequired extends Error {}
 
+/** `{name}` takes any segment; `{name:int}` only a row id, so a handler
+ * reading it gets digits and anything else is a 404 at the edge. */
 function compile(pattern: string): { names: string[]; re: RegExp } {
   const names: string[] = [];
   const src = pattern
     .split('/')
     .map((seg) => {
-      const m = /^\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(seg);
+      const m = /^\{([A-Za-z_][A-Za-z0-9_]*)(:int)?\}$/.exec(seg);
       if (!m) return seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       names.push(m[1]!);
-      return '([^/]+)';
+      return m[2] ? '(\\d{1,15})' : '([^/]+)';
     })
     .join('/');
   return { names, re: new RegExp(`^${src}$`) };
 }
+
+/** The pattern without its parameter types: the metrics label and the
+ * documented path. */
+export const routeTemplate = (route: Route): string => route.pattern.replace(/\{([A-Za-z_][A-Za-z0-9_]*):int\}/g, '{$1}');
 
 const compiled = new WeakMap<Route, { names: string[]; re: RegExp }>();
 

@@ -6,7 +6,7 @@
 // histogram would mostly be a record of the scraper.
 import { METRICS_CONTENT_TYPE, observeHttpRequest, renderMetrics } from '../../app/metrics.js';
 import { CELL_ROUTES } from '../cells/routes/all.js';
-import { matchRoute } from '../cells/router.js';
+import { matchRoute, routeTemplate } from '../cells/router.js';
 
 /** No route matched, so the raw path is not worth a series of its own. */
 export const UNMATCHED = '<unmatched>';
@@ -72,7 +72,8 @@ export function observe(method: string, path: string, status: number, seconds: n
 export function routeLabel(method: string, path: string): string {
   for (const [m, pattern] of ENTRY_ROUTES) if (m === method && matchPattern(pattern, path)) return pattern;
   for (const [m, pattern] of LOCAL_ROUTES) if (m === method && matchPattern(pattern, path)) return pattern;
-  return matchRoute(CELL_ROUTES, method, path)?.route.pattern ?? UNMATCHED;
+  const matched = matchRoute(CELL_ROUTES, method, path);
+  return matched ? routeTemplate(matched.route) : UNMATCHED;
 }
 
 const compiled = new Map<string, RegExp>();

@@ -80,11 +80,11 @@ export const pageRoutes: readonly Route[] = [
   route('GET', '/deck/{name}', 'user', (p, { repos }) => decks.deckView(repos, p)),
 
   // Questions.
-  route('GET', '/question/{qid}/edit', 'user', (p, { repos }) => decks.questionEditForm(repos, p)),
-  route('POST', '/question/{qid}/edit', 'user', (p, { repos }) => decks.questionEditSubmit(repos, p)),
-  route('POST', '/question/{qid}/suspend', 'user', (p, { repos }) => decks.questionSuspend(repos, p)),
-  route('POST', '/question/{qid}/unsuspend', 'user', (p, { repos }) => decks.questionUnsuspend(repos, p)),
-  route('POST', '/question/{qid}/improve', 'user', (p, { repos, ports }) => decks.questionImprove(repos, p, deckDeps(ports))),
+  route('GET', '/question/{qid:int}/edit', 'user', (p, { repos }) => decks.questionEditForm(repos, p)),
+  route('POST', '/question/{qid:int}/edit', 'user', (p, { repos }) => decks.questionEditSubmit(repos, p)),
+  route('POST', '/question/{qid:int}/suspend', 'user', (p, { repos }) => decks.questionSuspend(repos, p)),
+  route('POST', '/question/{qid:int}/unsuspend', 'user', (p, { repos }) => decks.questionUnsuspend(repos, p)),
+  route('POST', '/question/{qid:int}/improve', 'user', (p, { repos, ports }) => decks.questionImprove(repos, p, deckDeps(ports))),
 
   // Settings.
   route('GET', '/settings/agent', 'signedIn', (_p, { repos, ports }) => agentSettings.renderAgentSettings(repos, ports.freeTierConfigured)),
@@ -109,7 +109,7 @@ export const pageRoutes: readonly Route[] = [
   route('POST', '/settings/api/tokens', 'signedIn', (p, { repos, ports, subject }) =>
     apiSettings.apiTokenCreate(repos, p, { subject, random: ports.random, hasher: ports.hasher }),
   ),
-  route('POST', '/settings/api/tokens/{token_id}/delete', 'signedIn', (p, { repos }) => apiSettings.apiTokenDelete(repos, p)),
+  route('POST', '/settings/api/tokens/{token_id:int}/delete', 'signedIn', (p, { repos }) => apiSettings.apiTokenDelete(repos, p)),
   route('GET', '/settings/account', 'signedIn', (_p, { ports }) => account.accountSettings(accountDeps(ports))),
   route('POST', account.ACCOUNT_DELETE_PATH, 'signedIn', (p, { repos, ports }) => account.accountDelete(repos, p, accountDeps(ports))),
 
@@ -118,24 +118,24 @@ export const pageRoutes: readonly Route[] = [
   route('GET', '/notify', 'signedIn', (_p, { repos, ports }) => notifySettings(notifyDeps(repos, ports))),
   route('GET', '/notify/log', 'signedIn', (_p, { repos, ports }) => notificationLog(notifyDeps(repos, ports))),
 
-  // Trivia. The session and deck sub-paths precede `/trivia/{question_id}`.
+  // Trivia. The session and deck sub-paths precede `/trivia/{question_id:int}`.
   route('GET', '/trivia/session/{deck_name}', 'user', (p, { repos, ports }) => trivia.triviaSession(p, triviaDeps(repos, ports))),
   route('POST', '/trivia/session/{deck_name}/answer', 'user', (p, { repos, ports }) => trivia.triviaSessionAnswer(p, triviaDeps(repos, ports))),
   route('POST', '/trivia/session/{deck_name}/abandon', 'user', (p, { repos, ports }) => trivia.triviaSessionAbandon(p, triviaDeps(repos, ports))),
   route('POST', '/trivia/session/{deck_name}/snooze', 'user', (p, { repos, ports }) => trivia.triviaSessionSnooze(p, triviaDeps(repos, ports))),
   route('POST', '/trivia/session/{deck_name}/override', 'user', (p, { repos, ports }) => trivia.triviaSessionOverride(p, triviaDeps(repos, ports))),
   route('POST', '/trivia/session/{deck_name}/regrade', 'user', (p, { repos, ports }) => trivia.triviaSessionRegrade(p, triviaDeps(repos, ports))),
-  route('POST', '/trivia/decks/{deck_id}/mute', 'user', (p, { repos, ports }) => trivia.triviaDeckMute(p, triviaDeps(repos, ports))),
-  route('POST', '/trivia/decks/{deck_id}/unmute', 'user', (p, { repos, ports }) => trivia.triviaDeckUnmute(p, triviaDeps(repos, ports))),
-  route('POST', '/trivia/decks/{deck_id}/notifications', 'user', (p, { repos, ports }) =>
+  route('POST', '/trivia/decks/{deck_id:int}/mute', 'user', (p, { repos, ports }) => trivia.triviaDeckMute(p, triviaDeps(repos, ports))),
+  route('POST', '/trivia/decks/{deck_id:int}/unmute', 'user', (p, { repos, ports }) => trivia.triviaDeckUnmute(p, triviaDeps(repos, ports))),
+  route('POST', '/trivia/decks/{deck_id:int}/notifications', 'user', (p, { repos, ports }) =>
     trivia.triviaDeckNotifications(p, triviaDeps(repos, ports), (id, enabled) => setNotificationsEnabled(repos, id, enabled)),
   ),
-  route('POST', '/trivia/decks/{deck_id}/interval', 'user', (p, { repos, ports }) => trivia.triviaDeckInterval(p, triviaDeps(repos, ports))),
-  route('POST', '/trivia/decks/{deck_id}/session_size', 'user', (p, { repos, ports }) => trivia.triviaDeckSessionSize(p, triviaDeps(repos, ports))),
-  route('GET', '/trivia/{question_id}', 'user', (p, { repos, ports }) => trivia.triviaCard(p, triviaDeps(repos, ports))),
-  route('POST', '/trivia/{question_id}/answer', 'user', (p, { repos, ports }) => trivia.triviaAnswer(p, triviaDeps(repos, ports))),
-  route('POST', '/trivia/{question_id}/regrade', 'user', (p, { repos, ports }) => trivia.triviaCardRegrade(p, triviaDeps(repos, ports))),
-  route('POST', '/trivia/{question_id}/override', 'user', (p, { repos, ports }) => trivia.triviaCardOverride(p, triviaDeps(repos, ports))),
+  route('POST', '/trivia/decks/{deck_id:int}/interval', 'user', (p, { repos, ports }) => trivia.triviaDeckInterval(p, triviaDeps(repos, ports))),
+  route('POST', '/trivia/decks/{deck_id:int}/session_size', 'user', (p, { repos, ports }) => trivia.triviaDeckSessionSize(p, triviaDeps(repos, ports))),
+  route('GET', '/trivia/{question_id:int}', 'user', (p, { repos, ports }) => trivia.triviaCard(p, triviaDeps(repos, ports))),
+  route('POST', '/trivia/{question_id:int}/answer', 'user', (p, { repos, ports }) => trivia.triviaAnswer(p, triviaDeps(repos, ports))),
+  route('POST', '/trivia/{question_id:int}/regrade', 'user', (p, { repos, ports }) => trivia.triviaCardRegrade(p, triviaDeps(repos, ports))),
+  route('POST', '/trivia/{question_id:int}/override', 'user', (p, { repos, ports }) => trivia.triviaCardOverride(p, triviaDeps(repos, ports))),
 
   // The study shell.
   route('POST', '/study/{name}/begin', 'user', (p, { repos, ports }) => shell.studyBegin(p, shellDeps(repos, ports))),
