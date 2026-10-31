@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   STATIC,
@@ -22,6 +23,11 @@ afterEach(() => {
   for (const d of scratch.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
+/** The default export of a module the build wrote. */
+async function generated<T>(path: string): Promise<T> {
+  return ((await import(/* @vite-ignore */ pathToFileURL(path).href)) as { default: T }).default;
+}
+
 function seed(root: string, files: Record<string, string>) {
   for (const [rel, body] of Object.entries(files)) {
     mkdirSync(join(root, rel, ".."), { recursive: true });
@@ -38,15 +44,12 @@ describe("walk", () => {
 });
 
 describe("precompileTemplates", () => {
-  it("writes one entry per template, keyed by its relative name", () => {
+  it("writes one entry per template, keyed by its relative name", async () => {
     const templates = tmp();
     const out = tmp();
     seed(templates, { "base.html": "<p>{{ x }}</p>", "partials/row.html": "{% extends 'base.html' %}", "notes.txt": "skip" });
     expect(precompileTemplates(templates, out)).toBe(2);
-    const js = readFileSync(join(out, "templates.js"), "utf8");
-    expect(js).toContain('"base.html":');
-    expect(js).toContain('"partials/row.html":');
-    expect(js).not.toContain("notes.txt");
+    expect(Object.keys(await generated<Record<string, unknown>>(join(out, "templates.js"))).sort()).toEqual(["base.html", "partials/row.html"]);
     expect(existsSync(join(out, "templates.d.ts"))).toBe(true);
   });
 
@@ -58,20 +61,19 @@ describe("precompileTemplates", () => {
 });
 
 describe("bakeIcons", () => {
-  it("maps every static/icons svg by stem to its trimmed source", () => {
+  it("maps every static/icons svg by stem to its trimmed source", async () => {
     const out = tmp();
-    const n = bakeIcons(join(STATIC, "icons"), out);
-    expect(n).toBeGreaterThanOrEqual(38);
-    const js = readFileSync(join(out, "icons.js"), "utf8");
-    const icons = JSON.parse(js.replace(/^.*?export default /s, "").replace(/;\s*$/, "")) as Record<string, string>;
-    expect(Object.keys(icons)).toHaveLength(n);
+    const svgs = readdirSync(join(STATIC, "icons")).filter((f) => f.endsWith(".svg"));
+    expect(bakeIcons(join(STATIC, "icons"), out)).toBe(svgs.length);
+    const icons = await generated<Record<string, string>>(join(out, "icons.js"));
+    expect(Object.keys(icons).sort()).toEqual(svgs.map((f) => f.slice(0, -".svg".length)).sort());
     expect(icons["arrow-left"]).toBe(readFileSync(join(STATIC, "icons", "arrow-left.svg"), "utf8").trim());
     for (const svg of Object.values(icons)) expect(svg.startsWith("<svg")).toBe(true);
   });
 });
 
 describe("precacheTree", () => {
-  it("lists the css tree and only the four js subtrees, in order", () => {
+  it("lists the whole css tree and the js the offline app loads, never vendor", () => {
     const root = tmp();
     seed(root, {
       "sw.js": "",
@@ -85,18 +87,18 @@ describe("precacheTree", () => {
       "js/dashboard/d.js": "",
       "js/vendor/v.js": "",
     });
-    expect(precacheTree(root)).toEqual({
-      css: ["base.css", "components/a.css", "index.css"],
-      js: ["offline/o.js", "study/s.js", "dashboard/d.js", "modules/m.js"],
-    });
+    const tree = precacheTree(root);
+    expect([...tree.css].sort()).toEqual(["base.css", "components/a.css", "index.css"]);
+    expect([...tree.js].sort()).toEqual(["dashboard/d.js", "modules/m.js", "offline/o.js", "study/s.js"]);
   });
 });
 
 describe("bakeBuildInfo", () => {
-  it("bakes the resolved token", () => {
+  it("bakes the resolved token", async () => {
     const out = tmp();
     expect(bakeBuildInfo("ce11d0000000", out)).toBe("ce11d0000000");
-    expect(readFileSync(join(out, "buildinfo.js"), "utf8")).toContain('export const BUILD_TOKEN = "ce11d0000000";');
+    const baked = (await import(/* @vite-ignore */ pathToFileURL(join(out, "buildinfo.js")).href)) as { BUILD_TOKEN: string };
+    expect(baked.BUILD_TOKEN).toBe("ce11d0000000");
     expect(bakeBuildInfo("v0.44.0", out)).toBe("d8392eb81ff8");
     expect(bakeBuildInfo(undefined, out)).toMatch(/^[0-9a-f]{40}$/);
   });

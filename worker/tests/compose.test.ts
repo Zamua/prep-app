@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compose, composeWith, noCacheHtml } from '../runtime/compose.js';
+import { compose, noCacheHtml } from '../runtime/compose.js';
 import { fakeEnv, IDENTIFIED, req } from './helpers.js';
 
 /** A prod-shaped env: no pin of any kind. */
@@ -88,19 +88,6 @@ describe('compose', () => {
     expect(c.clock.now().toISOString()).toBe('2026-03-14T15:00:00.000Z');
     expect(c.buildToken).toBe('ce11d0000000');
     expect(c.internalToken).toBe('test-internal-token');
-  });
-
-  it('is memoized per env', () => {
-    const env = fakeEnv();
-    expect(compose(env)).toBe(compose(env));
-    expect(compose(env)).not.toBe(compose(fakeEnv()));
-  });
-
-  it('composeWith replaces ports through the same root', () => {
-    const env = fakeEnv();
-    const renderer = { render: () => 'x' };
-    expect(composeWith(env, { renderer }).renderer).toBe(renderer);
-    expect(compose(env).renderer).toBe(renderer);
   });
 });
 

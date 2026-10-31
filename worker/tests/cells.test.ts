@@ -5,7 +5,6 @@ import { composeWith, type Composition } from '../runtime/compose.js';
 import { JobCell } from '../runtime/cells/JobCell.js';
 import { KIND_HEADER, NOW_HEADER, PAT_HASH_HEADER, SUBJECT_HEADER, type Route } from '../runtime/cells/router.js';
 import { TOMBSTONED_HEADER, UnknownProfile, UserCell } from '../runtime/cells/UserCell.js';
-import { CELL_ROUTES } from '../runtime/cells/routes/all.js';
 import type { Env } from '../runtime/env.js';
 import { fakeCellState, FakeCellStorage } from './fakes/sqlStorage.js';
 import { fakeEnv, fakeState, req, spyRenderer } from './helpers.js';
@@ -39,20 +38,32 @@ const reseed = (target: UserCell, profile: string, at: string | null = null) =>
 /** A live anonymous account, minted the way the instant path mints one. A
  * cell holding no anonymous profile refuses an anon identity outright, so a
  * gate can only be reached through a real one. */
-async function anonymousCell(): Promise<{ cell: UserCell; state: ReturnType<typeof fakeCellState> }> {
+async function anonymousCell(routes: Route[] = []): Promise<{ cell: UserCell; state: ReturnType<typeof fakeCellState> }> {
   const state = fakeCellState();
-  const cell = new UserCell(state, env);
+  const cell = new RoutedCell(state, env, routes);
   await cell.createInstantDeck({ displayName: 'Guest deck', cards: [], mint: { id: ANON, displayName: 'Guest', idx: 7 }, at: AT });
   return { cell, state };
 }
 
-/** Routes the cell serves for the test's duration. Declaration order
- * decides a match, so a test route is prepended and wins over the real
- * table's entry for the same pattern. */
-function withRoutes(routes: Route[], run: () => Promise<void>): Promise<void> {
-  const table = CELL_ROUTES as Route[];
-  table.unshift(...routes);
-  return run().finally(() => table.splice(0, routes.length));
+/** A user cell serving `extra` ahead of the real table: declaration order
+ * decides a match, so a test route wins over the real one on its pattern. */
+class RoutedCell extends UserCell {
+  constructor(ctx: DurableObjectState, cellEnv: Env, private readonly extra: readonly Route[]) {
+    super(ctx, cellEnv);
+  }
+
+  protected override routes(): readonly Route[] {
+    return [...this.extra, ...super.routes()];
+  }
+}
+
+/** A fresh `cell` and `state`, the cell serving `routes` as well. The
+ * constructor arms the alarm off the migrated rows, so the cell is driven
+ * only once that settles, as the runtime orders it. */
+async function serving(routes: Route[]): Promise<void> {
+  state = fakeCellState();
+  cell = new RoutedCell(state, env, routes);
+  await state.ready();
 }
 
 describe('UserCell.seed', () => {
@@ -92,17 +103,16 @@ describe('UserCell.fetch', () => {
 
   it('serves a route through the gate, the last_seen bump and the page context', async () => {
     const route: Route = { method: 'GET', pattern: '/deck/{name}', gate: 'signedIn', handler: ({ params, repos }) => ({ page: 'deck.html', context: { deck_name: params['name'], decks: repos.decks.listSummaries().length } }) };
-    await withRoutes([route], async () => {
-      await reseed(cell, 'reader');
-      const res = await cell.fetch(identified('/deck/world-capitals', { headers: { [NOW_HEADER]: '2026-03-14T16:00:00Z' } }));
-      expect(res.status).toBe(200);
-      expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
-      const ctx = renderer.calls[0]!.context;
-      expect(renderer.calls[0]!.template).toBe('deck.html');
-      expect(ctx).toMatchObject({ deck_name: 'world-capitals', decks: 4, notif_unseen_count: 2, agent_available: true, auth_provider: 'tailscale', app_base: 'https://prep.example.test' });
-      expect(ctx['deck_display']).toEqual({ 'distributed-systems': 'Distributed Systems', 'world-capitals': 'World Capitals', scratch: 'Scratch', 'world-history': 'World History Trivia' });
-      expect((ctx['user'] as { last_seen_at: string }).last_seen_at).toBe('2026-03-14T16:00:00+00:00');
-    });
+    await serving([route]);
+    await reseed(cell, 'reader');
+    const res = await cell.fetch(identified('/deck/world-capitals', { headers: { [NOW_HEADER]: '2026-03-14T16:00:00Z' } }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    const ctx = renderer.calls[0]!.context;
+    expect(renderer.calls[0]!.template).toBe('deck.html');
+    expect(ctx).toMatchObject({ deck_name: 'world-capitals', decks: 4, notif_unseen_count: 2, agent_available: true, auth_provider: 'tailscale', app_base: 'https://prep.example.test' });
+    expect(ctx['deck_display']).toEqual({ 'distributed-systems': 'Distributed Systems', 'world-capitals': 'World Capitals', scratch: 'Scratch', 'world-history': 'World History Trivia' });
+    expect((ctx['user'] as { last_seen_at: string }).last_seen_at).toBe('2026-03-14T16:00:00+00:00');
   });
 
   it('gates: an anonymous identity on a signed-in route, a token on a page, a page on a token route', async () => {
@@ -110,41 +120,39 @@ describe('UserCell.fetch', () => {
       { method: 'GET', pattern: '/settings', gate: 'signedIn', handler: () => ({ json: { ok: true } }) },
       { method: 'GET', pattern: '/api/v1/decks', gate: 'pat', handler: () => ({ json: [] }) },
     ];
-    await withRoutes(routes, async () => {
-      await reseed(cell, 'reader');
-      const guest = await anonymousCell();
-      const anon = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon' };
-      const html = await guest.cell.fetch(req('/settings', { headers: anon }));
-      expect(html.status).toBe(303);
-      expect(html.headers.get('location')).toBe('/sign-in');
-      const json = await guest.cell.fetch(req('/settings', { headers: { ...anon, accept: 'application/json' } }));
-      expect(json.status).toBe(403);
-      expect(await json.json()).toEqual({ detail: 'sign in required' });
-      // The seeded token's own hash, or the credential check refuses before the gate.
-      const hash = String(state.fake.rows('api_tokens')[0]!['token_hash']);
-      const asToken = { ...IDENTIFIED, [KIND_HEADER]: 'pat', [PAT_HASH_HEADER]: hash };
-      const pat = await cell.fetch(req('/settings', { headers: asToken }));
-      expect(pat.status).toBe(401);
-      expect(await pat.json()).toEqual({ detail: 'not authenticated' });
-      expect((await cell.fetch(identified('/api/v1/decks'))).status).toBe(401);
-      expect((await cell.fetch(req('/api/v1/decks', { headers: asToken }))).status).toBe(200);
-    });
+    await serving(routes);
+    await reseed(cell, 'reader');
+    const guest = await anonymousCell(routes);
+    const anon = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon' };
+    const html = await guest.cell.fetch(req('/settings', { headers: anon }));
+    expect(html.status).toBe(303);
+    expect(html.headers.get('location')).toBe('/sign-in');
+    const json = await guest.cell.fetch(req('/settings', { headers: { ...anon, accept: 'application/json' } }));
+    expect(json.status).toBe(403);
+    expect(await json.json()).toEqual({ detail: 'sign in required' });
+    // The seeded token's own hash, or the credential check refuses before the gate.
+    const hash = String(state.fake.rows('api_tokens')[0]!['token_hash']);
+    const asToken = { ...IDENTIFIED, [KIND_HEADER]: 'pat', [PAT_HASH_HEADER]: hash };
+    const pat = await cell.fetch(req('/settings', { headers: asToken }));
+    expect(pat.status).toBe(401);
+    expect(await pat.json()).toEqual({ detail: 'not authenticated' });
+    expect((await cell.fetch(identified('/api/v1/decks'))).status).toBe(401);
+    expect((await cell.fetch(req('/api/v1/decks', { headers: asToken }))).status).toBe(200);
   });
 
   it('an anonymous identity is touched, never upserted; a provider identity is created and registered', async () => {
     const route: Route = { method: 'GET', pattern: '/x', gate: 'user', handler: () => ({ empty: true }) };
-    await withRoutes([route], async () => {
-      const guest = await anonymousCell();
-      const claims = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon', 'x-prep-display-name': 'Seed', [NOW_HEADER]: '2026-03-14T16:00:00Z' };
-      expect((await guest.cell.fetch(req('/x', { headers: claims }))).status).toBe(204);
-      // Touched, never upserted: the bump lands, the presented claims do not.
-      expect(guest.state.fake.rows('profile')).toMatchObject([{ id: ANON, display_name: 'Guest', is_anonymous: 1, last_seen_at: '2026-03-14T16:00:00+00:00' }]);
-      expect(await guest.cell.precheck()).toEqual({ exists: true, isAnonymous: true, tombstoned: null });
-      expect((await cell.fetch(identified('/x'))).status).toBe(204);
-      expect(await cell.precheck()).toEqual({ exists: true, isAnonymous: false, tombstoned: null });
-      expect(await c.directory.lookup(USER)).toMatchObject({ idx: 1 });
-      expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Seed', id_base: 1 });
-    });
+    await serving([route]);
+    const guest = await anonymousCell([route]);
+    const claims = { [SUBJECT_HEADER]: ANON, [KIND_HEADER]: 'anon', 'x-prep-display-name': 'Seed', [NOW_HEADER]: '2026-03-14T16:00:00Z' };
+    expect((await guest.cell.fetch(req('/x', { headers: claims }))).status).toBe(204);
+    // Touched, never upserted: the bump lands, the presented claims do not.
+    expect(guest.state.fake.rows('profile')).toMatchObject([{ id: ANON, display_name: 'Guest', is_anonymous: 1, last_seen_at: '2026-03-14T16:00:00+00:00' }]);
+    expect(await guest.cell.precheck()).toEqual({ exists: true, isAnonymous: true, tombstoned: null });
+    expect((await cell.fetch(identified('/x'))).status).toBe(204);
+    expect(await cell.precheck()).toEqual({ exists: true, isAnonymous: false, tombstoned: null });
+    expect(await c.directory.lookup(USER)).toMatchObject({ idx: 1 });
+    expect(state.fake.rows('profile')[0]).toMatchObject({ id: USER, display_name: 'Seed', id_base: 1 });
   });
 
   it('maps every handler shape and the cap refusal', async () => {
@@ -155,21 +163,20 @@ describe('UserCell.fetch', () => {
       { method: 'GET', pattern: '/e', gate: 'user', handler: () => ({ empty: true, headers: { 'hx-redirect': '/' } }) },
       { method: 'POST', pattern: '/cap', gate: 'user', handler: () => { throw new RowCapReached('guest account limit reached'); } },
     ];
-    await withRoutes(routes, async () => {
-      await reseed(cell, 'empty');
-      const j = await cell.fetch(identified('/j'));
-      expect([j.status, await j.json()]).toEqual([201, { a: 1 }]);
-      const r = await cell.fetch(identified('/r'));
-      expect([r.status, r.headers.get('location')]).toEqual([303, '/deck/x']);
-      expect(await (await cell.fetch(identified('/t'))).text()).toBe('plain');
-      const e = await cell.fetch(identified('/e'));
-      expect([e.status, e.headers.get('hx-redirect')]).toEqual([204, '/']);
-      const html = await cell.fetch(identified('/cap', { method: 'POST', headers: { accept: 'text/html' } }));
-      expect(html.status).toBe(429);
-      expect(renderer.calls.at(-1)?.context.status_code).toBe(429);
-      const json = await cell.fetch(identified('/cap', { method: 'POST', headers: { accept: 'application/json' } }));
-      expect(await json.json()).toEqual({ error: { code: 'deck_limit', message: 'guest account limit reached' } });
-    });
+    await serving(routes);
+    await reseed(cell, 'empty');
+    const j = await cell.fetch(identified('/j'));
+    expect([j.status, await j.json()]).toEqual([201, { a: 1 }]);
+    const r = await cell.fetch(identified('/r'));
+    expect([r.status, r.headers.get('location')]).toEqual([303, '/deck/x']);
+    expect(await (await cell.fetch(identified('/t'))).text()).toBe('plain');
+    const e = await cell.fetch(identified('/e'));
+    expect([e.status, e.headers.get('hx-redirect')]).toEqual([204, '/']);
+    const html = await cell.fetch(identified('/cap', { method: 'POST', headers: { accept: 'text/html' } }));
+    expect(html.status).toBe(429);
+    expect(renderer.calls.at(-1)?.context.status_code).toBe(429);
+    const json = await cell.fetch(identified('/cap', { method: 'POST', headers: { accept: 'application/json' } }));
+    expect(await json.json()).toEqual({ error: { code: 'deck_limit', message: 'guest account limit reached' } });
   });
 });
 

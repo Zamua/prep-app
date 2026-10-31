@@ -88,7 +88,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
     return this.c.userRepos(this.storage, clock);
   }
 
-  private routes(): readonly Route[] {
+  protected routes(): readonly Route[] {
     return CELL_ROUTES;
   }
 

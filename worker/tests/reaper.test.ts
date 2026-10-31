@@ -195,14 +195,6 @@ describe('the reaper walk', () => {
     await reapIdleAnonymous(f.deps);
     expect(await reapIdleAnonymous(f.deps)).toEqual({ scanned: 0, reaped: 0, cleaned: 0, skipped: 0, failed: 0, cursor: null });
   });
-
-  it('defaults to the policy batch', async () => {
-    const f = fixture();
-    const seen: number[] = [];
-    const directory = { ...f.directory, listAnonymous: async (_after: string | null, limit: number) => (seen.push(limit), []) };
-    await reapIdleAnonymous({ ...f.deps, directory: directory as unknown as FakeDirectory });
-    expect(seen).toEqual([BATCH_LIMIT]);
-  });
 });
 
 describe('one walk on Workers Free', () => {

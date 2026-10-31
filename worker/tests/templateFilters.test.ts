@@ -240,19 +240,30 @@ describe("none test", () => {
 
 describe("icon global", () => {
   const icons = { check: '<svg xmlns="x" viewBox="0 0 8 8" fill="currentColor"><path d="M0 0"/></svg>' };
-  it("injects class and aria-hidden after the opening tag", () => {
-    expect(renderIcon(icons, "check")).toBe('<svg xmlns="x" viewBox="0 0 8 8" fill="currentColor" class="icon" aria-hidden="true"><path d="M0 0"/></svg>');
-    expect(renderIcon(icons, "check", "icon icon-inline")).toContain(' class="icon icon-inline" aria-hidden="true">');
+  /** The opening tag's attributes, and what follows it. */
+  const parse = (svg: string) => {
+    const open = /^<svg([^>]*)>/.exec(svg)!;
+    return { attrs: Object.fromEntries([...open[1]!.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, k, v]) => [k, v])), body: svg.slice(open[0].length) };
+  };
+  it("adds the class and hides the icon from assistive tech, keeping the source", () => {
+    const { attrs, body } = parse(renderIcon(icons, "check"));
+    expect(attrs).toEqual({ xmlns: "x", viewBox: "0 0 8 8", fill: "currentColor", class: "icon", "aria-hidden": "true" });
+    expect(body).toBe('<path d="M0 0"/></svg>');
+    expect(parse(renderIcon(icons, "check", "icon icon-inline")).attrs).toMatchObject({ class: "icon icon-inline", "aria-hidden": "true" });
   });
   it("swaps aria-hidden for role and aria-label when titled", () => {
-    expect(renderIcon(icons, "check", "icon", "Done")).toBe('<svg xmlns="x" viewBox="0 0 8 8" fill="currentColor" class="icon" role="img" aria-label="Done"><path d="M0 0"/></svg>');
+    const { attrs } = parse(renderIcon(icons, "check", "icon", "Done"));
+    expect(attrs).toMatchObject({ class: "icon", role: "img", "aria-label": "Done" });
+    expect(attrs).not.toHaveProperty("aria-hidden");
   });
   it("renders nothing for an unknown name", () => {
     expect(renderIcon(icons, "nope")).toBe("");
   });
   it("takes keyword arguments from a template and is not escaped", () => {
-    expect(render("{{ icon('check', class_='icon icon-inline') }}")).toBe('<svg viewBox="0 0 8 8" fill="currentColor" class="icon icon-inline" aria-hidden="true"><path d="M0 0"/></svg>');
-    expect(render("{{ icon('check', title='Done') }}")).toContain('role="img" aria-label="Done"');
+    const inline = render("{{ icon('check', class_='icon icon-inline') }}");
+    expect(inline.startsWith("<svg ")).toBe(true);
+    expect(parse(inline).attrs).toMatchObject({ class: "icon icon-inline", "aria-hidden": "true" });
+    expect(parse(render("{{ icon('check', title='Done') }}")).attrs).toMatchObject({ role: "img", "aria-label": "Done" });
     expect(render("[{{ icon('missing') }}]")).toBe("[]");
   });
 });
