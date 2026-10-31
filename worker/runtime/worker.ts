@@ -5,10 +5,10 @@ import { isRefusal } from '../domain/jobs/refusal.js';
 import { appBase } from './appBase.js';
 import { ANON_COOKIE_HEADER, clockFor, compose, cookieHooks, noCacheHtml, TEST_NOW_HEADER, type Composition } from './compose.js';
 import type { Env } from './env.js';
-import { anonymousContext, errorPage, htmlResponse } from './errors.js';
+import { anonymousContext, errorPage, htmlResponse, type PageFn } from './errors.js';
 import { serveStatic } from './assets.js';
 import { offlineBuild, servePwa } from './sw.js';
-import { NOT_AUTHENTICATED, TOMBSTONED_HEADER, UnknownProfile } from './cells/UserCell.js';
+import { NOT_AUTHENTICATED, TOMBSTONED_HEADER } from './cells/UserCell.js';
 import {
   DISPLAY_NAME_HEADER,
   EMAIL_HEADER,
@@ -25,7 +25,6 @@ import { CELL_ROUTES } from './cells/routes/all.js';
 import { ACCOUNT_DELETE_PATH } from '../app/settings/account.js';
 import { resolveIdentity, type CookieVerdict, type Resolution } from '../app/auth/resolve.js';
 import { hexFrom, mergeAnonymous } from '../app/auth/mergeSaga.js';
-import type { CellSnapshot } from '../app/entities.js';
 import type { Identity } from '../app/ports.js';
 import { landingContext } from '../app/landing.js';
 import { COOKIE_NAME } from '../domain/anonCookie.js';
@@ -38,8 +37,7 @@ import { observe, serveMetrics } from './routes/metrics.js';
 import { servePublic } from './routes/openapi.js';
 import { serveMigrate } from './routes/migrate.js';
 import { serveMigrateDump } from './routes/migrateDump.js';
-import { serveTestJobs } from './routes/testJobs.js';
-import { refuseWithoutInternalToken } from './internalToken.js';
+import { serveTestHarness } from './routes/testHarness.js';
 
 export { UserCell } from './cells/UserCell.js';
 export { DirectoryCell } from './cells/DirectoryCell.js';
@@ -56,27 +54,6 @@ export const REAUTH_FALLBACK_COOKIE = 'prep_reauth_fallback';
 /** Bearer-only surfaces: with no token there is no cell to route to, so the
  * refusal is the entry worker's rather than a 404 from nowhere. */
 const PAT_ONLY = (path: string): boolean => path.startsWith('/api/v1/') || path === '/api/v1' || path === '/mcp';
-
-interface SeedApi {
-  wipe(profile: string): Promise<void>;
-  seed(profile: string, user: string, at: string | null): Promise<Record<string, unknown>>;
-  dump(): Promise<CellSnapshot>;
-}
-
-/** The global ledger's own reset, which the seed drives. */
-interface LimiterSeedApi {
-  wipe(): Promise<void>;
-}
-
-/** One job cell's reset, which the seed drives. */
-interface JobSeedApi {
-  wipe(): Promise<void>;
-}
-
-/** The directory's own rows, which only the test-only dump reads. */
-interface DirectorySeedApi {
-  dumpTables(): Promise<Record<string, Record<string, unknown>[]>>;
-}
 
 /** What the response owes the anonymous cookie, decided before any handler. */
 interface Outcome {
@@ -172,21 +149,8 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
   if (migration) return plain(migration);
 
   if (c.testMode) {
-    if (request.method === 'GET' && path === '/_test/raise') {
-      return plain(
-        url.searchParams.get('status') === '429'
-          ? errorPage(c.renderer, c.buildToken, 429, request, 'test: deliberate throttle')
-          : errorPage(c.renderer, c.buildToken, 500, request),
-      );
-    }
-    if (request.method === 'GET' && path === '/_test/reauth') return plain(page('reauth.html'));
-    if (request.method === 'GET' && path === '/_test/sign-out') {
-      return plain(page('sign_out_interstitial.html', { redirect_url: '/' }));
-    }
-    if (request.method === 'POST' && path === '/_test/seed') return plain(await seed(request, env, c));
-    if (request.method === 'GET' && path === '/_test/dump') return plain(await dumpCell(request, url, env, c));
-    const job = await serveTestJobs(request, url, env, c, isoUtc(clockFor(c, request).now()));
-    if (job) return plain(job);
+    const harness = await serveTestHarness(request, url, env, c, page);
+    if (harness) return plain(harness);
   }
 
   // Inbound copies of the identity headers are stripped before anything
@@ -262,7 +226,6 @@ async function instantGenerate(request: Request, env: Env, c: Composition, resol
 
 // ---- provider flows -------------------------------------------------------
 
-type PageFn = (template: string, extra?: Record<string, unknown>, status?: number) => Response;
 
 /**
  * Whether the browser says this request came from our own pages. Guards the
@@ -412,98 +375,4 @@ async function routeByToken(request: Request, headers: Headers, env: Env, c: Com
     return Response.json({ detail: BAD_TOKEN }, { status: 401 });
   }
   return response;
-}
-
-/**
- * The anonymous accounts a previous run minted. They belong to no profile,
- * and the seeded generator hands out the same ids again, so leaving them
- * makes the next run's mint land in a cell that already holds its deck.
- * Wiped rather than destroyed: a tombstone would refuse the id forever.
- */
-async function clearAnonymous(c: Composition): Promise<void> {
-  for (let page = 1; page <= ANONYMOUS_PAGES; page++) {
-    const users = await c.directory.listAnonymous(null, ANONYMOUS_PAGE);
-    if (users.length === 0) return;
-    for (const user of users) {
-      const cell = c.userCells.cell(user.id) as unknown as SeedApi;
-      // Two RPCs, as the profile seed is: the wipe takes the schema with it,
-      // and the empty seed puts it back so the id is usable again.
-      await cell.wipe(ANONYMOUS_PROFILE);
-      await cell.seed(ANONYMOUS_PROFILE, user.id, null);
-      await c.directory.remove(user.id);
-    }
-  }
-}
-
-/**
- * One cell's rows, for a test that used to open the server's database file.
- * Read-only and test-only, behind the same token the seed takes.
- */
-async function dumpCell(request: Request, url: URL, env: Env, c: Composition): Promise<Response> {
-  const refused = refuseWithoutInternalToken(request, c.internalToken);
-  if (refused) return refused;
-  if (url.searchParams.get('cell') === 'directory') {
-    return Response.json({ tables: await (c.directory as unknown as DirectorySeedApi).dumpTables() });
-  }
-  const user = url.searchParams.get('user');
-  if (!user) return Response.json({ detail: 'user is required' }, { status: 422 });
-  const stub = env.USER.get(env.USER.idFromName(user)) as unknown as SeedApi;
-  return Response.json(await stub.dump());
-}
-
-/**
- * The job cells a previous run started. Their ids come from the same seeded
- * generator, so the next run addresses the same cells, and a cell holding a
- * finished ledger answers `start` with that run's outcome instead of doing
- * the work again. Read before the owner's wipe, which takes the rows naming
- * them.
- */
-async function clearJobs(stub: SeedApi, c: Composition): Promise<void> {
-  const snapshot = await stub.dump();
-  const ids = new Set<string>();
-  for (const table of JOB_TABLES) {
-    for (const row of snapshot.tables[table] ?? []) {
-      const id = row['workflow_id'];
-      if (typeof id === 'string') ids.add(id);
-    }
-  }
-  for (const id of ids) await (c.jobCells.cell(id) as unknown as JobSeedApi).wipe();
-}
-
-const JOB_TABLES = ['active_workflows', 'job_progress'] as const;
-const ANONYMOUS_PROFILE = 'anonymous';
-const ANONYMOUS_PAGE = 100;
-const ANONYMOUS_PAGES = 20;
-
-async function seed(request: Request, env: Env, c: Composition): Promise<Response> {
-  const refused = refuseWithoutInternalToken(request, c.internalToken);
-  if (refused) return refused;
-  let body: { user?: unknown; profile?: unknown };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return Response.json({ detail: 'bad json' }, { status: 400 });
-  }
-  if (typeof body.user !== 'string' || !body.user || typeof body.profile !== 'string' || !body.profile) {
-    return Response.json({ detail: 'user and profile are required' }, { status: 422 });
-  }
-  const stub = env.USER.get(env.USER.idFromName(body.user)) as unknown as SeedApi;
-  try {
-    // The instant ledger is global and durable, and the pinned clock never
-    // advances, so one run's spend would refuse the next run's first
-    // generation. It leaves with the data it was recorded against.
-    await (c.limiter as unknown as LimiterSeedApi).wipe();
-    await clearAnonymous(c);
-    // The entry worker draws the anonymous id and the instant slug from its
-    // own isolate's generator, which no cell's reset reaches: without this
-    // the ids a run mints depend on how many the runs before it did.
-    c.resetRandom();
-    await clearJobs(stub, c);
-    // Two RPCs: the wipe cannot share a call with the rows it makes room for.
-    await stub.wipe(body.profile);
-    return Response.json(await stub.seed(body.profile, body.user, request.headers.get(TEST_NOW_HEADER)));
-  } catch (e) {
-    if (e instanceof UnknownProfile) return Response.json({ detail: e.message }, { status: 400 });
-    throw e;
-  }
 }

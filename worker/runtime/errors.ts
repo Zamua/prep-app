@@ -67,3 +67,6 @@ export function errorPage(
   const context = { ...anonymousContext(buildToken, appBase(request)), ...errorContext(status, path, detail) };
   return htmlResponse(renderer.render('error.html', context), status);
 }
+
+/** Renders one of the entry worker's own pages. */
+export type PageFn = (template: string, extra?: Record<string, unknown>, status?: number) => Response;
