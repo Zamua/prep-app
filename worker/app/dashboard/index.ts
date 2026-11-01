@@ -5,6 +5,7 @@ import type { UserRepos } from '../ports.js';
 import { menuContext, overviewPayload } from './overview.js';
 
 export function dashboard(repos: UserRepos): Record<string, unknown> {
+  repos.sessions.retireIdle();
   const summaries = repos.decks.listSummaries();
   const activeTrivia = repos.trivia.listActiveSessions().map((s) => ({
     deck_name: s.deck_name,

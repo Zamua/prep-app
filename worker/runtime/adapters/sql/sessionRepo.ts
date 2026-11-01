@@ -4,6 +4,7 @@
 import type { Clock, SessionIds, SessionRepo } from '../../../app/ports.js';
 import { SessionNotFound, StaleVersionError } from '../../../app/ports.js';
 import type { RecentSession, SessionState, SessionStatus, StudySession } from '../../../app/entities.js';
+import { columnsOf, next, sessionOf, type Session, type SessionEvent } from '../../../domain/study/session.js';
 import { DUE_BUCKET } from './cardRepo.js';
 import { Db, type CellStorage, type Row, type SqlValue } from './storage.js';
 import { DAY_MS, isoNow, isoUtc, shifted } from './time.js';
@@ -112,17 +113,20 @@ export class SqlSessionRepo implements SessionRepo {
   async create(deckId: number, deviceLabel: string): Promise<string> {
     const ts = isoNow(this.clock);
     const sid = await this.ids.next();
-    const next = this.pickNextQuestion(deckId, sid);
+    const first = this.pickNextQuestion(deckId, sid);
+    const c = columnsOf({ kind: 'awaiting', questionId: first ? first.id : null, draft: first ? first.skeleton || '' : '' });
     this.db.run(
       `INSERT INTO study_sessions
          (id, deck_id, created_at, last_active, status, state, current_question_id, current_draft, version, device_label)
-       VALUES (?, ?, ?, ?, 'active', 'awaiting-answer', ?, ?, 1, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
       sid,
       deckId,
       ts,
       ts,
-      next ? next.id : null,
-      next ? next.skeleton || '' : '',
+      c.status,
+      c.state,
+      c.current_question_id,
+      c.current_draft,
       deviceLabel,
     );
     return sid;
@@ -138,17 +142,21 @@ export class SqlSessionRepo implements SessionRepo {
     return row ? rowToSession(row) : null;
   }
 
+  retireIdle(): number {
+    const before = isoUtc(shifted(this.clock.now(), -7 * DAY_MS));
+    const idle = this.db.all<{ id: string }>(`SELECT id FROM study_sessions WHERE status = 'active' AND last_active < ?`, before);
+    for (const { id } of idle) this.apply(id, null, { type: 'idle' });
+    return idle.length;
+  }
+
   listRecent(limit = 5): RecentSession[] {
-    const now = this.clock.now();
-    const abandonBefore = isoUtc(shifted(now, -7 * DAY_MS));
-    this.db.run(`UPDATE study_sessions SET status = 'abandoned', version = version + 1 WHERE status = 'active' AND last_active < ?`, abandonBefore);
     return this.db
       .all(
         `${RECENT_SELECT}
           WHERE s.status = 'active' AND (s.snoozed_until IS NULL OR s.snoozed_until <= ?)
           ORDER BY s.last_active DESC
           LIMIT ?`,
-        isoUtc(now),
+        isoNow(this.clock),
         limit,
       )
       .map(rowToRecent);
@@ -169,48 +177,70 @@ export class SqlSessionRepo implements SessionRepo {
       .map(rowToRecent);
   }
 
-  /** The row at `expected`, still active and in a state `may` accepts;
-   * anything else is a move another device or the week-old sweep made. */
-  private checkedActive(sid: string, expected: number, may: (row: { state: string; current_question_id: number | null }) => boolean): { deck_id: number } {
-    const row = this.db.first<{ version: number; deck_id: number; status: string; state: string; current_question_id: number | null }>(SESSION_ROW, sid);
-    if (!row) throw new SessionNotFound(`session ${sid} not found for user`);
-    if (Number(row.version) !== expected || row.status !== 'active' || !may(row)) throw new StaleVersionError(Number(row.version));
-    return { deck_id: Number(row.deck_id) };
+  /**
+   * The one write a session's lifecycle takes: `e` applied to the stored
+   * state. A caller holding a version is refused when the row moved past it
+   * or the move is not one this state allows; an event the session itself
+   * raises (a grade landing, the week-old sweep) is dropped instead. The
+   * new version, or null when nothing moved.
+   */
+  private apply(sid: string, expected: number | null, e: SessionEvent | ((s: Session) => SessionEvent)): number | null {
+    return this.storage.transactionSync(() => {
+      const row = this.db.first(SESSION_ROW, sid);
+      if (!row) {
+        if (expected === null) return null;
+        throw new SessionNotFound(`session ${sid} not found for user`);
+      }
+      const version = Number(row['version'] || 1);
+      if (expected !== null && version !== expected) throw new StaleVersionError(version);
+      const session = sessionOf(rowToSession(row));
+      const move = next(session, typeof e === 'function' ? e(session) : e);
+      if ('refused' in move) {
+        if (expected === null) return null;
+        throw new StaleVersionError(version);
+      }
+      if ('ignored' in move) return null;
+      const ts = isoNow(this.clock);
+      if (move.answer !== null) {
+        const a = move.answer;
+        if (a.workflowId === null) this.db.run(RECORD_ANSWER, sid, a.questionId, ts, a.result);
+        else this.db.run(RECORD_GRADED_ANSWER, sid, a.questionId, ts, a.result, a.workflowId);
+      }
+      const c = columnsOf(move.to);
+      this.db.run(
+        `UPDATE study_sessions SET status = ?, state = ?, current_question_id = ?, current_draft = ?, current_grading_workflow_id = ?,
+                last_answered_qid = ?, last_answered_verdict = ?, last_answered_state = ?, version = ?, last_active = ?
+          WHERE id = ?`,
+        c.status,
+        c.state,
+        c.current_question_id,
+        c.current_draft,
+        c.current_grading_workflow_id,
+        c.last_answered_qid,
+        c.last_answered_verdict === null ? null : JSON.stringify(c.last_answered_verdict),
+        c.last_answered_state === null ? null : JSON.stringify(c.last_answered_state),
+        version + 1,
+        move.active ? ts : String(row['last_active']),
+        sid,
+      );
+      return version + 1;
+    });
   }
 
-  private checkedAnswerable(sid: string, questionId: number, expectedVersion: number): { deck_id: number } {
-    const row = this.db.first<{
-      version: number;
-      deck_id: number;
-      status: string;
-      state: string;
-      current_question_id: number | null;
-    }>(SESSION_ROW, sid);
+  /** Refuses as `apply` would, with nothing written. */
+  private assertAllows(sid: string, expected: number, e: SessionEvent): void {
+    const row = this.db.first(SESSION_ROW, sid);
     if (!row) throw new SessionNotFound(`session ${sid} not found for user`);
-    const currentVersion = Number(row.version);
-    if (
-      currentVersion !== expectedVersion ||
-      row.status !== 'active' ||
-      row.state !== 'awaiting-answer' ||
-      Number(row.current_question_id) !== questionId
-    ) {
-      throw new StaleVersionError(currentVersion);
-    }
-    return { deck_id: Number(row.deck_id) };
+    const version = Number(row['version'] || 1);
+    if (version !== expected || 'refused' in next(sessionOf(rowToSession(row)), e)) throw new StaleVersionError(version);
   }
 
   assertAnswerable(sid: string, questionId: number, expectedVersion: number): void {
-    this.checkedAnswerable(sid, questionId, expectedVersion);
+    this.assertAllows(sid, expectedVersion, { type: 'grade', questionId, workflowId: '' });
   }
 
   updateDraft(sid: string, draft: string, expectedVersion: number): number {
-    const ts = isoNow(this.clock);
-    return this.storage.transactionSync(() => {
-      this.checkedActive(sid, expectedVersion, (row) => row.state === 'awaiting-answer');
-      const v = expectedVersion + 1;
-      this.db.run('UPDATE study_sessions SET current_draft = ?, last_active = ?, version = ? WHERE id = ?', draft, ts, v, sid);
-      return v;
-    });
+    return this.apply(sid, expectedVersion, { type: 'draft', draft })!;
   }
 
   recordAnswerSync(
@@ -221,146 +251,40 @@ export class SqlSessionRepo implements SessionRepo {
     verdict: Record<string, unknown>,
     state: Record<string, unknown>,
   ): number {
-    const ts = isoNow(this.clock);
-    return this.storage.transactionSync(() => {
-      this.checkedAnswerable(sid, questionId, expectedVersion);
-      const v = expectedVersion + 1;
-      this.db.run(
-        RECORD_ANSWER,
-        sid,
-        questionId,
-        ts,
-        String(verdict['result']),
-      );
-      this.db.run(
-        `UPDATE study_sessions SET state = 'showing-result', current_draft = NULL, last_answered_qid = ?,
-                last_answered_verdict = ?, last_answered_state = ?, last_active = ?, version = ?
-          WHERE id = ?`,
-        questionId,
-        JSON.stringify(verdict),
-        JSON.stringify(state),
-        ts,
-        v,
-        sid,
-      );
-      return v;
-    });
+    return this.apply(sid, expectedVersion, { type: 'answer', questionId, verdict, srs: state })!;
   }
 
   setGrading(sid: string, questionId: number, workflowId: string, expectedVersion: number): number {
-    const ts = isoNow(this.clock);
-    return this.storage.transactionSync(() => {
-      this.checkedAnswerable(sid, questionId, expectedVersion);
-      const v = expectedVersion + 1;
-      this.db.run(
-        `UPDATE study_sessions SET state = 'grading', current_grading_workflow_id = ?, last_active = ?, version = ? WHERE id = ?`,
-        workflowId,
-        ts,
-        v,
-        sid,
-      );
-      return v;
-    });
+    return this.apply(sid, expectedVersion, { type: 'grade', questionId, workflowId })!;
   }
 
   gradingCompleted(sid: string, questionId: number, verdict: Record<string, unknown>, state: Record<string, unknown>, workflowId: string): void {
-    const ts = isoNow(this.clock);
-    this.storage.transactionSync(() => {
-      const row = this.db.first<{
-        state: string;
-        current_question_id: number | null;
-        current_grading_workflow_id: string | null;
-      }>(
-        'SELECT state, current_question_id, current_grading_workflow_id FROM study_sessions WHERE id = ?',
-        sid,
-      );
-      if (
-        !row ||
-        row.state !== 'grading' ||
-        Number(row.current_question_id) !== questionId ||
-        row.current_grading_workflow_id !== workflowId
-      ) return;
-      this.db.run(
-        RECORD_GRADED_ANSWER,
-        sid,
-        questionId,
-        ts,
-        String(verdict['result']),
-        workflowId,
-      );
-      this.db.run(
-        `UPDATE study_sessions SET state = 'showing-result', current_grading_workflow_id = NULL, current_draft = NULL,
-                last_answered_qid = ?, last_answered_verdict = ?, last_answered_state = ?, last_active = ?, version = version + 1
-          WHERE id = ?`,
-        questionId,
-        JSON.stringify(verdict),
-        JSON.stringify(state),
-        ts,
-        sid,
-      );
-    });
+    this.apply(sid, null, { type: 'graded', questionId, workflowId, verdict, srs: state });
   }
 
   gradingAbandoned(sid: string, workflowId: string): void {
-    this.db.run(
-      `UPDATE study_sessions SET state = 'awaiting-answer', current_grading_workflow_id = NULL, last_active = ?, version = version + 1
-        WHERE id = ? AND state = 'grading' AND current_grading_workflow_id = ?`,
-      isoNow(this.clock),
-      sid,
-      workflowId,
-    );
+    this.apply(sid, null, { type: 'gradeDropped', workflowId });
   }
 
   advance(sid: string, expectedVersion: number): number {
-    const ts = isoNow(this.clock);
-    return this.storage.transactionSync(() => {
-      // Past a verdict, or a re-pick when nothing was due: never past a card still unanswered.
-      const { deck_id } = this.checkedActive(
-        sid,
-        expectedVersion,
-        (row) => row.state === 'showing-result' || (row.state === 'awaiting-answer' && row.current_question_id === null),
-      );
-      const next = this.pickNextQuestion(deck_id, sid);
-      const v = expectedVersion + 1;
-      if (next === null) {
-        this.db.run(
-          `UPDATE study_sessions SET status = 'completed', state = 'awaiting-answer', current_question_id = NULL, current_draft = NULL,
-                  last_answered_qid = NULL, last_answered_verdict = NULL, last_answered_state = NULL, last_active = ?, version = ?
-            WHERE id = ?`,
-          ts,
-          v,
-          sid,
-        );
-      } else {
-        this.db.run(
-          `UPDATE study_sessions SET state = 'awaiting-answer', current_question_id = ?, current_draft = ?,
-                  last_answered_qid = NULL, last_answered_verdict = NULL, last_answered_state = NULL, last_active = ?, version = ?
-            WHERE id = ?`,
-          next.id,
-          next.skeleton || '',
-          ts,
-          v,
-          sid,
-        );
-      }
-      return v;
-    });
+    // The pick reads the due index, so it runs only once the move is allowed.
+    this.assertAllows(sid, expectedVersion, { type: 'advance', next: null });
+    const deckId = Number(this.db.first<{ deck_id: number }>(SESSION_ROW, sid)!.deck_id);
+    return this.apply(sid, expectedVersion, () => ({ type: 'advance', next: this.pickNextQuestion(deckId, sid) }))!;
   }
 
   markCompleted(sid: string): void {
-    this.db.run(`UPDATE study_sessions SET status='completed', version = version + 1, last_active = ? WHERE id = ? AND status = 'active'`, isoNow(this.clock), sid);
+    this.apply(sid, null, { type: 'exhausted' });
   }
 
   abandon(sid: string): void {
-    this.db.run(`UPDATE study_sessions SET status = 'abandoned', last_active = ?, version = version + 1 WHERE id = ? AND status = 'active'`, isoNow(this.clock), sid);
+    this.apply(sid, null, { type: 'abandon' });
   }
 
   abandonAllForDeck(deckId: number): number {
-    return this.db.run(
-      `UPDATE study_sessions SET status = 'abandoned', last_active = ?, version = version + 1 WHERE deck_id = ? AND status = 'active'`,
-      isoNow(this.clock),
-      deckId,
-    );
+    const open = this.db.all<{ id: string }>(`SELECT id FROM study_sessions WHERE deck_id = ? AND status = 'active'`, deckId);
+    for (const { id } of open) this.apply(id, null, { type: 'abandon' });
+    return open.length;
   }
 
   /** A due card the session has not answered: most overdue first, ties within the hour at random. */

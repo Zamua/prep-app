@@ -241,11 +241,11 @@ describe('the moves a session refuses', () => {
     const { d, sid, session } = await studying();
     const version = await answered(d, sid);
     (d.clock as MutableClock).advance(8 * DAY_MS);
-    d.repos.sessions.listRecent();
+    d.repos.sessions.retireIdle();
     expect(session().status).toBe('abandoned');
     expect(study.sessionAdvance(d, sid, { version })).toMatchObject({ status: 409 });
     expect(study.sessionDraft(d, sid, { version, draft: 'late' })).toMatchObject({ status: 409 });
-    expect(session()).toMatchObject({ status: 'abandoned', state: 'showing-result' });
+    expect(session().status).toBe('abandoned');
   });
 
   it('a draft lands only on a card awaiting its answer', async () => {

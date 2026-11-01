@@ -80,6 +80,7 @@ worker/
 │   ├── markdown/          the renderer (block, inline, links, tables, url)
 │   ├── instant/           card hygiene, limiter arithmetic, ip parsing
 │   ├── notify/wake.ts     when a user's next alarm should land
+│   ├── study/session.ts   a study session's states and its one transition
 │   ├── anonCookie.ts merge.ts limits.ts trivia.ts pat.ts time.ts …
 │   └── index.ts
 ├── app/                   use cases and PORTS. Policy, not plumbing
