@@ -76,6 +76,23 @@ describe("the renderer", () => {
     }
   });
 
+  // One classification decides every progress fragment's polling, so a
+  // status a newer runner writes keeps polling everywhere rather than
+  // freezing one page and not another.
+  it.each([
+    ["plan@generating.json", ["awaiting_feedback"]],
+    ["transform@deck-computing.json", ["awaiting_apply"]],
+    ["trivia/generating@generating.json", []],
+  ])("%s polls exactly while the job runs", (fixture, gates) => {
+    const entry = JSON.parse(readFileSync(join(CONTEXTS, fixture), "utf8")) as { template: string; context: Record<string, unknown> };
+    const polls = (status: string) => {
+      const context = { ...entry.context, progress: { ...(entry.context["progress"] as object), status } };
+      return makeRenderer().render(entry.template, derive(entry.template, context)).includes('hx-trigger="every');
+    };
+    for (const status of ["rejecting", "a_step_added_later"]) expect(polls(status), status).toBe(true);
+    for (const status of [...gates, "done", "failed", "rejected", "gone"]) expect(polls(status), status).toBe(false);
+  });
+
   it("hands the created-token dialog the absolute app root", () => {
     const html = makeRenderer("/prep").render(
       "settings_api.html",

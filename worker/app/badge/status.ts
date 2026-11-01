@@ -1,16 +1,10 @@
-// The three status buckets the badge sorts and labels by. Status strings are
-// workflow-type specific; these sets are the single source of truth for the
-// UI. The upper-case four are only on rows written before the current
-// runner, and are kept so an old badge still reads as finished.
+// The three status buckets the badge sorts and labels by, from the one
+// classification every job surface reads.
+import { jobPhase } from '../../domain/jobs/graph.js';
 
-export const ACTION_REQUIRED_STATUSES: readonly string[] = ['awaiting_apply', 'awaiting_feedback'];
-
-export const TERMINAL_STATUSES: readonly string[] = ['done', 'failed', 'rejected', 'gone', 'COMPLETED', 'FAILED', 'CANCELED', 'TERMINATED'];
-
-export const isActionRequired = (status: string): boolean => ACTION_REQUIRED_STATUSES.includes(status);
-export const isTerminal = (status: string): boolean => TERMINAL_STATUSES.includes(status);
-/** Anything not terminal and not awaiting-action, including transient values. */
-export const isInProgress = (status: string): boolean => !isTerminal(status) && !isActionRequired(status);
+export const isActionRequired = (status: string): boolean => jobPhase(status) === 'awaiting';
+export const isTerminal = (status: string): boolean => jobPhase(status) === 'terminal';
+export const isInProgress = (status: string): boolean => jobPhase(status) === 'running';
 
 /** Short label for the popover row; the popover is narrow. */
 export function displayStatus(status: string): string {

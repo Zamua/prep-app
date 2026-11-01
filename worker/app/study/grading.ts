@@ -2,7 +2,8 @@
 // transaction that made the job terminal, so a terminal status with no
 // result is a job that genuinely produced none, and the poll stops rather
 // than waiting for a write that will not come.
-import { flatten, TERMINAL_GRADING } from '../jobs/view.js';
+import { jobPhase } from '../../domain/jobs/graph.js';
+import { flatten } from '../jobs/view.js';
 import { json, type ApiResult } from '../http.js';
 import type { UserRepos } from '../ports.js';
 import { notFoundResult, pollUrl, sessionPayload, studyError, verdictOutcome, type StudyDeps } from './api.js';
@@ -44,7 +45,7 @@ export async function gradingPoll(deps: StudyDeps, wid: string, sid: string): Pr
   const progress = flatten(status);
   const note = String(progress['error'] ?? '');
 
-  if (!TERMINAL_GRADING.includes(status.status)) {
+  if (jobPhase(status.status) !== 'terminal') {
     // The step writes `progress.error` while still running (the busy
     // free-tier "add your own key" pointer arrives this way), so it travels
     // with the pending payload or the user never learns why the grade is slow.

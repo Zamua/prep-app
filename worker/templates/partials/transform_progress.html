@@ -18,14 +18,13 @@
      wid, scope, progress, deck_name, modification_diffs,
      deletion_decks, move_source_decks, deck_id_to_name #}
 {%- set _status = progress.status or '' -%}
-{# Polling states: workflow is mid-flight, fragment polls the server.
-   Transient `rejecting` is included so the brief window before the
-   workflow exits is visible (the partial polls once more and lands
-   on the terminal `rejected` / `gone` fragment). #}
-{%- set _polling_states = ['computing', 'applying', 'rejecting', ''] -%}
+{# Polls while the job runs. Transient `rejecting` counts as running, so
+   the partial polls once more and lands on the terminal `rejected` /
+   `gone` fragment. #}
+{%- set _polling = job_phase(_status) == 'running' -%}
 {%- set _root = root -%}
 <div id="transform-progress"
-     {% if _status in _polling_states %}
+     {% if _polling %}
      hx-get="{{ _root }}/transform/{{ wid }}/fragment"
      hx-trigger="every 2s"
      hx-target="this"
