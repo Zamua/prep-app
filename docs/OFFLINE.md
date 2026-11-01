@@ -496,11 +496,16 @@ holds the two rules a wipe has to obey:
   removal, which by definition runs with no session the server will
   accept.
 - **A wiped device is un-adoptable until a real owner is stamped.**
-  `wipeAll` clears `meta.owner`, and `ownerAllows` reads an absent
-  owner as a pass, so a row a second tab writes after the wipe would
-  be flushed into whichever account signs in next. `wipeAll` leaves a
-  `meta.wiped` marker; `sync.js` drops those rows and clears the
-  marker when the next snapshot refresh stamps an owner.
+  `wipeAll` clears `meta.owner` and leaves a `meta.wiped` marker. While
+  it stands, a flush drops any row a second tab wrote after the wipe
+  instead of sending it, and the next snapshot refresh drops them too
+  and clears the marker just before it stamps an owner.
+- **Ownership is one state machine.** `static/js/offline/ownership.js`
+  names the device states (unclaimed, wiped, owned, and a per-page
+  conflict) and decides every sync step's move in one pure `next`;
+  `sync.js` reads the state from `meta`, raises the events and
+  performs the effects. `worker/tests/domain/offlineOwnership.test.ts`
+  drives it with event sequences.
 
 Answering a question about data must not answer a question about the
 session. The unsynced-work dialog reached from sign-out therefore
