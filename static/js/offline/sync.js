@@ -12,17 +12,15 @@
 // card_client_id sits in a later chunk would reject as unknown. The
 // owner-mismatch guard ships with the flush, not after it: syncing
 // under a mismatched sign-in would replay one account's outbox into
-// another. On mismatch, sync disables entirely for the session -- no
-// flush, no snapshot write -- and the M5 confirm-then-wipe dialog
-// (maybeConfirmOwnerConflict below) offers the signed-in user an
-// EXPLICIT choice: wipe this device's offline data and reseed as the
-// new account, or keep the other account's data with sync off. Never
-// silent, never automatic.
-//
-// An owner-ABSENT device is a different answer from a mismatched one:
-// absent is transient and self-closing (the refresh stamps it),
-// mismatch is a hard refusal.
+// another. Whose data the device holds, and what each sync step may do
+// about it, is decided in ownership.js; this module reads that state,
+// raises its events and performs the effects. On a mismatch the
+// confirm-then-wipe dialog (maybeConfirmOwnerConflict below) offers
+// the signed-in user an EXPLICIT choice: wipe this device's offline
+// data and reseed as the new account, or keep the other account's
+// data with sync off. Never silent, never automatic.
 
+import {next, ownershipOf, shouldPrompt} from "./ownership.js";
 import {
   bulkReplace,
   clearSnapshotFlag,
@@ -45,15 +43,39 @@ const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const CARDS_PER_CHUNK = 100;
 const REVIEWS_PER_CHUNK = 500;
 
-// Flipped on owner mismatch; every sync entry point then refuses to
-// touch the network or the local stores until the next page load (or
-// until the user chooses wipe-and-reseed in the conflict dialog).
-let syncDisabled = false;
+// The conflict this page load observed, if any. It is the one
+// ownership state no meta record holds: the next load re-derives it.
+let conflict = null;
 
-// Set by ownerAllows when the guard trips: {owner, serverUser}. The
-// raw material for maybeConfirmOwnerConflict; null while no mismatch
-// has been observed this session.
-let ownerConflict = null;
+async function ownership() {
+  if (conflict) return conflict;
+  return ownershipOf({owner: await metaGet("owner"), wiped: await metaGet("wiped")});
+}
+
+async function perform(effect) {
+  switch (effect.type) {
+    case "stamp":
+      return metaPut("owner", effect.owner);
+    case "dropOrphans":
+      return dropPostWipeRows();
+    case "clearWiped":
+      return remove("meta", "wiped");
+    case "recordKeep":
+      return metaPut("owner_conflict", {dismissed_user_id: effect.userId, dismissed_at: new Date().toISOString()});
+    default:
+      throw new Error("unknown ownership effect " + effect.type);
+  }
+}
+
+// Applies one ownership event: the move, its effects, then the state
+// this page holds. Returns the move, whose `refused` says whether the
+// step that raised it may go on.
+async function raise(event) {
+  const move = next(await ownership(), event);
+  for (const effect of move.effects) await perform(effect);
+  conflict = move.state.kind === "conflict" ? move.state : null;
+  return move;
+}
 
 // The deploy's root path, derived from this module's own URL (it is
 // served under <root>/static/js/..., versioned prefix included).
@@ -70,32 +92,18 @@ function buildToken() {
   return m ? m[1] : null;
 }
 
-// The load-bearing identity guard: the server-resolved user id must
-// match the local snapshot owner before ANY flush or snapshot write.
-// A device with no owner yet (fresh install) passes; a mismatch
-// disables sync for the whole session so the mismatched sign-in can
-// neither absorb the other account's outbox nor overwrite its data.
+// The load-bearing identity guard: the server-resolved user must be
+// the snapshot owner before ANY flush or snapshot write. A mismatch
+// turns sync off for the page so the mismatched sign-in can neither
+// absorb the other account's outbox nor overwrite its data.
 async function ownerAllows(serverUser) {
-  const owner = await metaGet("owner");
-  const serverUserId = serverUser && serverUser.id;
-  if (owner && owner.user_id && serverUserId && owner.user_id !== serverUserId) {
-    // A merged-away id is this account: the server says so through
-    // previous_ids, which it derives from its own merge audit and
-    // never accepts from a client. Re-stamp so the next sync
-    // compares equal without consulting the list at all.
-    const previous = (serverUser && serverUser.previous_ids) || [];
-    if (previous.includes(owner.user_id)) {
-      await metaPut("owner", {...owner, user_id: serverUserId});
-      return true;
-    }
-    syncDisabled = true;
-    ownerConflict = {owner, serverUser};
+  const move = await raise({type: "signedIn", user: serverUser});
+  if (move.refused === "mismatch") {
     console.warn(
       "offline sync disabled: signed-in user does not match this device's snapshot owner"
     );
-    return false;
   }
-  return true;
+  return !move.refused;
 }
 
 // Rows written after a wipe belong to no account. The wipe cleared
@@ -110,14 +118,6 @@ async function dropPostWipeRows() {
     for (const c of await getAll("local_cards")) await remove("local_cards", c.client_id);
     for (const r of await getAll("rejects")) await remove("rejects", r.client_id);
   });
-}
-
-// A flush needs a stamped owner. An unstamped device cannot say
-// whose outbox this is, so it refreshes first (which stamps) and
-// flushes on the next pass.
-async function ownerUnstamped() {
-  if (await metaGet("owner")) return false;
-  return (await getAll("local_cards")).length > 0;
 }
 
 async function fetchSnapshotPayload() {
@@ -140,11 +140,11 @@ async function fetchSnapshotPayload() {
 // Throttled: skipped when the last successful refresh is younger than
 // an hour, unless force is set (a post-flush refresh will force).
 export async function refreshSnapshot({force = false} = {}) {
-  if (syncDisabled) return {ok: false, disabled: true};
+  if ((await raise({type: "refreshing"})).refused) return {ok: false, disabled: true};
   if (!force) {
     const sync = await metaGet("sync");
-    const ownerMeta = await metaGet("owner").catch(() => null);
-    if (sync && sync.last_refresh_at && !ownerMeta) {
+    const owned = (await ownership().catch(() => null))?.kind === "owned";
+    if (sync && sync.last_refresh_at && !owned) {
       const age = Date.now() - Date.parse(sync.last_refresh_at);
       if (Number.isFinite(age) && age >= 0 && age < REFRESH_INTERVAL_MS) {
         return {ok: true, skipped: true};
@@ -158,14 +158,7 @@ export async function refreshSnapshot({force = false} = {}) {
   if (!fetched.ok) return fetched;
   const snapshot = fetched.snapshot;
   if (!(await ownerAllows(snapshot.user))) return {ok: false, disabled: true};
-
-  // The marker dies with the first owner this device gets after a
-  // wipe. From the stamp below, whatever the queues hold belongs to
-  // that account; anything written before it does not.
-  if (await metaGet("wiped")) {
-    await dropPostWipeRows();
-    await remove("meta", "wiped");
-  }
+  if ((await raise({type: "claim"})).refused) return {ok: false, disabled: true};
 
   // Full replace sidesteps tombstone bookkeeping for deletions. Local
   // ladder overlays are seeded null EXCEPT for cards that still have
@@ -213,11 +206,14 @@ export async function refreshSnapshot({force = false} = {}) {
       })
     );
   });
-  await metaPut("owner", {
-    user_id: snapshot.user.id,
-    display_name: snapshot.user.display_name || "",
-    snapshot_at: snapshot.generated_at || new Date().toISOString(),
-    build: buildToken(),
+  await raise({
+    type: "stamped",
+    owner: {
+      user_id: snapshot.user.id,
+      display_name: snapshot.user.display_name || "",
+      snapshot_at: snapshot.generated_at || new Date().toISOString(),
+      build: buildToken(),
+    },
   });
   // What the landing page reads before it paints, so it has to state
   // what the stores now hold and not merely that a refresh happened:
@@ -363,14 +359,11 @@ async function postSyncChunk(deviceId, newCards, reviews) {
 // reviews after an unacked card chunk would violate the cards-first
 // ordering and bounce card_client_id reviews as unknown.
 export async function flushOutbox() {
-  if (syncDisabled) return {flushed: 0, created: 0, disabled: true};
-  // Ahead of the owner checks below, which cannot tell a wiped device
-  // from a fresh one.
-  if (await metaGet("wiped")) {
-    await dropPostWipeRows();
-    return {flushed: 0, created: 0, wiped: true};
-  }
-  if (await ownerUnstamped()) {
+  let localCards = await getAll("local_cards");
+  const gate = await raise({type: "flushing", localCards: localCards.length});
+  if (gate.refused === "disabled") return {flushed: 0, created: 0, disabled: true};
+  if (gate.refused === "wiped") return {flushed: 0, created: 0, wiped: true};
+  if (gate.refused === "unstamped") {
     // Force the stamping refresh instead of simply refusing: refusing
     // alone strands the cards until something else happens to stamp.
     // The refresh replaces decks + cards only, so the queued rows
@@ -379,7 +372,6 @@ export async function flushOutbox() {
     return {flushed: 0, created: 0, owner_unstamped: true, refreshed: Boolean(refresh.ok)};
   }
   let queued = await getAll("outbox_reviews");
-  let localCards = await getAll("local_cards");
   queued = await parkCorruptRows("outbox_reviews", queued, "review");
   localCards = await parkCorruptRows("local_cards", localCards, "card");
   if (!queued.length && !localCards.length) return {flushed: 0, created: 0};
@@ -534,8 +526,7 @@ function makeEl(tag, className, text) {
 // refresh under the new identity (which also re-stamps meta.owner).
 export async function wipeAndReseed() {
   await withLock(() => wipeAll());
-  syncDisabled = false;
-  ownerConflict = null;
+  await raise({type: "wiped"});
   return refreshSnapshot({force: true});
 }
 
@@ -631,10 +622,7 @@ function showOwnerConflictDialog({owner, serverUser, outboxCount, localCardCount
       // The recorded choice suppresses re-prompts for THIS mismatched
       // account only; a different account signing in later prompts
       // again (its id will not match dismissed_user_id).
-      await metaPut("owner_conflict", {
-        dismissed_user_id: serverUser.id,
-        dismissed_at: new Date().toISOString(),
-      });
+      await raise({type: "kept"});
     } catch (e) {
       console.warn("offline owner-conflict keep failed:", e);
     } finally {
@@ -682,19 +670,17 @@ export async function maybeConfirmOwnerConflict({onWiped} = {}) {
   // An open dialog means the user is mid-decision (possibly mid-wipe);
   // a connectivity flap re-running the chain must not yank it.
   if (document.querySelector("dialog.offline-owner-dialog")) return;
-  if (!ownerConflict) return false;
+  if (!conflict) return false;
   try {
-    const dismissed = await metaGet("owner_conflict");
-    if (dismissed && dismissed.dismissed_user_id === ownerConflict.serverUser.id) {
-      return false;
-    }
+    const state = conflict;
+    if (!shouldPrompt(state, await metaGet("owner_conflict"))) return false;
     const [outbox, localCards] = await Promise.all([
       getAll("outbox_reviews"),
       getAll("local_cards"),
     ]);
     showOwnerConflictDialog({
-      owner: ownerConflict.owner,
-      serverUser: ownerConflict.serverUser,
+      owner: state.owner,
+      serverUser: state.serverUser,
       outboxCount: outbox.length,
       localCardCount: localCards.length,
       onWiped,
