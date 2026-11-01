@@ -221,7 +221,9 @@ export interface SessionRepo {
   create(deckId: number, deviceLabel: string): Promise<string>;
   get(sid: string): StudySession | null;
   findActiveForDeck(deckId: number): StudySession | null;
-  /** Ages idle sessions out first; snoozed ones are hidden. */
+  /** Abandons every session idle for a week; how many it abandoned. */
+  retireIdle(): number;
+  /** Active sessions, most recent first; snoozed ones are hidden. */
   listRecent(limit?: number): RecentSession[];
   snooze(sid: string, untilIso: string | null): void;
   listSnoozed(): RecentSession[];

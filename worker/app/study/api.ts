@@ -8,6 +8,7 @@
 import { grade, GradingError, UnsupportedQuestionType } from '../../domain/grading/index.js';
 import { AnswerJsonError } from '../../domain/grading/answerJson.js';
 import { deviceLabelFromUa } from '../../domain/study/device.js';
+import { sessionOf } from '../../domain/study/session.js';
 import { keyedGradeId } from '../../domain/jobs/ids.js';
 import { gradeCard } from '../../domain/jobs/snapshot.js';
 import { DurationError, parseUntil } from '../durations.js';
@@ -204,33 +205,33 @@ interface Answering {
 function sessionView(deps: StudyDeps, s: StudySession): ApiResult {
   const { repos } = deps;
   const deckName = repos.decks.findName(s.deck_id) || '';
-  let payload = sessionPayload(s, deckName);
-
-  if (s.status === 'abandoned') return json({ ended: { reason: 'abandoned' }, session: payload });
-  if (s.status === 'completed') return json(caughtUp(deps, s.deck_id, payload));
-
-  if (s.state === 'showing-result') {
-    const q = s.last_answered_qid ? repos.questions.get(s.last_answered_qid) : null;
-    if (q === null) return notFound('question');
-    const userAnswer = repos.reviews.getLastUserAnswer(q.id) || '';
-    return json(verdictOutcome(q, s.last_answered_verdict ?? {}, s.last_answered_state ?? {}, userAnswer, userAnswer === '', payload, deckName));
+  const payload = sessionPayload(s, deckName);
+  const state = sessionOf(s);
+  switch (state.kind) {
+    case 'abandoned':
+      return json({ ended: { reason: 'abandoned' }, session: payload });
+    case 'completed':
+      return json(caughtUp(deps, s.deck_id, payload));
+    case 'result': {
+      const q = repos.questions.get(state.questionId);
+      if (q === null) return notFound('question');
+      const userAnswer = repos.reviews.getLastUserAnswer(q.id) || '';
+      return json(verdictOutcome(q, state.verdict, state.srs, userAnswer, userAnswer === '', payload, deckName));
+    }
+    case 'grading':
+      return json({ pending: { poll: pollUrl(state.workflowId, s.id), workflow_id: state.workflowId }, session: payload });
+    case 'awaiting': {
+      const q = state.questionId !== null ? repos.questions.get(state.questionId) : null;
+      if (q === null) {
+        // No card left to show: the same synchronous bump the HTML view
+        // does, so both surfaces agree on the row.
+        repos.sessions.markCompleted(s.id);
+        const done = repos.sessions.get(s.id);
+        return json(caughtUp(deps, s.deck_id, done ? sessionPayload(done, deckName) : payload));
+      }
+      return json({ card: cardPayload(q), draft: state.draft || q.skeleton || '', session: payload });
+    }
   }
-
-  if (s.state === 'grading') {
-    const wid = s.current_grading_workflow_id || '';
-    return json({ pending: { poll: pollUrl(wid, s.id), workflow_id: wid }, session: payload });
-  }
-
-  const q = s.current_question_id ? repos.questions.get(s.current_question_id) : null;
-  if (q === null) {
-    // No due card left: the same synchronous bump the HTML view does, so
-    // both surfaces agree on the row.
-    repos.sessions.markCompleted(s.id);
-    const done = repos.sessions.get(s.id);
-    payload = done ? sessionPayload(done, deckName) : payload;
-    return json(caughtUp(deps, s.deck_id, payload));
-  }
-  return json({ card: cardPayload(q), draft: s.current_draft || q.skeleton || '', session: payload });
 }
 
 // ---- submission ------------------------------------------------------------

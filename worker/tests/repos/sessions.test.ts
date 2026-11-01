@@ -113,7 +113,7 @@ describe('SessionRepo', () => {
     expect(c.storage.rows('study_session_answers')).toHaveLength(1);
   });
 
-  it('lists recent sessions with deck and prompt, ages idle ones out, hides snoozed ones', async () => {
+  it('retires idle sessions, then lists recent ones with deck and prompt, hiding snoozed ones', async () => {
     const c = cell();
     const { d, ids } = deckWithDue(c, ['2026-03-14T12:00:00+00:00']);
     const old = await c.repos.sessions.create(d, 'old');
@@ -121,6 +121,7 @@ describe('SessionRepo', () => {
     const fresh = await c.repos.sessions.create(d, 'fresh');
     const snoozed = await c.repos.sessions.create(d, 'snoozed');
     c.repos.sessions.snooze(snoozed, '2026-03-14T18:00:00+00:00');
+    expect(c.repos.sessions.retireIdle()).toBe(1);
     const recent = c.repos.sessions.listRecent();
     expect(recent.map((r) => r.id)).toEqual([fresh]);
     expect(recent[0]).toMatchObject({ deck_name: 'd', deck_display_name: 'Deck', current_question_id: ids[0], current_prompt: 'q0', current_type: 'code', device_label: 'fresh', snoozed_until: null });
