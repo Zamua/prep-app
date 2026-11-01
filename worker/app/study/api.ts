@@ -426,8 +426,7 @@ export function sessionAbandon(deps: StudyDeps, sid: string): ApiResult {
   const s = repos.sessions.get(sid);
   if (s === null) return notFound('session');
   repos.sessions.abandon(sid);
-  const moved = repos.sessions.get(sid);
-  return json({ ended: { reason: 'abandoned' }, session: sessionPayload(moved ?? s, repos.decks.findName(s.deck_id) || '') });
+  return sessionView(deps, repos.sessions.get(sid) ?? s);
 }
 
 /** Hide the session from the Continue strip until it wakes; `preset=wake` clears it. */
