@@ -141,7 +141,7 @@ export class SqlSessionRepo implements SessionRepo {
   listRecent(limit = 5): RecentSession[] {
     const now = this.clock.now();
     const abandonBefore = isoUtc(shifted(now, -7 * DAY_MS));
-    this.db.run(`UPDATE study_sessions SET status = 'abandoned' WHERE status = 'active' AND last_active < ?`, abandonBefore);
+    this.db.run(`UPDATE study_sessions SET status = 'abandoned', version = version + 1 WHERE status = 'active' AND last_active < ?`, abandonBefore);
     return this.db
       .all(
         `${RECENT_SELECT}
@@ -169,10 +169,12 @@ export class SqlSessionRepo implements SessionRepo {
       .map(rowToRecent);
   }
 
-  private checkedVersion(sid: string, expected: number): { deck_id: number } {
-    const row = this.db.first<{ version: number; deck_id: number }>(SESSION_ROW, sid);
+  /** The row at `expected`, still active and in a state `may` accepts;
+   * anything else is a move another device or the week-old sweep made. */
+  private checkedActive(sid: string, expected: number, may: (row: { state: string; current_question_id: number | null }) => boolean): { deck_id: number } {
+    const row = this.db.first<{ version: number; deck_id: number; status: string; state: string; current_question_id: number | null }>(SESSION_ROW, sid);
     if (!row) throw new SessionNotFound(`session ${sid} not found for user`);
-    if (Number(row.version) !== expected) throw new StaleVersionError(Number(row.version));
+    if (Number(row.version) !== expected || row.status !== 'active' || !may(row)) throw new StaleVersionError(Number(row.version));
     return { deck_id: Number(row.deck_id) };
   }
 
@@ -204,7 +206,7 @@ export class SqlSessionRepo implements SessionRepo {
   updateDraft(sid: string, draft: string, expectedVersion: number): number {
     const ts = isoNow(this.clock);
     return this.storage.transactionSync(() => {
-      this.checkedVersion(sid, expectedVersion);
+      this.checkedActive(sid, expectedVersion, (row) => row.state === 'awaiting-answer');
       const v = expectedVersion + 1;
       this.db.run('UPDATE study_sessions SET current_draft = ?, last_active = ?, version = ? WHERE id = ?', draft, ts, v, sid);
       return v;
@@ -312,7 +314,12 @@ export class SqlSessionRepo implements SessionRepo {
   advance(sid: string, expectedVersion: number): number {
     const ts = isoNow(this.clock);
     return this.storage.transactionSync(() => {
-      const { deck_id } = this.checkedVersion(sid, expectedVersion);
+      // Past a verdict, or a re-pick when nothing was due: never past a card still unanswered.
+      const { deck_id } = this.checkedActive(
+        sid,
+        expectedVersion,
+        (row) => row.state === 'showing-result' || (row.state === 'awaiting-answer' && row.current_question_id === null),
+      );
       const next = this.pickNextQuestion(deck_id, sid);
       const v = expectedVersion + 1;
       if (next === null) {
@@ -341,11 +348,11 @@ export class SqlSessionRepo implements SessionRepo {
   }
 
   markCompleted(sid: string): void {
-    this.db.run(`UPDATE study_sessions SET status='completed', version = version + 1, last_active = ? WHERE id = ?`, isoNow(this.clock), sid);
+    this.db.run(`UPDATE study_sessions SET status='completed', version = version + 1, last_active = ? WHERE id = ? AND status = 'active'`, isoNow(this.clock), sid);
   }
 
   abandon(sid: string): void {
-    this.db.run(`UPDATE study_sessions SET status = 'abandoned', last_active = ?, version = version + 1 WHERE id = ?`, isoNow(this.clock), sid);
+    this.db.run(`UPDATE study_sessions SET status = 'abandoned', last_active = ?, version = version + 1 WHERE id = ? AND status = 'active'`, isoNow(this.clock), sid);
   }
 
   abandonAllForDeck(deckId: number): number {

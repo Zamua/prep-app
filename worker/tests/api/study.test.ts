@@ -5,7 +5,7 @@ import { buildMessage, DEFAULT_PROVIDER, providerUrls, quoteAll } from '../../ap
 import { RunnerUnavailable, StaleVersionError, type GradeAnswerInput, type WorkflowRunner } from '../../app/ports.js';
 import { RequestValidationError } from '../../app/validation.js';
 import { keyedGradeId } from '../../domain/jobs/ids.js';
-import { cell, TEST_NOW } from '../repos/setup.js';
+import { cell, MutableClock, TEST_NOW } from '../repos/setup.js';
 
 const IDLE = { signal: async () => null, status: async () => null, terminate: async () => {} };
 
@@ -194,6 +194,73 @@ describe('a session grade start', () => {
     expect(d.repos.sessions.get(sid)).toMatchObject({ state: 'grading', current_grading_workflow_id: keyedGradeId(qid, `${sid}v${version}`) });
     expect(await submit()).toMatchObject({ status: 409 });
     expect(keys).toHaveLength(1);
+  });
+});
+
+describe('the moves a session refuses', () => {
+  const DAY_MS = 24 * 3_600_000;
+
+  /** A deck of `cards` short cards and a session parked on the first. */
+  async function studying(cards = 2, runner: WorkflowRunner = refusing) {
+    const d = deps({ runner, agentAvailable: runner !== refusing });
+    const deck = d.repos.decks.create('capitals');
+    for (let i = 0; i < cards; i++) d.repos.questions.add(deck, { type: 'short', prompt: `Capital ${i}?`, answer: `City ${i}` });
+    const sid = await d.repos.sessions.create(deck, 'test');
+    return { d, sid, session: () => d.repos.sessions.get(sid)! };
+  }
+
+  /** Answers the current card Right, leaving the session on its result. */
+  async function answered(d: study.StudyDeps, sid: string): Promise<number> {
+    const s = d.repos.sessions.get(sid)!;
+    const q = d.repos.questions.get(s.current_question_id!)!;
+    const result = (await study.sessionSubmit(d, sid, { question_id: q.id, version: s.version, answer: q.answer, verdict: 'right' })) as { json: { session: { version: number } } };
+    expect(d.repos.sessions.get(sid)!.state).toBe('showing-result');
+    return result.json.session.version;
+  }
+
+  it('will not advance past a card nobody answered', async () => {
+    const { d, sid, session } = await studying();
+    const before = session();
+    expect(study.sessionAdvance(d, sid, { version: before.version })).toMatchObject({ status: 409 });
+    expect(session()).toMatchObject({ state: 'awaiting-answer', current_question_id: before.current_question_id, version: before.version });
+  });
+
+  it('will not advance while the answer is grading, so the grade still lands on it', async () => {
+    const runner: WorkflowRunner = { ...IDLE, start: async (_kind, input, opts) => ({ workflowId: keyedGradeId((input as GradeAnswerInput).questionId, opts!.idempotencyKey!) }) };
+    const { d, sid, session } = await studying(2, runner);
+    const s = session();
+    await study.sessionSubmit(d, sid, { question_id: s.current_question_id!, version: s.version, answer: 'the zeroth city', idk: false });
+    const grading = session();
+    const wid = grading.current_grading_workflow_id;
+    expect(grading.state).toBe('grading');
+    expect(study.sessionAdvance(d, sid, { version: grading.version })).toMatchObject({ status: 409 });
+    expect(session()).toMatchObject({ state: 'grading', current_question_id: s.current_question_id, current_grading_workflow_id: wid });
+  });
+
+  it('a session the dashboard retires after a week is stale to the tab that still holds it', async () => {
+    const { d, sid, session } = await studying();
+    const version = await answered(d, sid);
+    (d.clock as MutableClock).advance(8 * DAY_MS);
+    d.repos.sessions.listRecent();
+    expect(session().status).toBe('abandoned');
+    expect(study.sessionAdvance(d, sid, { version })).toMatchObject({ status: 409 });
+    expect(study.sessionDraft(d, sid, { version, draft: 'late' })).toMatchObject({ status: 409 });
+    expect(session()).toMatchObject({ status: 'abandoned', state: 'showing-result' });
+  });
+
+  it('a draft lands only on a card awaiting its answer', async () => {
+    const { d, sid } = await studying();
+    const version = await answered(d, sid);
+    expect(study.sessionDraft(d, sid, { version, draft: 'too late' })).toMatchObject({ status: 409 });
+  });
+
+  it('abandoning a finished session leaves it finished', async () => {
+    const { d, sid, session } = await studying(1);
+    const version = await answered(d, sid);
+    expect(study.sessionAdvance(d, sid, { version })).toMatchObject({ status: 200 });
+    expect(session().status).toBe('completed');
+    study.sessionAbandon(d, sid);
+    expect(session().status).toBe('completed');
   });
 });
 
