@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { JOB_GRAPHS, jobRoute, WORKFLOW_TYPE, type JobKind } from '../../app/jobs/graph.js';
 import { DuplicateStep, llmStep, StepRegistry, unregisteredSteps, UnknownStep, writeStep, type StepContext } from '../../app/jobs/registry.js';
-import { statusLiterals, validateGraph, type StepGraph } from '../../domain/jobs/graph.js';
+import { jobPhase, statusLiterals, validateGraph, type StepGraph } from '../../domain/jobs/graph.js';
 import { gradeId, planId, transformId, triviaId } from '../../domain/jobs/ids.js';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
@@ -28,6 +28,18 @@ describe('every declared graph', () => {
         expect(html.includes(`'${status}'`), `${kind}: ${graph.partial} never mentions ${status}`).toBe(true);
       }
     }
+  });
+
+  it('reads a gate status as awaiting, an ending as terminal, and every other status as running', () => {
+    for (const [kind, graph] of graphs) {
+      const gates = new Set(graph.nodes.filter((n) => n.kind === 'gate').map((n) => n.status));
+      const endings = new Set([graph.doneStatus, 'failed', 'rejected']);
+      for (const status of statusLiterals(graph)) {
+        const want = gates.has(status) ? 'awaiting' : endings.has(status) ? 'terminal' : 'running';
+        expect(jobPhase(status), `${kind}: ${status}`).toBe(want);
+      }
+    }
+    expect(jobPhase('gone')).toBe('terminal');
   });
 
   it('keys the grading record on the job id and nothing else', () => {

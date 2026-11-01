@@ -13,10 +13,9 @@
 {%- set _generated = progress.generated_count or 0 -%}
 {%- set _status = progress.status or 'starting' -%}
 {%- set _round = progress.round or 1 -%}
-{# Polling continues for any non-terminal state. accepting/rejecting are
-   transient post-signal states; the partial re-polls so the user sees
-   the workflow tick into generating/rejected without having to refresh. #}
-{%- set _polling = _status not in ['awaiting_feedback', 'done', 'rejected', 'failed', 'gone'] -%}
+{# Polls while the job runs, transient post-signal states included, so
+   the user sees it tick into generating/rejected without a refresh. #}
+{%- set _polling = job_phase(_status) == 'running' -%}
 {%- set _root = root -%}
 <div id="plan-progress"
      {% if _polling %}

@@ -83,9 +83,22 @@ export interface StepGraph {
   progressSeed?: (input: Readonly<Record<string, unknown>>) => Record<string, unknown>;
 }
 
-/** Terminal statuses the runner writes; `gone` is what a missing row renders. */
-export const TERMINAL_JOB_STATUSES = ['done', 'rejected', 'failed'] as const;
-export type TerminalJobStatus = (typeof TERMINAL_JOB_STATUSES)[number];
+/** Where a job stands, read from its status: still moving, parked on a human
+ * gate, or over. Pages poll a running job and stop on the other two. */
+export type JobPhase = 'running' | 'awaiting' | 'terminal';
+
+// `gone` is what a missing row renders. The upper-case four are only on rows
+// written before the current runner, and still read as over.
+const TERMINAL = new Set(['done', 'rejected', 'failed', 'gone', 'COMPLETED', 'FAILED', 'CANCELED', 'TERMINATED']);
+const AWAITING = new Set(['awaiting_apply', 'awaiting_feedback']);
+
+/** Anything not over and not at a gate is running, a status a newer runner
+ * writes included, so a page keeps polling it rather than freezing. */
+export function jobPhase(status: string): JobPhase {
+  if (TERMINAL.has(status)) return 'terminal';
+  if (AWAITING.has(status)) return 'awaiting';
+  return 'running';
+}
 
 export const nodeOnError = (node: StepNode): 'fail' | 'skip' => node.onError ?? 'fail';
 

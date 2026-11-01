@@ -7,7 +7,7 @@
    Inputs: wid, deck_name, progress (dict with status, generated_count,
    total, inserted, error). #}
 {%- set _status = progress.status or 'starting' -%}
-{%- set _terminal = _status in ['done', 'failed'] -%}
+{%- set _terminal = job_phase(_status) == 'terminal' -%}
 {%- set _root = root -%}
 {%- set _total = progress.total or 0 -%}
 {%- set _generated = progress.generated_count or 0 -%}
