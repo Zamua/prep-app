@@ -305,7 +305,11 @@ function visitorResponse(request: Request, url: URL, c: Composition, resolution:
   if (!matchRoute(CELL_ROUTES, request.method, url.pathname)) {
     return { response: errorPage(c.renderer, c.buildToken, 404, request, 'Not Found'), cookie };
   }
-  if (wantsJson(request)) return { response: Response.json({ detail: NOT_AUTHENTICATED }, { status: 401 }), cookie };
+  // A fragment poll cannot follow a redirect to the provider's page, and a
+  // tab left open would repeat it for as long as it lives.
+  if (wantsJson(request) || request.headers.get('hx-request') === 'true') {
+    return { response: Response.json({ detail: NOT_AUTHENTICATED }, { status: 401 }), cookie };
+  }
   const signIn = c.identity.urls().sign_in;
   if (signIn) return { response: new Response(null, { status: 303, headers: { location: signIn } }), cookie };
   return { response: errorPage(c.renderer, c.buildToken, 401, request, NOT_AUTHENTICATED), cookie };
