@@ -1,6 +1,9 @@
 // The per-IP limiter key. IPv4 keys on the exact address; IPv6 keys on the
 // /64 prefix, since one host trivially owns a /64. Values that do not parse
 // share one sentinel bucket. Header selection is the router's.
+//
+// `logSubnet` is the coarser, log-only form: the only client identity a log
+// line may carry.
 
 export const SENTINEL_BUCKET = 'unresolved';
 
@@ -116,4 +119,19 @@ export function limiterBucket(value: string): string {
   if (ip === null) return SENTINEL_BUCKET;
   if (ip >> 32n === 0xffffn) return formatV4(ip & 0xffffffffn);
   return `${formatV6((ip >> 64n) << 64n)}/64`;
+}
+
+export const UNKNOWN_SUBNET = 'unknown';
+
+/** The IPv4 /24 or IPv6 /40 of a client address, cut before any log line is
+ * built so the address itself is never held beside the event. */
+export function logSubnet(value: unknown): string {
+  if (typeof value !== 'string') return UNKNOWN_SUBNET;
+  const raw = value.trim();
+  const v4 = parseV4(raw);
+  if (v4) return `${v4[0]}.${v4[1]}.${v4[2]}.0/24`;
+  const ip = parseV6(raw);
+  if (ip === null) return UNKNOWN_SUBNET;
+  if (ip >> 32n === 0xffffn) return logSubnet(formatV4(ip & 0xffffffffn));
+  return `${formatV6((ip >> 88n) << 88n)}/40`;
 }

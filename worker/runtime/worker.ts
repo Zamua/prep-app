@@ -29,10 +29,11 @@ import type { Identity } from '../app/ports.js';
 import { landingContext } from '../app/landing.js';
 import { COOKIE_NAME } from '../domain/anonCookie.js';
 import { parseCookieHeader } from '../domain/cookies.js';
-import { bearerValue, parseToken, TOKEN_PREFIX, BAD_TOKEN } from '../domain/pat.js';
+import { bearerValue, isPatSurface, parseToken, TOKEN_PREFIX, BAD_TOKEN } from '../domain/pat.js';
 import { isoUtc } from '../domain/time.js';
 import { clerkWebhook } from './webhooks.js';
 import { serveInstant } from './routes/instant.js';
+import { noteResponse } from './abuseLog.js';
 import { observe, serveMetrics } from './routes/metrics.js';
 import { servePublic } from './routes/openapi.js';
 import { serveMigrate } from './routes/migrate.js';
@@ -50,10 +51,6 @@ export { SUBJECT_HEADER, DISPLAY_NAME_HEADER };
 /** The shell's escape hatch: it sets this and reloads when recovery fails,
  * so the landing page is reachable and the reauth loop cannot close. */
 export const REAUTH_FALLBACK_COOKIE = 'prep_reauth_fallback';
-
-/** Bearer-only surfaces: with no token there is no cell to route to, so the
- * refusal is the entry worker's rather than a 404 from nowhere. */
-const PAT_ONLY = (path: string): boolean => path.startsWith('/api/v1/') || path === '/api/v1' || path === '/mcp';
 
 /** What the response owes the anonymous cookie, decided before any handler. */
 interface Outcome {
@@ -79,7 +76,9 @@ export default {
     } finally {
       // A thrown request is observed as a 500: the timer has to record the
       // response the client never got, or an outage reads as no traffic.
-      observe(request.method, url.pathname, observed?.status ?? 500, (Date.now() - started) / 1000);
+      const status = observed?.status ?? 500;
+      observe(request.method, url.pathname, status, (Date.now() - started) / 1000);
+      noteResponse(request, url, env, status);
     }
   },
 };
@@ -164,7 +163,9 @@ async function route(request: Request, url: URL, env: Env, c: Composition): Prom
 
   // A personal access token names its owner, so it routes without any
   // provider and without a directory read.
-  if (PAT_ONLY(path) || isPatBearer(request)) return plain(await routeByToken(request, headers, env, c));
+  // With no token there is no cell to route to, so the refusal is the entry
+  // worker's rather than a 404 from nowhere.
+  if (isPatSurface(path) || isPatBearer(request)) return plain(await routeByToken(request, headers, env, c));
 
   const cookies = parseCookieHeader(request.headers.get('cookie'));
   // Identification reads headers only. The body is a one-shot stream, so

@@ -2,40 +2,15 @@
 // so the limiter, the directory and the mint all run here. The body is
 // parsed by hand so every failure keeps the `kind` wire shape.
 import { generateInstantDeck, type InstantDeps } from '../../app/instant/generate.js';
-import { limiterBucket, SENTINEL_BUCKET } from '../../domain/instant/index.js';
+import { clientIp, type ClientIpEnv } from '../clientAddress.js';
 import { ANON_COOKIE_HEADER } from '../compose.js';
 import { observedInstant } from '../instrument.js';
-
-const DEFAULT_CLIENT_IP_HEADER = 'x-real-ip';
-const XFF_LAST_MODE = 'x-forwarded-for-last';
 
 /** Far above any legitimate topic payload, and enforced before the parse:
  * the endpoint is anonymous and the limiter only runs after it. */
 export const MAX_BODY_BYTES = 16 * 1024;
 
 const generate = observedInstant(generateInstantDeck);
-
-export interface ClientIpEnv {
-  PREP_CLIENT_IP_HEADER?: string;
-}
-
-/**
- * The limiter bucket for the requesting client. Only the ingress-set header
- * is read; a missing or non-IP value fails closed to the shared sentinel,
- * never to a client-forgeable address.
- */
-export function clientIp(request: Request, env: ClientIpEnv): string {
-  const mode = (env.PREP_CLIENT_IP_HEADER || DEFAULT_CLIENT_IP_HEADER).trim().toLowerCase();
-  let value: string;
-  if (mode === XFF_LAST_MODE) {
-    const raw = request.headers.get('x-forwarded-for') ?? '';
-    value = (raw.split(',').pop() ?? '').trim();
-  } else {
-    value = (request.headers.get(mode) ?? '').trim();
-  }
-  if (!value) return SENTINEL_BUCKET;
-  return limiterBucket(value);
-}
 
 /** Body bytes, or null when the request must be refused: absent, non-integer
  * or over-cap Content-Length, or a stream that runs past the cap. */

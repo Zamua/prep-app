@@ -107,6 +107,7 @@ worker/
 │   │   └── clerk, anonCookie, pat, svix, byokCrypto, hkdf, webpush,
 │   │       alarmLedgerRunner, clock, random, apkg, zip, …
 │   ├── routes/            instant, metrics, openapi, legal, migrate
+│   ├── abuseLog.ts clientAddress.ts   abuse-event log line, client address
 │   ├── env.ts             the whole env contract, typed
 │   └── assets.ts sw.ts storage.ts buildToken.ts webhooks.ts
 ├── templates/             nunjucks templates, precompiled at build time
@@ -519,6 +520,19 @@ eviction. Do not write a query that assumes otherwise.
 
 Scrape configuration and dashboards are operator-side and are not in
 this repo.
+
+**Abuse log.** The entry worker prints one JSON line per abuse event:
+`{event, route, status, subnet, country}`. Events are `auth-failure`
+(401/403), `rate-limited` (429) and `webhook-rejected` (400/401 on
+`/webhooks/*`); nothing else is logged. `route` is a fixed kind (`pat`,
+`webhook`, `instant`, `badge`, `migrate`, `api`, `page`), never a path.
+The client is only its subnet (IPv4 /24, IPv6 /40), cut before the line is
+built; there is no hash, no address, no user id, and it is console only.
+The address comes from `PREP_CLIENT_IP_HEADER`, falling back to
+`cf-connecting-ip` only when `request.cf` exists (the Workers runtime).
+Code: `domain/abuse.ts` (what is a signal, the line shape),
+`runtime/abuseLog.ts` (the hook in `worker.ts`'s `fetch`, which never
+throws).
 
 ---
 
