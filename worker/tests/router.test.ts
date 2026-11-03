@@ -429,6 +429,18 @@ describe('the provider flows', () => {
     expect((await worker.fetch(req('/plan'), e)).status).toBe(404);
   });
 
+  it('answers a visitor’s htmx poll 401, not a redirect it cannot follow', async () => {
+    const { env: e } = await clerkish();
+    for (const path of ['/api/active-workflows-badge', '/transform/w1/status']) {
+      const poll = await worker.fetch(req(path, { headers: { 'hx-request': 'true', accept: '*/*' } }), e);
+      expect(poll.status, path).toBe(401);
+      expect(await poll.json(), path).toEqual({ detail: 'not authenticated' });
+      expect(poll.headers.get('location'), path).toBeNull();
+    }
+    // A navigation to the same URL still goes to sign-in.
+    expect((await worker.fetch(req('/transform/w1/status'), e)).status).toBe(303);
+  });
+
   it('forget-device redirects home and drops the cookie', async () => {
     const res = await call('/forget-device', { method: 'POST' });
     expect(res.status).toBe(303);
