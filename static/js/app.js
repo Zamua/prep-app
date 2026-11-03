@@ -16,6 +16,7 @@ import {init as initPwaInstall} from "@/modules/pwa-install.js";
 import {init as initRowOverflow} from "@/modules/row-overflow.js";
 import {attachDeclarative as attachByokToggles} from "@/modules/byok-key-toggle.js";
 import {attachDeclarative as attachCopyButtons} from "@/modules/copy-button.js";
+import {init as initBadgePoll} from "@/modules/badge-poll.js";
 
 initDetailsToggle();
 attachDialogs();
@@ -25,6 +26,7 @@ initPwaInstall();
 initRowOverflow();
 attachByokToggles();
 attachCopyButtons();
+initBadgePoll();
 
 // ---- Service worker (always-on) --------------------------------------
 // Registered app-wide so an installed PWA has a SW even if the user

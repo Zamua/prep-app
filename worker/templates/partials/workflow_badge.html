@@ -1,8 +1,9 @@
 {# Masthead "running operations" badge.
 
-   Rendered by GET /api/active-workflows-badge. htmx polls this URL
-   every 5s and swaps the response in place via outerHTML on the
-   #workflow-badge slot in base.html.
+   Rendered by GET /api/active-workflows-badge. htmx fetches this URL on
+   each `badge-poll` event (sent by modules/badge-poll.js) and swaps the
+   response in place via outerHTML on the #workflow-badge slot in
+   base.html.
 
    Renders nothing when the user has no active workflows — keeps the
    masthead uncluttered. Renders a small <details> popover with N
@@ -10,9 +11,8 @@
    (awaiting-action → in-progress → just-completed) so the template
    just iterates.
 
-   The wrapper carries its own hx-* attributes so the swap response
-   continues the polling loop without a separate trigger declaration
-   in base.html. #}
+   The wrapper carries its own hx-* attributes so the swapped fragment
+   keeps listening for the next `badge-poll`. #}
 {%- set _root = root -%}
 {%- set _n = workflows|length -%}
 {%- set _n_active = active_workflow_count -%}
@@ -20,7 +20,7 @@
 <div id="workflow-badge"
      class="workflow-badge"
      hx-get="{{ _root }}/api/active-workflows-badge"
-     hx-trigger="every 5s"
+     hx-trigger="badge-poll"
      hx-swap="outerHTML"
      {% if _n == 0 %}data-empty="1"{% endif %}>
   {% if _n > 0 %}
