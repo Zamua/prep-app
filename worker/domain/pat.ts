@@ -44,6 +44,9 @@ export function maskToken(token: string): string {
   return `${TOKEN_PREFIX}${middle}…${token.slice(-4)}`;
 }
 
+/** Bearer-only surfaces: no token means no cell to route to. */
+export const isPatSurface = (path: string): boolean => path === '/api/v1' || path.startsWith('/api/v1/') || path === '/mcp';
+
 /** The bearer refusals, in the order they are checked. */
 export const MISSING_HEADER = 'missing Authorization header';
 export const BAD_SCHEME = "Authorization must be 'Bearer <token>'";

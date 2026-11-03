@@ -3,7 +3,8 @@
 // visitor has no cell and the whole point is what happens before one.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ANON_MAX_DECKS } from '../../domain/limits.js';
-import { clientIp, MAX_BODY_BYTES } from '../../runtime/routes/instant.js';
+import { clientIp } from '../../runtime/clientAddress.js';
+import { MAX_BODY_BYTES } from '../../runtime/routes/instant.js';
 import type { Env } from '../../runtime/env.js';
 import worker from '../../runtime/worker.js';
 import { ORIGIN, SEED_USER, workerEnv, seed } from './harness.js';
