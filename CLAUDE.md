@@ -572,11 +572,17 @@ in an inline module higher in the page, taking the behaviors wired there
 with it. This has caused an outage. Keep it in `<head>`.
 
 **Polling is htmx, not a JS state machine.** The progress partials
-(`transform_progress`, `plan_progress`, `trivia_generating_progress`,
-`workflow_badge`) carry `hx-get` plus `hx-trigger="every Ns"`. The
-server controls the lifecycle: a non-terminal fragment includes the
-trigger, a terminal fragment omits it and htmx stops. Do not reach for
-`setInterval` in a new wait-for-backend flow.
+(`transform_progress`, `plan_progress`, `trivia_generating_progress`)
+carry `hx-get` plus `hx-trigger="every Ns"`. The server controls the
+lifecycle: a non-terminal fragment includes the trigger, a terminal
+fragment omits it and htmx stops. Do not reach for `setInterval` in a
+new wait-for-backend flow.
+
+The masthead badge (`workflow_badge`) is the one poll with no terminal
+state, so its schedule lives in `static/js/modules/badge-poll.js`: htmx
+still sends the request (the slot's trigger is a `badge-poll` event),
+and the module backs off on errors, stops on 401 or a redirect, and
+idles while the tab is hidden.
 
 **Closed `<dialog>` rendering inline at the page bottom.** Setting
 `display: flex` on a dialog selector unconditionally overrides the UA's

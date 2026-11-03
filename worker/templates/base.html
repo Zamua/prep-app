@@ -181,18 +181,20 @@
         <span class="brand-word">Prep&nbsp;·&nbsp;<em>a commonplace book</em></span>
       </a>
       {% if user %}
-        {# Active-workflows badge. htmx polls /api/active-workflows-badge
-           every 5s and swaps this div in place. Initial render is empty
-           (data-empty="1") so the masthead doesn't reserve width for a
-           badge the user doesn't need; the first poll lands within 5s
-           and reveals the chip if any workflows are in flight. The
-           response template carries its own hx-trigger so polling
-           continues on the swapped fragment without per-page wiring. #}
+        {# Active-workflows badge. htmx fetches /api/active-workflows-badge
+           on each `badge-poll` event and swaps this div in place;
+           modules/badge-poll.js sends the event (every 5s, backing off on
+           errors, stopping on 401, idle while the tab is hidden). Initial
+           render is empty (data-empty="1") so the masthead doesn't reserve
+           width for a badge the user doesn't need; the first poll reveals
+           the chip if any workflows are in flight. The response template
+           carries the same hx-trigger so the swapped fragment keeps
+           listening. #}
         <div id="workflow-badge"
              class="workflow-badge"
              data-empty="1"
              hx-get="{{ root }}/api/active-workflows-badge"
-             hx-trigger="load, every 5s"
+             hx-trigger="badge-poll"
              hx-swap="outerHTML"></div>
         {# User indicator. Tap to expand a small panel showing the full
            identity. Future: settings (vim default, keybindings, etc.). #}
