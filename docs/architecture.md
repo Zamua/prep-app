@@ -5,7 +5,7 @@ already seen the [README](../README.md), got the worker running
 locally, and now wants to know *why* the code is shaped the way it is.
 
 If you are an AI agent picking up work on the codebase, read
-[`CLAUDE.md`](../CLAUDE.md) instead. It is terser and skewed toward
+[`AGENTS.md`](../AGENTS.md) instead. It is terser and skewed toward
 "what is true right now".
 
 ---

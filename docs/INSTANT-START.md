@@ -117,7 +117,7 @@ States of the hero form, driven by
    `<noscript>` line replaces the form promise: "Instant decks need
    JavaScript. Sign in to build decks instead."
 2. **Generating.** On submit: button flips to `is-loading` (equal
-   size spinner, no layout shift, per the UX rails in CLAUDE.md), a
+   size spinner, no layout shift, per the UX rails in AGENTS.md), a
    status line cycles honest copy ("Writing your cards. Usually 10
    to 20 seconds."). One in-flight request max; the fetch carries
    `AbortSignal.timeout(75000)`, slightly above the server's cap.
