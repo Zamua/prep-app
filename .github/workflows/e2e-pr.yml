@@ -1,0 +1,91 @@
+name: e2e flows (PR)
+
+# Every pull request gets its own runner, so concurrent branches never share a
+# database, a port, or an account. Nothing here knows how prep is wired: the
+# suite boots its own server on an OS-assigned port and seeds its own scratch
+# sqlite. Adding a flow means adding tests/e2e/test_flow_<name>.py, not editing
+# this file.
+on:
+  pull_request:
+
+# A new push supersedes the run it interrupted. Ten branches still run ten jobs.
+concurrency:
+  group: e2e-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  flows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Tests write screenshots here. Kept out of test-results/ because the
+      # pytest-playwright plugin wipes its own output dir at session start.
+      PREP_E2E_ARTIFACTS: ${{ github.workspace }}/artifacts
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync dependencies
+        run: uv sync --group dev
+
+      # Chromium is ~150 MB and unpacking it is the single slowest install
+      # step, so it is cached on the resolved playwright version rather than
+      # on the lockfile hash.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(uv run python -c 'import playwright; print(playwright.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Chromium cache
+        id: pwcache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Run flow tests
+        id: tests
+        run: |
+          mkdir -p "$PREP_E2E_ARTIFACTS"
+          files="tests/e2e/test_local_browser_smoke.py"
+          for f in tests/e2e/test_flow_*.py; do
+            [ -e "$f" ] && files="$files $f"
+          done
+          echo "running: $files"
+          uv run pytest -v --tb=short $files
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flow-artifacts-pr${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: |
+            artifacts/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Per-step durations come from the API, which is authoritative. This is
+      # just the at-a-glance version for whoever opens the PR.
+      - name: Timing summary
+        if: always()
+        run: |
+          {
+            echo "### Flow run"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| commit | \`${GITHUB_SHA:0:8}\` |"
+            echo "| result | ${{ steps.tests.outcome }} |"
+            echo "| chromium cache | ${{ steps.pwcache.outputs.cache-hit == 'true' && 'hit' || 'miss' }} |"
+            echo "| screenshots | $(find "$PREP_E2E_ARTIFACTS" -name '*.png' 2>/dev/null | wc -l | tr -d ' ') |"
+          } >> "$GITHUB_STEP_SUMMARY"
