@@ -1,6 +1,7 @@
 // The ports the app layer speaks through. Adapters live in runtime/adapters
 // and meet these interfaces at the composition root only. No repository
 // method takes a user: a cell holds one.
+import type { ActivityEvent } from '../domain/activity.js';
 import type { ScheduledReview } from '../domain/fsrs/index.js';
 import type { LedgerCommit, LedgerRows, StepOutput } from '../domain/jobs/ledger.js';
 import type { GradeCard, TransformCard, TransformDeck, TransformScope } from '../domain/jobs/snapshot.js';
@@ -778,6 +779,11 @@ export interface JobProgressRepo {
 }
 
 // ---- the global cells, as the user cell and the router see them ------------
+
+/** Usage events for aggregate counts. `record` never rejects. */
+export interface ActivityLog {
+  record(actorId: string, events: readonly ActivityEvent[]): Promise<void>;
+}
 
 export interface Directory {
   /** Idempotent: an existing id keeps its idx. */

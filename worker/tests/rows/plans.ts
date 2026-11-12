@@ -11,8 +11,9 @@
 import type Database from 'better-sqlite3';
 import type { Statement } from './recorder.js';
 
-/** Tables a request may read whole: one row, or one row per deck or device. */
-export const SMALL_TABLES = new Set(['profile', 'tombstone', 'schema_version', 'decks', 'push_subscriptions', 'byok_credentials']);
+/** Tables a request may read whole: one row, or one row per deck, device or
+ * table. */
+export const SMALL_TABLES = new Set(['profile', 'tombstone', 'schema_version', 'decks', 'push_subscriptions', 'byok_credentials', 'sqlite_sequence']);
 
 /** Index walks bounded by current work rather than by history, keyed by the
  * index and the constraint the plan walks it with, or by the index alone for a

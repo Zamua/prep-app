@@ -158,6 +158,12 @@ export function countRows(sql: Sql, table: string): number {
   return Number(db.first<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table}"`)?.n ?? 0);
 }
 
+/** The highest id `table` has handed out: it only grows, so the difference
+ * across a piece of work is the rows that work inserted. */
+export function lastRowid(sql: Sql, table: string): number {
+  return Number(new Db(sql).first<{ seq: number }>('SELECT seq FROM sqlite_sequence WHERE name = ?', table)?.seq ?? 0);
+}
+
 /** Drops every counter so ids restart at 1: the seed pins block 0. */
 export function resetSequences(sql: Sql): void {
   new Db(sql).run('DELETE FROM sqlite_sequence');

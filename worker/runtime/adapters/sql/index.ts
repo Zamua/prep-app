@@ -63,7 +63,7 @@ export function userRepos(raw: CellStorage, deps: RepoDeps): UserRepos {
   };
 }
 
-export { countRows, importGlobalRows as importGlobalCellRows, migrate, seedSequences, resetSequences, USER_MIGRATIONS, DIRECTORY_MIGRATIONS, JOB_MIGRATIONS, LIMITER_MIGRATIONS } from './migrate.js';
+export { countRows, lastRowid, importGlobalRows as importGlobalCellRows, migrate, seedSequences, resetSequences, USER_MIGRATIONS, DIRECTORY_MIGRATIONS, JOB_MIGRATIONS, LIMITER_MIGRATIONS } from './migrate.js';
 export { SqlDirectoryRepo } from './directoryRepo.js';
 export { ReadCachingStorage } from './readCache.js';
 export { SqlJobLedger } from './jobLedgerRepo.js';

@@ -8,6 +8,7 @@ import { deliverJobStatus } from '../../app/jobs/status.js';
 import { canGenerate, nextWakeAt, runWake, type WakeDeps } from '../../app/notify/wake.js';
 import type { StepOutput, WriteStepContext } from '../../app/jobs/registry.js';
 import { derive } from '../../app/viewmodels/derive.js';
+import { activityEvents } from '../../domain/activity.js';
 import { RowCapReached } from '../../domain/limits.js';
 import { isRefusal } from '../../domain/jobs/refusal.js';
 import { ChunkRejected } from '../../domain/migrate.js';
@@ -52,6 +53,11 @@ import { applyImage, imageOf } from './image.js';
 export class AccountDestroyed extends Error {}
 
 export { UnknownProfile } from './seed/cell.js';
+
+/** Polls a page makes on its own: answering one says nothing about the user. */
+const BACKGROUND_PATHS: ReadonlySet<string> = new Set(['/api/active-workflows-badge']);
+/** Work done for an account outside a request of its owner's. */
+const NOT_A_REQUEST = { active: false, signup: false } as const;
 
 export const TOMBSTONED_HEADER = 'x-prep-tombstoned';
 /** The `detail` an unauthenticated request answers with. */
@@ -146,7 +152,12 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
       if (e instanceof SignInRequired || e instanceof TokenRequired) return gateRefusal(e, request);
       throw e;
     }
-    await this.touch(identity, repos, clock);
+    const signup = await this.touch(identity, repos, clock);
+    return this.reporting(repos, { active: !BACKGROUND_PATHS.has(url.pathname), signup }, () => this.respond(request, url, match, identity, repos, clock));
+  }
+
+  private async respond(request: Request, url: URL, match: NonNullable<ReturnType<typeof matchRoute>>, identity: CellIdentity, repos: UserRepos, clock: Clock): Promise<Response> {
+    const c = this.c;
 
     let handled: Handled;
     try {
@@ -197,21 +208,42 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
   }
 
   /** `last_seen_at`: an upsert for a provider identity, a touch otherwise. */
-  private async touch(identity: CellIdentity, repos: UserRepos, clock: Clock): Promise<void> {
+  private async touch(identity: CellIdentity, repos: UserRepos, clock: Clock): Promise<boolean> {
     if (identity.kind === 'anon' || identity.kind === 'pat') {
       repos.prefs.touch();
-      return;
+      return false;
     }
     const claims = { email: identity.email, displayName: identity.displayName, profilePicUrl: identity.profilePicUrl };
     if (repos.prefs.get() !== null) {
       repos.prefs.upsert(identity.subject, claims);
-      return;
+      return false;
     }
     // First contact: the directory hands out the id block before any row is written.
     const { idx } = await this.c.directory.register(identity.subject, false, isoUtc(clock.now()));
     this.c.seedIdBlock(this.storage, idx);
     repos.prefs.upsert(identity.subject, claims);
     repos.prefs.setIdBase(idx);
+    return true;
+  }
+
+  /**
+   * Runs `work` and reports what it did for the account's owner: the decks
+   * and reviews it inserted, read off the id counters so every write path
+   * counts without knowing it is counted. An anonymous account reports
+   * nothing.
+   */
+  private async reporting<T>(repos: UserRepos, seen: { active: boolean; signup: boolean }, work: () => Promise<T> | T): Promise<T> {
+    const mark = () => ({ reviews: this.c.lastRowid(this.storage, 'reviews'), decks: this.c.lastRowid(this.storage, 'decks') });
+    const before = mark();
+    try {
+      return await work();
+    } finally {
+      const profile = repos.prefs.get();
+      if (profile !== null && !profile.is_anonymous) {
+        const after = mark();
+        await this.c.activity.record(profile.login, activityEvents({ ...seen, reviews: after.reviews - before.reviews, decks: after.decks - before.decks }));
+      }
+    }
   }
 
   // ---- the seed: test-only, the work is in seed/cell.ts --------------------
@@ -250,8 +282,10 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
 
   async upsert(id: string, claims: ProfileClaims, at: string, idx?: number): Promise<Profile> {
     const repos = this.repos(fixedClock(at));
-    if (idx !== undefined && repos.prefs.get() === null) this.c.seedIdBlock(this.storage, idx);
+    const created = repos.prefs.get() === null;
+    if (idx !== undefined && created) this.c.seedIdBlock(this.storage, idx);
     const profile = repos.prefs.upsert(id, claims);
+    if (created && !profile.is_anonymous) await this.c.activity.record(profile.login, activityEvents({ active: false, signup: true, reviews: 0, decks: 0 }));
     if (idx !== undefined && repos.prefs.getIdBase() === 0 && idx !== 0) repos.prefs.setIdBase(idx);
     return profile;
   }
@@ -307,7 +341,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
       clock: fixedClock(step.at),
       repos,
     };
-    const output = await this.c.stepRegistry.get(step.name)(ctx);
+    const output = await this.reporting(repos, NOT_A_REQUEST, () => this.c.stepRegistry.get(step.name)(ctx));
     // A write step is the one job path that adds rows here: fresh trivia
     // cards change what the deck's next wake is worth. Same tick floor as the
     // status write, for the same reason.
@@ -398,9 +432,11 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
   }): Promise<InstantDeckResult> {
     const repos = this.repos(fixedClock(input.at));
     if (input.mint) this.c.seedIdBlock(this.storage, input.mint.idx);
-    const result = repos.instant.createInstantDeck(input.displayName, input.cards, input.mint ? { id: input.mint.id, displayName: input.mint.displayName } : null);
-    if (input.mint) repos.prefs.setIdBase(input.mint.idx);
-    return result;
+    return this.reporting(repos, NOT_A_REQUEST, () => {
+      const result = repos.instant.createInstantDeck(input.displayName, input.cards, input.mint ? { id: input.mint.id, displayName: input.mint.displayName } : null);
+      if (input.mint) repos.prefs.setIdBase(input.mint.idx);
+      return result;
+    });
   }
 
   /** Step one of deletion: the size, `deleteAll`, then the tombstone alone. Retry-safe. */

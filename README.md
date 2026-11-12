@@ -63,6 +63,12 @@ additionally configure one shared OpenAI-compatible endpoint
 without it, AI features refuse with one clear message and the rest of
 the app works as a manual SRS.
 
+**Usage counts are optional.** Bind an Analytics Engine dataset as
+`ACTIVITY` and set the secret `ACTIVITY_SALT` (32 or more random bytes)
+to get aggregate events: active users, signups, reviews, decks created.
+Each carries a keyed hash of the user id and a count, never an id or any
+content. Leave either unset and nothing is written.
+
 ## Hack on it
 
 ```bash
