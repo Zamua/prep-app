@@ -33,6 +33,10 @@ export function activityEvents(seen: { active: boolean; signup: boolean; reviews
   return events;
 }
 
+/** The dataset samples per index value. Only `active` sits under the bare
+ * hash, whose distinct count is the active users; every other action gets
+ * its own value, so a burst of activity cannot sample a rare one away. */
 export function dataPoint(actorHash: string, event: ActivityEvent): ActivityDataPoint {
-  return { indexes: [actorHash], blobs: [ACTIVITY_APP, event.action, ''], doubles: [event.count] };
+  const index = event.action === 'active' ? actorHash : `${actorHash}:${event.action}`;
+  return { indexes: [index], blobs: [ACTIVITY_APP, event.action, ''], doubles: [event.count] };
 }

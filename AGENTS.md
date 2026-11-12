@@ -536,7 +536,9 @@ throws).
 
 **Activity events.** With an Analytics Engine dataset bound as `ACTIVITY`
 and the secret `ACTIVITY_SALT` set, the user cell writes one data point
-per event: `indexes[0]` the actor hash, `blobs` `['prep', action, '']`,
+per event: `indexes[0]` the actor hash (bare for `active`,
+`<hash>:<action>` for the rest, so sampling never merges a rare action
+into a burst of `active`), `blobs` `['prep', action, '']`,
 `doubles[0]` a count. Actions are `active` (one per request the user's
 own action caused; the badge poll does not count), `signup` (the request
 or RPC that creates the account row), `card_review` (reviews recorded)

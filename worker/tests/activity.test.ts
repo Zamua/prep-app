@@ -36,7 +36,8 @@ describe('activityEvents', () => {
   });
 
   it('lays a point out as one index, three blobs and one double', () => {
-    expect(dataPoint('abcd', { action: 'card_review', count: 12 })).toEqual({ indexes: ['abcd'], blobs: ['prep', 'card_review', ''], doubles: [12] });
+    expect(dataPoint('abcd', { action: 'card_review', count: 12 })).toEqual({ indexes: ['abcd:card_review'], blobs: ['prep', 'card_review', ''], doubles: [12] });
+    expect(dataPoint('abcd', { action: 'active', count: 1 }).indexes).toEqual(['abcd']);
   });
 });
 
