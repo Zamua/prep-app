@@ -141,6 +141,16 @@ describe('the user cell reports activity', () => {
     expect(actions()).toEqual([]);
   });
 
+  it('a request that asks to be skipped writes nothing, a new user’s first included', async () => {
+    const skipped = (subject: string, path: string, init: RequestInit = {}) =>
+      cell.fetch(req(path, { ...init, headers: { [SUBJECT_HEADER]: subject, 'X-Activity-Skip': '1' } }));
+    expect((await skipped(USER, '/t/read')).status).toBe(200);
+    expect((await skipped(USER, '/t/deck', { method: 'POST' })).status).toBe(200);
+    expect(ds.points).toEqual([]);
+    await as(USER, '/t/read');
+    expect(actions()).toEqual([['active', 1]]);
+  });
+
   it('an anonymous account writes nothing', async () => {
     await cell.createInstantDeck({ displayName: 'Guest deck', cards: [], mint: { id: ANON, displayName: 'Guest', idx: 7 }, at: AT });
     expect((await as(ANON, '/t/read', {}, 'anon')).status).toBe(200);
