@@ -105,7 +105,7 @@ worker/
 │   │   ├── agents/        anthropic, openaiCompat, byok, freeTier, select
 │   │   ├── nunjucks/      the renderer, its filter set, the icon global
 │   │   └── clerk, anonCookie, pat, svix, byokCrypto, hkdf, webpush,
-│   │       alarmLedgerRunner, clock, random, apkg, zip, …
+│   │       alarmLedgerRunner, clock, random, apkg, zip, activity, …
 │   ├── routes/            instant, metrics, openapi, legal, migrate
 │   ├── abuseLog.ts clientAddress.ts   abuse-event log line, client address
 │   ├── env.ts             the whole env contract, typed
@@ -533,6 +533,26 @@ The address comes from `PREP_CLIENT_IP_HEADER`, falling back to
 Code: `domain/abuse.ts` (what is a signal, the line shape),
 `runtime/abuseLog.ts` (the hook in `worker.ts`'s `fetch`, which never
 throws).
+
+**Activity events.** With an Analytics Engine dataset bound as `ACTIVITY`
+and the secret `ACTIVITY_SALT` set, the user cell writes one data point
+per event: `indexes[0]` the actor hash, `blobs` `['prep', action, '']`,
+`doubles[0]` a count. Actions are `active` (one per request the user's
+own action caused; the badge poll does not count), `signup` (the request
+or RPC that creates the account row), `card_review` (reviews recorded)
+and `deck_created` (decks created). The actor is the first 16 hex chars
+of HMAC-SHA256(`ACTIVITY_SALT`, `"prep:" + user id)`; no raw id and no
+content is written. Anonymous accounts write nothing. Either setting
+absent, nothing is written, which is how tests and local dev run.
+
+The counts come from the id counters (`sqlite_sequence`) read before and
+after the work in `UserCell.reporting`, so every write path (pages, API,
+MCP, offline sync, imports, job steps) is counted without being
+instrumented. A new path that inserts reviews or decks outside
+`serve`, `applyJobStep` or `createInstantDeck` must run inside
+`reporting` to be counted. `record` never rejects and a failed write
+changes no response. Code: `domain/activity.ts` (events and the point
+layout), `runtime/adapters/activity.ts` (the hash and the write).
 
 ---
 

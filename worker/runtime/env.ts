@@ -1,3 +1,4 @@
+import type { ActivityDataPoint } from '../domain/activity.js';
 /** Clerk's public configuration; a deploy file may carry all of these. */
 export interface ClerkVars {
   CLERK_ISSUER?: string;
@@ -28,6 +29,10 @@ export interface PublicServiceVars {
   PREP_VAPID_SUB?: string;
   /** Which ingress header names the client IP; `x-forwarded-for-last` reads the last entry. */
   PREP_CLIENT_IP_HEADER?: string;
+  /** Where activity events go; absent, none are written. */
+  ACTIVITY?: { writeDataPoint(point: ActivityDataPoint): void };
+  /** Keys the actor hash. Per deploy, never shared: the hash is only as private as this. */
+  ACTIVITY_SALT?: string;
   CELLD_FETCH_TIMEOUT_S?: string;
   /** Ceiling on one LLM step; capped by the fetch timeout above. */
   PREP_JOB_LLM_TIMEOUT_S?: string;

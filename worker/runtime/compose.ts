@@ -2,6 +2,7 @@
 // isolate. Cross-cutting wrappers live here and are applied by the router,
 // never inside a handler. Cells get their repositories through it too.
 import type {
+  ActivityLog,
   AgentConfig,
   AgentPort,
   ApkgReader,
@@ -62,6 +63,7 @@ import type { TestPins } from './cells/seed/pins.js';
 import { DATA_TABLES } from './adapters/sql/schema.js';
 import {
   countRows,
+  lastRowid,
   DIRECTORY_MIGRATIONS,
   importGlobalCellRows,
   JOB_MIGRATIONS,
@@ -78,6 +80,7 @@ import {
   userRepos,
 } from './adapters/sql/index.js';
 import type { CellStorage, ReadCachedStorage } from './storage.js';
+import { activityLogOf } from './adapters/activity.js';
 import { resolveBuildToken } from './buildToken.js';
 import type { Env, InstantLimitEnv, PublicServiceVars } from './env.js';
 import { NOW_HEADER } from './cells/router.js';
@@ -191,6 +194,9 @@ export interface Composition {
    * preserves. Used by the two global cells, which own no repository for it. */
   importGlobalRows(storage: CellStorage, table: string, rows: readonly Record<string, unknown>[]): number;
   countRows(storage: CellStorage, table: string): number;
+  /** The highest id an autoincrement table has handed out. */
+  lastRowid(storage: CellStorage, table: string): number;
+  activity: ActivityLog;
   resetIdBlock(storage: CellStorage): void;
   /** The seed's column pins over a cell's storage; test seeding only. */
   seedPins(storage: CellStorage): TestPins;
@@ -440,6 +446,8 @@ export function compose(env: Env, warn: (msg: string) => void = console.warn): C
     dataTables: DATA_TABLES,
     importGlobalRows: (storage, table, rows) => importGlobalCellRows(storage.sql, table, rows),
     countRows: (storage, table) => countRows(storage.sql, table),
+    lastRowid: (storage, table) => lastRowid(storage.sql, table),
+    activity: activityLogOf(env.ACTIVITY, env.ACTIVITY_SALT),
     seedIdBlock: (storage, idx) => seedSequences(storage.sql, idx),
     resetIdBlock: (storage) => resetSequences(storage.sql),
     seedPins: (storage) => new SqlTestPins(storage),
