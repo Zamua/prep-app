@@ -28,12 +28,13 @@ fail() {
 }
 
 # fetch CHECK URL OUT [curl args]: the body lands in OUT; anything but a 200
-# fails CHECK, a transport error included (status 000).
+# fails CHECK, a transport error included (status 000). Every request asks not
+# to be counted as use.
 fetch() {
   check=$1 url=$2 out=$3
   shift 3
   : >"$out"
-  if ! status=$(curl -sS --max-time 15 -o "$out" -w '%{http_code}' "$@" "$url" 2>"$tmp/curl.err"); then
+  if ! status=$(curl -sS --max-time 15 -H 'X-Activity-Skip: 1' -o "$out" -w '%{http_code}' "$@" "$url" 2>"$tmp/curl.err"); then
     fail "$check" "$url" "${status:-000}" "$out" "$(tr '\n' ' ' <"$tmp/curl.err")"
   fi
   [ "$status" = 200 ] || fail "$check" "$url" "$status" "$out" "expected 200"

@@ -8,7 +8,7 @@ import { deliverJobStatus } from '../../app/jobs/status.js';
 import { canGenerate, nextWakeAt, runWake, type WakeDeps } from '../../app/notify/wake.js';
 import type { StepOutput, WriteStepContext } from '../../app/jobs/registry.js';
 import { derive } from '../../app/viewmodels/derive.js';
-import { activityEvents } from '../../domain/activity.js';
+import { ACTIVITY_SKIP_HEADER, activityEvents } from '../../domain/activity.js';
 import { RowCapReached } from '../../domain/limits.js';
 import { isRefusal } from '../../domain/jobs/refusal.js';
 import { ChunkRejected } from '../../domain/migrate.js';
@@ -153,6 +153,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
       throw e;
     }
     const signup = await this.touch(identity, repos, clock);
+    if (request.headers.get(ACTIVITY_SKIP_HEADER) === '1') return this.respond(request, url, match, identity, repos, clock);
     return this.reporting(repos, { active: !BACKGROUND_PATHS.has(url.pathname), signup }, () => this.respond(request, url, match, identity, repos, clock));
   }
 

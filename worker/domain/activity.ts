@@ -4,6 +4,10 @@
 
 export const ACTIVITY_APP = 'prep';
 
+/** A request carrying this header as `1` reports nothing: scripted checks
+ * send it so they are not counted as use. Not a secret. */
+export const ACTIVITY_SKIP_HEADER = 'x-activity-skip';
+
 export type ActivityAction = 'active' | 'signup' | 'card_review' | 'deck_created';
 
 export interface ActivityEvent {
