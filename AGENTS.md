@@ -542,7 +542,8 @@ into a burst of `active`), `blobs` `['prep', action, '']`,
 `doubles[0]` a count. Actions are `active` (one per request the user's
 own action caused; the badge poll does not count), `signup` (the request
 or RPC that creates the account row), `card_review` (reviews recorded)
-and `deck_created` (decks created). The actor is the first 16 hex chars
+`deck_created` (decks created) and `trivia_answer` (trivia answers
+recorded, which write no review row). The actor is the first 16 hex chars
 of HMAC-SHA256(`ACTIVITY_SALT`, `"prep:" + user id)`; no raw id and no
 content is written. Anonymous accounts write nothing. A request with the
 header `X-Activity-Skip: 1` writes nothing either: `scripts/smoke.sh` and
@@ -550,7 +551,8 @@ any scripted check against a deploy send it. Either setting
 absent, nothing is written, which is how tests and local dev run.
 
 The counts come from the id counters (`sqlite_sequence`) read before and
-after the work in `UserCell.reporting`, so every write path (pages, API,
+after the work in `UserCell.reporting` (trivia answers from the trivia
+repository's own count, since an answer updates a row instead of adding one), so every write path (pages, API,
 MCP, offline sync, imports, job steps) is counted without being
 instrumented. A new path that inserts reviews or decks outside
 `serve`, `applyJobStep` or `createInstantDeck` must run inside
