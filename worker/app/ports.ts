@@ -253,6 +253,8 @@ export interface TriviaRepo {
   listQueueForDeck(deckId: number): (TriviaQueueEntry & { prompt: string })[];
   importEntry(questionId: number, queuePosition: number, opts?: { lastAnsweredAt?: string | null; lastAnsweredCorrectly?: number | null }): void;
   markAnswered(questionId: number, correct: boolean): void;
+  /** Answers `markAnswered` has recorded through this repository. */
+  answersRecorded(): number;
   setLastCorrectness(questionId: number, correct: boolean): void;
   countUnanswered(deckId: number): number;
   deckStats(deckId: number): TriviaDeckStats;

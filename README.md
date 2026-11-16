@@ -65,7 +65,7 @@ the app works as a manual SRS.
 
 **Usage counts are optional.** Bind an Analytics Engine dataset as
 `ACTIVITY` and set the secret `ACTIVITY_SALT` (32 or more random bytes)
-to get aggregate events: active users, signups, reviews, decks created.
+to get aggregate events: active users, signups, reviews, decks created, trivia answers.
 Each carries a keyed hash of the user id and a count, never an id or any
 content. Leave either unset and nothing is written.
 

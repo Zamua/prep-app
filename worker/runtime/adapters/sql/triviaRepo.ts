@@ -49,6 +49,7 @@ export function shuffle<T>(items: T[], random: Random): T[] {
 
 export class SqlTriviaRepo implements TriviaRepo {
   private readonly db: Db;
+  private answers = 0;
 
   constructor(
     private readonly storage: CellStorage,
@@ -130,7 +131,7 @@ export class SqlTriviaRepo implements TriviaRepo {
         'SELECT COALESCE(MAX(tq.queue_position), 0) + 1 AS np FROM trivia_queue tq JOIN questions q ON q.id = tq.question_id WHERE q.deck_id = ?',
         deckId,
       );
-      this.db.run(
+      this.answers += this.db.run(
         'UPDATE trivia_queue SET last_answered_at = ?, last_answered_correctly = ?, queue_position = ? WHERE question_id = ?',
         this.nowIso(),
         correct ? 1 : 0,
@@ -139,6 +140,10 @@ export class SqlTriviaRepo implements TriviaRepo {
       );
       this.db.run('UPDATE decks SET notification_ignored_streak = 0 WHERE id = ?', deckId);
     });
+  }
+
+  answersRecorded(): number {
+    return this.answers;
   }
 
   setLastCorrectness(questionId: number, correct: boolean): void {

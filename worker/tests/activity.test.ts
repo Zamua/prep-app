@@ -25,14 +25,15 @@ function dataset(): ActivityDataset & { points: Point[] } {
 
 describe('activityEvents', () => {
   it('names only what happened, with its count', () => {
-    expect(activityEvents({ active: true, signup: false, reviews: 0, decks: 0 })).toEqual([{ action: 'active', count: 1 }]);
-    expect(activityEvents({ active: true, signup: true, reviews: 12, decks: 2 })).toEqual([
+    expect(activityEvents({ active: true, signup: false, reviews: 0, decks: 0, triviaAnswers: 0 })).toEqual([{ action: 'active', count: 1 }]);
+    expect(activityEvents({ active: true, signup: true, reviews: 12, decks: 2, triviaAnswers: 4 })).toEqual([
       { action: 'active', count: 1 },
       { action: 'signup', count: 1 },
       { action: 'card_review', count: 12 },
       { action: 'deck_created', count: 2 },
+      { action: 'trivia_answer', count: 4 },
     ]);
-    expect(activityEvents({ active: false, signup: false, reviews: -3, decks: 0 })).toEqual([]);
+    expect(activityEvents({ active: false, signup: false, reviews: -3, decks: 0, triviaAnswers: 0 })).toEqual([]);
   });
 
   it('lays a point out as one index, three blobs and one double', () => {
@@ -100,6 +101,27 @@ describe('the user cell reports activity', () => {
         return { json: {} };
       },
     },
+    {
+      method: 'POST',
+      pattern: '/t/trivia',
+      gate: 'user',
+      handler: ({ repos }) => {
+        const deck = repos.decks.create('world-history');
+        const qids = [1, 2].map((n) => repos.questions.add(deck, { type: 'short', prompt: `Question ${n}?`, answer: 'Rome' } as never));
+        for (const qid of qids) repos.trivia.appendCard(qid, deck);
+        return { json: { qids } };
+      },
+    },
+    {
+      method: 'POST',
+      pattern: '/t/trivia/answer',
+      gate: 'user',
+      handler: ({ repos, request }) => {
+        const qids = new URL(request.url).searchParams.getAll('q').map(Number);
+        for (const qid of qids) repos.trivia.markAnswered(qid, true);
+        return { json: {} };
+      },
+    },
     { method: 'POST', pattern: '/t/boom', gate: 'user', handler: () => { throw new Error('handler exploded'); } },
   ];
 
@@ -133,6 +155,15 @@ describe('the user cell reports activity', () => {
     ds.points.length = 0;
     await as(USER, `/t/review/${qid}`, { method: 'POST' });
     expect(actions()).toEqual([['active', 1], ['card_review', 3]]);
+  });
+
+  it('counts the trivia answers a request recorded', async () => {
+    await as(USER, '/t/read');
+    const { qids } = (await (await as(USER, '/t/trivia', { method: 'POST' })).json()) as { qids: number[] };
+    ds.points.length = 0;
+    await as(USER, `/t/trivia/answer?q=${qids[0]}&q=${qids[1]}&q=999999`, { method: 'POST' });
+    expect(actions()).toEqual([['active', 1], ['trivia_answer', 2]]);
+    expect(ds.points[1]!.indexes).toEqual([`${hashOf(USER)}:trivia_answer`]);
   });
 
   it('a background poll is not activity', async () => {

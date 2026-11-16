@@ -230,19 +230,25 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
   /**
    * Runs `work` and reports what it did for the account's owner: the decks
    * and reviews it inserted, read off the id counters so every write path
-   * counts without knowing it is counted. An anonymous account reports
+   * counts without knowing it is counted, and the trivia answers it recorded. An anonymous account reports
    * nothing.
    */
   private async reporting<T>(repos: UserRepos, seen: { active: boolean; signup: boolean }, work: () => Promise<T> | T): Promise<T> {
     const mark = () => ({ reviews: this.c.lastRowid(this.storage, 'reviews'), decks: this.c.lastRowid(this.storage, 'decks') });
     const before = mark();
+    const answersBefore = repos.trivia.answersRecorded();
     try {
       return await work();
     } finally {
       const profile = repos.prefs.get();
       if (profile !== null && !profile.is_anonymous) {
         const after = mark();
-        await this.c.activity.record(profile.login, activityEvents({ ...seen, reviews: after.reviews - before.reviews, decks: after.decks - before.decks }));
+        await this.c.activity.record(profile.login, activityEvents({
+          ...seen,
+          reviews: after.reviews - before.reviews,
+          decks: after.decks - before.decks,
+          triviaAnswers: repos.trivia.answersRecorded() - answersBefore,
+        }));
       }
     }
   }
@@ -286,7 +292,7 @@ export class UserCell extends DurableObject<Env> implements UserCellRpc, seedCel
     const created = repos.prefs.get() === null;
     if (idx !== undefined && created) this.c.seedIdBlock(this.storage, idx);
     const profile = repos.prefs.upsert(id, claims);
-    if (created && !profile.is_anonymous) await this.c.activity.record(profile.login, activityEvents({ active: false, signup: true, reviews: 0, decks: 0 }));
+    if (created && !profile.is_anonymous) await this.c.activity.record(profile.login, activityEvents({ active: false, signup: true, reviews: 0, decks: 0, triviaAnswers: 0 }));
     if (idx !== undefined && repos.prefs.getIdBase() === 0 && idx !== 0) repos.prefs.setIdBase(idx);
     return profile;
   }

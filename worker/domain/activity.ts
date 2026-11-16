@@ -8,7 +8,7 @@ export const ACTIVITY_APP = 'prep';
  * send it so they are not counted as use. Not a secret. */
 export const ACTIVITY_SKIP_HEADER = 'x-activity-skip';
 
-export type ActivityAction = 'active' | 'signup' | 'card_review' | 'deck_created';
+export type ActivityAction = 'active' | 'signup' | 'card_review' | 'deck_created' | 'trivia_answer';
 
 export interface ActivityEvent {
   action: ActivityAction;
@@ -24,12 +24,13 @@ export interface ActivityDataPoint {
 /** What the hash covers: the app prefix keeps one id from matching across apps. */
 export const actorMessage = (actorId: string): string => `${ACTIVITY_APP}:${actorId}`;
 
-export function activityEvents(seen: { active: boolean; signup: boolean; reviews: number; decks: number }): ActivityEvent[] {
+export function activityEvents(seen: { active: boolean; signup: boolean; reviews: number; decks: number; triviaAnswers: number }): ActivityEvent[] {
   const events: ActivityEvent[] = [];
   if (seen.active) events.push({ action: 'active', count: 1 });
   if (seen.signup) events.push({ action: 'signup', count: 1 });
   if (seen.reviews > 0) events.push({ action: 'card_review', count: seen.reviews });
   if (seen.decks > 0) events.push({ action: 'deck_created', count: seen.decks });
+  if (seen.triviaAnswers > 0) events.push({ action: 'trivia_answer', count: seen.triviaAnswers });
   return events;
 }
 
