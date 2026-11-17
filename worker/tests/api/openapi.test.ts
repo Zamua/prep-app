@@ -1,5 +1,7 @@
-// The unauthenticated JSON surface and the two doc shells, whose vendor tags
-// are stripped in test mode so visual tests never reach a CDN.
+// The unauthenticated JSON surface and the two doc shells, whose vendored
+// viewer tags are stripped in test mode.
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { OPENAPI_DOCUMENT, redocShell, servePublic, swaggerShell } from '../../runtime/routes/openapi.js';
 import worker from '../../runtime/worker.js';
@@ -124,11 +126,22 @@ describe('the doc shells', () => {
     expect(redocShell(true)).toContain('spec-url="/openapi.json"');
   });
 
-  it('carry the vendor bundles off testMode, and only the indentation on it', () => {
-    expect(swaggerShell(false)).toContain('cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js');
-    expect(redocShell(false)).toContain('cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js');
-    expect(swaggerShell(true)).not.toContain('cdn.jsdelivr.net');
-    expect(redocShell(true)).not.toContain('fonts.googleapis.com');
+  it('load every viewer asset from this origin, from a file that exists', () => {
+    const assets = (html: string) => [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
+    const swagger = assets(swaggerShell(false));
+    const redoc = assets(redocShell(false));
+    expect(swagger).toContain('/static/js/vendor/swagger-ui-bundle-5.35.0.js');
+    expect(swagger).toContain('/static/js/vendor/swagger-ui-5.35.0.css');
+    expect(redoc).toContain('/static/js/vendor/redoc-2.5.4.standalone.js');
+    for (const path of [...swagger, ...redoc]) {
+      expect(path).toMatch(/^\/static\//);
+      expect(existsSync(fileURLToPath(new URL(`../../..${path}`, import.meta.url).href)), path).toBe(true);
+    }
+  });
+
+  it('strip the viewer tags in testMode, and only the indentation remains', () => {
+    expect(swaggerShell(true)).not.toContain('/static/js/vendor/');
+    expect(redocShell(true)).not.toContain('/static/js/vendor/');
     // The stripped line keeps its place, so the two bodies differ only in
     // the tags themselves.
     expect(swaggerShell(true).split('\n')).toHaveLength(swaggerShell(false).split('\n').length);

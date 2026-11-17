@@ -3,8 +3,10 @@
 // OAuth2 redirect, /llms.txt, and the VAPID public key a browser needs to
 // subscribe.
 //
-// The shells load their viewer from a CDN, which test mode strips so a
-// screenshot never reaches the network. Stripping keeps the line's
+// The shells load their viewer from exact versions vendored under
+// /static/js/vendor (see SOURCES.md there), never from a CDN, so no other
+// host decides what script runs on this origin. Test mode strips those tags
+// so a screenshot stays the bare shell. Stripping keeps the line's
 // indentation, so the rest of the markup is unchanged.
 import doc from '../openapi.json';
 import { llmsTxt } from './legal.js';
@@ -12,10 +14,9 @@ import { OAUTH2_REDIRECT_HTML } from './oauth2Redirect.js';
 
 export const OPENAPI_DOCUMENT: Record<string, unknown> = doc as Record<string, unknown>;
 
-const SWAGGER_CSS = '<link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">';
-const SWAGGER_JS = '<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>';
-const REDOC_FONTS = '<link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">';
-const REDOC_JS = '<script src="https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js"> </script>';
+const SWAGGER_CSS = '<link type="text/css" rel="stylesheet" href="/static/js/vendor/swagger-ui-5.35.0.css">';
+const SWAGGER_JS = '<script src="/static/js/vendor/swagger-ui-bundle-5.35.0.js"></script>';
+const REDOC_JS = '<script src="/static/js/vendor/redoc-2.5.4.standalone.js"> </script>';
 const FAVICON = '<link rel="shortcut icon" href="/static/pwa/icon-192.png">';
 
 const INDENT = '    ';
@@ -70,8 +71,6 @@ export function redocShell(testMode: boolean): string {
     line('<!-- needed for adaptive design -->'),
     line('<meta charset="utf-8"/>'),
     line('<meta name="viewport" content="width=device-width, initial-scale=1">'),
-    line(''),
-    tag(REDOC_FONTS),
     line(''),
     tag(FAVICON),
     line('<!--'),
